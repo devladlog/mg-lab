@@ -1,0 +1,21 @@
+### MG Lab #5 — least-privilege Graph access for the managed identity (run in Graph Explorer as an admin)
+### 1. Find the identity's service principal (objectId = principalId output of main.bicep)
+GET https://graph.microsoft.com/v1.0/servicePrincipals/{principalId}?$select=id,appId,displayName
+
+### 2. Find Microsoft Graph's service principal and the Sites.Selected app role id
+GET https://graph.microsoft.com/v1.0/servicePrincipals(appId='00000003-0000-0000-c000-000000000000')?$select=id,appRoles
+
+### 3. Give the identity the Sites.Selected application permission (appRoleId 883ea226-0bf2-4a8f-9f9d-92c9162a727d)
+POST https://graph.microsoft.com/v1.0/servicePrincipals/{principalId}/appRoleAssignments
+Content-Type: application/json
+
+{ "principalId": "{principalId}", "resourceId": "{graphServicePrincipalId}", "appRoleId": "883ea226-0bf2-4a8f-9f9d-92c9162a727d" }
+
+### 4. Grant READ on ONE site only (Sites.Selected = no access until a site grants it)
+POST https://graph.microsoft.com/v1.0/sites/{siteId}/permissions
+Content-Type: application/json
+
+{ "roles": ["read"], "grantedToIdentities": [ { "application": { "id": "{identityAppId}", "displayName": "func-mglab-graph" } } ] }
+
+### 5. Check
+GET https://graph.microsoft.com/v1.0/sites/{siteId}/permissions
