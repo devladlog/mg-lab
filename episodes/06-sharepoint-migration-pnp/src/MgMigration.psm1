@@ -52,7 +52,7 @@ function Test-MgMigrationItem {
     if (-not (Get-MgDepartment $RelativePath))      { $issues.Add('UnmappedFolder') }
     $target = "$TargetLibraryUrl/$((Get-MgDepartment $RelativePath) ?? 'Unmapped')/$name"
     if ($target.Length -gt $script:MaxUrlLength)    { $issues.Add('PathTooLong') }
-    , $issues.ToArray()
+    $issues.ToArray()   # empty array = ready
 }
 
 function Get-MgMigrationInventory {
@@ -71,7 +71,7 @@ function Get-MgMigrationInventory {
             Department   = Get-MgDepartment $rel
             DocType      = Get-MgDocType $_.Name
             Issues       = $issues -join ';'
-            Ready        = $issues.Count -eq 0
+            Ready        = @($issues).Count -eq 0
         }
     }
 }
