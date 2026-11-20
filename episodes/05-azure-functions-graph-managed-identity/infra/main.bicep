@@ -1,5 +1,7 @@
-// MG Lab #5 — Azure Function (Flex Consumption) + system-assigned managed identity. No secrets anywhere:
-// the host reaches its storage with the identity (shared keys disabled) and calls Microsoft Graph with the same identity.
+// MG Lab #5 — Azure Function (Flex Consumption) with managed identities. No secrets anywhere.
+//   system-assigned identity -> the host's own storage (shared keys disabled)
+//   user-assigned identity   -> Microsoft Graph. Created first, so Graph permissions can be granted BEFORE the app
+//                               ever asks for a token (managed identity tokens are cached for up to 24 hours).
 @description('Azure region')
 param location string = resourceGroup().location
 
@@ -31,6 +33,11 @@ resource storage 'Microsoft.Storage/storageAccounts@2023-05-01' = {
   }
 }
 
+resource graphIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
+  name: 'id-mglab-graph-${suffix}'
+  location: location
+}
+
 resource plan 'Microsoft.Web/serverfarms@2024-04-01' = {
   name: 'plan-mglab-graph-${suffix}'
   location: location
@@ -43,7 +50,10 @@ resource functionApp 'Microsoft.Web/sites@2024-04-01' = {
   name: functionAppName
   location: location
   kind: 'functionapp,linux'
-  identity: { type: 'SystemAssigned' }
+  identity: {
+    type: 'SystemAssigned, UserAssigned'
+    userAssignedIdentities: { '${graphIdentity.id}': {} }
+  }
   properties: {
     serverFarmId: plan.id
     httpsOnly: true
@@ -54,6 +64,7 @@ resource functionApp 'Microsoft.Web/sites@2024-04-01' = {
         { name: 'AzureWebJobsStorage__accountName', value: storage.name }
         { name: 'SHAREPOINT_SITE_ID', value: sharePointSiteId }
         { name: 'SHAREPOINT_LIST', value: sharePointList }
+        { name: 'GRAPH_CLIENT_ID', value: graphIdentity.properties.clientId }
       ]
     }
     functionAppConfig: {
@@ -88,4 +99,5 @@ resource storageRoleAssignments 'Microsoft.Authorization/roleAssignments@2022-04
 
 output functionAppName string = functionApp.name
 output principalId string = functionApp.identity.principalId
-output defaultHostName string = functionApp.properties.defaultHostName
+output graphIdentityPrincipalId string = graphIdentity.properties.principalId
+output graphIdentityClientId string = graphIdentity.properties.clientId

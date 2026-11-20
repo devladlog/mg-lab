@@ -8,7 +8,8 @@ echo "1/3 Infrastructure (Bicep)"
 OUT=$(az deployment group create -g "$RG" -f "$HERE/infra/main.bicep" -p sharePointSiteId="$SITE_ID" \
       --query properties.outputs -o json)
 APP=$(echo "$OUT" | jq -r .functionAppName.value)
-echo "   Function App: $APP   principalId: $(echo "$OUT" | jq -r .principalId.value)"
+echo "   Function App: $APP"
+echo "   Graph identity principalId: $(echo "$OUT" | jq -r .graphIdentityPrincipalId.value)  <- grant Graph access to THIS one"
 
 echo "2/3 Build and publish"
 dotnet publish "$HERE/src/MGLab.GraphFunction" -c Release -o "$HERE/out" --nologo -v q

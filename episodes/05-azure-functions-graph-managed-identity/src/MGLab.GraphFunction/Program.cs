@@ -9,9 +9,12 @@ var builder = FunctionsApplication.CreateBuilder(args);
 builder.ConfigureFunctionsWebApplication();
 
 // One credential for every environment:
-//   in Azure  -> the Function App's managed identity (no secrets, nothing to rotate)
+//   in Azure  -> the user-assigned managed identity named by GRAPH_CLIENT_ID (no secrets, nothing to rotate)
 //   locally   -> your az login / Visual Studio account
-builder.Services.AddSingleton<TokenCredential>(new DefaultAzureCredential());
+builder.Services.AddSingleton<TokenCredential>(new DefaultAzureCredential(new DefaultAzureCredentialOptions
+{
+    ManagedIdentityClientId = builder.Configuration["GRAPH_CLIENT_ID"]
+}));
 builder.Services.AddSingleton(sp =>
     new GraphServiceClient(sp.GetRequiredService<TokenCredential>(), ["https://graph.microsoft.com/.default"]));
 
