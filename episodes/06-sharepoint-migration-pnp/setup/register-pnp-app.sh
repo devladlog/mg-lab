@@ -17,5 +17,19 @@ fi
 az ad app permission add --id "$APP_ID" --api $SPO   --api-permissions "$(scope $SPO AllSites.FullControl)=Scope" -o none 2>/dev/null || true
 az ad app permission add --id "$APP_ID" --api $GRAPH --api-permissions "$(scope $GRAPH User.Read)=Scope" -o none 2>/dev/null || true
 sleep 20   # let the new service principal replicate before consenting
-az ad app permission admin-consent --id "$APP_ID"
+# Admin consent for the whole tenant = one oauth2PermissionGrant per API (works in Cloud Shell, unlike
+# 'az ad app permission admin-consent', which needs a token Cloud Shell's managed identity can't get).
+CLIENT_SP=$(az ad sp show --id "$APP_ID" --query id -o tsv)
+grant() {   # $1 = resource appId, $2 = scopes
+  local RES; RES=$(az ad sp show --id "$1" --query id -o tsv)
+  local EXISTING; EXISTING=$(az rest -u "https://graph.microsoft.com/v1.0/oauth2PermissionGrants?\$filter=clientId eq '$CLIENT_SP' and resourceId eq '$RES'" --query "value[0].id" -o tsv)
+  if [ -n "$EXISTING" ]; then
+    az rest -m PATCH -u "https://graph.microsoft.com/v1.0/oauth2PermissionGrants/$EXISTING" --headers Content-Type=application/json -b "{\"scope\":\"$2\"}" -o none
+  else
+    az rest -m POST -u "https://graph.microsoft.com/v1.0/oauth2PermissionGrants" --headers Content-Type=application/json \
+      -b "{\"clientId\":\"$CLIENT_SP\",\"consentType\":\"AllPrincipals\",\"resourceId\":\"$RES\",\"scope\":\"$2\"}" -o none
+  fi
+}
+grant $SPO   "AllSites.FullControl"
+grant $GRAPH "User.Read"
 echo "PnP client id: $APP_ID"
