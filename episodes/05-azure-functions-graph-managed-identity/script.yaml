@@ -1,0 +1,224 @@
+episode: 5
+slug: azure-functions-graph-managed-identity
+title: "Azure Functions + Microsoft Graph, no secrets"
+subtitle: "Managed identity and least privilege, real demo"
+voice: am_michael
+thumbnail_text: "GRAPH API\nWITH ZERO\nSECRETS"
+youtube:
+  title: "Call Microsoft Graph from Azure Functions with Managed Identity — No Secrets (Real Demo) | MG Lab #5"
+  tags: [Azure Functions, Microsoft Graph, managed identity, Sites.Selected, SharePoint, Azure, Bicep, least privilege, .NET]
+next_episode: "Automating SharePoint migrations with PnP PowerShell"
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Microsoft Graph, zero secrets"
+    sub: "Azure Functions + managed identity + least privilege"
+    short: hook
+    narration: >
+      Somewhere in your tenant there's an app registration with a client secret in an app setting. It expires on a
+      Friday night, or it leaks in a screenshot. In this episode, an Azure Function reads a SharePoint list through
+      Microsoft Graph with no secret at all, and with access to exactly one site. Real tenant, real demo. Welcome to MG Lab.
+
+  - id: problem
+    type: bullets
+    heading: "Why secrets keep hurting"
+    bullets:
+      - "Client secrets expire and must be rotated"
+      - "They leak: logs, repos, screenshots"
+      - "Sites.Read.All = every site in the tenant"
+      - "Managed identity: Entra issues the token to the resource"
+      - "Nothing to store, nothing to rotate"
+    narration: >
+      Secrets hurt in two ways. They expire and someone has to rotate them, and they leak into logs, repositories and
+      screenshots. On top of that, most integrations ask for Sites.Read.All, which means every site in the tenant.
+      With a managed identity, Entra ID issues tokens directly to the Azure resource. There's nothing to store and
+      nothing to rotate.
+
+  - id: architecture
+    type: bullets
+    heading: "What we're building"
+    bullets:
+      - "Function App: Flex Consumption, .NET 8 isolated"
+      - "System-assigned identity → its own storage, no keys"
+      - "User-assigned identity → Microsoft Graph"
+      - "Graph permission: Sites.Selected, read on ONE site"
+      - "All in Bicep, deployed from Cloud Shell"
+    narration: >
+      Here's the setup. A Function App on the Flex Consumption plan running .NET 8. Its system-assigned identity reaches
+      its own storage account, with shared keys disabled. A separate user-assigned identity calls Microsoft Graph with
+      Sites.Selected, and gets read access to one SharePoint site only. Everything is in Bicep, deployed from Cloud Shell.
+
+  - id: code-credential
+    type: code
+    heading: "One line of auth"
+    lang: csharp
+    code: |
+      // in Azure: the managed identity  ·  locally: your az login
+      builder.Services.AddSingleton<TokenCredential>(
+          new DefaultAzureCredential(new DefaultAzureCredentialOptions
+          {
+              ManagedIdentityClientId = builder.Configuration["GRAPH_CLIENT_ID"]
+          }));
+
+      builder.Services.AddSingleton(sp => new GraphServiceClient(
+          sp.GetRequiredService<TokenCredential>(),
+          ["https://graph.microsoft.com/.default"]));
+    narration: >
+      This is all the authentication code. DefaultAzureCredential uses the managed identity in Azure and your own
+      Azure CLI login on your machine. We point it at the user-assigned identity through its client ID, which is just an
+      app setting, not a secret. The Graph SDK takes the credential and handles tokens for us.
+
+  - id: code-graph
+    type: code
+    heading: "Read the list through Graph"
+    lang: csharp
+    code: |
+      var page = await graph.Sites[SiteId].Lists[ListName].Items.GetAsync(r =>
+      {
+          r.QueryParameters.Expand =
+              ["fields($select=Title,Requester,Department,Budget,RequestStatus,DueDate)"];
+          r.QueryParameters.Top = 200;
+      });
+
+      var items = page.Value
+          .Select(i => ProjectRequest.FromFields(i.Fields.AdditionalData))
+          .Where(r => status is null || r.Status == status)
+          .OrderBy(r => r.DueDate);
+    narration: >
+      The function reads the Project Requests list from episode three. Expand the fields, select only the columns we
+      need, and map each item to a typed record. A small mapper handles the untyped values the Graph SDK returns, and
+      it has unit tests. Graph errors with 401 or 403 come back as a clean 403.
+
+  - id: bicep
+    type: code
+    heading: "Infrastructure as code"
+    lang: text
+    code: |
+      resource graphIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
+        name: 'id-mglab-graph-${suffix}'
+      }
+      resource functionApp 'Microsoft.Web/sites@2024-04-01' = {
+        kind: 'functionapp,linux'
+        identity: {
+          type: 'SystemAssigned, UserAssigned'
+          userAssignedIdentities: { '${graphIdentity.id}': {} }
+        }
+        // appSettings: AzureWebJobsStorage__accountName, GRAPH_CLIENT_ID
+        // storage: allowSharedKeyAccess: false + data-plane roles
+      }
+    narration: >
+      In Bicep, the user-assigned identity is its own resource, attached to the Function App next to the system identity.
+      The host connects to storage by account name with its identity, and the storage account has shared key access
+      turned off. The deploy script builds, publishes and zip-deploys from Cloud Shell in a few minutes.
+
+  - id: identity
+    type: screen
+    heading: "Two identities, two jobs"
+    image: screens/identity.jpg
+    crop: [0, 50, 1050, 265]
+    highlight: [232, 232, 815, 24]
+    bar: "Azure portal · Function App · Identity"
+    narration: >
+      Here it is in the portal. The system-assigned identity is on, and under user assigned, our Graph identity,
+      in the same resource group. One identity per job keeps permissions small and easy to review.
+
+  - id: sites-selected
+    type: bullets
+    heading: "Sites.Selected in two steps"
+    bullets:
+      - "1. Assign the Sites.Selected app role"
+      - "   → by itself: access to nothing"
+      - "2. Grant read on one site (Graph: /sites/{id}/permissions)"
+      - "Granting needs an admin with Sites.FullControl.All"
+      - "Roles: read · write · manage · fullcontrol"
+    narration: >
+      Sites.Selected works in two steps. First, assign the Sites.Selected application role to the identity. On its own,
+      that gives access to nothing. Then an administrator grants a role, read in our case, on one specific site through
+      the site permissions endpoint. The Azure CLI token can't do that second call, so we used Graph Explorer as an admin.
+
+  - id: grant
+    type: screen
+    heading: "Grant read on one site"
+    image: screens/graph-grant.jpg
+    crop: [385, 150, 820, 310]
+    highlight: [0, 290, 820, 22]
+    bar: "Graph Explorer · POST /sites/{site-id}/permissions"
+    short: grant
+    narration: >
+      This is the grant. A POST to the site's permissions, role read, granted to our identity's client ID.
+      Created, two hundred and one. That identity can now read this site, and nothing else in the tenant.
+
+  - id: whoami
+    type: screen
+    heading: "What's in the token?"
+    image: screens/whoami.jpg
+    crop: [0, 62, 440, 145]
+    highlight: [0, 64, 380, 46]
+    bar: "Cloud Shell · GET /api/whoami"
+    narration: >
+      A small whoami endpoint shows which identity is calling and which roles are in its token, without ever returning
+      the token itself. Identity type app, and a single role: Sites.Selected.
+
+  - id: requests
+    type: screen
+    heading: "Real data, no secrets"
+    image: screens/requests.jpg
+    crop: [0, 62, 460, 330]
+    highlight: [0, 18, 300, 36]
+    bar: "Cloud Shell · GET /api/requests?status=Approved"
+    short: result
+    narration: >
+      And the real call. Approved requests, straight from the SharePoint list through Microsoft Graph: five items with
+      title, department, budget and due date. No client secret anywhere: not in code, not in settings, not in Key Vault.
+
+  - id: denied
+    type: screen
+    heading: "Least privilege, proven"
+    image: screens/denied.jpg
+    crop: [0, 62, 420, 60]
+    highlight: [0, 18, 340, 32]
+    bar: "Cloud Shell · same function, another site"
+    short: denied
+    narration: >
+      Now we point the same function at the tenant's root site, which we never granted. Access denied, four oh three.
+      That's what least privilege looks like: if this function is ever compromised, the blast radius is one site, read only.
+
+  - id: token-cache
+    type: bullets
+    heading: "The 24-hour gotcha"
+    bullets:
+      - "We called Graph first, granted the role after"
+      - "Token still had no roles, even after a restart"
+      - "Managed identity tokens are cached ~24 hours"
+      - "No way to force a refresh"
+      - "Fix: create the identity first, grant, then call"
+    short: cache
+    narration: >
+      A lesson from building this. Our first try used the system identity: we called Graph, then granted the role.
+      The token still had no roles, even after a restart. Managed identity tokens are cached by the platform for around
+      twenty-four hours, and you can't force a refresh. So create the identity first, grant permissions, and only then
+      let the app call. That's exactly why the Graph identity is user-assigned and created by Bicep up front.
+
+  - id: recap
+    type: bullets
+    heading: "Five rules"
+    bullets:
+      - "No secrets: managed identity + DefaultAzureCredential"
+      - "Sites.Selected, not Sites.Read.All"
+      - "One identity per job"
+      - "Grant before the first token"
+      - "Bicep for everything, keys off on storage"
+    narration: >
+      Five rules. No secrets: use a managed identity and DefaultAzureCredential. Ask for Sites.Selected, not
+      Sites.Read.All. One identity per job. Grant permissions before the first token. And put everything in Bicep,
+      with shared keys turned off on storage.
+
+  - id: outro
+    type: outro
+    heading: "Function, Bicep and grants on GitHub"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The function, the tests, the Bicep, the deploy script and the exact Graph calls are on GitHub. The link is in the
+      description. In the next episode, we'll automate a SharePoint migration with PnP PowerShell.
+      Subscribe so you don't miss it. This was MG Lab, by Momento Galático.
