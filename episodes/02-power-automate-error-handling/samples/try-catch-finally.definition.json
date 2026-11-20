@@ -1,0 +1,168 @@
+{
+  "$comment": "MG Lab #2 - Try/Catch/Finally skeleton for a Power Automate cloud flow (workflow definition language). Use it as a reference for the structure and settings; rebuild it in the designer or paste the actions with 'Copy to my clipboard' style tooling. Replace the Compose placeholders with your real actions and connections.",
+  "definition": {
+    "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+    "contentVersion": "1.0.0.0",
+    "triggers": {
+      "manual": {
+        "type": "Request",
+        "kind": "Button",
+        "inputs": {
+          "schema": {
+            "type": "object",
+            "properties": {
+              "orderId": {
+                "type": "string",
+                "title": "Order ID"
+              }
+            },
+            "required": [
+              "orderId"
+            ]
+          }
+        }
+      }
+    },
+    "actions": {
+      "Try": {
+        "type": "Scope",
+        "actions": {
+          "Get_order": {
+            "type": "Http",
+            "inputs": {
+              "method": "GET",
+              "uri": "@{parameters('mgl_ApiBaseUrl (mgl_ApiBaseUrl)')}/orders/@{triggerBody()?['orderId']}",
+              "retryPolicy": {
+                "type": "exponential",
+                "count": 4,
+                "interval": "PT10S",
+                "minimumInterval": "PT10S",
+                "maximumInterval": "PT1H"
+              }
+            }
+          },
+          "Do_the_real_work": {
+            "type": "Compose",
+            "inputs": "@body('Get_order')",
+            "runAfter": {
+              "Get_order": [
+                "Succeeded"
+              ]
+            }
+          }
+        },
+        "runAfter": {}
+      },
+      "Catch": {
+        "type": "Scope",
+        "actions": {
+          "Filter_failed_actions": {
+            "type": "Query",
+            "inputs": {
+              "from": "@result('Try')",
+              "where": "@equals(item()?['status'], 'Failed')"
+            }
+          },
+          "FailedAction": {
+            "type": "Compose",
+            "inputs": "@first(body('Filter_failed_actions'))?['name']",
+            "runAfter": {
+              "Filter_failed_actions": [
+                "Succeeded"
+              ]
+            }
+          },
+          "ErrorMessage": {
+            "type": "Compose",
+            "inputs": "@coalesce(first(body('Filter_failed_actions'))?['error']?['message'], first(body('Filter_failed_actions'))?['outputs']?['body']?['error']?['message'], 'No error message returned')",
+            "runAfter": {
+              "FailedAction": [
+                "Succeeded"
+              ]
+            }
+          },
+          "RunUrl": {
+            "type": "Compose",
+            "inputs": "https://make.powerautomate.com/environments/@{workflow()?['tags']?['environmentName']}/flows/@{workflow()?['tags']?['logicAppName']}/runs/@{workflow()?['run']?['name']}",
+            "runAfter": {
+              "ErrorMessage": [
+                "Succeeded"
+              ]
+            }
+          },
+          "Notify_team": {
+            "$comment": "Replace with 'Run a Child Flow' (Report error), 'Post message in a chat or channel' or 'Send an email (V2)'.",
+            "type": "Compose",
+            "inputs": {
+              "flow": "@{workflow()?['tags']?['flowDisplayName']}",
+              "environment": "@{workflow()?['tags']?['environmentName']}",
+              "failedAction": "@{outputs('FailedAction')}",
+              "message": "@{outputs('ErrorMessage')}",
+              "runUrl": "@{outputs('RunUrl')}",
+              "businessKey": "@{triggerBody()?['orderId']}"
+            },
+            "runAfter": {
+              "RunUrl": [
+                "Succeeded"
+              ]
+            }
+          }
+        },
+        "runAfter": {
+          "Try": [
+            "Failed",
+            "TimedOut"
+          ]
+        }
+      },
+      "Finally": {
+        "$comment": "Always runs: after Catch finishes, or right after Try succeeds (Catch is then Skipped). Put cleanup here: release a lock, update a status column, write an audit row.",
+        "type": "Scope",
+        "actions": {
+          "Cleanup": {
+            "type": "Compose",
+            "inputs": "cleanup"
+          }
+        },
+        "runAfter": {
+          "Catch": [
+            "Succeeded",
+            "Failed",
+            "Skipped",
+            "TimedOut"
+          ]
+        }
+      },
+      "Terminate": {
+        "type": "Terminate",
+        "inputs": {
+          "runStatus": "Failed",
+          "runError": {
+            "code": "@{outputs('FailedAction')}",
+            "message": "@{outputs('ErrorMessage')}"
+          }
+        },
+        "runAfter": {
+          "Finally": [
+            "Succeeded",
+            "Failed",
+            "Skipped",
+            "TimedOut"
+          ],
+          "Catch": [
+            "Succeeded",
+            "Failed"
+          ]
+        },
+        "$comment": "Runs only when Catch ran (Try failed). Both runAfter conditions must be true, so on the success path (Catch Skipped) this is skipped and the run ends Succeeded."
+      }
+    },
+    "parameters": {
+      "mgl_ApiBaseUrl (mgl_ApiBaseUrl)": {
+        "type": "String",
+        "defaultValue": "https://api-dev.example.com"
+      }
+    },
+    "outputs": {}
+  }
+}

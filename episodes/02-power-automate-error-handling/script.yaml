@@ -1,0 +1,209 @@
+episode: 2
+slug: power-automate-error-handling
+title: "Error handling in Power Automate"
+subtitle: "Try, Catch, Finally — the way production deserves"
+voice: am_michael
+thumbnail_text: "YOUR FLOW\nFAILED.\nNOW WHAT?"
+youtube:
+  title: "Power Automate Error Handling: Try / Catch / Finally Done Right | MG Lab #2"
+  tags: [Power Automate, error handling, try catch, Power Platform, cloud flows, scopes, retry policy, run after, Logic Apps]
+next_episode: "Dataverse or SharePoint lists? Choosing the right data source"
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Your flow failed. Now what?"
+    sub: "Error handling that production deserves"
+    short: hook
+    narration: >
+      Your flow failed at three in the morning. Nobody noticed. The invoice was never sent, and the first person
+      to find out was the customer. If that sounds familiar, this episode is for you. In the next few minutes
+      we'll turn a fragile Power Automate flow into one that retries, catches errors, tells you exactly what broke,
+      and still fails loudly when it should. Welcome to MG Lab.
+
+  - id: problem
+    type: bullets
+    heading: "What usually goes wrong"
+    bullets:
+      - "One long chain of actions"
+      - "No retries tuned, no timeouts"
+      - "A failure email with no details"
+      - "Errors swallowed: run shows Succeeded"
+      - "Nobody owns the alerts"
+    narration: >
+      Here's what usually goes wrong. The flow is one long chain of actions, so any failure stops everything.
+      Retry settings are left as they are, and nobody thinks about timeouts. When someone does add error handling,
+      it's a generic email saying "the flow failed", with no details. Worse, the error gets caught and swallowed,
+      so the run history says Succeeded while the work never happened. And the alerts go to a mailbox nobody reads.
+
+  - id: pattern
+    type: diagram
+    heading: "The pattern"
+    nodes: ["Trigger", "Try", "Catch", "Finally", "Terminate"]
+    labels: ["start", "the real work", "if Try failed", "always runs", "Failed status"]
+    short: pattern
+    narration: >
+      Here's the pattern. After the trigger, put the real work inside a Scope called Try. Add a second Scope called Catch,
+      configured to run only if Try failed or timed out. Add a third, Finally, after Catch, that runs no matter what, for cleanup.
+      And last, a Terminate action with the status Failed, that only runs when Catch ran, so the run history tells the truth.
+      Three scopes and one Terminate. That's the whole structure.
+
+  - id: runafter
+    type: bullets
+    heading: "Configure run after"
+    bullets:
+      - "Every action has a run-after rule"
+      - "Default: previous step is successful"
+      - "Catch: has failed + has timed out"
+      - "Finally: after Catch, all four statuses"
+      - "Works on scopes as a whole"
+    narration: >
+      This all depends on one setting: Configure run after. Every action has a rule that says when it runs.
+      By default, it's when the previous step is successful. For the Catch scope, change it to has failed and has timed out.
+      For Finally, run it after Catch and tick all four: successful, failed, skipped and timed out. Because a scope reports a single status
+      for everything inside it, one rule covers the whole block.
+
+  - id: retry
+    type: code
+    heading: "Retry policy"
+    lang: json
+    code: |
+      "retryPolicy": {
+        "type": "exponential",
+        "count": 4,
+        "interval": "PT10S",
+        "minimumInterval": "PT10S",
+        "maximumInterval": "PT1H"
+      }
+    short: retry
+    narration: >
+      Before catching an error, try not to have one. Most connector actions already retry transient failures,
+      like timeouts, throttling with a 429, or 500-level server errors. The default is an exponential policy with up to four retries.
+      For calls you know are slow to recover, set your own policy in the action settings: exponential, with a count
+      and an interval. And remember, retries only help with temporary problems. A wrong URL fails every time.
+
+  - id: result
+    type: code
+    heading: "What actually failed?"
+    lang: text
+    code: |
+      Filter array
+        From:   @result('Try')
+        Where:  @equals(item()?['status'], 'Failed')
+
+      Compose  ErrorMessage
+        @first(body('Filter_array'))?['error']?['message']
+
+      Compose  FailedAction
+        @first(body('Filter_array'))?['name']
+    short: result
+    narration: >
+      Inside Catch, the key is the result function. Result of Try returns every action inside that scope, with its status,
+      inputs, outputs and error. Filter that array to the items where status equals Failed. Now you have the name of the action
+      that broke, and its error message. No more emails that just say "something went wrong".
+
+  - id: runurl
+    type: code
+    heading: "Link straight to the run"
+    lang: text
+    code: |
+      https://make.powerautomate.com/environments/
+        @{workflow()?['tags']?['environmentName']}
+        /flows/@{workflow()?['tags']?['logicAppName']}
+        /runs/@{workflow()?['run']?['name']}
+    narration: >
+      Next, the workflow function. It returns details about the current run: the environment, the flow, and the run ID.
+      Put them together and you get a link that opens this exact run in Power Automate. Add it to the alert,
+      and whoever is on call is one click away from the failed action.
+
+  - id: alert
+    type: bullets
+    heading: "An alert people can act on"
+    bullets:
+      - "Flow name + environment"
+      - "Failed action + error message"
+      - "Link to the run"
+      - "Business key: which record, which order"
+      - "Send to a team channel, not one inbox"
+    narration: >
+      So what goes in the alert? The flow name and environment. The action that failed and its error message.
+      The link to the run. And a business key, like the order number or the record ID, so someone knows what to fix.
+      Send it to a Teams channel or a shared mailbox owned by a team, not to the inbox of the person who built the flow.
+
+  - id: terminate
+    type: code
+    heading: "Fail loudly"
+    lang: json
+    code: |
+      "Terminate": {
+        "type": "Terminate",
+        "inputs": {
+          "runStatus": "Failed",
+          "runError": {
+            "code": "@{outputs('FailedAction')}",
+            "message": "@{outputs('ErrorMessage')}"
+          }
+        },
+        "runAfter": {
+          "Finally": ["Succeeded", "Failed", "Skipped", "TimedOut"],
+          "Catch": ["Succeeded", "Failed"] }
+      }
+    short: terminate
+    narration: >
+      Here's the mistake almost everyone makes. If Catch handles the error and the flow just ends, the run is marked Succeeded.
+      Your analytics look perfect while work is silently failing. So the last step is a Terminate action with the status Failed,
+      carrying the error code and message. It runs after Finally, but only if Catch ran. Now the run history,
+      the analytics and any monitoring you have all show the truth.
+
+  - id: logging
+    type: bullets
+    heading: "Log it somewhere you can query"
+    bullets:
+      - "A Dataverse table: Flow Error Log"
+      - "Flow, run URL, action, message, key"
+      - "Write it in Finally or Catch"
+      - "Report on it with Power BI"
+      - "Don't log every success"
+    narration: >
+      Emails get deleted. For anything important, also write the error to a table you can query, like a Dataverse table
+      called Flow Error Log. Store the flow name, the run link, the failed action, the message and the business key.
+      Then you can see which flows fail most, and why. Just don't log every successful run. Too much logging slows
+      flows down and buries the signal.
+
+  - id: childflow
+    type: bullets
+    heading: "Reuse it with a child flow"
+    bullets:
+      - "One 'Report error' child flow"
+      - "Called from every Catch scope"
+      - "Same format everywhere"
+      - "Change the alert once"
+      - "Child flows must be in a solution"
+    narration: >
+      If you have more than a handful of flows, don't copy the same Catch logic everywhere. Build one child flow
+      called Report error, that receives the flow name, run link, action, message and business key, and does the logging
+      and the alert. Every Catch scope calls it. When you want to change the format or the channel, you change it once.
+      Remember that child flows need to live in a solution.
+
+  - id: recap
+    type: bullets
+    heading: "Five rules"
+    bullets:
+      - "Try / Catch / Finally scopes"
+      - "Tune retries for transient errors"
+      - "result() + workflow() for details"
+      - "Alert a team with a business key"
+      - "Terminate as Failed. Never swallow."
+    narration: >
+      Let's recap with five rules. Use Try, Catch and Finally scopes. Tune retry policies for transient errors.
+      Use the result and workflow functions so every alert says exactly what failed and links to the run.
+      Alert a team, with a business key. And always terminate as Failed. Never swallow an error.
+
+  - id: outro
+    type: outro
+    heading: "Templates on GitHub"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The scope template, the expressions and the error log table design from this episode are on GitHub.
+      The link is in the description. In the next episode, we'll answer a question every Power Platform project asks:
+      Dataverse or SharePoint lists? Subscribe so you don't miss it. This was MG Lab, by Momento Galático.

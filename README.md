@@ -13,7 +13,7 @@ A video series by [Momento Galático](https://momentogalatico.com), a Microsoft 
 | # | Episode | What you get |
 |---|---------|--------------|
 | 01 | [Power Platform ALM that actually works](episodes/01-power-platform-alm/) | GitHub Actions workflows (export & unpack, build & release), deployment settings files, pac CLI script |
-| 02 | Error handling in Power Automate that production deserves | *coming soon* |
+| 02 | [Power Automate error handling: Try / Catch / Finally done right](episodes/02-power-automate-error-handling/) | Try/Catch/Finally flow definition, expressions cheat sheet, error log table, Report error child flow |
 | 03 | Dataverse vs SharePoint lists: choosing the right data layer | *coming soon* |
 | 04 | A Dataverse plugin in C# with unit tests | *coming soon* |
 | 05 | Azure Functions + Microsoft Graph with managed identity | *coming soon* |

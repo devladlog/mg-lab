@@ -212,7 +212,7 @@ PAD = 0.7  # seconds of silence after each scene
 def still_segment(img_path, wav, dur, out, size="1920x1080", zoom=True):
     w, h = size.split("x")
     frames = int(math.ceil(dur * 30))
-    vf = (f"scale={int(w)*2}:-1,zoompan=z='1+0.00025*on':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d={frames}:s={size}:fps=30"
+    vf = (f"scale={int(w)*2}:-1,zoompan=z='min(1+0.00005*on,1.04)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d={frames}:s={size}:fps=30"
           if zoom else f"scale={w}:{h},fps=30")
     run(["ffmpeg", "-y", "-loop", "1", "-i", str(img_path), "-i", str(wav), "-filter_complex",
          f"[0:v]{vf},format=yuv420p,fade=t=in:st=0:d=0.3,fade=t=out:st={dur-0.3:.2f}:d=0.3[v];[1:a]apad,atrim=0:{dur:.2f}[a]",
@@ -254,12 +254,34 @@ def make_thumbnail(script, out):
     im.convert("RGB").save(out, quality=92)
 
 
+
+def short_panel(scene, ep, W=1080, max_h=760):
+    """Content panel for vertical Shorts: enlarged code, bullets or the 16:9 slide for diagrams/titles."""
+    t = scene["type"]
+    if t == "code":
+        return code_image(scene["code"], scene.get("lang", "text"), W - 60, max_h, base=40)
+    if t == "bullets":
+        img = Image.new("RGBA", (W - 60, max_h), (0, 0, 0, 0))
+        d = ImageDraw.Draw(img)
+        d.text((10, 0), scene["heading"], font=font("Inter-Bold.otf", 60), fill=WHITE)
+        d.rectangle((10, 85, 200, 93), fill=BLUE)
+        y, fb = 130, font("Inter-SemiBold.otf", 50)
+        for b in scene["bullets"]:
+            d.ellipse((14, y + 18, 32, y + 36), fill=BLUE)
+            for l in wrap(d, b, fb, W - 160):
+                d.text((60, y), l, font=fb, fill=WHITE)
+                y += 62
+            y += 22
+        return img.crop((0, 0, W - 60, min(max_h, y + 10)))
+    slide = render_slide(scene, ep).convert("RGBA")
+    return slide.resize((W, int(W * 9 / 16)), Image.LANCZOS)
+
 def make_short(scene, script, wav, dur, slide_png, out, workdir):
     """Vertical 1080x1920: slide in the middle, captions burned in below, end card."""
     W, H = 1080, 1920
     chunks = caption_chunks(scene["narration"], 7)
     total_chars = sum(len(c) for c in chunks)
-    slide = Image.open(slide_png).convert("RGB").resize((1080, 608), Image.LANCZOS)
+    slide = short_panel(scene, script["episode"])
     frames_dir = workdir / f"short_{scene['id']}"
     frames_dir.mkdir(exist_ok=True)
     concat_list, t = [], 0.0
@@ -271,10 +293,10 @@ def make_short(scene, script, wav, dur, slide_png, out, workdir):
         d.text((W - 60, 110), f"EP {script['episode']:02d}", font=font("Inter-Bold.otf", 44), fill=WHITE, anchor="ra")
         for j, l in enumerate(wrap(d, script["title"], font("Inter-Bold.otf", 64), W - 120)[:2]):
             d.text((60, 220 + j * 76), l, font=font("Inter-Bold.otf", 64), fill=WHITE)
-        im.paste(slide, (0, 470))
+        im.alpha_composite(slide, ((W - slide.width) // 2, 400))
         fc = font("Inter-Bold.otf", 62)
         lines = wrap(d, c, fc, W - 140)
-        y = 1170
+        y = 400 + slide.height + 70
         for l in lines:
             d.text((W / 2, y), l, font=fc, fill=(255, 230, 120), anchor="ma", stroke_width=4, stroke_fill=(0, 0, 0))
             y += 80
