@@ -21,6 +21,7 @@ ASSETS = HERE / "assets"
 MODELS = HERE / "models"
 
 # ---- brand ---------------------------------------------------------------
+YELLOW = (255, 214, 0, 255)
 BLUE = (59, 130, 246)
 WHITE = (255, 255, 255)
 MUTED = (186, 192, 212)
@@ -147,6 +148,31 @@ def render_slide(scene, ep, W=1920, H=1080):
         elif t == "code":
             ci = code_image(scene["code"], scene.get("lang", "text"), W - 220, H - 340)
             im.alpha_composite(ci, (110 + max(0, (W - 220 - ci.width) // 2), 315))
+        elif t == "screen":
+            # real (masked) screen capture inside a neutral browser frame
+            src = Path(scene["image"])
+            if not src.is_absolute():
+                src = Path(scene.get("_base", ".")) / src
+            shot = Image.open(src).convert("RGBA")
+            crop = scene.get("crop")  # [x, y, w, h] in source pixels
+            if crop:
+                shot = shot.crop((crop[0], crop[1], crop[0] + crop[2], crop[1] + crop[3]))
+            maxw, maxh = W - 220, H - 360
+            sc = min(maxw / shot.width, maxh / (shot.height + 44))
+            sw, sh = int(shot.width * sc), int(shot.height * sc)
+            fx, fy = (W - sw) // 2, 320
+            frame = Image.new("RGBA", (sw + 8, sh + 52), (0, 0, 0, 0))
+            fd = ImageDraw.Draw(frame)
+            fd.rounded_rectangle((0, 0, sw + 7, sh + 51), radius=18, fill=(28, 32, 60, 255), outline=(70, 80, 140, 255), width=2)
+            for i, c in enumerate([(255, 95, 86), (255, 189, 46), (39, 201, 63)]):
+                fd.ellipse((18 + i * 26, 16, 34 + i * 26, 32), fill=c)
+            fd.text((sw // 2, 14), scene.get("bar", "demo environment"), font=font("Inter-Medium.otf", 22), fill=MUTED, anchor="ma")
+            frame.alpha_composite(shot.resize((sw, sh), Image.LANCZOS), (4, 48))
+            hl = scene.get("highlight")  # [x, y, w, h] in (cropped) source pixels
+            if hl:
+                hx, hy = 4 + hl[0] * sc, 48 + hl[1] * sc
+                fd.rounded_rectangle((hx - 6, hy - 6, hx + hl[2] * sc + 6, hy + hl[3] * sc + 6), radius=10, outline=YELLOW, width=6)
+            im.alpha_composite(frame, (fx - 4, fy))
         elif t == "diagram":
             nodes, labels = scene["nodes"], scene.get("labels", [""] * len(scene["nodes"]))
             n = len(nodes)
@@ -343,6 +369,8 @@ def main():
     work = out / "work"
     work.mkdir(parents=True, exist_ok=True)
     ep = script["episode"]
+    for sc in script["scenes"]:
+        sc["_base"] = str(Path(a.script).parent)
 
     parts, srt, t = [], [], 0.0
     durations = {}
@@ -366,7 +394,7 @@ def main():
             ct += seg
         if not a.only_shorts:
             seg_mp4 = work / f"{i:02d}_{sc['id']}.mp4"
-            still_segment(png, wav, dur, seg_mp4, zoom=sc["type"] != "code")
+            still_segment(png, wav, dur, seg_mp4, zoom=sc["type"] not in ("code", "screen"))
             parts.append(seg_mp4)
         t += dur
         print(f"[{i+1}/{len(script['scenes'])}] {sc['id']}: {speech:.1f}s", flush=True)
