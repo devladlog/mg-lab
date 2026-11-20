@@ -1,0 +1,249 @@
+episode: 4
+slug: dataverse-plugin-csharp
+title: "A Dataverse plugin in C#, with unit tests"
+subtitle: "Real code, real environment, real tests"
+voice: am_michael
+thumbnail_text: "DATAVERSE\nPLUGIN\nIN C#"
+youtube:
+  title: "Dataverse Plugin in C# with Unit Tests (Real Demo) | MG Lab #4"
+  tags: [Dataverse, plugin, C#, Power Platform, unit tests, xUnit, Moq, Dataverse SDK, pro-code]
+next_episode: "Azure Functions + Microsoft Graph with managed identity"
+
+scenes:
+  - id: hook
+    type: title
+    heading: "A Dataverse plugin in C#"
+    sub: "Real code, real environment, real tests"
+    short: hook
+    narration: >
+      Some rules can't live in a form. They have to run no matter who saves the record: the app, an API call,
+      an import or a flow. That's what Dataverse plugins are for. In this episode we write one in C#, test it
+      without a Dataverse environment, register it in a real one, and watch it work. Welcome to MG Lab.
+
+  - id: when
+    type: bullets
+    heading: "Do you even need a plugin?"
+    bullets:
+      - "Try low-code first: column rules, business rules, Power Fx"
+      - "Plugin: runs inside the transaction"
+      - "Same rule for apps, API, imports and flows"
+      - "Can change the data before it's saved"
+      - "Can block the save with a clear message"
+    narration: >
+      First, do you even need one? Try low-code first: column settings, business rules, Power Fx and flows.
+      Reach for a plugin when the rule must run inside the database transaction, for every client, not just one form.
+      A plugin can change the data before it's saved, or block the save with a clear message for the user.
+
+  - id: pipeline
+    type: bullets
+    heading: "Where your code runs"
+    bullets:
+      - "Pre-validation (stage 10)"
+      - "Pre-operation (stage 20): change the Target"
+      - "Main operation: the save itself"
+      - "Post-operation (stage 40): react, call others"
+      - "2-minute limit per operation, aim for < 2 s"
+    narration: >
+      Every create or update goes through an event pipeline. Pre-validation runs first, then pre-operation, where
+      you can still change the record being saved. Then the main operation, and post-operation to react to it.
+      The whole operation, including every synchronous plugin, must finish within two minutes, so keep yours
+      under two seconds.
+
+  - id: rules
+    type: bullets
+    heading: "Our three rules"
+    bullets:
+      - "Due date can't be in the past"
+      - "Budget ≥ €50,000 → priority High"
+      - "No approval without a department"
+      - "Pre-operation, synchronous, Create + Update"
+    narration: >
+      We'll use the Project Request table from episode three. Three rules. A due date can't be in the past.
+      Any request with a budget of fifty thousand euros or more is automatically High priority.
+      And a request can't be approved without a department. One plugin, registered pre-operation,
+      synchronous, on create and update.
+
+  - id: code-rules
+    type: code
+    heading: "Keep the rules pure"
+    lang: csharp
+    code: |
+      public static void Apply(Entity target, Entity preImage,
+                               ITracingService tracing, DateTime today)
+      {
+          if (target.Contains(DueDate) && target[DueDate] is DateTime due
+              && due.Date < today.Date)
+              throw new InvalidPluginExecutionException(
+                  $"Due date can't be in the past ({due:yyyy-MM-dd}).");
+
+          var budget = Read<Money>(target, preImage, Budget)?.Value;
+          if (budget >= HighBudgetThreshold && ...)
+              target[Priority] = new OptionSetValue(PriorityHigh);
+
+          if (status == StatusApproved && department == null)
+              throw new InvalidPluginExecutionException(
+                  "A request needs a department before it can be approved.");
+      }
+    narration: >
+      Keep the rules pure. This static method takes the columns being saved, the current row from the pre-image,
+      a tracing service and today's date, and makes no calls to Dataverse. Today is injected so tests don't depend
+      on the clock. An InvalidPluginExecutionException is the way to show a message to the user and roll back the save.
+
+  - id: code-plugin
+    type: code
+    heading: "A thin plugin around it"
+    lang: csharp
+    code: |
+      public sealed class ProjectRequestValidationPlugin : PluginBase
+      {
+          protected override void ExecuteCore(LocalContext local)
+          {
+              var target = local.Target;
+              if (target?.LogicalName != "mgl_projectrequest") return;
+
+              var preImage = local.Context.MessageName == "Update"
+                  ? local.PreImage("PreImage") : null;
+
+              ProjectRequestRules.Apply(target, preImage,
+                                        local.Tracing, DateTime.UtcNow);
+          }
+      }
+    narration: >
+      The plugin itself stays thin. A small base class resolves the execution context and the tracing service,
+      writes a trace line, and turns unexpected exceptions into a clear error. The plugin reads the target,
+      takes the pre-image on updates, and calls the rules. That's it.
+
+  - id: tests
+    type: code
+    heading: "Unit tests, no environment needed"
+    lang: csharp
+    short: tests
+    code: |
+      [Fact]
+      public void Create_with_big_budget_sets_priority_high()
+      {
+          var target = Request(e => {
+              e[Budget] = new Money(75000);
+              e[Priority] = new OptionSetValue(PriorityLow); });
+
+          Run(ctx, "Create", target);
+
+          Assert.Equal(PriorityHigh,
+              target.GetAttributeValue<OptionSetValue>(Priority).Value);
+      }
+      // dotnet test  ->  Passed: 9, Failed: 0  (16 ms)
+    narration: >
+      Now the tests. With xUnit and Moq we fake the service provider Dataverse passes in, run the real plugin,
+      and assert on the target. Nine tests cover every rule, the pre-image cases, other tables, and the error wrapping.
+      They run in milliseconds, on Linux too, so they belong in your CI pipeline.
+
+  - id: register
+    type: bullets
+    heading: "Build and register"
+    bullets:
+      - "Target .NET Framework 4.6.2, sign the assembly"
+      - "Assembly → plugin type → step"
+      - "Update step: filtering attributes + pre-image"
+      - "Register into your solution, not Default"
+      - "Plugin Registration Tool, pac CLI or Web API"
+    narration: >
+      To deploy, the plugin project targets .NET Framework 4.6.2 and the assembly must be signed.
+      Then you register three things: the assembly, the plugin type, and a step per message. On the update step,
+      set filtering attributes so it only fires when those columns change, and add a pre-image with the current values.
+      Register everything into your solution so it travels with your ALM pipeline.
+
+  - id: solution
+    type: screen
+    heading: "Registered in the solution"
+    image: screens/solution.jpg
+    crop: [262, 145, 900, 215]
+    highlight: [0, 68, 900, 112]
+    bar: "Power Apps · MG Lab Demo solution"
+    narration: >
+      Here it is in the MG Lab Demo solution, in our DEV environment: the MGLab.Plugins assembly, version 1.0.1,
+      and its two steps, create and update, both switched on, sitting next to the tables they protect.
+
+  - id: form-before
+    type: screen
+    heading: "Save a big request…"
+    image: screens/form-before.jpg
+    crop: [0, 240, 980, 340]
+    highlight: [160, 168, 815, 34]
+    bar: "Project Request · new record"
+    narration: >
+      Let's try it. A new request for a warehouse robotics pilot, budget eighty-five thousand euros,
+      and someone picked Low priority.
+
+  - id: form-after
+    type: screen
+    heading: "…and the plugin sets High"
+    image: screens/form-after.jpg
+    crop: [0, 240, 980, 340]
+    highlight: [160, 168, 815, 34]
+    bar: "Project Request · saved"
+    short: priority
+    narration: >
+      We save, and the record comes back as High priority. The user didn't change it, and no form script did.
+      The plugin changed the target in pre-operation, inside the same transaction, so it works the same way
+      for imports, flows and API calls.
+
+  - id: form-error
+    type: screen
+    heading: "Rules that block the save"
+    image: screens/form-error.jpg
+    crop: [0, 240, 980, 340]
+    highlight: [604, 6, 358, 210]
+    bar: "Project Request · Business Process Error"
+    short: error
+    narration: >
+      Now we clear the department and set the status to Approved. Save, and the plugin blocks it with our message.
+      Nothing was written. The same message comes back to an API client as an error response.
+
+  - id: platform
+    type: bullets
+    heading: "Don't code what the platform does"
+    bullets:
+      - "First draft: 'Budget can't be negative'"
+      - "Never ran: the column's minimum value is 0"
+      - "Platform validation runs first"
+      - "Less code, fewer tests, fewer surprises"
+    short: platform
+    narration: >
+      A lesson from building this. Our first draft had a rule: budget can't be negative. In the real environment it
+      never ran, because the currency column already has a minimum value of zero, and the platform rejects the value
+      before our plugin sees it. So we deleted that rule and replaced it with the due date check. Don't write code
+      for what the platform already does.
+
+  - id: trace
+    type: screen
+    heading: "Plugin trace log"
+    image: screens/trace-log.jpg
+    crop: [0, 280, 1000, 170]
+    highlight: [160, 58, 836, 50]
+    bar: "Plug-in Trace Log · Execution"
+    narration: >
+      And when something goes wrong, turn on the plugin trace log. Every trace line we wrote is here, with the message,
+      the stage, the duration, forty-six milliseconds, and any exception. Use "exception only" in production and "all" in development.
+
+  - id: recap
+    type: bullets
+    heading: "Five rules"
+    bullets:
+      - "Low-code first, plugin when it must always run"
+      - "Pre-operation to change, exceptions to block"
+      - "Pure rules, thin plugin, injected clock"
+      - "Unit tests in CI, no environment needed"
+      - "Filtering attributes, pre-images, tracing"
+    narration: >
+      Five rules. Low-code first, and a plugin when the rule must always run. Use pre-operation to change data and
+      exceptions to block it. Keep the rules pure, the plugin thin, and inject the clock. Run the unit tests in CI.
+      And always set filtering attributes, pre-images and tracing.
+
+  - id: outro
+    type: outro
+    heading: "Plugin source and tests on GitHub"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The plugin, the tests and the registration script are on GitHub. The link is in the description.
+      In the next episode, we'll call Microsoft Graph from an Azure Function using a managed identity, with no secrets.
+      Subscribe so you don't miss it. This was MG Lab, by Momento Galático.

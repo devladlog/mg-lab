@@ -15,8 +15,7 @@ A video series by [Momento Galático](https://momentogalatico.com), a Microsoft 
 | 01 | [Power Platform ALM that actually works](episodes/01-power-platform-alm/) | GitHub Actions workflows (export & unpack, build & release), deployment settings files, pac CLI script |
 | 02 | [Power Automate error handling: Try / Catch / Finally done right](episodes/02-power-automate-error-handling/) | Try/Catch/Finally flow definition, expressions cheat sheet, error log table, Report error child flow |
 | 03 | [Dataverse vs SharePoint lists (real demo)](episodes/03-dataverse-vs-sharepoint/) | Dataverse data model + Web API script, SharePoint list schema, decision checklist |
-| 03 | Dataverse vs SharePoint lists: choosing the right data layer | *coming soon* |
-| 04 | A Dataverse plugin in C# with unit tests | *coming soon* |
+| 04 | [A Dataverse plugin in C# with unit tests](episodes/04-dataverse-plugin-csharp/) | Plug-in source (net462, signed), 9 xUnit + Moq tests, Web API registration script, CI workflow |
 | 05 | Azure Functions + Microsoft Graph with managed identity | *coming soon* |
 | 06 | Automating SharePoint migrations with PnP PowerShell | *coming soon* |
 
