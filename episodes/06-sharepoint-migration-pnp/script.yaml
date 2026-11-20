@@ -1,0 +1,189 @@
+episode: 6
+slug: sharepoint-migration-pnp
+title: "Automating a SharePoint migration with PnP PowerShell"
+subtitle: "File share to SharePoint, real tenant, real failures"
+voice: am_michael
+thumbnail_text: "FILE SHARE\nTO SHAREPOINT\nWITH PnP"
+youtube:
+  title: "File Share to SharePoint Migration with PnP PowerShell (Real Demo) | MG Lab #6"
+  tags: [PnP PowerShell, SharePoint migration, SharePoint Online, file share migration, PowerShell, Pester, Microsoft 365, Entra ID]
+next_episode: ""
+
+scenes:
+  - id: hook
+    type: title
+    heading: "File share → SharePoint, scripted"
+    sub: "PnP PowerShell, real tenant, real failures"
+    short: hook
+    narration: >
+      Every file share migration starts the same way: someone drags folders into SharePoint, half of them fail, and
+      nobody knows which. In this episode we script it with PnP PowerShell: inventory, pre-flight checks, metadata,
+      logging and verification, on a real tenant, including the failure we didn't see coming. Welcome to MG Lab.
+
+  - id: when
+    type: bullets
+    heading: "Script it, or use a tool?"
+    bullets:
+      - "Big volumes: Migration Manager or SPMT"
+      - "Script when you need custom rules and metadata"
+      - "Folders → metadata, renames, mapping tables"
+      - "Repeatable, testable, logged"
+      - "Often both: tool for bulk, script for the rest"
+    narration: >
+      First, honesty. For terabytes, use Microsoft's Migration Manager or the SharePoint Migration Tool. Script it
+      when you need your own rules: folders that become metadata, mapping tables, renames, and a log you can hand to
+      the business. Often it's both: a tool for the bulk, and a script for the tricky part.
+
+  - id: phases
+    type: bullets
+    heading: "Five phases"
+    bullets:
+      - "1. Inventory every file"
+      - "2. Pre-flight: what will fail, and why"
+      - "3. Provision the target (idempotent)"
+      - "4. Migrate with metadata, log every file"
+      - "5. Verify counts per department"
+    narration: >
+      The script has five phases. Inventory every file. Run pre-flight checks so you know what will fail before you
+      upload anything. Provision the target library and columns, safely re-runnable. Migrate with metadata and a log
+      line per file. And verify the counts per department at the end.
+
+  - id: auth
+    type: code
+    heading: "Bring your own Entra app"
+    lang: text
+    code: |
+      # The shared "PnP Management Shell" app was deleted on 9 Sep 2024.
+      # Register your own: delegated permissions, so it can never do
+      # more than the signed-in user.
+      ./setup/register-pnp-app.sh          # az ad app create + consent
+        → AllSites.FullControl (delegated), User.Read
+
+      Connect-PnPOnline -Url https://contoso.sharepoint.com/sites/MGLabDemo `
+                        -ClientId $clientId -DeviceLogin
+    narration: >
+      Authentication first. The shared PnP Management Shell app was deleted in September 2024, so you register your
+      own Entra app. Ours uses delegated permissions only: it can never do more than the person signed in. A small
+      Azure CLI script creates it and grants consent, and we connect with a device code from Cloud Shell.
+
+  - id: preflight-code
+    type: code
+    heading: "Pre-flight as a pure function"
+    lang: powershell
+    code: |
+      function Test-MgMigrationItem($RelativePath, $SizeBytes, $TargetLibraryUrl) {
+          $name = Split-Path $RelativePath -Leaf
+          if ($name -match '^(~\$.*|Thumbs\.db|desktop\.ini)$')  { 'BlockedFile' }
+          if ($name -match '["*:<>?/\\|]')                       { 'InvalidCharacters' }
+          if ($name -match '^\s|\s$|\.$')                        { 'LeadingOrTrailingSpaceOrDot' }
+          if ($SizeBytes -eq 0)                                  { 'EmptyFile' }
+          if (-not (Get-MgDepartment $RelativePath))             { 'UnmappedFolder' }
+          if ("$TargetLibraryUrl/.../$name".Length -gt 400)      { 'PathTooLong' }
+      }
+    narration: >
+      Pre-flight is a pure function: give it a path and a size, and it returns the reasons the file would fail.
+      Office temp files and Thumbs dot db, characters SharePoint rejects, leading or trailing spaces, empty files,
+      folders nobody mapped, and paths over SharePoint's four hundred character limit. No SharePoint needed to run it.
+
+  - id: pester
+    type: screen
+    heading: "Seventeen Pester tests"
+    image: screens/pester.jpg
+    crop: [0, 330, 470, 190]
+    highlight: [0, 168, 450, 18]
+    bar: "Cloud Shell · Invoke-Pester"
+    narration: >
+      Which means we can test it. Seventeen Pester tests cover the department mapping, the document types and every
+      pre-flight rule. They run in a fraction of a second, so they belong in your pipeline like any other code.
+
+  - id: inventory
+    type: screen
+    heading: "Know what will fail, before it fails"
+    image: screens/inventory.jpg
+    crop: [0, 62, 560, 205]
+    highlight: [0, 96, 345, 78]
+    bar: "Cloud Shell · inventory + pre-flight"
+    short: preflight
+    narration: >
+      Here's the inventory of our fictional legacy share: thirty-three files, twenty-eight ready and five blocked,
+      each with a reason. A folder nobody mapped, an Office temp file, Thumbs dot db, a colon in a file name and an
+      empty file. That list goes to the business before migration day, not after.
+
+  - id: mapping
+    type: code
+    heading: "Folders become metadata"
+    lang: powershell
+    code: |
+      $DepartmentMap = @{ 'Accounts' = 'Finance'; 'People' = 'HR'; 'Ops' = 'Operations'
+                          'Sales & Marketing' = 'Sales'; 'IT Support' = 'IT' }
+
+      $file = Add-PnPFile -Path $source -Folder "MigratedDocuments/$($row.Department)"
+      Set-PnPListItem -List $Library -Identity $item.Id -UpdateType UpdateOverwriteVersion -Values @{
+          Department = $row.Department;  DocType  = $row.DocType
+          LegacyPath = $row.RelativePath; Modified = $row.Modified   # keep the original date
+      }
+    narration: >
+      The key design choice: folders become metadata. A mapping table turns legacy folder names into the Department
+      values the business uses. Each file is uploaded, then its metadata is set with update overwrite version, so the
+      original modified date survives and no extra version is created. And the legacy path is kept for traceability.
+
+  - id: run1
+    type: screen
+    heading: "The failure we didn't see coming"
+    image: screens/run1.jpg
+    crop: [0, 62, 620, 300]
+    highlight: [0, 140, 120, 20]
+    bar: "Cloud Shell · Invoke-MgMigration (run 1)"
+    short: fail
+    narration: >
+      First run: twenty-seven migrated, five skipped on purpose, and one failed. Invalid text value. That file had a
+      legacy path of three hundred and twenty-six characters, and a single line of text column stops at two hundred and
+      fifty-five. Pre-flight didn't catch it. The log did, and the run carried on instead of stopping.
+
+  - id: run2
+    type: screen
+    heading: "Fix, re-run, nothing duplicated"
+    image: screens/run2.jpg
+    crop: [0, 62, 420, 290]
+    highlight: [0, 80, 160, 32]
+    bar: "Cloud Shell · same command, run 2"
+    short: rerun
+    narration: >
+      The fix: make LegacyPath a multi-line text column. The provisioning step upgrades the existing column in place,
+      keeping its values. Then we run exactly the same command. Twenty-seven already migrated, one migrated, five skipped.
+      Nothing was uploaded twice. And verification matches in every department.
+
+  - id: library
+    type: screen
+    heading: "The result in SharePoint"
+    image: screens/library.jpg
+    crop: [90, 225, 880, 380]
+    highlight: [330, 40, 100, 330]
+    bar: "SharePoint · Migrated Documents · Finance"
+    narration: >
+      And in SharePoint: the Finance documents with their department, document type and legacy path, and the original
+      modified dates, going back years, not the day we migrated. Users can filter and group by
+      metadata instead of digging through folders.
+
+  - id: recap
+    type: bullets
+    heading: "Five rules"
+    bullets:
+      - "Inventory and pre-flight before migration day"
+      - "Your own Entra app, delegated permissions"
+      - "Folders → metadata, keep dates and legacy path"
+      - "Idempotent: safe to re-run after every fix"
+      - "Log every file, verify the counts"
+    narration: >
+      Five rules. Inventory and pre-flight before migration day. Use your own Entra app with delegated permissions.
+      Turn folders into metadata, and keep the original dates and paths. Make every step safe to re-run. And log every
+      file, then verify the counts.
+
+  - id: outro
+    type: outro
+    heading: "Module, tests and sample share on GitHub"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The PowerShell module, the Pester tests, the sample share and the app setup script are on GitHub. The link is in
+      the description. Tell us in the comments what you'd like to see in the next MG Lab episode.
+      Subscribe so you don't miss it. This was MG Lab, by Momento Galático.
