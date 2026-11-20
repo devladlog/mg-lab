@@ -1,0 +1,190 @@
+episode: 3
+slug: dataverse-vs-sharepoint
+title: "Dataverse or SharePoint lists?"
+subtitle: "Same data, two platforms, real demo"
+voice: am_michael
+thumbnail_text: "DATAVERSE\nOR SHAREPOINT\nLISTS?"
+youtube:
+  title: "Dataverse vs SharePoint Lists: Which One for Your Power App? (Real Demo) | MG Lab #3"
+  tags: [Dataverse, SharePoint lists, Power Apps, Power Platform, delegation, security roles, Microsoft Lists, low code]
+next_episode: "A Dataverse plugin in C# with unit tests"
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Dataverse or SharePoint lists?"
+    sub: "Same data, two platforms, real demo"
+    short: hook
+    narration: >
+      Every Power Platform project hits the same question in week one: do we store the data in a SharePoint list,
+      or in Dataverse? Pick wrong, and six months later you're rebuilding the app. In this episode we put the same data
+      in both, look at them side by side in real environments, and finish with a simple way to decide. Welcome to MG Lab.
+
+  - id: question
+    type: bullets
+    heading: "The real question"
+    bullets:
+      - "Not 'which is better'"
+      - "How relational is the data?"
+      - "Who can see which rows?"
+      - "How much data, how fast?"
+      - "What licences do users have?"
+    narration: >
+      The real question isn't which one is better. Both are good at different things. What matters is how relational
+      your data is, who is allowed to see which rows, how much data you'll have and how fast it grows,
+      and what licences your users already have. Let's look at the same data in both platforms.
+
+  - id: sp-demo
+    type: screen
+    heading: "SharePoint: a list"
+    image: screens/sp-list.jpg
+    crop: [66, 40, 1500, 640]
+    highlight: [429, 195, 100, 445]
+    bar: "SharePoint · MG Lab Demo"
+    narration: >
+      Here's a SharePoint list with twenty-four project requests. Title, requester, department, budget, status,
+      priority and due date. It took minutes to build, everyone with Microsoft 365 can open it, and it comes with views,
+      versioning, alerts and Excel export for free. But look at Department. It's just a choice column, a piece of text
+      on every row. There's no Department table behind it.
+
+  - id: dv-columns
+    type: screen
+    heading: "Dataverse: a table"
+    image: screens/dv-columns.jpg
+    crop: [240, 95, 1328, 603]
+    highlight: [20, 305, 1290, 36]
+    bar: "Power Apps · MG Lab Demo solution"
+    short: tables
+    narration: >
+      Now the same data in Dataverse, inside a solution so it can travel through our ALM pipeline from episode one.
+      Budget is a real currency column, Due Date is a date-only column, and Department is a lookup to its own table.
+      Every column has a type, a schema name and a requirement level, and Dataverse adds owner, created by and modified
+      fields for you.
+
+  - id: dv-relationships
+    type: screen
+    heading: "Real relationships"
+    image: screens/dv-relationships.jpg
+    crop: [240, 95, 1328, 603]
+    highlight: [20, 265, 1290, 36]
+    bar: "Power Apps · Project Request · Relationships"
+    narration: >
+      That lookup is a real relationship: many project requests to one department, with cascading rules you control.
+      Rename a department once, and every request shows the new name. In SharePoint you can add lookup columns too,
+      but there's a limit on how many lookups a view can join, and no real referential rules.
+
+  - id: dv-security
+    type: screen
+    heading: "Security per table, per privilege"
+    image: screens/dv-security.jpg
+    crop: [266, 270, 1290, 230]
+    highlight: [4, 118, 1280, 36]
+    bar: "Power Platform admin center · Security roles"
+    short: security
+    narration: >
+      This is where Dataverse really pulls ahead. Project Request is owned by a user or a team, and every security role
+      decides, per privilege, whether you can create, read, write or delete: only your own rows, your business unit's,
+      or the whole organization's. Add column-level security and hierarchy security on top. In SharePoint, permissions
+      live on the site, the list or individual items, and item-level permissions get hard to manage at scale.
+
+  - id: limits
+    type: bullets
+    heading: "Know the numbers"
+    bullets:
+      - "SharePoint list: up to 30 million items"
+      - "List view threshold: 5,000 items per query"
+      - "Power Apps non-delegable: 500 rows (max 10,000)"
+      - "Dataverse: server-side queries, built for scale"
+      - "Both need delegable formulas"
+    narration: >
+      Know the numbers. A SharePoint list can hold up to thirty million items, but a single view or query works within
+      a five thousand item threshold unless you use indexed columns and filters. In Power Apps, any formula that can't be
+      delegated only sees the first five hundred rows by default, ten thousand at most. Dataverse delegates more
+      functions and runs the query on the server, but on both platforms, you need delegable formulas.
+
+  - id: delegation
+    type: code
+    heading: "Delegation in one example"
+    lang: text
+    code: |
+      // OK: delegable on SharePoint and Dataverse
+      Filter('Project Requests', Budget > 10000)
+
+      // WARNING: not delegable on SharePoint:
+      //    only the first 500 rows are checked
+      Filter('Project Requests', Len(Title) > 20)
+
+      // OK: exact count on Dataverse (up to 50,000 rows)
+      CountIf('Project Requests', Budget > 10000)
+    short: delegation
+    narration: >
+      Here's delegation in one example. Filtering on a simple number comparison is delegated on both platforms, so the server does
+      the work. But a function the data source doesn't understand, like the length of a text, can't be delegated to
+      SharePoint, so Power Apps only checks the first five hundred rows and silently misses the rest. Dataverse supports
+      more delegable functions, like CountIf for exact counts up to fifty thousand rows.
+
+  - id: licensing
+    type: bullets
+    heading: "Licensing, honestly"
+    bullets:
+      - "SharePoint lists: included with Microsoft 365"
+      - "Dataverse: premium — users need a premium licence"
+      - "Per user or per app plans"
+      - "Dataverse storage capacity is pooled per tenant"
+      - "Price the whole solution, not just the app"
+    narration: >
+      Licensing, honestly. SharePoint lists come with Microsoft 365, and the SharePoint connector is standard.
+      Dataverse is premium, so every user of the app needs a premium licence, per user or per app.
+      Dataverse storage capacity is pooled at the tenant level. So price the whole solution, not just the first app,
+      because the second and third apps on the same data make premium much easier to justify.
+
+  - id: choose-sp
+    type: bullets
+    heading: "Choose SharePoint lists when…"
+    bullets:
+      - "Simple, flat data and small teams"
+      - "Documents and collaboration are central"
+      - "Everyone sees roughly the same rows"
+      - "Thousands of rows, not millions"
+      - "Standard licences only"
+    narration: >
+      Choose SharePoint lists when the data is simple and flat, when documents and collaboration are at the centre,
+      when everyone sees roughly the same rows, when you're talking thousands of rows, not millions,
+      and when the budget is standard licences only.
+
+  - id: choose-dv
+    type: bullets
+    heading: "Choose Dataverse when…"
+    bullets:
+      - "Related tables and business rules"
+      - "Row-level or column-level security"
+      - "Large or fast-growing data"
+      - "Proper ALM with solutions"
+      - "Model-driven apps, plugins, auditing"
+    short: decision
+    narration: >
+      Choose Dataverse when you have related tables and business rules, when different people must see different rows
+      or columns, when data is large or growing fast, when you want proper ALM with solutions and pipelines,
+      and when you need model-driven apps, server-side plugins or auditing. Next episode, we'll write one of those plugins.
+
+  - id: recap
+    type: bullets
+    heading: "Five rules"
+    bullets:
+      - "Decide on data shape, not habit"
+      - "Security needs → Dataverse"
+      - "Mind the 5,000 and 500 limits"
+      - "Fix delegation warnings early"
+      - "Price the platform, not one app"
+    narration: >
+      Five rules. Decide on the shape of the data, not on habit. If you need row-level security, go Dataverse.
+      Mind the five thousand and five hundred limits. Fix delegation warnings early. And price the platform, not just one app.
+
+  - id: outro
+    type: outro
+    heading: "Demo data model on GitHub"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The table design, the list schema and the decision checklist from this episode are on GitHub. The link is in the
+      description. In the next episode, we'll write a Dataverse plugin in C#, with unit tests.
+      Subscribe so you don't miss it. This was MG Lab, by Momento Galático.
