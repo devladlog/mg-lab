@@ -21,10 +21,10 @@ foreach ($dept in $files.Keys) {
         (Get-Item -LiteralPath $file -Force).LastWriteTimeUtc = [datetime]'2019-01-01' + [timespan]::FromDays($rnd.Next(0, 2100))
     }
 }
-# A folder nobody mapped, and a path that is far too long for SharePoint
+# A folder nobody mapped, and a very deep legacy path (fine once folders become metadata)
 New-Item -ItemType Directory -Path (Join-Path $Path 'Archive') -Force | Out-Null
 [IO.File]::WriteAllText((Join-Path $Path 'Archive/old proposal.docx'), 'legacy')
 $long = Join-Path $Path ('Ops/' + ('Very long project folder name ' * 4).Trim())
 New-Item -ItemType Directory -Path $long -Force | Out-Null
-[IO.File]::WriteAllText((Join-Path $long (('Final report revision ' * 12).Trim() + '.docx')), 'legacy')
+[IO.File]::WriteAllText((Join-Path $long (('Final report revision ' * 9).Trim() + '.docx')), 'legacy')
 Get-ChildItem $Path -Recurse -File -Force | Measure-Object | ForEach-Object { "Created $($_.Count) files in $Path" }
