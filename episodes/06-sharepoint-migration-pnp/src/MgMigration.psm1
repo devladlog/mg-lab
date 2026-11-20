@@ -86,10 +86,15 @@ function Initialize-MgMigrationTarget {
     $fields = @(
         @{ Name = 'Department';   Type = 'Choice'; Choices = 'Finance', 'HR', 'Operations', 'Sales', 'IT' }
         @{ Name = 'DocType';      Type = 'Choice'; Choices = 'Document', 'Spreadsheet', 'Presentation', 'Other' }
-        @{ Name = 'LegacyPath';   Type = 'Text' }
+        @{ Name = 'LegacyPath';   Type = 'Note' }     # multi-line: single line of text stops at 255 characters
     )
     foreach ($f in $fields) {
-        if (-not (Get-PnPField -List $Library -Identity $f.Name -ErrorAction SilentlyContinue)) {
+        $existing = Get-PnPField -List $Library -Identity $f.Name -ErrorAction SilentlyContinue
+        if ($existing -and $existing.TypeAsString -ne $f.Type -and $f.Type -eq 'Note' -and $existing.TypeAsString -eq 'Text') {
+            Set-PnPField -List $Library -Identity $f.Name -Values @{ TypeAsString = 'Note' } | Out-Null   # keeps the values
+            Write-Host "Changed column '$($f.Name)' to multi-line text"
+        }
+        if (-not $existing) {
             $p = @{ List = $Library; DisplayName = $f.Name; InternalName = $f.Name; Type = $f.Type; AddToDefaultView = $true }
             if ($f.Choices) { $p.Choices = $f.Choices }
             Add-PnPField @p | Out-Null
