@@ -1,0 +1,373 @@
+#!/usr/bin/env python3
+"""MG Lab video pipeline: script.yaml -> narrated 1080p episode, vertical Shorts, SRT and thumbnail.
+
+Usage:
+  python make_episode.py ../episodes/01-power-platform-alm/script.yaml --out ./build/ep01
+Options:
+  --only-shorts / --skip-shorts / --voice am_michael / --speed 1.0
+
+Needs: ffmpeg on PATH, pip install -r requirements.txt, Kokoro model files in ./models
+(kokoro-v1.0.onnx + voices-v1.0.bin from github.com/thewh1teagle/kokoro-onnx releases),
+brand assets in ./assets (background.png, music.mp3 optional, intro_clip.mp4 optional).
+"""
+import argparse, os, re, subprocess, json, math, shutil
+from pathlib import Path
+import yaml
+from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageEnhance
+
+HERE = Path(__file__).resolve().parent
+FONTS = HERE / "fonts"
+ASSETS = HERE / "assets"
+MODELS = HERE / "models"
+
+# ---- brand ---------------------------------------------------------------
+BLUE = (59, 130, 246)
+WHITE = (255, 255, 255)
+MUTED = (186, 192, 212)
+CODE_BG = (13, 14, 28, 235)
+TOKEN_COLORS = {
+    "Keyword": (198, 146, 255), "Name.Tag": (130, 170, 255), "Name.Attribute": (130, 170, 255),
+    "Literal.String": (152, 222, 140), "String": (152, 222, 140), "Literal.Number": (255, 184, 108),
+    "Number": (255, 184, 108), "Comment": (110, 118, 150), "Operator": (137, 221, 255),
+    "Punctuation": (190, 196, 220), "Name.Builtin": (255, 203, 107), "Name.Variable": (255, 203, 107),
+}
+
+
+def font(name, size):
+    return ImageFont.truetype(str(FONTS / name), size)
+
+
+def wrap(draw, text, f, max_w):
+    lines = []
+    for para in str(text).split("\n"):
+        line = ""
+        for w in para.split():
+            t = (line + " " + w).strip()
+            if draw.textlength(t, font=f) <= max_w:
+                line = t
+            else:
+                if line:
+                    lines.append(line)
+                line = w
+        lines.append(line)
+    return lines
+
+
+def background(W, H):
+    bg = ASSETS / "background.png"
+    if bg.exists():
+        im = Image.open(bg).convert("RGB")
+        r = max(W / im.width, H / im.height)
+        im = im.resize((int(im.width * r) + 1, int(im.height * r) + 1), Image.LANCZOS)
+        x, y = (im.width - W) // 2, (im.height - H) // 2
+        im = im.crop((x, y, x + W, y + H)).filter(ImageFilter.GaussianBlur(6))
+        im = ImageEnhance.Brightness(im).enhance(0.35)
+    else:
+        im = Image.new("RGB", (W, H), (8, 8, 20))
+    return im.convert("RGBA")
+
+
+def header(d, W, ep, label="MG LAB"):
+    d.text((70, 48), "MG", font=font("Inter-Bold.otf", 46), fill=WHITE)
+    d.text((160, 62), f"{label}  ·  EPISODE {ep:02d}", font=font("Inter-Medium.otf", 24), fill=MUTED)
+    d.text((W - 70, 62), "momentogalatico.com", font=font("Inter-Medium.otf", 24), fill=MUTED, anchor="ra")
+
+
+# ---- slide renderers (1920x1080) ------------------------------------------
+def code_image(code, lang, max_w, max_h, base=34):
+    from pygments import lex
+    from pygments.lexers import get_lexer_by_name, TextLexer
+    try:
+        lexer = get_lexer_by_name(lang)
+    except Exception:
+        lexer = TextLexer()
+    lines = code.rstrip("\n").split("\n")
+    size = base
+    while size > 16:
+        f = font("JetBrainsMono-Regular.ttf", size)
+        lh = int(size * 1.45)
+        longest = max(len(l) for l in lines) if lines else 1
+        if longest * f.getlength("M") <= max_w - 80 and lh * len(lines) <= max_h - 70:
+            break
+        size -= 2
+    f = font("JetBrainsMono-Regular.ttf", size)
+    lh = int(size * 1.45)
+    w = int(max(len(l) for l in lines) * f.getlength("M")) + 80
+    h = lh * len(lines) + 70
+    img = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+    d.rounded_rectangle((0, 0, w, h), radius=22, fill=CODE_BG, outline=(70, 80, 130, 255), width=2)
+    x0, y = 40, 35
+    x = x0
+    for ttype, value in lex(code.rstrip("\n"), lexer):
+        tname = str(ttype).replace("Token.", "")
+        color = WHITE
+        for k, c in TOKEN_COLORS.items():
+            if tname.startswith(k):
+                color = c
+                break
+        parts = value.split("\n")
+        for i, p in enumerate(parts):
+            if i > 0:
+                y += lh
+                x = x0
+            if p:
+                d.text((x, y), p, font=f, fill=color)
+                x += f.getlength(p)
+    return img
+
+
+def render_slide(scene, ep, W=1920, H=1080):
+    im = background(W, H)
+    d = ImageDraw.Draw(im)
+    header(d, W, ep)
+    t = scene["type"]
+    if t in ("title", "outro"):
+        fb = font("Inter-Bold.otf", 120)
+        lines = wrap(d, scene["heading"], fb, W - 280)
+        y = H / 2 - (len(lines) * 135) / 2 - 40
+        for l in lines:
+            d.text((W / 2, y), l, font=fb, fill=WHITE, anchor="ma")
+            y += 135
+        d.rectangle((W / 2 - 160, y + 20, W / 2 + 160, y + 30), fill=BLUE)
+        if scene.get("sub"):
+            d.text((W / 2, y + 70), scene["sub"], font=font("Inter-Medium.otf", 48), fill=MUTED, anchor="ma")
+    else:
+        d.text((110, 170), scene["heading"], font=font("Inter-Bold.otf", 72), fill=WHITE)
+        d.rectangle((110, 268, 330, 276), fill=BLUE)
+        if t == "bullets":
+            fb = font("Inter-SemiBold.otf", 54)
+            y = 340
+            for b in scene["bullets"]:
+                d.ellipse((120, y + 20, 140, y + 40), fill=BLUE)
+                for i, l in enumerate(wrap(d, b, fb, W - 340)):
+                    d.text((175, y), l, font=fb, fill=WHITE)
+                    y += 68
+                y += 34
+        elif t == "code":
+            ci = code_image(scene["code"], scene.get("lang", "text"), W - 220, H - 340)
+            im.alpha_composite(ci, (110 + max(0, (W - 220 - ci.width) // 2), 315))
+        elif t == "diagram":
+            nodes, labels = scene["nodes"], scene.get("labels", [""] * len(scene["nodes"]))
+            n = len(nodes)
+            bw, bh, gap = 270, 170, (W - 220 - n * 270) / (n - 1)
+            y = 470
+            for i, (nd, lb) in enumerate(zip(nodes, labels)):
+                x = 110 + i * (bw + gap)
+                d.rounded_rectangle((x, y, x + bw, y + bh), radius=26, fill=(20, 24, 52, 235), outline=BLUE, width=4)
+                d.text((x + bw / 2, y + 48), nd, font=font("Inter-Bold.otf", 58), fill=WHITE, anchor="ma")
+                d.text((x + bw / 2, y + bh + 30), lb, font=font("Inter-Medium.otf", 32), fill=MUTED, anchor="ma")
+                if i < n - 1:
+                    ax0, ax1, ay = x + bw + 18, x + bw + gap - 18, y + bh / 2
+                    d.line((ax0, ay, ax1, ay), fill=BLUE, width=6)
+                    d.polygon([(ax1, ay), (ax1 - 22, ay - 14), (ax1 - 22, ay + 14)], fill=BLUE)
+    return im.convert("RGB")
+
+
+# ---- TTS -------------------------------------------------------------------
+_kokoro = None
+
+
+def tts(text, path, voice, speed):
+    global _kokoro
+    import soundfile as sf
+    if _kokoro is None:
+        from kokoro_onnx import Kokoro
+        _kokoro = Kokoro(str(MODELS / "kokoro-v1.0.onnx"), str(MODELS / "voices-v1.0.bin"))
+    lang = "en-gb" if voice.startswith("b") else "en-us"
+    audio, sr = _kokoro.create(" ".join(text.split()), voice=voice, speed=speed, lang=lang)
+    sf.write(path, audio, sr)
+    return len(audio) / sr
+
+
+def sentences(text):
+    s = re.split(r"(?<=[.!?])\s+", " ".join(text.split()))
+    return [x for x in s if x]
+
+
+def srt_time(t):
+    h, r = divmod(t, 3600)
+    m, s = divmod(r, 60)
+    return f"{int(h):02d}:{int(m):02d}:{int(s):02d},{int((s - int(s)) * 1000):03d}"
+
+
+def caption_chunks(text, max_words=9):
+    out = []
+    for s in sentences(text):
+        w = s.split()
+        while w:
+            out.append(" ".join(w[:max_words]))
+            w = w[max_words:]
+    return out
+
+
+def run(cmd):
+    subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+
+
+# ---- assembly ---------------------------------------------------------------
+PAD = 0.7  # seconds of silence after each scene
+
+
+def still_segment(img_path, wav, dur, out, size="1920x1080", zoom=True):
+    w, h = size.split("x")
+    frames = int(math.ceil(dur * 30))
+    vf = (f"scale={int(w)*2}:-1,zoompan=z='1+0.00025*on':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d={frames}:s={size}:fps=30"
+          if zoom else f"scale={w}:{h},fps=30")
+    run(["ffmpeg", "-y", "-loop", "1", "-i", str(img_path), "-i", str(wav), "-filter_complex",
+         f"[0:v]{vf},format=yuv420p,fade=t=in:st=0:d=0.3,fade=t=out:st={dur-0.3:.2f}:d=0.3[v];[1:a]apad,atrim=0:{dur:.2f}[a]",
+         "-map", "[v]", "-map", "[a]", "-t", f"{dur:.2f}", "-c:v", "libx264", "-preset", "veryfast", "-crf", "20",
+         "-c:a", "aac", "-b:a", "160k", "-ar", "48000", str(out)])
+
+
+def concat(parts, out, music=None, music_db=-24):
+    lst = out.parent / (out.stem + "_list.txt")
+    lst.write_text("".join(f"file '{p.resolve()}'\n" for p in parts))
+    tmp = out.parent / (out.stem + "_raw.mp4")
+    run(["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", str(lst), "-c", "copy", str(tmp)])
+    if music and Path(music).exists():
+        dur = float(subprocess.check_output(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", str(tmp)]).decode())
+        run(["ffmpeg", "-y", "-i", str(tmp), "-stream_loop", "-1", "-i", str(music), "-filter_complex",
+             f"[1:a]volume={music_db}dB,afade=t=in:d=2,afade=t=out:st={dur-3:.2f}:d=3[m];[0:a][m]amix=inputs=2:duration=first:normalize=0[a]",
+             "-map", "0:v", "-map", "[a]", "-c:v", "copy", "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", str(out)])
+        tmp.unlink()
+    else:
+        shutil.move(tmp, out)
+    lst.unlink()
+
+
+def make_thumbnail(script, out):
+    W, H = 1280, 720
+    im = background(W, H)
+    im = Image.alpha_composite(im, Image.new("RGBA", (W, H), (0, 0, 0, 40)))
+    d = ImageDraw.Draw(im)
+    d.text((60, 50), "MG LAB", font=font("Inter-Bold.otf", 40), fill=BLUE)
+    d.text((W - 60, 50), f"#{script['episode']:02d}", font=font("Inter-Bold.otf", 40), fill=WHITE, anchor="ra")
+    fb = font("Inter-Bold.otf", 118)
+    lines = script.get("thumbnail_text", script["title"]).split("\n")
+    y = H / 2 - len(lines) * 128 / 2 - 10
+    for l in lines:
+        d.text((60, y), l, font=fb, fill=WHITE)
+        y += 128
+    d.rectangle((60, y + 10, 300, y + 22), fill=BLUE)
+    d.text((60, H - 80), script.get("subtitle", ""), font=font("Inter-SemiBold.otf", 36), fill=MUTED)
+    im.convert("RGB").save(out, quality=92)
+
+
+def make_short(scene, script, wav, dur, slide_png, out, workdir):
+    """Vertical 1080x1920: slide in the middle, captions burned in below, end card."""
+    W, H = 1080, 1920
+    chunks = caption_chunks(scene["narration"], 7)
+    total_chars = sum(len(c) for c in chunks)
+    slide = Image.open(slide_png).convert("RGB").resize((1080, 608), Image.LANCZOS)
+    frames_dir = workdir / f"short_{scene['id']}"
+    frames_dir.mkdir(exist_ok=True)
+    concat_list, t = [], 0.0
+    for i, c in enumerate(chunks):
+        seg = dur * len(c) / total_chars
+        im = background(W, H)
+        d = ImageDraw.Draw(im)
+        d.text((60, 110), "MG LAB", font=font("Inter-Bold.otf", 44), fill=BLUE)
+        d.text((W - 60, 110), f"EP {script['episode']:02d}", font=font("Inter-Bold.otf", 44), fill=WHITE, anchor="ra")
+        for j, l in enumerate(wrap(d, script["title"], font("Inter-Bold.otf", 64), W - 120)[:2]):
+            d.text((60, 220 + j * 76), l, font=font("Inter-Bold.otf", 64), fill=WHITE)
+        im.paste(slide, (0, 470))
+        fc = font("Inter-Bold.otf", 62)
+        lines = wrap(d, c, fc, W - 140)
+        y = 1170
+        for l in lines:
+            d.text((W / 2, y), l, font=fc, fill=(255, 230, 120), anchor="ma", stroke_width=4, stroke_fill=(0, 0, 0))
+            y += 80
+        p = frames_dir / f"{i:03d}.png"
+        im.convert("RGB").save(p)
+        concat_list.append(f"file '{p.resolve()}'\nduration {seg:.3f}\n")
+        t += seg
+    end = background(W, H)
+    d = ImageDraw.Draw(end)
+    d.text((W / 2, 760), "Full episode", font=font("Inter-Bold.otf", 90), fill=WHITE, anchor="ma")
+    d.text((W / 2, 870), "on YouTube", font=font("Inter-Bold.otf", 90), fill=WHITE, anchor="ma")
+    d.rectangle((W / 2 - 150, 1000, W / 2 + 150, 1010), fill=BLUE)
+    d.text((W / 2, 1060), "MG Lab · @momentogalatico", font=font("Inter-SemiBold.otf", 48), fill=MUTED, anchor="ma")
+    pe = frames_dir / "end.png"
+    end.convert("RGB").save(pe)
+    concat_list.append(f"file '{pe.resolve()}'\nduration 2.5\nfile '{pe.resolve()}'\n")
+    lst = frames_dir / "list.txt"
+    lst.write_text("".join(concat_list))
+    total = dur + 2.5
+    music = ASSETS / "music.mp3"
+    inputs = ["-f", "concat", "-safe", "0", "-i", str(lst), "-i", str(wav)]
+    if music.exists():
+        inputs += ["-stream_loop", "-1", "-i", str(music)]
+        af = f"[1:a]apad,atrim=0:{total:.2f}[v1];[2:a]volume=-22dB,atrim=0:{total:.2f},afade=t=out:st={total-1.5:.2f}:d=1.5[m];[v1][m]amix=inputs=2:normalize=0[a]"
+    else:
+        af = f"[1:a]apad,atrim=0:{total:.2f}[a]"
+    run(["ffmpeg", "-y", *inputs, "-filter_complex", f"[0:v]fps=30,format=yuv420p[v];{af}", "-map", "[v]", "-map", "[a]",
+         "-t", f"{total:.2f}", "-c:v", "libx264", "-preset", "veryfast", "-crf", "21", "-c:a", "aac", "-b:a", "160k",
+         "-movflags", "+faststart", str(out)])
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("script")
+    ap.add_argument("--out", default="build")
+    ap.add_argument("--voice")
+    ap.add_argument("--speed", type=float, default=1.0)
+    ap.add_argument("--skip-shorts", action="store_true")
+    ap.add_argument("--only-shorts", action="store_true")
+    a = ap.parse_args()
+    script = yaml.safe_load(Path(a.script).read_text(encoding="utf-8"))
+    voice = a.voice or script.get("voice", "am_michael")
+    out = Path(a.out)
+    work = out / "work"
+    work.mkdir(parents=True, exist_ok=True)
+    ep = script["episode"]
+
+    parts, srt, t = [], [], 0.0
+    durations = {}
+    for i, sc in enumerate(script["scenes"]):
+        png = work / f"{i:02d}_{sc['id']}.png"
+        wav = work / f"{i:02d}_{sc['id']}.wav"
+        render_slide(sc, ep).save(png)
+        if not wav.exists():
+            tts(sc["narration"], wav, voice, a.speed)
+        import soundfile as sf
+        info = sf.info(str(wav))
+        speech = info.frames / info.samplerate
+        durations[sc["id"]] = (speech, wav, png)
+        dur = speech + PAD
+        chunks = caption_chunks(sc["narration"])
+        total = sum(len(c) for c in chunks)
+        ct = t
+        for c in chunks:
+            seg = speech * len(c) / total
+            srt.append((ct, ct + seg, c))
+            ct += seg
+        if not a.only_shorts:
+            seg_mp4 = work / f"{i:02d}_{sc['id']}.mp4"
+            still_segment(png, wav, dur, seg_mp4, zoom=sc["type"] != "code")
+            parts.append(seg_mp4)
+        t += dur
+        print(f"[{i+1}/{len(script['scenes'])}] {sc['id']}: {speech:.1f}s", flush=True)
+
+    base = f"mglab-ep{ep:02d}-{script['slug']}"
+    if not a.only_shorts:
+        concat(parts, out / f"{base}.mp4", ASSETS / "music.mp3")
+        (out / f"{base}.srt").write_text(
+            "".join(f"{n+1}\n{srt_time(s)} --> {srt_time(e)}\n{txt}\n\n" for n, (s, e, txt) in enumerate(srt)), encoding="utf-8")
+        make_thumbnail(script, out / f"{base}-thumbnail.jpg")
+        chapters, ct = [], 0.0
+        for sc in script["scenes"]:
+            chapters.append(f"{int(ct//60)}:{int(ct%60):02d} {sc['heading']}")
+            ct += durations[sc["id"]][0] + PAD
+        (out / f"{base}-chapters.txt").write_text("\n".join(chapters), encoding="utf-8")
+    if not a.skip_shorts:
+        for sc in script["scenes"]:
+            if sc.get("short"):
+                speech, wav, png = durations[sc["id"]]
+                make_short(sc, script, wav, speech, png, out / f"{base}-short-{sc['short']}.mp4", work)
+                print("short:", sc["short"], flush=True)
+    print("done ->", out)
+
+
+if __name__ == "__main__":
+    main()

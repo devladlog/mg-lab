@@ -1,0 +1,238 @@
+episode: 1
+slug: power-platform-alm
+title: "Power Platform ALM that actually works"
+subtitle: "Managed solutions, source control and GitHub Actions"
+voice: am_michael
+thumbnail_text: "STOP CLICKING\nIMPORT"
+youtube:
+  title: "Power Platform ALM That Actually Works: Managed Solutions + GitHub Actions | MG Lab #1"
+  tags: [Power Platform, ALM, GitHub Actions, Power Apps, Power Automate, Dataverse, pac CLI, DevOps, managed solutions]
+next_episode: "Error handling in Power Automate that production deserves"
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Stop clicking Import"
+    sub: "A real ALM process for Power Platform"
+    short: hook
+    narration: >
+      If your Power Apps reach production because someone exported a zip file and clicked Import in the browser,
+      this episode is for you. In the next few minutes we'll build a real application lifecycle for Power Platform:
+      separate environments, managed solutions, source control, and a GitHub Actions pipeline that deploys
+      to test and production for you. Welcome to MG Lab.
+
+  - id: problem
+    type: bullets
+    heading: "What usually goes wrong"
+    bullets:
+      - "Building directly in production"
+      - "Everything in the Default solution"
+      - "Unmanaged solutions everywhere"
+      - "Hard-coded URLs and connections"
+      - "No history of who changed what"
+    narration: >
+      Let's start with what usually goes wrong. People build directly in production, because it's quicker.
+      Everything lives in the Default solution. Unmanaged solutions get imported everywhere, so nobody can tell
+      what's customised and what's deployed. URLs and connections are hard-coded inside flows. And when something breaks,
+      there's no history of who changed what, or why. None of this is a tooling problem. It's a process problem,
+      and the good news is that the fix is not complicated.
+
+  - id: architecture
+    type: diagram
+    heading: "The target"
+    nodes: ["DEV", "Git", "Build", "TEST", "PROD"]
+    labels: ["unmanaged", "unpacked source", "managed + checker", "automated", "approved"]
+    short: architecture
+    narration: >
+      Here's the target. You build in a development environment, using an unmanaged solution.
+      A pipeline exports that solution and unpacks it into Git, so every change becomes a readable diff in a pull request.
+      From main, a build job packs a managed solution and runs Solution Checker as a quality gate.
+      Then the same artifact is deployed to test automatically, and to production after someone approves it.
+      One artifact, built once, promoted through every environment.
+
+  - id: environments
+    type: bullets
+    heading: "Environments"
+    bullets:
+      - "DEV: where makers build (unmanaged)"
+      - "TEST: where users validate (managed)"
+      - "PROD: where the business runs (managed)"
+      - "All need Dataverse"
+      - "Free Developer Plan for personal DEV"
+    narration: >
+      First, environments. You need at least three. Development is where makers build, and it's the only place
+      where the solution is unmanaged. Test is where users validate. Production is where the business runs.
+      Test and production only ever receive managed solutions. All of them need a Dataverse database,
+      and for personal development environments, the Power Apps Developer Plan is free.
+
+  - id: solutions
+    type: bullets
+    heading: "Solutions done right"
+    bullets:
+      - "Create your own publisher and prefix"
+      - "Never build in the Default solution"
+      - "Unmanaged only in DEV"
+      - "Managed everywhere else"
+      - "Version every release"
+    narration: >
+      Second, solutions. Create your own publisher, with a short prefix, so every table, column and flow you create
+      is clearly yours. Never build in the Default solution. Keep the solution unmanaged in development only,
+      and deploy it as managed everywhere else. Managed solutions can be upgraded and removed cleanly,
+      and they stop people from editing production by hand. And version every release, so you always know
+      exactly what is running where.
+
+  - id: envvars
+    type: code
+    heading: "Deployment settings"
+    lang: json
+    code: |
+      {
+        "EnvironmentVariables": [
+          { "SchemaName": "mgl_ApiBaseUrl",
+            "Value": "https://api-test.example.com" }
+        ],
+        "ConnectionReferences": [
+          { "LogicalName": "mgl_sharedoffice365_ref",
+            "ConnectionId": "<connection-id-in-TEST>",
+            "ConnectorId": "/providers/Microsoft.PowerApps/apis/shared_office365" }
+        ]
+      }
+    short: envvars
+    narration: >
+      Third, nothing environment-specific inside your apps and flows. Use environment variables for URLs,
+      email addresses and IDs, and connection references for connections. Then, for each target environment,
+      keep a deployment settings file like this one. The pipeline passes it during import, so the same managed
+      solution points to the test API in test and to the real API in production. No editing after deployment.
+
+  - id: pac
+    type: code
+    heading: "pac CLI in five commands"
+    lang: powershell
+    code: |
+      pac auth create --name mglab-dev `
+        --environment https://mglab-dev.crm4.dynamics.com
+      pac solution export --name MGLabDemo --path out\MGLabDemo.zip
+      pac solution export --name MGLabDemo --managed `
+        --path out\MGLabDemo_managed.zip
+      pac solution unpack --zipfile out\MGLabDemo.zip `
+        --folder src\MGLabDemo --packagetype Both
+      pac solution create-settings `
+        --solution-zip out\MGLabDemo_managed.zip `
+        --settings-file settings\template.json
+    narration: >
+      Everything the pipeline does, you can do locally with the Power Platform CLI. Authenticate to development.
+      Export the solution twice, unmanaged and managed. Unpack both into a source folder. And let the CLI generate
+      a deployment settings template from the solution, with every environment variable and connection reference
+      already listed. These five commands are all in the repository for this episode.
+
+  - id: repo
+    type: code
+    heading: "Repository layout"
+    lang: text
+    code: |
+      mg-lab-alm/
+      ├── .github/workflows/
+      │   ├── export-unpack.yml
+      │   └── build-release.yml
+      ├── src/MGLabDemo/          ← unpacked solution
+      │   ├── Other/Solution.xml
+      │   ├── Entities/ …
+      │   └── Workflows/ …
+      └── settings/
+          ├── deployment-settings.test.json
+          └── deployment-settings.prod.json
+    narration: >
+      This is the repository layout. Two workflows. The unpacked solution under source, where every table,
+      form and flow is a file you can review. And one deployment settings file per environment.
+      Notice what's not here: no zip files. Zips are build outputs. Source control holds the unpacked source.
+
+  - id: spn
+    type: bullets
+    heading: "Pipeline identity"
+    bullets:
+      - "App registration in Microsoft Entra ID"
+      - "Application user in each environment"
+      - "Least-privilege security role"
+      - "Secret in GitHub environment secrets"
+      - "Rotate it. Never in code."
+    narration: >
+      The pipeline needs its own identity, not your account. Create an app registration in Microsoft Entra ID,
+      then add it as an application user in each environment, with a security role that gives it only what it needs.
+      Store the client secret as a GitHub secret, ideally scoped to a GitHub environment, and rotate it.
+      Never put credentials in code or in the workflow file.
+
+  - id: export
+    type: code
+    heading: "Workflow 1: export & unpack"
+    lang: yaml
+    code: |
+      - uses: microsoft/powerplatform-actions/actions-install@v1
+      - uses: microsoft/powerplatform-actions/export-solution@v1
+        with:
+          environment-url: ${{ env.DEV_URL }}
+          app-id: ${{ env.APP_ID }}
+          client-secret: ${{ secrets.PP_CLIENT_SECRET }}
+          tenant-id: ${{ env.TENANT_ID }}
+          solution-name: MGLabDemo
+          solution-output-file: out/MGLabDemo.zip
+      - uses: microsoft/powerplatform-actions/unpack-solution@v1
+        with:
+          solution-file: out/MGLabDemo.zip
+          solution-folder: src/MGLabDemo
+          solution-type: Both
+      - uses: peter-evans/create-pull-request@v6
+    narration: >
+      The first workflow runs on demand. It installs the Power Platform tools, exports the solution from development
+      using the service principal, unpacks it, and opens a pull request. Now a change in a Power App
+      goes through the same review as any other code change. Someone else looks at it before it reaches main.
+
+  - id: release
+    type: code
+    heading: "Workflow 2: build & release"
+    lang: yaml
+    code: |
+      build:
+        - uses: microsoft/powerplatform-actions/pack-solution@v1
+          with: { solution-type: Managed, … }
+        - uses: microsoft/powerplatform-actions/check-solution@v1
+          with: { fail-on-analysis-error: true, … }
+      deploy-test:
+        environment: test
+        - uses: microsoft/powerplatform-actions/import-solution@v1
+          with:
+            use-deployment-settings-file: true
+            deployment-settings-file: settings/deployment-settings.test.json
+            stage-and-upgrade: true
+      deploy-prod:
+        needs: deploy-test
+        environment: production    # required reviewers
+    short: release
+    narration: >
+      The second workflow runs when main changes. The build job packs a managed solution from source and runs
+      Solution Checker. If the checker finds errors, the pipeline stops. The test job imports that exact artifact
+      with the test settings file. The production job uses a GitHub environment with required reviewers,
+      so nothing reaches production without an approval. And stage and upgrade means components you removed
+      in development are also removed in production.
+
+  - id: recap
+    type: bullets
+    heading: "Five rules"
+    bullets:
+      - "Three environments, minimum"
+      - "Your own publisher. Never Default."
+      - "Managed outside DEV"
+      - "Environment variables + settings files"
+      - "Git + pipeline. No manual imports."
+    narration: >
+      Let's recap with five rules. Three environments, minimum. Your own publisher, and never the Default solution.
+      Managed solutions everywhere outside development. Environment variables and a settings file per environment.
+      And Git plus a pipeline, so nobody ever imports into production by hand again.
+
+  - id: outro
+    type: outro
+    heading: "Code & workflows on GitHub"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      All the workflows, settings files and commands from this episode are on GitHub. The link is in the description.
+      In the next episode, we'll make Power Automate flows fail properly, with error handling that production deserves.
+      Subscribe so you don't miss it. This was MG Lab, by Momento Galático.

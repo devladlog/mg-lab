@@ -1,0 +1,91 @@
+# Copy to .github/workflows/ in your own repository.
+# Builds a MANAGED solution from source control, runs Solution Checker,
+# then deploys to TEST and (after approval) to PROD.
+name: build-and-release
+
+on:
+  push:
+    branches: [main]
+    paths: ["src/**", "settings/**"]
+  workflow_dispatch:
+
+env:
+  SOLUTION_NAME: MGLabDemo
+  APP_ID: ${{ vars.PP_APP_ID }}
+  TENANT_ID: ${{ vars.PP_TENANT_ID }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Power Platform tools
+        uses: microsoft/powerplatform-actions/actions-install@v1
+
+      - name: Pack managed solution from source
+        uses: microsoft/powerplatform-actions/pack-solution@v1
+        with:
+          solution-folder: src/${{ env.SOLUTION_NAME }}
+          solution-file: out/${{ env.SOLUTION_NAME }}_managed.zip
+          solution-type: Managed
+
+      - name: Solution Checker (quality gate)
+        uses: microsoft/powerplatform-actions/check-solution@v1
+        with:
+          environment-url: ${{ vars.DEV_ENVIRONMENT_URL }}
+          app-id: ${{ env.APP_ID }}
+          client-secret: ${{ secrets.PP_CLIENT_SECRET }}
+          tenant-id: ${{ env.TENANT_ID }}
+          path: out/${{ env.SOLUTION_NAME }}_managed.zip
+          geo: Europe
+          fail-on-analysis-error: true
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: managed-solution
+          path: out/${{ env.SOLUTION_NAME }}_managed.zip
+
+  deploy-test:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: test            # GitHub environment: holds TEST url + secret
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with: { name: managed-solution, path: out }
+      - uses: microsoft/powerplatform-actions/actions-install@v1
+      - name: Import into TEST
+        uses: microsoft/powerplatform-actions/import-solution@v1
+        with:
+          environment-url: ${{ vars.ENVIRONMENT_URL }}
+          app-id: ${{ env.APP_ID }}
+          client-secret: ${{ secrets.PP_CLIENT_SECRET }}
+          tenant-id: ${{ env.TENANT_ID }}
+          solution-file: out/${{ env.SOLUTION_NAME }}_managed.zip
+          use-deployment-settings-file: true
+          deployment-settings-file: settings/deployment-settings.test.json
+          stage-and-upgrade: true
+          run-asynchronously: true
+
+  deploy-prod:
+    needs: deploy-test
+    runs-on: ubuntu-latest
+    environment: production      # add "Required reviewers" on this environment
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with: { name: managed-solution, path: out }
+      - uses: microsoft/powerplatform-actions/actions-install@v1
+      - name: Import into PROD
+        uses: microsoft/powerplatform-actions/import-solution@v1
+        with:
+          environment-url: ${{ vars.ENVIRONMENT_URL }}
+          app-id: ${{ env.APP_ID }}
+          client-secret: ${{ secrets.PP_CLIENT_SECRET }}
+          tenant-id: ${{ env.TENANT_ID }}
+          solution-file: out/${{ env.SOLUTION_NAME }}_managed.zip
+          use-deployment-settings-file: true
+          deployment-settings-file: settings/deployment-settings.prod.json
+          stage-and-upgrade: true
+          run-asynchronously: true

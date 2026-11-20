@@ -1,0 +1,74 @@
+# Copy to .github/workflows/ in your own repository.
+# Exports the solution from DEV (unmanaged + managed), unpacks it and opens a pull request.
+name: export-and-unpack
+
+on:
+  workflow_dispatch:
+    inputs:
+      solution_name:
+        description: "Solution unique name (not the display name)"
+        required: true
+        default: "MGLabDemo"
+
+permissions:
+  contents: write
+  pull-requests: write
+
+env:
+  DEV_URL: ${{ vars.DEV_ENVIRONMENT_URL }}     # e.g. https://mglab-dev.crm4.dynamics.com
+  APP_ID: ${{ vars.PP_APP_ID }}
+  TENANT_ID: ${{ vars.PP_TENANT_ID }}
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Power Platform tools
+        uses: microsoft/powerplatform-actions/actions-install@v1
+
+      - name: Who am I (fail fast if the connection is wrong)
+        uses: microsoft/powerplatform-actions/who-am-i@v1
+        with:
+          environment-url: ${{ env.DEV_URL }}
+          app-id: ${{ env.APP_ID }}
+          client-secret: ${{ secrets.PP_CLIENT_SECRET }}
+          tenant-id: ${{ env.TENANT_ID }}
+
+      - name: Export unmanaged
+        uses: microsoft/powerplatform-actions/export-solution@v1
+        with:
+          environment-url: ${{ env.DEV_URL }}
+          app-id: ${{ env.APP_ID }}
+          client-secret: ${{ secrets.PP_CLIENT_SECRET }}
+          tenant-id: ${{ env.TENANT_ID }}
+          solution-name: ${{ inputs.solution_name }}
+          solution-output-file: out/${{ inputs.solution_name }}.zip
+          managed: false
+
+      - name: Export managed
+        uses: microsoft/powerplatform-actions/export-solution@v1
+        with:
+          environment-url: ${{ env.DEV_URL }}
+          app-id: ${{ env.APP_ID }}
+          client-secret: ${{ secrets.PP_CLIENT_SECRET }}
+          tenant-id: ${{ env.TENANT_ID }}
+          solution-name: ${{ inputs.solution_name }}
+          solution-output-file: out/${{ inputs.solution_name }}_managed.zip
+          managed: true
+
+      - name: Unpack (both) into source control
+        uses: microsoft/powerplatform-actions/unpack-solution@v1
+        with:
+          solution-file: out/${{ inputs.solution_name }}.zip
+          solution-folder: src/${{ inputs.solution_name }}
+          solution-type: Both
+
+      - name: Open pull request
+        uses: peter-evans/create-pull-request@v6
+        with:
+          branch: export/${{ inputs.solution_name }}-${{ github.run_number }}
+          title: "Export ${{ inputs.solution_name }} from DEV (#${{ github.run_number }})"
+          commit-message: "Export ${{ inputs.solution_name }} from DEV"
+          add-paths: src/${{ inputs.solution_name }}
