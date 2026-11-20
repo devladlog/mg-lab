@@ -27,12 +27,13 @@ Describe 'Pre-flight checks' {
         @{ Path = 'Accounts/~$Budget.xlsx';        Size = 165; Expected = 'BlockedFile' }
         @{ Path = 'Ops/Thumbs.db';                 Size = 10;  Expected = 'BlockedFile' }
         @{ Path = 'People/Contract: v2.docx';      Size = 10;  Expected = 'InvalidCharacters' }
-        @{ Path = 'People/Notes .txt';             Size = 10;  Expected = $null }
         @{ Path = 'IT Support/empty.txt';          Size = 0;   Expected = 'EmptyFile' }
         @{ Path = 'Archive/old.docx';              Size = 10;  Expected = 'UnmappedFolder' }
     ) {
-        $issues = Test-MgMigrationItem -RelativePath $Path -SizeBytes $Size -TargetLibraryUrl $lib
-        if ($Expected) { $issues | Should -Contain $Expected } else { $issues | Should -BeNullOrEmpty }
+        Test-MgMigrationItem -RelativePath $Path -SizeBytes $Size -TargetLibraryUrl $lib | Should -Contain $Expected
+    }
+    It 'accepts a space before the extension' {
+        Test-MgMigrationItem -RelativePath 'People/Notes .txt' -SizeBytes 10 -TargetLibraryUrl $lib | Should -BeNullOrEmpty
     }
     It 'flags paths over 400 characters' {
         $name = ('x' * 380) + '.docx'
