@@ -1,0 +1,245 @@
+# DEVLADLOG Power Automate — episode 16 (draft: material built and tested locally, demo still to record)
+episode: 16
+slug: process-mining-process-advisor
+series_label: "POWER AUTOMATE"
+series_name: "DEVLADLOG Power Automate"
+file_prefix: "power-automate"
+title: "Process mining: see how the process really runs"
+subtitle: "Check the event log first, then let Power Automate draw the map"
+voice: am_michael
+thumbnail_text: "PROCESS\nMINING\nIN POWER AUTOMATE"
+youtube:
+  title: "Process Mining in Power Automate: Prepare the Event Log, Read the Map | DEVLADLOG Power Automate #16"
+  tags: [Power Automate, process mining, task mining, process advisor, event log, process map, variants, rework, bottleneck, Power Platform]
+sources:
+  - https://www.devladlog.com/articles/power-automate/2026-03-31-process-mining-complete-guide-2026/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "How long does a purchase really take?"
+    sub: "Process mining in Power Automate, with data we checked first"
+    short: hook
+    narration: >
+      Ask anyone how long a purchase request takes and you get an answer. Ask the event log and you get another one.
+      In this episode we take three hundred fictional purchase requests, check the data, load it into Power Automate
+      process mining, and see what the process really does. Most of the work happens before the upload.
+
+  - id: what
+    type: bullets
+    heading: "Process mining and task mining"
+    bullets:
+      - "Process mining: an event log from your system"
+      - "The map: activities are nodes, transitions are edges"
+      - "A variant is one unique path, start to finish"
+      - "Task mining: recordings of desktop work"
+      - "Learn's page addresses still say process advisor"
+    narration: >
+      Process mining reads an event log from a system of record and draws the process as it really ran. Activities
+      are nodes, transitions are edges, and every unique path from start to finish is a variant. Task mining is the
+      sibling that records what people do on the desktop. The Learn page addresses still say process advisor, but
+      the pages now call both capabilities process mining and task mining.
+
+  - id: licence
+    type: bullets
+    heading: "What you need first"
+    bullets:
+      - "An environment with Dataverse, Environment Maker role"
+      - "Trial: 100 MB of process data per process"
+      - "Each Premium licence adds 50 MB to a pool"
+      - "Learn says 30 days in one place, 90 in another"
+      - "Our event log is under one megabyte"
+    narration: >
+      Before you try it. You need an environment with Dataverse and the Environment Maker role. The trial gives a
+      hundred megabytes of process data per process, and each Power Automate Premium licence adds fifty megabytes to
+      a tenant pool. Learn says the trial lasts thirty days in one article and ninety in another, so check yours. Our
+      log is under one megabyte.
+
+  - id: log
+    type: code
+    heading: "One row per activity"
+    lang: text
+    code: |
+      CaseId,ActivityName,StartTimestamp,EndTimestamp,Resource,Amount,Category
+      PR-0001,Submit request,2026-07-06 08:00:00,2026-07-06 08:17:00,Alex Demo,792.69,Software
+      PR-0001,Manager review,2026-07-06 11:46:00,2026-07-06 12:08:00,Sam Demo,792.69,Software
+      PR-0001,Request more information,2026-07-06 12:13:00,...
+
+      CaseId         = Case ID
+      ActivityName   = Activity name
+      StartTimestamp = Start timestamp
+      EndTimestamp   = End timestamp
+      Resource       = Resource
+      Amount         = Financial per case (first event)
+      Category       = Case level attribute (first event)
+    narration: >
+      The log is one row per activity. Case id, activity name and start timestamp are mandatory. The end timestamp
+      turns it into an activity log, and resource and amount are optional extras. The amount repeats on every row of
+      a case, and the product reads it from the first event.
+
+  - id: doctor
+    type: code
+    heading: "Check the data before you upload it"
+    lang: text
+    short: doctor
+    code: |
+      $ python -m pmkit doctor purchase-requests-eventlog-raw.csv
+      ERROR   PM002 3 row(s) have an empty CaseId
+      ERROR   PM003 28 timestamp(s) aren't ISO 8601
+      WARNING PM009 timestamps carry UTC offsets ['+01:00']
+      WARNING PM004 8 row(s) end before they start
+      WARNING PM005 activity 'manager review' is spelled 3 ways
+      WARNING PM006 14 exact duplicate row(s)
+
+      $ python -m pmkit clean ... --out fixed.csv
+      dropped_incomplete_rows: 3   dropped_duplicates: 12
+      renamed_activities: 18       converted_timestamps: 24
+      swapped_start_end: 8
+    narration: >
+      Our raw export has the problems real ones have. Three rows without a case id. Dates written day first. Manager
+      review spelled three ways, which would show up as three boxes on the map. Learn says the case id must be on
+      every row and timestamps should be ISO eight six oh one. The doctor finds all of it, and the clean step repairs
+      it, to the byte, back to the file we generated.
+
+  - id: upload
+    type: screen
+    heading: "Create the process, import the file"
+    image: screens/upload.jpg
+    bar: "make.powerautomate.com · Process mining · Create a new process"
+    demo: >
+      Power Automate, environment DEV, Process mining > Start here: process name "Purchase requests", Import data,
+      Choose a data source > Text/CSV > Upload file (Preview) with purchase-requests-eventlog.csv selected, then the
+      Power Query preview of the first rows. Mask the org URL and the environment id.
+    narration: >
+      Now the real product. In Power Automate, open process mining, start here, name the process and choose import
+      data. Pick text or CSV, upload the file, and look at the preview. This power query step is where you could
+      filter or rename activities. Our file is already clean, so we go on.
+
+  - id: mapping
+    type: screen
+    heading: "Tell it what each column means"
+    image: screens/mapping.jpg
+    bar: "Process mining · Map your data"
+    demo: >
+      The mapping screen: CaseId = Case ID, ActivityName = Activity name, StartTimestamp = Start timestamp,
+      EndTimestamp = End timestamp, Resource = Resource, Amount = Financial per case (first event), Category = Case level
+      attribute (first event). The Save and analyze button visible.
+    narration: >
+      On the mapping screen every column gets an attribute type. Case id, activity, start and end timestamp, and
+      resource. The amount is a financial value per case, the category a case level attribute. Save and analyze, and
+      wait a few minutes.
+
+  - id: map
+    type: screen
+    heading: "The process as it really ran"
+    image: screens/map.jpg
+    bar: "Process mining · Purchase requests · Map"
+    demo: >
+      The Map tab for "Purchase requests": nine activities, the Performance layer with Mean duration selected, the long
+      transition from Manager review to Finance review highlighted; then the Rework layer showing the loop around
+      Manager review and Revise request. Mask the org URL.
+    narration: >
+      This is the map. Boxes are activities, arrows are transitions. Switch to the performance layer and mean duration
+      and the arrow from manager review to finance review stands out. Switch to the rework layer and you see the loop
+      where managers ask for more information and requesters revise.
+
+  - id: kpis
+    type: screen
+    heading: "The dashboard, and our numbers"
+    image: screens/kpis.jpg
+    bar: "Process mining · Purchase requests · Summary"
+    demo: >
+      Split screen. Left: the Summary tab with the KPIs (average case duration, self-loop cases, loop cases, rework
+      cases), Variants by frequency and the case, activity and variant counts. Right: the terminal output of
+      python -m pmkit analyze on the same CSV. Mask the org URL.
+    narration: >
+      And the summary page. Three hundred cases, seventeen variants, an average case duration of about nine and a half
+      days, and rework in twenty eight percent of cases. We computed the same numbers locally before uploading, so we
+      know whether to trust the screen.
+
+  - id: numbers
+    type: code
+    heading: "What the data says"
+    lang: text
+    short: numbers
+    code: |
+      $ python -m pmkit analyze purchase-requests-eventlog.csv \
+            --before "Manager review" "Place order"
+      cases 300  events 1781  activities 9  variants 17
+      average case duration 227.2 h  median 234.1 h
+      rework cases 28.0 %
+      slowest transitions (mean wait, at least 20 cases):
+        155.6 h  Place order > Receive goods  (265 cases)
+         79.6 h  Receive goods > Receive goods  (21 cases)
+         64.7 h  Manager review > Finance review  (106 cases)
+      Place order before Manager review: 8 case(s)
+    narration: >
+      Here is the reading. The longest wait is delivery, about six and a half days, and that is the supplier's. The
+      longest wait we own is the queue for finance review, sixty five hours on average across a hundred and six
+      requests. And eight requests had the order placed before the manager review. No spreadsheet would have shown
+      you that.
+
+  - id: source
+    type: bullets
+    heading: "Gotcha: where does the log come from?"
+    bullets:
+      - "Most tables hold the current state, not history"
+      - "Dynamics keeps its history in the Activities table"
+      - "Dataverse and Dataflow connectors: not supported"
+      - "Use the OData connector, URL ending api/data/v9.2"
+      - "Premium KPIs need your own Power BI workspace"
+    narration: >
+      The honest gotcha is the data. Most tables only hold the current state, and Learn points at the Activities table
+      for Dynamics. The Dataverse connector is not supported as a source, so you connect with the OData connector and put
+      api, data, v nine point two at the end of the environment address. And some KPIs, like the median, are premium
+      and need your own Power BI workspace.
+
+  - id: task
+    type: bullets
+    heading: "Task mining: zoom into one step"
+    bullets:
+      - "Record with Power Automate for desktop"
+      - "Analyze adds recordings to the process map"
+      - "The TDS endpoint setting must be enabled"
+      - "Automate activities drafts a flow"
+    narration: >
+      Process mining finds the slow step. Task mining zooms in. You record the task with Power Automate for desktop,
+      analyze the recordings, and the process map shows what people actually click. The tenant needs the T D S
+      endpoint setting enabled, and automate activities drafts a flow from what it saw.
+
+  - id: tests
+    type: code
+    heading: "Everything tested without a tenant"
+    lang: text
+    code: |
+      $ python -m pytest
+      31 passed in 5s
+
+      generate:  same seed, same bytes
+      doctor:    10 rules, 6 fire on the raw file
+      clean:     raw file back to the original, byte for byte
+      analyze:   variants, rework, waits, compliance
+    narration: >
+      Thirty one tests, no tenant. The generator is deterministic, the doctor has its rules, and cleaning the raw
+      file gives back the original byte for byte. The analysis covers variants, rework, waits and the compliance check.
+
+  - id: recap
+    type: bullets
+    heading: "Takeaways"
+    bullets:
+      - "Check the log before you upload it"
+      - "Case id, activity, start timestamp: the minimum"
+      - "Read variants, rework and waits, not averages"
+      - "Compute the numbers yourself once"
+      - "Task mining zooms into the slow step"
+    narration: >
+      To recap. Check the log before the upload. Case id, activity and start timestamp are the minimum. Read variants,
+      rework and waits, not just averages. Compute the numbers yourself at least once. And use task mining to zoom in.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The code is on GitHub, and the five guides for this topic are on devladlog dot com. That closes the Power Automate
+      series for now. Thanks for watching.

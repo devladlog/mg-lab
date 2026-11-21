@@ -1,0 +1,153 @@
+{
+  "properties": {
+    "connectionReferences": {
+      "shared_commondataserviceforapps": {
+        "runtimeSource": "embedded",
+        "connection": {
+          "connectionReferenceLogicalName": "cts_shareddataverse_salesfollowup"
+        },
+        "api": {
+          "name": "shared_commondataserviceforapps"
+        }
+      },
+      "shared_office365": {
+        "runtimeSource": "embedded",
+        "connection": {
+          "connectionReferenceLogicalName": "cts_sharedoffice365_salesfollowup"
+        },
+        "api": {
+          "name": "shared_office365"
+        }
+      }
+    },
+    "definition": {
+      "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+      "contentVersion": "1.0.0.0",
+      "parameters": {
+        "$connections": {
+          "defaultValue": {},
+          "type": "Object"
+        },
+        "$authentication": {
+          "defaultValue": {},
+          "type": "SecureObject"
+        }
+      },
+      "triggers": {
+        "Every_Monday_morning": {
+          "type": "Recurrence",
+          "recurrence": {
+            "frequency": "Week",
+            "interval": 1,
+            "timeZone": "GMT Standard Time",
+            "startTime": "2026-11-23T08:00:00",
+            "schedule": {
+              "weekDays": [
+                "Monday"
+              ],
+              "hours": [
+                "8"
+              ],
+              "minutes": [
+                0
+              ]
+            }
+          }
+        }
+      },
+      "actions": {
+        "List_overdue_opportunities": {
+          "type": "OpenApiConnection",
+          "runAfter": {},
+          "inputs": {
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+              "connectionName": "shared_commondataserviceforapps",
+              "operationId": "ListRecords"
+            },
+            "parameters": {
+              "entityName": "opportunities",
+              "$select": "name,estimatedvalue,estimatedclosedate,_ownerid_value",
+              "$expand": "parentaccountid($select=name)",
+              "$filter": "statecode eq 0 and estimatedclosedate lt @{formatDateTime(utcNow(), 'yyyy-MM-dd')}",
+              "$orderby": "estimatedclosedate asc,opportunityid asc",
+              "$top": 50
+            },
+            "authentication": "@parameters('$authentication')"
+          }
+        },
+        "Any_overdue": {
+          "type": "If",
+          "runAfter": {
+            "List_overdue_opportunities": [
+              "Succeeded"
+            ]
+          },
+          "expression": {
+            "greater": [
+              "@length(outputs('List_overdue_opportunities')?['body/value'])",
+              0
+            ]
+          },
+          "actions": {
+            "Overdue_table": {
+              "type": "Table",
+              "runAfter": {},
+              "inputs": {
+                "from": "@outputs('List_overdue_opportunities')?['body/value']",
+                "format": "HTML",
+                "columns": [
+                  {
+                    "header": "Opportunity",
+                    "value": "@item()?['name']"
+                  },
+                  {
+                    "header": "Account",
+                    "value": "@item()?['parentaccountid']?['name']"
+                  },
+                  {
+                    "header": "Owner",
+                    "value": "@item()?['_ownerid_value@OData.Community.Display.V1.FormattedValue']"
+                  },
+                  {
+                    "header": "Estimated value",
+                    "value": "@item()?['estimatedvalue']"
+                  },
+                  {
+                    "header": "Should have closed",
+                    "value": "@item()?['estimatedclosedate']"
+                  }
+                ]
+              }
+            },
+            "Send_digest": {
+              "type": "OpenApiConnection",
+              "runAfter": {
+                "Overdue_table": [
+                  "Succeeded"
+                ]
+              },
+              "inputs": {
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365",
+                  "connectionName": "shared_office365",
+                  "operationId": "SendEmailV2"
+                },
+                "parameters": {
+                  "emailMessage/To": "sales-managers@contoso.com",
+                  "emailMessage/Subject": "Overdue opportunities: @{length(outputs('List_overdue_opportunities')?['body/value'])}",
+                  "emailMessage/Body": "<p>Open opportunities past their estimated close date:</p>@{body('Overdue_table')}"
+                },
+                "authentication": "@parameters('$authentication')"
+              }
+            }
+          },
+          "else": {
+            "actions": {}
+          }
+        }
+      }
+    }
+  },
+  "schemaVersion": "1.0.0.0"
+}

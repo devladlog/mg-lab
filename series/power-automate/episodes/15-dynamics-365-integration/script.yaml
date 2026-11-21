@@ -1,0 +1,261 @@
+# DEVLADLOG Power Automate — episode 15 (draft: material built and tested locally, demo still to record)
+episode: 15
+slug: dynamics-365-integration
+series_label: "POWER AUTOMATE"
+series_name: "DEVLADLOG Power Automate"
+file_prefix: "power-automate"
+title: "Dynamics 365 integration without the surprises"
+subtitle: "Triggers that fire once, lookups that bind, queries you test first"
+voice: am_michael
+thumbnail_text: "DYNAMICS 365\nAND POWER\nAUTOMATE"
+youtube:
+  title: "Dynamics 365 and Power Automate: Triggers, Lookups, Filters That Work | DEVLADLOG Power Automate #15"
+  tags: [Power Automate, Dynamics 365, Dynamics 365 Sales, Dataverse connector, Dataverse trigger, OData filter, opportunity, lookup, service protection limits, Power Platform]
+sources:
+  - https://www.devladlog.com/articles/power-automate/2025-05-07-dynamics-365-integration-complete-guide-2025/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "A deal is won. Nothing happens."
+    sub: "Dynamics 365 Sales and Power Automate, done carefully"
+    short: hook
+    narration: >
+      A salesperson closes a deal as won in Dynamics 365 Sales. Nobody books the kick-off call, and finance finds out
+      a week later. A flow can fix that in an afternoon. The hard part is not building it. The hard part is making it
+      fire once, for the right row, without looping. That is this episode.
+
+  - id: connector
+    type: bullets
+    heading: "Which connector, and who signs in"
+    bullets:
+      - "Dynamics 365 connector: deprecated, don't use it"
+      - "Use the Microsoft Dataverse connector"
+      - "Learn lists it as premium for Power Automate"
+      - "Connections: sign-in, certificate or service principal"
+      - "The flow runs as whoever owns the connection"
+    narration: >
+      First, the connector. The old Dynamics 365 connector is deprecated, and Microsoft says to replace it with the
+      Microsoft Dataverse connector, which talks to the tables behind Sales. Learn lists that connector as premium for
+      Power Automate, so the maker needs a premium licence or the trial. It supports a normal sign in, a
+      certificate, or a service principal. Whatever the connection is, that identity is who your flow acts as.
+
+  - id: trigger
+    type: code
+    heading: "The trigger: a won opportunity"
+    lang: json
+    code: |
+      "When_an_opportunity_is_won": {
+        "inputs": {
+          "host": { "operationId": "SubscribeWebhookTrigger" },
+          "parameters": {
+            "subscriptionRequest/message": 3,
+            "subscriptionRequest/entityname": "opportunity",
+            "subscriptionRequest/scope": 4,
+            "subscriptionRequest/filteringattributes": "statecode",
+            "subscriptionRequest/filterexpression": "statecode eq 1"
+          }
+        }
+      }
+    narration: >
+      The trigger watches updates to the opportunity table across the organization. Two settings do the work. Select
+      columns says the flow may only start when state code is part of the update. Filter rows says the row must be
+      won after the save. State code one means won. Without those two, every edit of every opportunity starts a run.
+
+  - id: fires
+    type: code
+    heading: "Does it fire? Ask before you save"
+    lang: text
+    short: fires
+    code: |
+      $ d365kit fires --flow won.json --row won.json \
+            --changed statecode,statuscode
+      When_an_opportunity_is_won: FIRES
+
+      $ d365kit fires --flow won.json --row won.json \
+            --changed description
+      When_an_opportunity_is_won: does not fire
+
+      $ d365kit fires --flow won.json --row open.json \
+            --changed statecode
+      When_an_opportunity_is_won: does not fire
+    narration: >
+      We model those rules in code. Closing as won includes state code, and the row passes the filter, so it fires.
+      Editing the description does not include state code, so nothing runs. Reopen the deal and state code is in the
+      request, but the filter is false after the save. Learn adds a catch: a column in the list triggers the flow even
+      when its value did not change.
+
+  - id: won
+    type: screen
+    heading: "Close as won, watch the flow"
+    image: screens/won.jpg
+    bar: "Sales Hub · Opportunity · Close as Won"
+    demo: >
+      Dynamics 365 Sales Hub in the Sales trial environment: the opportunity "Fabrikam laptop refresh" (12,500 EUR)
+      with the Close as Won dialog, then make.powerautomate.com run history of "Won opportunity follow-up" with every
+      action green. Mask the org URL and user names except Alex Demo.
+    narration: >
+      Here is the real thing. Alex Demo presses Close as Won on the twelve thousand five hundred euro opportunity.
+      Seconds later the run history shows the flow started once, read the opportunity, found no existing task, and
+      created one.
+
+  - id: task
+    type: code
+    heading: "Lookups: entity set name, then id"
+    lang: json
+    code: |
+      "Create_kickoff_task": {
+        "inputs": {
+          "host": { "operationId": "CreateRecord" },
+          "parameters": {
+            "entityName": "tasks",
+            "item/subject": "Kick-off call",
+            "item/scheduledend": "@addDays(utcNow(), 3)",
+            "item/regardingobjectid_opportunity@odata.bind":
+                "opportunities(@{triggerOutputs()?['body/opportunityid']})",
+            "item/ownerid@odata.bind":
+                "systemusers(@{outputs('Get_opportunity')?['body/_ownerid_value']})"
+          }
+        }
+      }
+    narration: >
+      Creating the task is where lookups bite. A lookup column is set with the entity set name, then the row id in
+      brackets. The regarding column points at several tables, so its name carries the table: regarding object,
+      opportunity. And we set the owner to the deal owner, otherwise the task belongs to whoever owns the connection.
+
+  - id: timeline
+    type: screen
+    heading: "One task, owned by the right person"
+    image: screens/task.jpg
+    bar: "Sales Hub · Opportunity · Timeline"
+    demo: >
+      The opportunity timeline in Sales Hub showing exactly one open task "Kick-off call", regarding the opportunity,
+      owner Alex Demo, due in three days. Then the opportunity reopened and closed as won again, and the timeline still
+      showing one task. Mask the org URL.
+    narration: >
+      The task is on the timeline, regarding the opportunity, owned by Alex. Now the test that matters. Reopen the deal
+      and win it again. The trigger fires again, the flow looks for an existing kick-off task first, finds it, and
+      does nothing. One deal, one task.
+
+  - id: query
+    type: screen
+    heading: "Test the filter outside the flow"
+    image: screens/query.jpg
+    bar: "PowerShell 7 · Invoke-DataverseQuery.ps1"
+    demo: >
+      Terminal on the lab laptop: Invoke-DataverseQuery.ps1 with -PrintOnly (the URL and the Prefer header), then
+      the real run with the digest filter "statecode eq 0 and estimatedclosedate lt <today>", paging with -PageSize 2
+      showing "N row(s) in M page(s)". Token comes from an environment variable and is never shown; mask the org URL
+      and GUIDs.
+    narration: >
+      The weekly digest lists open deals past their close date. Before putting that filter in a flow, we run the exact
+      text against the real Web API with a small script. It prints the request, follows the next link between pages,
+      and tells us how many rows came back. The filter is wrong in the script long before it is wrong in an email.
+
+  - id: paging
+    type: code
+    heading: "Paging and throttling, by the book"
+    lang: powershell
+    code: |
+      $url = $uri
+      while ($url -and $pages -lt $MaxPages) {
+          $r = Send-Get $url
+          $pages++
+          foreach ($row in $r.value) { $rows.Add($row) }
+          $url = $r.'@odata.nextLink'   # never modified or extended
+      }
+
+      # in Send-Get, on a 429:
+      $wait = [math]::Ceiling($resp.Headers.RetryAfter.Delta.TotalSeconds)
+      Start-Sleep -Seconds $wait
+    narration: >
+      Two rules from Learn. Follow the next link exactly as given, with the same page size, and never combine top with
+      a page size, because the top is ignored. And when Dataverse answers four twenty nine, wait for the retry after
+      header. The default limit is six thousand requests per user in five minutes, per web server.
+
+  - id: digest
+    type: screen
+    heading: "Monday morning digest"
+    image: screens/digest.jpg
+    bar: "Outlook on the web · Overdue opportunities: 3"
+    demo: >
+      Outlook on the web (Jordan Demo, sales manager) showing the Monday digest mail "Overdue opportunities" with
+      the HTML table (Opportunity, Account, Owner, Estimated value, Should have closed), next to the flow run history of
+      "Overdue opportunities digest" (manual test run). Mask the org URL.
+    narration: >
+      The flow runs on Monday morning and lists the overdue open deals ordered by close date, with the row id as the
+      last sort column so pages never overlap. The owner comes through as a name, not a guid, because the connector
+      returns the formatted value. If nothing is overdue, no mail is sent.
+
+  - id: limits
+    type: bullets
+    heading: "Limits worth knowing"
+    bullets:
+      - "List rows returns 5,000 rows by default"
+      - "Pagination threshold: up to 100,000 rows"
+      - "FetchXML: pagination setting not supported"
+      - "Filter text: no $filter= prefix, double single quotes"
+      - "Service protection: 6,000 requests per 5 minutes"
+    narration: >
+      Limits. List rows returns up to five thousand rows unless you turn on pagination, and the threshold tops out at
+      one hundred thousand. Pagination does not work with FetchXML, so page that yourself. The filter box takes the
+      expression only, no dollar filter prefix, and a quote inside a value is doubled.
+
+  - id: gotcha
+    type: code
+    heading: "Gotcha: lookups can't be trigger columns"
+    lang: text
+    short: lookup
+    code: |
+      $ d365kit lint won-bad.json
+      ERROR   D365001 trigger When_an_opportunity_is_won:
+        Select columns lists lookup column(s) ['parentaccountid']:
+        changes to lookups don't trigger the flow (Learn).
+        Use a scalar column
+      ERROR   D365003 trigger When_an_opportunity_is_won:
+        Select columns lists the primary key ['opportunityid']:
+        it is part of every update, so every update triggers
+        the flow (Learn)
+    narration: >
+      The honest gotcha. Learn says lookup columns are not supported in Select columns. Put the account in the list and
+      the flow silently never fires on account changes. And a primary key in that list makes every update fire. Both
+      look fine in the designer, so our linter checks for them.
+
+  - id: tests
+    type: code
+    heading: "Everything tested without a tenant"
+    lang: text
+    code: |
+      $ python -m pytest
+      50 passed in 41s
+      $ Invoke-Pester tests/Invoke-DataverseQuery.Tests.ps1
+      Tests Passed: 12, Failed: 0
+
+      flows:    won, small deal, second win, digest
+      triggers: fires, reopen, lookup, primary key
+      script:   paging, 429, encoding, real PowerShell
+    narration: >
+      Fifty Python tests and twelve Pester tests, no tenant needed. The flows run against mocked connectors, the trigger
+      rules are checked, and the script is real PowerShell with only the web call mocked.
+
+  - id: recap
+    type: bullets
+    heading: "Takeaways"
+    bullets:
+      - "Dataverse connector, never the deprecated one"
+      - "Select columns plus Filter rows: fire once"
+      - "Lookups: entity set name and id"
+      - "Check before you create: triggers repeat"
+      - "Test OData text and respect 429 and paging"
+    narration: >
+      To recap. Use the Dataverse connector. Select columns and a filter make the trigger fire once. Lookups take the
+      entity set name and the id. Check before you create, because triggers repeat. And test your query text outside
+      the flow.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The code is on GitHub, and the five guides for this topic are on devladlog dot com. See you in the next episode,
+      process mining.

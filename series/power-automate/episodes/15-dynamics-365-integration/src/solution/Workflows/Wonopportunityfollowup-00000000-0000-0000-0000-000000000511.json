@@ -1,0 +1,176 @@
+{
+  "properties": {
+    "connectionReferences": {
+      "shared_commondataserviceforapps": {
+        "runtimeSource": "embedded",
+        "connection": {
+          "connectionReferenceLogicalName": "cts_shareddataverse_salesfollowup"
+        },
+        "api": {
+          "name": "shared_commondataserviceforapps"
+        }
+      },
+      "shared_office365": {
+        "runtimeSource": "embedded",
+        "connection": {
+          "connectionReferenceLogicalName": "cts_sharedoffice365_salesfollowup"
+        },
+        "api": {
+          "name": "shared_office365"
+        }
+      }
+    },
+    "definition": {
+      "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+      "contentVersion": "1.0.0.0",
+      "parameters": {
+        "$connections": {
+          "defaultValue": {},
+          "type": "Object"
+        },
+        "$authentication": {
+          "defaultValue": {},
+          "type": "SecureObject"
+        }
+      },
+      "triggers": {
+        "When_an_opportunity_is_won": {
+          "type": "OpenApiConnection",
+          "inputs": {
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+              "connectionName": "shared_commondataserviceforapps",
+              "operationId": "SubscribeWebhookTrigger"
+            },
+            "parameters": {
+              "subscriptionRequest/message": 3,
+              "subscriptionRequest/entityname": "opportunity",
+              "subscriptionRequest/scope": 4,
+              "subscriptionRequest/filteringattributes": "statecode",
+              "subscriptionRequest/filterexpression": "statecode eq 1"
+            },
+            "authentication": "@parameters('$authentication')"
+          }
+        }
+      },
+      "actions": {
+        "Get_opportunity": {
+          "type": "OpenApiConnection",
+          "runAfter": {},
+          "inputs": {
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+              "connectionName": "shared_commondataserviceforapps",
+              "operationId": "GetItem"
+            },
+            "parameters": {
+              "entityName": "opportunities",
+              "recordId": "@triggerOutputs()?['body/opportunityid']",
+              "$select": "name,estimatedvalue,actualvalue,_ownerid_value",
+              "$expand": "parentaccountid($select=name)"
+            },
+            "authentication": "@parameters('$authentication')"
+          }
+        },
+        "List_existing_kickoff_tasks": {
+          "type": "OpenApiConnection",
+          "runAfter": {
+            "Get_opportunity": [
+              "Succeeded"
+            ]
+          },
+          "inputs": {
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+              "connectionName": "shared_commondataserviceforapps",
+              "operationId": "ListRecords"
+            },
+            "parameters": {
+              "entityName": "tasks",
+              "$select": "activityid",
+              "$top": 1,
+              "$filter": "_regardingobjectid_value eq @{triggerOutputs()?['body/opportunityid']} and subject eq 'Kick-off call'"
+            },
+            "authentication": "@parameters('$authentication')"
+          }
+        },
+        "Already_has_kickoff_task": {
+          "type": "If",
+          "runAfter": {
+            "List_existing_kickoff_tasks": [
+              "Succeeded"
+            ]
+          },
+          "expression": {
+            "equals": [
+              "@length(outputs('List_existing_kickoff_tasks')?['body/value'])",
+              0
+            ]
+          },
+          "actions": {
+            "Create_kickoff_task": {
+              "type": "OpenApiConnection",
+              "runAfter": {},
+              "inputs": {
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+                  "connectionName": "shared_commondataserviceforapps",
+                  "operationId": "CreateRecord"
+                },
+                "parameters": {
+                  "entityName": "tasks",
+                  "item/subject": "Kick-off call",
+                  "item/description": "Won: @{outputs('Get_opportunity')?['body/name']} for @{outputs('Get_opportunity')?['body/parentaccountid']?['name']}",
+                  "item/scheduledend": "@addDays(utcNow(), 3)",
+                  "item/regardingobjectid_opportunity@odata.bind": "opportunities(@{triggerOutputs()?['body/opportunityid']})",
+                  "item/ownerid@odata.bind": "systemusers(@{outputs('Get_opportunity')?['body/_ownerid_value']})"
+                },
+                "authentication": "@parameters('$authentication')"
+              }
+            },
+            "Big_deal": {
+              "type": "If",
+              "runAfter": {
+                "Create_kickoff_task": [
+                  "Succeeded"
+                ]
+              },
+              "expression": {
+                "greaterOrEquals": [
+                  "@coalesce(outputs('Get_opportunity')?['body/actualvalue'], outputs('Get_opportunity')?['body/estimatedvalue'], 0)",
+                  5000
+                ]
+              },
+              "actions": {
+                "Tell_finance": {
+                  "type": "OpenApiConnection",
+                  "runAfter": {},
+                  "inputs": {
+                    "host": {
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365",
+                      "connectionName": "shared_office365",
+                      "operationId": "SendEmailV2"
+                    },
+                    "parameters": {
+                      "emailMessage/To": "finance@contoso.com",
+                      "emailMessage/Subject": "Deal won: @{outputs('Get_opportunity')?['body/name']}",
+                      "emailMessage/Body": "<p>@{outputs('Get_opportunity')?['body/name']} for @{outputs('Get_opportunity')?['body/parentaccountid']?['name']} was closed as won, value @{coalesce(outputs('Get_opportunity')?['body/actualvalue'], outputs('Get_opportunity')?['body/estimatedvalue'], 0)} EUR.</p>"
+                    },
+                    "authentication": "@parameters('$authentication')"
+                  }
+                }
+              },
+              "else": {
+                "actions": {}
+              }
+            }
+          },
+          "else": {
+            "actions": {}
+          }
+        }
+      }
+    }
+  },
+  "schemaVersion": "1.0.0.0"
+}
