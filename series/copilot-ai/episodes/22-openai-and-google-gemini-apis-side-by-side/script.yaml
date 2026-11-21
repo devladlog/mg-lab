@@ -1,0 +1,214 @@
+# DEVLADLOG Copilot & AI - episode 22 (draft: screen scenes need the recording described in demo.md)
+episode: 22
+slug: openai-and-google-gemini-apis-side-by-side
+series_label: "COPILOT & AI"
+series_name: "DEVLADLOG Copilot & AI"
+file_prefix: "copilot-ai"
+title: "OpenAI and Google Gemini APIs Side by Side"
+subtitle: "Responses API and Interactions API on the same Contoso tasks"
+voice: am_michael
+thumbnail_text: "OPENAI\nVS\nGEMINI API"
+youtube:
+  title: "OpenAI Responses vs Gemini Interactions API, Same Tasks (Real Run) | DEVLADLOG Copilot & AI #22"
+  tags: [OpenAI, Responses API, Gemini API, Interactions API, structured outputs, function calling, JSON schema, tool use, token usage, Python, Contoso]
+next_episode: "Copilot and AI Series Wrap-Up"
+sources:
+  - "https://developers.openai.com/api/docs/guides/structured-outputs"
+  - "https://developers.openai.com/api/docs/guides/function-calling"
+  - "https://developers.openai.com/api/docs/api-reference/responses/create"
+  - "https://developers.openai.com/api/docs/models/gpt-6.2-sol"
+  - "https://ai.google.dev/gemini-api/docs/interactions"
+  - "https://ai.google.dev/gemini-api/docs/structured-output"
+  - "https://ai.google.dev/gemini-api/docs/function-calling"
+  - "https://ai.google.dev/gemini-api/docs/pricing"
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Same task, two APIs: where they really differ"
+    sub: "OpenAI Responses vs Gemini Interactions, on Contoso's vendor list"
+    short: hook
+    narration: >
+      Everyone says the two APIs are basically the same. Then your strict schema is rejected, your token limit returns half
+      a sentence, and the bill has a number you did not expect. We run the same three Contoso tasks against Open A I and
+      Gemini, and look at exactly where they differ. Welcome to Dev Lad Log, Copilot and A I.
+
+  - id: tasks
+    type: bullets
+    heading: "Three tasks, one contract"
+    bullets:
+      - "Extract: four vendors into a JSON schema, total 45,000 euros"
+      - "Tool: renewals in the next 180 days, via a function we run"
+      - "Truncate: a 16 token limit, to see what a cut-off looks like"
+      - "One neutral contract, two adapters, no framework"
+    narration: >
+      Three tasks. Extract the four Contoso vendors into a schema and total them. Call a function that lists renewals in
+      the next hundred and eighty days. And ask for an answer with a limit of sixteen tokens, to see what a cut off
+      looks like. The task is written once. Each vendor gets its own adapter, and the tests run the real S D Ks against a
+      scripted endpoint.
+
+  - id: openai-code
+    type: code
+    heading: "OpenAI: Responses API, strict schema"
+    lang: python
+    code: |
+      if schema is not None:
+          strict, _ = to_openai_strict(schema)
+          body["text"] = {"format": {"type": "json_schema", "name": name, "schema": strict, "strict": True}}
+      if tool is not None:
+          body["tools"] = [openai_tool(tool)]
+          body["include"] = ["reasoning.encrypted_content"]  # lets a stateless (store=false) tool loop keep the model's reasoning
+    narration: >
+      On Open A I, the schema goes under text, format, with strict set to true. Strict mode wants every property listed
+      as required, additional properties false on every object, and optional fields written as a type or null. So our
+      converter does that, and reports what it changed. With tools, we also ask for the encrypted reasoning, so a stateless
+      loop can hand it back.
+
+  - id: gemini-code
+    type: code
+    heading: "Gemini: Interactions API, plain schema"
+    lang: python
+    code: |
+      if max_output_tokens is not None:
+          body["generation_config"] = {"max_output_tokens": max_output_tokens}
+      if schema is not None:
+          body["response_format"] = {"type": "text", "mime_type": "application/json", "schema": copy.deepcopy(schema)}
+      if tool is not None:
+          body["tools"] = [gemini_tool(tool)]
+    narration: >
+      Gemini takes the schema as it is, under response format, with a J S O N mime type. Optional fields stay optional.
+      The token limit lives in generation config, not at the top level. And the catch is in the documentation. Keywords like
+      min length and unique items are accepted, and not enforced.
+
+  - id: schema-screen
+    type: screen
+    heading: "The schema conversion, no network needed"
+    image: screens/schema-conversion.jpg
+    bar: "lab terminal · python -m llm_sidebyside schema"
+    demo: "Terminal in the episode's src folder: 'python -m llm_sidebyside schema', then 'python -m llm_sidebyside payloads extract | more' to show the two request bodies. Needs no key and no network, so it is a real run. Nothing is mocked."
+    narration: >
+      This command needs no keys. The notice days field becomes nullable for Open A I. Min length and unique items are
+      dropped from the strict schema, and listed as not enforced for Gemini. Nothing is silent.
+
+  - id: extract-screen
+    type: screen
+    heading: "Extract, both vendors, one command"
+    image: screens/extract-run.jpg
+    bar: "lab terminal · python -m llm_sidebyside run extract"
+    short: result
+    demo: "Terminal: 'python -m llm_sidebyside run extract --vendor both' with the owner's own OPENAI_API_KEY and GEMINI_API_KEY typed off camera. Visible: one line per vendor with model, status, requests, tokens in, out, reasoning, cached, estimated cost, then the JSON and any PROBLEM lines. Real output, whatever it is; keep a second take only if both are real."
+    narration: >
+      One command, two vendors. Each line shows the model, the status, the tokens in and out, the thinking tokens and an
+      estimated cost. Then the answer, checked by our own validator. If the model gets the total or the first renewal
+      wrong, it prints a problem, and the exit code says so.
+
+  - id: validate-code
+    type: code
+    heading: "Validate what the API does not"
+    lang: python
+    code: |
+      vendors = parsed["vendors"]
+      total = sum(v["yearly_cost_eur"] for v in vendors)
+      if abs(total - parsed["total_yearly_cost_eur"]) > 0.5:
+          problems.append(f"total_yearly_cost_eur {parsed['total_yearly_cost_eur']} != sum of vendors {total}")
+      earliest = min(vendors, key=lambda v: v["renews"])["name"]
+      if parsed["first_to_renew"] != earliest:
+          problems.append(f"first_to_renew {parsed['first_to_renew']!r} != earliest renewal {earliest!r}")
+      return problems
+    narration: >
+      A schema guarantees shape, not truth. After the call we validate against the full schema, including the keywords the
+      services skip, and then check the arithmetic and the earliest date. Both vendors go through this same function.
+
+  - id: tool-code
+    type: code
+    heading: "Tools, stateless: resend, then answer"
+    lang: python
+    code: |
+      body["input"] = list(body["input"]) + [s.model_dump(mode="json", exclude_none=True) for s in resp.steps]
+      for call in pending:
+          calls.append(call.name)
+          try:
+              result = json.dumps(contract.get_vendor_renewals(data, **call.arguments))
+              is_error = False
+          except (ValueError, TypeError) as exc:
+              result, is_error = json.dumps({"error": str(exc)}), True
+          body["input"].append({"type": "function_result", "call_id": call.id, "name": call.name,
+                                "result": result, "is_error": is_error})
+    narration: >
+      Tools work the same way in spirit. The model asks, we run the function, and we send the result back. With store set
+      to false, nothing is kept for us, so we resend the model's own steps first. On Open A I the result is a function call
+      output, matched by call I D. On Gemini it is a function result step, with an error flag. Bad arguments come back as an
+      error result, not a crash.
+
+  - id: truncate-screen
+    type: screen
+    heading: "Sixteen tokens: what a cut-off looks like"
+    image: screens/truncate-run.jpg
+    bar: "lab terminal · python -m llm_sidebyside run truncate"
+    demo: "Terminal: 'python -m llm_sidebyside run truncate --vendor both', owner's own keys typed off camera. Visible: status truncated or not for each vendor, the partial text (possibly empty), and the in, out and reasoning counts. Real output: a reasoning model may spend the 16 tokens before any visible text, and that is the point of the scene."
+    narration: >
+      Sixteen tokens is the lowest value Open A I allows. On a reasoning model, thinking tokens count against that limit,
+      so you can get an empty answer and a truncated status. Gemini reports an incomplete status, and counts its thinking
+      separately. Same symptom, different arithmetic.
+
+  - id: usage-code
+    type: code
+    heading: "Counting the bill the same way"
+    lang: python
+    code: |
+      def billable_output(self, vendor: str) -> int:
+          """Both vendors bill thinking as output. OpenAI already includes it in output_tokens, Gemini reports it separately."""
+          return self.output_tokens + (self.reasoning_tokens if vendor == "gemini" else 0)
+    narration: >
+      This is the trap in a cost comparison. Open A I includes reasoning inside output tokens. Gemini reports thought
+      tokens in their own field. Add them yourself, or Gemini looks cheaper than it is. Our prices file is dated the
+      twenty first of November, with GPT six point two Sol at two dollars in and ten out per million tokens, and Gemini three
+      point eight Flash at seventy five cents in and three seventy five out until the end of the year.
+
+  - id: errors-code
+    type: code
+    heading: "A 429 is not always a rate limit"
+    lang: python
+    code: |
+      if status == 429:
+          # OpenAI uses 429 for both "slow down" and "your billing quota is used up". Only the first is worth retrying.
+          kind = "quota" if getattr(exc, "code", None) == "insufficient_quota" else "rate_limit"
+    narration: >
+      Errors differ too. Open A I answers four twenty nine both for slow down and for an exhausted billing quota. Retrying
+      the second one only wastes time. We map both S D Ks to one small set of kinds, retry only what can work, and honour the
+      retry after header.
+
+  - id: data-screen
+    type: screen
+    heading: "Free tier is not private"
+    image: screens/gemini-pricing-free-vs-paid.jpg
+    bar: "ai.google.dev · Gemini API · Pricing · Gemini 3.8 Flash"
+    demo: "Browser on the Gemini API pricing page, Gemini 3.8 Flash table, Standard tab: free tier and paid tier columns with the 'Used to improve our products' row (Yes for the free tier, No for paid). Public page, no sign-in needed. Do not show the owner's keys."
+    narration: >
+      One row in Google's pricing table matters more than the rest. Used to improve our products. On the free tier the
+      answer is yes. Never send Contoso data through a free key. And on both sides, set store to false: the Responses
+      A P I keeps application state for thirty days by default, and Gemini interactions are stored for a day on the free
+      tier and fifty five days on the paid tier.
+
+  - id: gotchas
+    type: bullets
+    heading: "Gotchas, honestly"
+    short: gotcha
+    bullets:
+      - "Strict mode changes your schema: optional becomes nullable"
+      - "Gemini accepts keywords it does not enforce: validate yourself"
+      - "Output limits and thinking tokens count differently"
+      - "Gemini's price changes on 1 January 2027"
+      - "Tool calling here is checked against mocks, not yet live"
+    narration: >
+      The honest part. Strict mode rewrites your schema. Gemini accepts keywords it does not enforce. Limits and thinking
+      tokens are counted differently. Gemini's listed price doubles on the first of January. And the tool loops in this
+      episode are proven against scripted responses with the real S D Ks. Run the tool task live yourself before you trust it.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The adapters, the schema converter and the tests are on GitHub, and the official docs are in the description. Next
+      time, we wrap up the Copilot and A I series. See you there.

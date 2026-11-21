@@ -1,0 +1,251 @@
+# DEVLADLOG Copilot & AI - episode 21 (draft: screen scenes need the recording described in demo.md)
+episode: 21
+slug: claude-in-the-microsoft-ecosystem
+series_label: "COPILOT & AI"
+series_name: "DEVLADLOG Copilot & AI"
+file_prefix: "copilot-ai"
+title: "Claude in the Microsoft Ecosystem"
+subtitle: "Copilot, Copilot Studio, Foundry and Claude Code"
+voice: am_michael
+thumbnail_text: "CLAUDE IN\nMICROSOFT\nECOSYSTEM"
+youtube:
+  title: "Claude in Microsoft Copilot, Foundry and Claude Code (Real Demo) | DEVLADLOG Copilot & AI #21"
+  tags: [Claude, Anthropic, Microsoft Foundry, Microsoft 365 Copilot, Copilot Studio, Claude Code, Anthropic subprocessor, Bicep, Messages API, tool use, Contoso]
+next_episode: "OpenAI and Google Gemini APIs Side by Side"
+sources:
+  - "https://learn.microsoft.com/copilot/implement/connect-to-ai-subprocessor"
+  - "https://learn.microsoft.com/copilot/plan/copilot-subprocessor-overview"
+  - "https://learn.microsoft.com/microsoft-copilot-studio/agents-experience/authoring-agent-model-availability"
+  - "https://learn.microsoft.com/azure/foundry/foundry-models/concepts/claude-models"
+  - "https://learn.microsoft.com/azure/foundry/foundry-models/how-to/use-foundry-models-claude"
+  - "https://learn.microsoft.com/azure/foundry/foundry-models/concepts/claude-models-billing"
+  - "https://learn.microsoft.com/azure/developer/ai/how-to/deploy-claude-foundry"
+  - "https://learn.microsoft.com/azure/foundry/foundry-models/how-to/configure-claude-code"
+  - "https://platform.claude.com/docs/en/build-with-claude/claude-in-microsoft-foundry"
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Claude is already inside your Microsoft tenant"
+    sub: "Admin switch, Foundry deployment, and Claude Code, on Contoso's data"
+    short: hook
+    narration: >
+      Claude is not a separate world any more. It is a model choice inside Microsoft Copilot, inside Copilot Studio, in
+      Microsoft Foundry, and behind Claude Code. In this episode we find the admin switch, deploy Claude in Foundry with
+      Bicep, call it from Python with a tool, and point Claude Code at it. Welcome to Dev Lad Log, Copilot and A I.
+
+  - id: map
+    type: bullets
+    heading: "Where Claude shows up in Microsoft"
+    bullets:
+      - "Microsoft 365 Copilot: Researcher, Excel, Word, PowerPoint, Cowork"
+      - "Copilot Studio: pick Claude as the agent's model"
+      - "Microsoft Foundry: your own deployment, Messages API"
+      - "GitHub Copilot: Claude in the model picker"
+      - "Claude Code: runs against your Foundry deployment"
+    narration: >
+      Five places. In Microsoft three six five Copilot, Learn lists Researcher, Copilot in Excel and Copilot Cowork. In
+      Copilot Studio you choose Claude as the model of an agent. In Foundry you deploy Claude yourself and call the
+      Anthropic Messages A P I. GitHub Copilot lists Claude models in its model picker. And Claude Code can run against
+      your Foundry deployment instead of an Anthropic account.
+
+  - id: admin-screen
+    type: screen
+    heading: "The admin switch: Anthropic as a subprocessor"
+    image: screens/admin-center-anthropic.jpg
+    bar: "admin.microsoft.com · Copilot · Settings · AI providers operating as Microsoft subprocessors"
+    demo: "Microsoft 365 admin center as labadmin: Copilot, Settings, View all, 'AI providers operating as Microsoft subprocessors', Anthropic selected, showing the current state of 'Choose who can access Anthropic models'. The lab tenant is in Portugal, so show the default (off), then turn it on for the lab users only, as the owner approved. Mask the tenant name."
+    narration: >
+      The first switch is in the Microsoft three six five admin center. Copilot, Settings, A I providers operating as
+      Microsoft subprocessors, Anthropic. Anthropic acts as a Microsoft subprocessor, so the Microsoft product terms
+      and the data protection addendum apply. In the European Union, EFTA and the U K, it is off by default. Our lab
+      is in Portugal, so we turn it on here, knowing what that means.
+
+  - id: admin-rules
+    type: bullets
+    heading: "What the admin must know"
+    bullets:
+      - "Claude is processed outside the EU Data Boundary"
+      - "Default on in most commercial clouds, off in EU, EFTA and UK"
+      - "Not available in GCC High, DoD or sovereign clouds"
+      - "Copilot Studio also needs the Power Platform admin center"
+      - "Models with data retention: separate opt-in"
+    narration: >
+      Read the fine print before you click. Claude models in these Microsoft offerings are currently excluded from the
+      EU Data Boundary. They are not available in GCC High, D o D or other sovereign clouds. For Copilot Studio, a Power
+      Platform admin must also allow the provider in each environment. And Claude models that require data retention
+      by Anthropic are off by default everywhere, under Anthropic's own terms.
+
+  - id: studio-screen
+    type: screen
+    heading: "Copilot Studio: Claude as the agent's model"
+    image: screens/copilot-studio-model.jpg
+    bar: "copilotstudio.microsoft.com · Agent · Model"
+    demo: "Copilot Studio as labadmin (trial licence), in an environment where Power Platform admin center allows external LLMs: open an agent that uses the Microsoft Copilot harness and open the model selector, showing the Claude entries next to the GPT ones. Do not publish anything. If the selector shows no Claude entries, record the Power Platform admin center setting that blocks it instead and say so."
+    narration: >
+      In Copilot Studio the creator picks the model. Here are the Claude models next to the G P T ones. Learn lists
+      Claude Sonnet five point five, Claude Haiku five point five and Claude Opus five point five as generally
+      available, and marks four older ones as retiring on the fifteenth of February, twenty twenty seven.
+
+  - id: hostings
+    type: bullets
+    heading: "Claude in Foundry: two hosting options"
+    bullets:
+      - "Hosted on Azure, or hosted on Anthropic infrastructure"
+      - "Anthropic Marketplace offer, billed in Claude Consumption Units"
+      - "Paid pay-as-you-go subscription, not CSP, not credits only"
+      - "Deployment name is the model parameter"
+      - "Entra ID or API key"
+    narration: >
+      Now Foundry. Claude comes in two versions: hosted on Azure, or hosted on Anthropic infrastructure. You subscribe
+      through the Azure Marketplace, and usage is billed in Claude Consumption Units on your Azure invoice. You need a
+      paid pay as you go subscription. Cloud Solution Provider and credit only subscriptions are not supported. And the
+      model you call is the name of your deployment.
+
+  - id: bicep-code
+    type: code
+    heading: "Bicep: a Claude deployment with the attestation"
+    lang: bicep
+    code: |
+      resource claude 'Microsoft.CognitiveServices/accounts/deployments@2026-05-01' = [for d in deployments: {
+        name: d.name
+        sku: { name: 'GlobalStandard', capacity: capacity }
+        properties: {
+          model: {
+            format: 'Anthropic'
+            name: d.model
+            version: d.?version // omitted when not set
+          }
+          modelProviderData: {
+            organizationName: organizationName
+            countryCode: countryCode
+            industry: industry
+          }
+        }
+      }]
+    narration: >
+      The Bicep follows Learn's Claude starter kit. Format Anthropic, the model id, and a model provider data block
+      with your organization name, country and industry. Deploying accepts the Anthropic Marketplace terms on your
+      behalf, so those values must describe the real organization. We also disable local keys, so only Entra I D
+      works.
+
+  - id: deploy-screen
+    type: screen
+    heading: "The Claude deployments in Foundry"
+    image: screens/foundry-claude-deployments.jpg
+    bar: "ai.azure.com · Models + endpoints · rg-mglab-copilot-ai-21"
+    demo: "Foundry portal (ai.azure.com, New Foundry toggle on) as labadmin, the project created by src/infra/main.bicep: the model deployments list with the Claude deployments, then open one deployment's Details showing target URI and status Succeeded. Mask subscription and resource names that contain the tenant name."
+    narration: >
+      Here are the deployments in the portal. Open one, and the details show the target U R I and the status. The
+      base U R I is your resource name dot services dot a i dot azure dot com, slash anthropic.
+
+  - id: client-code
+    type: code
+    heading: "Python: the Anthropic SDK, with Entra ID"
+    lang: python
+    code: |
+      from anthropic import AnthropicFoundry
+      from azure.identity import DefaultAzureCredential, get_bearer_token_provider
+
+      ENTRA_SCOPE = "https://ai.azure.com/.default"
+
+      kwargs = {"resource": name, "max_retries": max_retries}
+      kwargs["azure_ad_token_provider"] = get_bearer_token_provider(
+          DefaultAzureCredential(), ENTRA_SCOPE)
+      client = AnthropicFoundry(**kwargs)
+
+      resp = client.messages.create(
+          model=deployment,          # the deployment name, not the model id
+          max_tokens=1024, system=SYSTEM_PROMPT, tools=TOOLS, messages=messages)
+    narration: >
+      The code uses the normal Anthropic S D K. Its Foundry client takes your resource name and a token provider from
+      the Azure identity library, with the scope ai dot azure dot com slash dot default. Then it is the same Messages
+      A P I as anywhere else. The model parameter is your deployment name.
+
+  - id: loop-code
+    type: code
+    heading: "A tool, and the loop that runs it"
+    lang: python
+    code: |
+      resp = client.messages.create(model=deployment, max_tokens=max_tokens,
+                                    system=SYSTEM_PROMPT, tools=TOOLS, messages=messages)
+      if resp.stop_reason != "tool_use":
+          ...  # final answer: collect the text blocks and stop
+      # Send the assistant turn back exactly as received (thinking blocks included)
+      messages.append({"role": "assistant", "content": resp.content})
+      outputs = []
+      for block in resp.content:
+          if getattr(block, "type", "") != "tool_use":
+              continue
+          payload = get_vendor_renewals(data, block.input.get("within_days"))
+          outputs.append({"type": "tool_result", "tool_use_id": block.id,
+                          "content": json.dumps(payload)})
+      messages.append({"role": "user", "content": outputs})
+    narration: >
+      Claude never reads our vendor file. It asks for a tool, we run it, and we send back a tool result. The loop
+      stops when the model stops asking. We pass the assistant turn back unchanged, because thinking blocks must go
+      back with the tool results. And the supplier notes are untrusted text: the system prompt says tool results are
+      data, not instructions.
+
+  - id: triage-screen
+    type: screen
+    heading: "Contoso renewals, answered by Claude"
+    image: screens/claude-triage-run.jpg
+    bar: "lab Windows terminal · python -m claude_ms triage"
+    short: result
+    demo: "Terminal on the lab laptop (dark theme, 18 pt), az login done off camera, ANTHROPIC_FOUNDRY_RESOURCE set: 'python -m claude_ms triage --deployment claude-sonnet-5-5 --vendors samples/vendors.json'. Visible: the resource and auth line (auth=entra), the tool_use line with within_days, the answer, and the turns and token line. The sample data contains a supplier note that tries to give instructions: show whether the model ignored it. Real output only, do not edit."
+    narration: >
+      And the real run. The resource, signed in with Entra I D, the tool call, and the answer: Litware Security renews
+      on the thirtieth of November and needs cancelling in writing, Fabrikam Cloud is next. One note in our data tries
+      to give the assistant instructions. Watch what the model does with it, and run it more than once.
+
+  - id: claudecode-env
+    type: code
+    heading: "Claude Code on your Foundry deployment"
+    lang: powershell
+    code: |
+      # python -m claude_ms code-env --resource mglabfoundry21 --sonnet claude-sonnet-5-5 --haiku claude-haiku-5-5
+      $env:CLAUDE_CODE_USE_FOUNDRY = "1"
+      $env:ANTHROPIC_FOUNDRY_RESOURCE = "mglabfoundry21"
+      $env:ANTHROPIC_DEFAULT_SONNET_MODEL = "claude-sonnet-5-5"
+      $env:ANTHROPIC_DEFAULT_HAIKU_MODEL = "claude-haiku-5-5"
+    narration: >
+      Claude Code needs four environment variables. Switch on the Foundry integration, give the resource name, and
+      name your deployments for the Sonnet and Haiku roles. Our helper prints them, and never writes a key. Sign in
+      with az login. Inside Claude Code, the login and logout commands are disabled when you use Foundry.
+
+  - id: claudecode-screen
+    type: screen
+    heading: "Claude Code reports Microsoft Foundry"
+    image: screens/claude-code-status.jpg
+    bar: "lab Windows terminal · claude · /status"
+    demo: "Terminal on the lab laptop with Claude Code installed (native installer) and the environment from 'python -m claude_ms code-env' applied, az login done off camera: run 'claude', then '/status'. Visible: API provider Microsoft Foundry, the resource name (masked if it contains the tenant name), and the model. Then one short prompt such as 'summarize this folder'. Then show the Foundry portal Monitor tab for the deployment with the request counted."
+    narration: >
+      Start Claude and run slash status. The A P I provider says Microsoft Foundry, with your resource and your model.
+      Every request now goes through your Azure resource, under your Entra I D, and the Monitor tab in Foundry counts
+      the tokens.
+
+  - id: gotchas
+    type: bullets
+    heading: "Gotchas, honestly"
+    short: gotcha
+    bullets:
+      - "Foundry adds no content filter for Claude: add your own"
+      - "No server-side fallbacks, no Batches API on Foundry"
+      - "Files API and code execution need Anthropic hosting"
+      - "Default quota can be zero for your subscription tier"
+      - "Older Claude models retire in Copilot Studio in 2027"
+    narration: >
+      The gotchas. Learn says Foundry does not apply built in content filtering to Claude at deployment time, so add
+      your own safety layer. Server side fallbacks and the Batches A P I are not supported on Foundry, so we wrote a
+      client side fallback. The Files A P I and code execution need the version hosted by Anthropic. Your default quota
+      can be zero, check it before you promise a date. And Claude Sonnet four point six, Sonnet five, Opus four point
+      eight and Opus five retire in Copilot Studio on the fifteenth of February.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The Bicep, the Python and the tests are on GitHub, and the Learn pages are in the description. Next time, the
+      Open A I and Google Gemini A P I s, side by side, on the same Contoso tasks. See you there.
