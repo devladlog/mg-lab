@@ -1,0 +1,227 @@
+# DEVLADLOG Dynamics 365 — episode 09. Draft: screen scenes need the lab-tenant capture described in demo.md.
+episode: 9
+slug: power-apps-portal-integration
+series_label: "DYNAMICS 365"
+series_name: "DEVLADLOG Dynamics 365"
+file_prefix: "dynamics-365"
+title: "Power Apps Portal Integration"
+subtitle: "Power Pages, the Web API, and a configuration review that catches the mistakes"
+voice: am_michael
+thumbnail_text: "POWER PAGES\nWEB API\nSAFE BY DESIGN"
+youtube:
+  title: "Power Pages Web API: Table Permissions, Site Settings and a Linter | DEVLADLOG Dynamics 365 #9"
+  tags: [Dynamics 365, Power Pages, Power Apps portals, Dataverse, Web API, table permissions, web roles, site settings, pac pages, JavaScript]
+sources:
+  - https://www.devladlog.com/articles/dynamics-365/2025-10-19-power-apps-portal-integration-complete-guide-2025/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Let customers raise their own cases"
+    sub: "Power Pages, the Web API, and what can go wrong"
+    short: hook
+    narration: >
+      A store manager at Contoso Retail has a broken till and no way to tell you except email. In this episode we
+      give them a support page on Power Pages that reads and creates cases straight from Dataverse, through the
+      portal Web API. Then we look at the part that actually keeps you safe: the site settings and table
+      permissions behind it, and a small tool that reviews them before a customer does. Everything you'll see runs
+      against our real lab environment, with fictional customers and lab users only.
+
+  - id: what
+    type: bullets
+    heading: "The portal Web API, in one slide"
+    bullets:
+      - "Route: slash underscore api, RESTful, like Dataverse"
+      - "Create, read, update, delete, associate"
+      - "Built for your own pages, not for integration"
+      - "No actions or functions"
+      - "Needs a Power Pages licence"
+    narration: >
+      The portal Web API lives under the underscore api route of your site and follows the same pattern as the
+      Dataverse Web API. You can read, create, update, delete and associate records. Learn is clear about its
+      purpose: it's built for rich experiences inside your own pages, not for third party integration. Calling
+      actions and functions isn't supported, and operations need a Power Pages licence.
+
+  - id: site
+    type: screen
+    heading: "The support site"
+    image: screens/pages-site.jpg
+    bar: "Power Pages design studio · Contoso Retail store support"
+    demo: >
+      Power Pages design studio for the trial site Contoso Retail store support, created in the Sales trial
+      environment: the Pages workspace with the Support page selected. Mask tenant, org and site URL.
+    narration: >
+      Here's the site. Learn says a Power Pages site starts life as a trial site, and in a trial environment it expires
+      after thirty days or with the environment, whichever comes first. Ours lives in the same environment as our
+      Customer Service cases. Private by default, and
+      signed in with Microsoft Entra, so only our lab users can open it while we build.
+
+  - id: settings
+    type: code
+    heading: "Two site settings per table"
+    lang: yaml
+    code: |
+      # site-settings/incident-enabled.sitesetting.yml
+      adx_name: Webapi/incident/enabled
+      adx_value: true
+
+      # site-settings/incident-fields.sitesetting.yml
+      adx_name: Webapi/incident/fields
+      adx_value: title,description,prioritycode,createdon,statecode,ticketnumber
+    narration: >
+      Nothing is exposed until you say so. For each table, one site setting turns the Web API on, using the table's
+      logical name, and another lists the columns it may return. Learn says the wildcard in that list is
+      deprecated, and requests fail until you name the columns. These settings travel with the site files that
+      p a c pages download gives you, so they can be reviewed like code.
+
+  - id: lint-code
+    type: code
+    heading: "A linter for the configuration"
+    lang: python
+    code: |
+      if "*" in ts.field_list:
+          out.append(Finding("error", "P002", w, "fields contains '*': Learn says the wildcard is deprecated and "
+                                                 "requests fail until explicit column names are configured"))
+      elif not ts.field_list and not ts.view_columns:
+          out.append(Finding("error", "P001", w, "enabled without 'fields' (or UseFieldsFromView): Learn says the "
+                                                 "fields setting is required"))
+      perms = [p for p in site.permissions if p.table == table]
+      if not perms:
+          out.append(Finding("error", "P004", w, "enabled but no table permission for this table: the Web API follows "
+                                                 "table permissions, so every call is denied"))
+    narration: >
+      Our tool, pagekit, reads those downloaded files and applies rules taken from Learn. A wildcard in the
+      columns. Enabled with no columns. Enabled with no table permission, which means every call is denied.
+      Global scope for the anonymous role with write access. A configuration table that the Web API doesn't
+      support. And drift from a small file listing the tables and columns the pages really need.
+
+  - id: lint-run
+    type: screen
+    heading: "Review before release"
+    image: screens/pagekit-lint.jpg
+    bar: "Terminal · python -m pagekit lint site-download --expect"
+    demo: >
+      Terminal: pagekit inspect on the real downloaded lab site, then pagekit lint with the expectation file,
+      first on the site with one deliberate mistake (the wildcard in the case columns), then after the fix,
+      showing zero errors. Keep the real output. Blur ids.
+    short: lint
+    narration: >
+      Run against the real site we downloaded from the lab. First with one deliberate mistake, the wildcard in the
+      case columns, and the command fails with an error that says why. Fix the setting, run it again, clean. The
+      exit code makes it a pipeline gate.
+
+  - id: columns-code
+    type: code
+    heading: "Do the columns exist?"
+    lang: python
+    code: |
+      def table_columns(api: WebApi, table: str) -> Set[str]:
+          data = api.get(f"EntityDefinitions(LogicalName='{table}')/Attributes?$select=LogicalName")
+          return {a["LogicalName"] for a in data.get("value", [])}
+
+      missing = [f for f in ts.field_list if f not in cols]
+      if missing:
+          out.append(Finding("error", "F001", f"Webapi/{table}", f"not a column of '{table}': {', '.join(missing)}"))
+    narration: >
+      A misspelt column is a failure you'd only meet in the browser. So a second command asks Dataverse for the
+      real columns of each table and compares them with the list in the site settings.
+
+  - id: perms
+    type: screen
+    heading: "Table permissions decide"
+    image: screens/pages-table-permissions.jpg
+    bar: "Power Pages design studio · Security · Table permissions"
+    demo: >
+      Design studio, Security workspace, Table permissions: the permission for the case table with access type
+      Contact, privileges Read and Create, role Store managers, and the relationship chosen. Beside it the Contact
+      table permission with Self access. Mask tenant and site URL.
+    narration: >
+      The settings only open the door. Table permissions decide who walks through. The Web API follows the same
+      permissions as lists and forms, given through web roles. Here, store managers get the contact access type on
+      cases, read and create, so they only see cases that belong to them. Learn's security advice is to avoid
+      global access for business data, especially when the table is exposed through the Web API.
+
+  - id: js-code
+    type: code
+    heading: "Every call carries the token"
+    lang: javascript
+    code: |
+      function getToken() {
+        return new Promise(function (resolve, reject) {
+          env.shell.getTokenDeferred().done(resolve).fail(reject);
+        });
+      }
+
+      function safeFetch(url, init) {
+        init = init || {};
+        return getToken().then(function (token) {
+          var headers = Object.assign({ Accept: "application/json" }, init.headers || {});
+          headers["__RequestVerificationToken"] = token;
+    narration: >
+      On the page, every Web API call must include a cross site request forgery token, in a header called request
+      verification token. Learn's sample wraps that in a function; ours does the same with fetch. The session
+      handles sign in, so there's no other authentication code. We always select explicit columns, and the helper
+      checks a title before it ever calls the server.
+
+  - id: call
+    type: screen
+    heading: "The page, calling the API"
+    image: screens/pages-api-call.jpg
+    bar: "Browser · support page · developer tools"
+    demo: >
+      Browser as Alex Demo on the support page of the lab site: the case list rendered by listCases, then a new case
+      created with createCase (title Till offline in store 12, priority High), and in the Network tab the POST to
+      the incidents route with the token header (value hidden) and the entityid in the response headers. Mask the
+      site URL and token.
+    narration: >
+      Signed in as Alex, the page lists the open cases, and creating one is a single post. The new record's id
+      comes back in the entity id response header. In the network tab you can see the token header on the request.
+
+  - id: gotcha
+    type: bullets
+    heading: "Gotchas Learn documents"
+    bullets:
+      - "Wildcard in the columns setting: deprecated, requests fail"
+      - "Table permissions apply, even to the Web API"
+      - "Site settings use logical names, code uses EntitySetName"
+      - "Web API operations are case sensitive"
+      - "Not for third-party integration"
+    short: gotcha
+    narration: >
+      The gotchas, all from Learn. The wildcard in the columns setting is deprecated and requests fail. Table
+      permissions always apply. Site settings use the table logical name, but your code uses the entity set name,
+      which is the plural. Operations are case sensitive. And this API isn't for third party integration: for that,
+      use the Dataverse Web API with a proper application identity.
+
+  - id: hub
+    type: screen
+    heading: "The case in Customer Service Hub"
+    image: screens/hub-portal-case.jpg
+    bar: "Customer Service Hub · Cases · Till offline in store 12"
+    demo: >
+      Customer Service Hub as labadmin: the case Till offline in store 12, created from the portal, customer the
+      portal contact, with the SLA timers visible, as in episode 8. Mask tenant and avatar.
+    narration: >
+      And on the agent side, the case is just a case, with the customer filled in and the SLA from the last
+      episode applied.
+
+  - id: recap
+    type: bullets
+    heading: "Four rules"
+    bullets:
+      - "Enable the Web API per table, with named columns"
+      - "Table permissions first, least access that works"
+      - "Send the token on every call"
+      - "Review the config from the downloaded files"
+    narration: >
+      Four rules. Enable the Web API per table, with named columns. Table permissions first, with the least access
+      that works. Send the token on every call. And review the configuration from the downloaded files, so it's
+      checked before customers meet it.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The tool, the sample sites and all the tests are on GitHub, and the complete guide to Power Pages
+      integration is on devladlog dot com. Next episode, reporting and analytics. Subscribe so you don't miss it.

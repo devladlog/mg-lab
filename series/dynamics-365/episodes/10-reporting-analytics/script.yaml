@@ -1,0 +1,208 @@
+# DEVLADLOG Dynamics 365 — episode 10. Draft: screen scenes need the lab-tenant capture described in demo.md.
+episode: 10
+slug: reporting-analytics
+series_label: "DYNAMICS 365"
+series_name: "DEVLADLOG Dynamics 365"
+file_prefix: "dynamics-365"
+title: "Reporting & Analytics"
+subtitle: "Aggregates, charts and Power BI, and a check that the numbers agree"
+voice: am_michael
+thumbnail_text: "D365 REPORTING\nDO THE NUMBERS\nAGREE?"
+youtube:
+  title: "Dynamics 365 Reporting: FetchXML, OData, Charts and Power BI Compared | DEVLADLOG Dynamics 365 #10"
+  tags: [Dynamics 365, Dataverse, reporting, analytics, FetchXML, OData, aggregate, charts, Power BI, TDS endpoint, Python]
+sources:
+  - https://www.devladlog.com/articles/dynamics-365/2025-11-17-reporting-analytics-complete-guide-2025/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Do the numbers agree?"
+    sub: "Three ways to total a pipeline, one answer"
+    short: hook
+    narration: >
+      Open the pipeline total in a chart, in a query and in Power BI, and you'll sometimes get three different
+      numbers. In this episode we total the open pipeline of our sales trial environment three ways,
+      reconcile them from code, build a chart in Dynamics 365 from a definition we can test, and finish in Power
+      B I. Everything runs against the real environment, with fictional customers only. The numbers on screen are what the
+      tools really print, not what we hoped for.
+
+  - id: layers
+    type: bullets
+    heading: "Where reports come from"
+    bullets:
+      - "In the app: views, charts, dashboards"
+      - "Queries: FetchXML and OData aggregates"
+      - "Power BI: the Dataverse connector, over TDS"
+      - "Bulk analytics: Azure Synapse Link"
+    narration: >
+      Four layers, from small to large, and they answer different questions. Inside the app you have views, charts and dashboards. Queries, with
+      FetchXML or OData, give you aggregates from code. Power B I connects with the Dataverse connector, which
+      uses the tabular data stream endpoint. And for bulk extraction, Learn recommends Azure Synapse Link, because
+      the connector and the A P I are meant for analytical scenarios with relatively small data volumes.
+
+  - id: fetch-code
+    type: code
+    heading: "One: a FetchXML aggregate"
+    lang: python
+    code: |
+      return (f'<fetch aggregate="true"><entity name="opportunity">'
+              f'<attribute name="estimatedvalue" alias="total" aggregate="sum" />'
+              f'<attribute name="opportunityid" alias="n" aggregate="count" />'
+              f'<attribute name="{by}" alias="grp" groupby="true" />'
+              f'<filter><condition attribute="statecode" operator="eq" value="0" /></filter>'
+              f'<order alias="grp" /></entity></fetch>')
+    narration: >
+      First, FetchXML. Set aggregate to true, give every attribute an alias, sum the estimated value, count the
+      rows, group by the forecast category, and order by the alias of the group, which Learn requires. Only open
+      opportunities, state code zero.
+
+  - id: apply-code
+    type: code
+    heading: "Two: OData $apply"
+    lang: python
+    code: |
+      return (f"opportunities?$apply=filter(statecode eq 0)/groupby(({by}),"
+              f"aggregate(estimatedvalue with sum as total,$count as n))")
+    narration: >
+      Second, the same question with the OData apply option: filter, group by, aggregate. It's shorter, and it
+      has limits, which we'll get to in a moment. Both results come back with the formatted label of the choice
+      column, so the report can print names instead of numbers. The third way is the dull one: fetch the rows and add them up yourself.
+
+  - id: reconcile
+    type: screen
+    heading: "Reconcile"
+    image: screens/reportkit-reconcile.jpg
+    bar: "Terminal · python -m reportkit reconcile"
+    demo: >
+      Terminal against the Sales trial environment: reportkit pipeline (the table by forecast category), then
+      reportkit reconcile with its OK lines for FetchXML and OData against the client-side rows, and the monthly
+      check. Keep what it really prints; if a line says MISMATCH, show it and explain it. Blur ids.
+    short: reconcile
+    narration: >
+      The rows are the reference. The FetchXML total and the OData total are compared with it, group by group, to
+      the cent. When they agree you get an O K per method. When they don't, you get the groups that differ, and
+      the command fails. The monthly report gets the same treatment, with a group for records that have no close
+      date at all.
+
+  - id: gotcha
+    type: bullets
+    heading: "Gotchas Learn documents"
+    bullets:
+      - "Aggregates are limited to 50,000 records"
+      - "OData: no groupby on datetime, no orderby on aggregates"
+      - "Date grouping uses the user's time zone by default"
+      - "Aggregate sums skip null values"
+      - "Power BI connector: 80 MB result, 5 minute timeout"
+    short: gotcha
+    narration: >
+      The gotchas, all from Learn. Aggregate queries are limited to fifty thousand records. With OData you can't
+      group by a date or order by an aggregate, so monthly numbers need FetchXML. Date grouping uses the user's
+      time zone unless you turn that off, so our query asks for U T C. Sums skip null values. And the Power B I
+      Dataverse connector has an eighty megabyte result limit and a five minute timeout per query.
+
+  - id: limit-code
+    type: code
+    heading: "When the limit hits"
+    lang: python
+    code: |
+      def _raise_if_limit(e: DataverseError) -> None:
+          blob = f"{e.code} {e.message}".lower()
+          if "aggregatequeryrecordlimit" in blob or "8004e023" in blob:
+              raise AggregateLimit("more than 50,000 records match: add a filter (a date range or a subset of a choice "
+                                   "column), run the query several times and combine the results") from e
+    narration: >
+      When the limit is hit you get an error number and a message. The tool recognises it and says what Learn
+      says to do: add a filter, such as a date range, and run the query several times.
+
+  - id: chart-code
+    type: code
+    heading: "A chart is two XML strings"
+    lang: python
+    code: |
+      series = pres.findall("./Series/Series")
+      if len(series) != len(collections):
+          problems.append(f"{len(series)} <Series> in the presentation but {len(collections)} <measurecollection> "
+                          "in the data description (Learn: they map one to one)")
+      for mc in collections:
+          for m in mc.findall("measure"):
+              if m.get("alias") not in aliases:
+                  problems.append(f"measure '{m.get('alias')}' is not an attribute alias in the fetch")
+    narration: >
+      Charts in Dynamics 365 are rows too. A data description holds a FetchXML aggregate and the measures, and a
+      presentation description holds the look. Learn says each measure collection maps to one series. So before we
+      send anything, the tool checks that the XML is well formed, that every measure is an alias in the fetch, and
+      that the series match.
+
+  - id: chart-create
+    type: screen
+    heading: "Create the chart"
+    image: screens/reportkit-chart.jpg
+    bar: "Terminal · python -m reportkit chart pipeline --apply"
+    demo: >
+      Terminal: reportkit chart pipeline as a dry run (plus line), then with --apply (created), then again (equals
+      line, already exists). Keep the real output. Blur ids.
+    narration: >
+      A dry run first, then the real thing. It creates a user owned chart on the opportunity table, and running it
+      again finds the chart by name and doesn't create a second one.
+
+  - id: hub-chart
+    type: screen
+    heading: "In Sales Hub"
+    image: screens/saleshub-chart.jpg
+    bar: "Sales Hub · Opportunities · Open pipeline by forecast category"
+    demo: >
+      Sales Hub as labadmin: Opportunities, the chart pane open, the chart [MGL demo] Open pipeline by forecast
+      category selected from the chart list, columns per forecast category with value labels. Mask tenant and avatar.
+    narration: >
+      And here it is in Sales Hub, on the opportunities list, columns per forecast category. The totals are the
+      ones we reconciled a minute ago.
+
+  - id: powerbi
+    type: screen
+    heading: "Power BI, the same total"
+    image: screens/powerbi-pipeline.jpg
+    bar: "Power BI Desktop · Dataverse connector · opportunity"
+    demo: >
+      Power BI Desktop on the recording laptop: Get data, Dataverse, the Sales trial environment URL (masked), the
+      opportunity table, a card with the sum of the estimated value column filtered to open opportunities next to a column
+      chart by forecast category. The total on the card must equal the reportkit total shown earlier. Mask tenant.
+    narration: >
+      In Power B I, the Dataverse connector, the opportunity table, a filter for open opportunities and a sum. If
+      the total on the card matches the one from our command, the three layers agree. If it doesn't, now you
+      know where to look: the filter, the null values, or the time zone.
+
+  - id: choose
+    type: bullets
+    heading: "Which tool for which question"
+    bullets:
+      - "Daily, in the app: views and charts"
+      - "A number in code: FetchXML aggregate"
+      - "Monthly or by date part: FetchXML, not OData"
+      - "Interactive analysis: Power BI"
+      - "Large history: Azure Synapse Link"
+    narration: >
+      Here's how I'd choose. For the daily view in the app, a chart, because it's already where people work. For a number in code, a FetchXML aggregate. For anything by date
+      part, FetchXML, not OData. For exploration, Power B I. And for large history, Synapse Link, instead of pulling it through the connector. Whatever you pick, keep one
+      of these reconciled numbers somewhere, so the next argument about the pipeline starts from facts.
+
+  - id: recap
+    type: bullets
+    heading: "Four rules"
+    bullets:
+      - "Ask one question, compute it two ways"
+      - "Filter before you aggregate: fifty thousand rows"
+      - "State the time zone and the nulls"
+      - "Test the chart definition before sending it"
+    narration: >
+      Four rules. Ask one question and compute it two ways. Filter before you aggregate, because of the fifty
+      thousand record limit. State the time zone and what happens with nulls. And test the chart definition
+      before you send it.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The tool, the sample data and all the tests are on GitHub, and the complete guide to reporting and analytics
+      is on devladlog dot com. Next episode, Dynamics 365 administration. Subscribe so you don't miss it.
