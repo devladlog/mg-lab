@@ -1,0 +1,104 @@
+{
+  "note": "Copilot & AI #15. REQUIRES a paid GitHub Copilot plan on the requester account (the owner's plan is not known: confirm at Settings, Billing and plans, Copilot; Free has no cloud agent) and a second GitHub account with write access to approve the agent's pull request. The throwaway private repo is created in prepare and deleted in teardown. gate-terminal is recorded twice (before approval, then after the second account approved and the workflows ran): run the scene, do the browser steps, and run it again with -SkipPrepare; keep the second as the 'ready' take. Tokens from gh are never shown. A screen that needs a second capture of another kind lists it under 'then'.",
+  "prepare": [
+    "python -m pip install -r src/requirements.txt --quiet",
+    "python -m pytest -q",
+    "dotnet test src/demo-repo/Contoso.Bikes.sln --nologo -v q",
+    "# owner signs in to GitHub with gh (gh auth login, off camera); gh auth refresh -s delete_repo for the teardown",
+    "$owner = gh api user --jq .login",
+    "if (-not (gh repo view \"$owner/contoso-bikes-pricing\" --json name 2>$null)) { $T = \"$HOME\\contoso-bikes-pricing\"; Copy-Item .\\src\\demo-repo $T -Recurse -Force; Push-Location $T; Remove-Item -Recurse -Force .\\review-demo, .\\issues; git init -b main | Out-Null; git add -A; git -c user.name='MG Lab' -c user.email='lab@example.invalid' commit -q -m 'Contoso Bikes pricing baseline'; gh repo create contoso-bikes-pricing --private --source . --push; Pop-Location }",
+    "Push-Location src; python -m agent_ready setup-steps \"$HOME\\contoso-bikes-pricing\\.github\\workflows\\copilot-setup-steps.yml\"; Pop-Location",
+    "$body = Join-Path $env:TEMP 'issue01.md'; Get-Content src/demo-repo/issues/01-ready-loyalty-rounding.md | Select-Object -Skip 1 | Set-Content $body; if (-not (gh issue list --repo \"$owner/contoso-bikes-pricing\" --search 'Loyalty price rounds' --json number --jq '.[0].number')) { gh issue create --repo \"$owner/contoso-bikes-pricing\" --title 'Loyalty price rounds halves to even; finance expects away from zero' --body-file $body }; Remove-Item $body -Force",
+    "# manual (owner): on github.com run the workflow Copilot Setup Steps once by hand (workflow_dispatch) and confirm it is green; confirm the ci workflow is green on main; if the account is an organisation, enable the cloud agent policy",
+    "# manual (owner): invite the second GitHub account as collaborator with write access"
+  ],
+  "screens": [
+    {
+      "name": "assign-issue",
+      "kind": "browser",
+      "url": "https://github.com/",
+      "account": "the owner's GitHub account (requester)",
+      "steps": [
+        "Open the repo contoso-bikes-pricing (private), then the issue 'Loyalty price rounds halves to even; finance expects away from zero'",
+        "Right sidebar, Assignees, select Copilot; show the optional prompt field with: Run dotnet test Contoso.Bikes.sln before you finish, and the branch and model menus",
+        "Assign and show that the agent starts"
+      ],
+      "mask": [
+        "the account e-mail only (nothing else needs masking)"
+      ],
+      "then": [
+        {
+          "name": "assign-issue-preflight",
+          "kind": "terminal",
+          "target": "host",
+          "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\copilot-ai\\episodes\\15-github-copilot-coding-agent-and-code-review\\src",
+          "prompt": "PS> ",
+          "commands": [
+            "python -m agent_ready issue demo-repo/issues/01-ready-loyalty-rounding.md",
+            "#pause 3"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "agent-pr",
+      "kind": "browser",
+      "url": "https://github.com/",
+      "account": "the owner's GitHub account (requester)",
+      "steps": [
+        "Wait for the draft pull request on a branch starting with copilot/ (minutes; the wait is cut in editing and said so)",
+        "Show the commits authored by Copilot with the requester as co-author and marked Verified",
+        "Show the link to the session log and the merge box with Approve and run workflows; capture BEFORE clicking it"
+      ],
+      "mask": [
+        "the account e-mail only"
+      ]
+    },
+    {
+      "name": "gate-terminal",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\copilot-ai\\episodes\\15-github-copilot-coding-agent-and-code-review\\src",
+      "prompt": "PS> ",
+      "commands": [
+        "$owner = gh api user --jq .login",
+        "$n = gh pr list --repo \"$owner/contoso-bikes-pricing\" --state open --json number,headRefName --jq '[.[] | select(.headRefName | startswith(\"copilot/\"))][0].number'",
+        "python -m agent_ready gate --repo \"$owner/contoso-bikes-pricing\" --pull $n --requested-by $owner",
+        "#pause 5"
+      ],
+      "note": "Record twice: (a) while the pull request is a draft with no approval and workflows not run: WAIT lines, Verdict: not ready; (b) after the second account approved, the pull request was marked ready by a human and Approve and run workflows passed: all OK, Verdict: ready for a human to merge. If there is no second account record only (a) and say so."
+    },
+    {
+      "name": "code-review",
+      "kind": "browser",
+      "url": "https://github.com/",
+      "account": "the owner's GitHub account (requester)",
+      "steps": [
+        "Open the seeded pull request 'Add bulk discount total' (created by the scene prepare)",
+        "Reviewers, Copilot, Request (or python -m agent_ready review <owner>/contoso-bikes-pricing <n> --execute)",
+        "Show the real Copilot review as a Comment review with line comments, without editing or staging it",
+        "Say honestly which of the four planted problems it found: double for money, Math.Round without MidpointRounding.AwayFromZero, no validation of negative input, exception swallowed in catch"
+      ],
+      "mask": [
+        "the account e-mail only"
+      ],
+      "prepare": [
+        "$owner = gh api user --jq .login; $patch = (Resolve-Path ./src/demo-repo/review-demo/0001-add-bulk-discount.patch).Path; Push-Location \"$HOME\\contoso-bikes-pricing\"; if (-not (git branch --list feature/bulk-discount)) { git switch -c feature/bulk-discount; git -c user.name='MG Lab' -c user.email='lab@example.invalid' am $patch; git push -u origin feature/bulk-discount; gh pr create --fill }; Pop-Location"
+      ]
+    }
+  ],
+  "teardown": [
+    "$owner = gh api user --jq .login",
+    "gh pr list --repo \"$owner/contoso-bikes-pricing\" --state open --json number --jq '.[].number' | ForEach-Object { gh pr close $_ --repo \"$owner/contoso-bikes-pricing\" --delete-branch }",
+    "gh repo delete \"$owner/contoso-bikes-pricing\" --yes",
+    "Remove-Item $HOME\\contoso-bikes-pricing -Recurse -Force -ErrorAction SilentlyContinue",
+    "# manual (owner): remove the second account's collaborator invite if the repo still exists; check Settings, Billing for the Actions minutes and AI credits used and write them in the README; cancel the Copilot plan if it was bought only for this recording; gh auth logout if the laptop is shared"
+  ],
+  "needs": [
+    "licence:github-copilot-paid (cloud agent: Pro, Pro+, Max, Business or Enterprise)",
+    "github-second-account (write access, approves the pull request)",
+    "github-cli",
+    "dotnet-10-sdk"
+  ],
+  "blocked": "The cloud agent needs a paid GitHub Copilot plan on the requester account (owner's plan unknown, owner decision); without a second GitHub account only the first half of the gate can be recorded."
+}

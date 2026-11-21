@@ -1,0 +1,105 @@
+{
+  "note": "Copilot & AI #5. Order matters: copilot-data and copilot-formula first (the real table, column names and the accepted formula feed the terminal takes). The owner then writes context.mylab.json, data.mylab.json (shape of src/samples) and saves the accepted formula in formula.mylab.txt and the delegation formula in delegation.mylab.txt, all in the episode folder and never committed. Microsoft Copilot in canvas apps and Copilot Studio apps are not recorded (licence needed). A screen that needs a second capture of another kind lists it under 'then'.",
+  "prepare": [
+    "dotnet build src/PowerFxReview --nologo -v q",
+    "# manual (owner): Power Platform admin center, DEV: confirm Dataverse, region, the Generative AI features card (write down Move data across regions) and that labadmin holds System Administrator or System Customizer there",
+    "# manual (owner): make.powerapps.com as labadmin, switch to DEV, accept the Power Apps trial if asked; rehearse the Copilot prompt once and delete what it created so DEV starts clean"
+  ],
+  "screens": [
+    {
+      "name": "copilot-data",
+      "kind": "browser",
+      "url": "https://make.powerapps.com/",
+      "account": "labadmin",
+      "steps": [
+        "Switch to environment DEV; Home, Start with data, Create new data",
+        "In the Create new tables workspace with the Copilot panel on the right, type the prompt exactly: Create tables to track equipment loans at Contoso: item, borrower, borrower email, due date, returned on date and status (Out, Returned, Lost)",
+        "Show the generated table, its columns and the sample rows without editing them",
+        "Select Save and open app, name it Equipment loans",
+        "If the shape is unexpected (extra tables, other columns) keep it and say so; if Create new data is missing or refuses show Move data across regions in the admin center and record that"
+      ],
+      "mask": [
+        "environment/org URL in the address bar and picker",
+        "tenant name and account e-mail"
+      ]
+    },
+    {
+      "name": "copilot-formula",
+      "kind": "browser",
+      "url": "https://make.powerapps.com/",
+      "account": "labadmin",
+      "steps": [
+        "In Power Apps Studio, canvas app Equipment loans, select the gallery and its Items property",
+        "In the formula bar type the comment: // show the loans that are not returned and are due before today",
+        "Wait for the grey suggestion (or press Enter), capture it and press Tab to accept",
+        "Open the Copilot menu next to fx, choose Explain this formula, capture the explanation (zoom so both are readable)",
+        "Copy the accepted formula into formula.mylab.txt in the episode folder for the terminal takes; if the suggestion is wrong or empty record that"
+      ],
+      "mask": [
+        "environment/org URL in the address bar",
+        "tenant name and account e-mail"
+      ]
+    },
+    {
+      "name": "check-run",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\copilot-ai\\episodes\\05-copilot-in-power-apps",
+      "prompt": "PS> ",
+      "prepare": [
+        "if (-not ((Test-Path ./context.mylab.json) -and (Test-Path ./data.mylab.json) -and (Test-Path ./formula.mylab.txt))) { throw 'Record copilot-data and copilot-formula first, then create context.mylab.json, data.mylab.json and formula.mylab.txt in the episode folder (demo.md screen 3)' }"
+      ],
+      "commands": [
+        "$f = (Get-Content ./formula.mylab.txt -Raw).Trim()",
+        "dotnet run --project src/PowerFxReview -- check $f --property Items --context ./context.mylab.json",
+        "#pause 3",
+        "dotnet run --project src/PowerFxReview -- run \"CountRows($f)\" --context ./context.mylab.json --data ./data.mylab.json",
+        "dotnet run --project src/PowerFxReview -- run $f --context ./context.mylab.json --data ./data.mylab.json",
+        "#pause 5"
+      ],
+      "note": "If the checker reports an error on the real Copilot formula keep the take: that is the point."
+    },
+    {
+      "name": "delegation",
+      "kind": "browser",
+      "url": "https://make.powerapps.com/",
+      "account": "labadmin",
+      "steps": [
+        "Power Apps Studio, same app: set the gallery Items to FirstN(Sort(Filter(<table>, Len(<borrower column>) > 2), <due date column>), 10) using the real names (same text as delegation.mylab.txt)",
+        "Capture whether Studio shows the yellow delegation triangle and hover its message; if there is none say so (not every nondelegable case shows a warning)",
+        "Then undo the change in Studio"
+      ],
+      "mask": [
+        "environment/org URL in the address bar",
+        "tenant name and account e-mail"
+      ],
+      "prepare": [
+        "if (-not (Test-Path ./delegation.mylab.txt)) { throw 'Write the real-name delegation formula to delegation.mylab.txt first' }"
+      ],
+      "then": [
+        {
+          "name": "delegation-terminal",
+          "kind": "terminal",
+          "target": "host",
+          "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\copilot-ai\\episodes\\05-copilot-in-power-apps",
+          "prompt": "PS> ",
+          "commands": [
+            "$d = (Get-Content ./delegation.mylab.txt -Raw).Trim()",
+            "dotnet run --project src/PowerFxReview -- check $d --property Items --context ./context.mylab.json",
+            "#pause 5"
+          ]
+        }
+      ]
+    }
+  ],
+  "teardown": [
+    "Get-ChildItem . -File | Where-Object { $_.Name -like '*.mylab.*' -or $_.Extension -eq '.msapp' } | Remove-Item -Force",
+    "# manual (owner): close the app without publishing and delete Equipment loans on make.powerapps.com; delete the tables Copilot created (with sample rows, relationships, any solution); restore Move data across regions to the state written down; unzipped .msapp folder if any"
+  ],
+  "needs": [
+    "tenant",
+    "dataverse-env:DEV",
+    "premium-trial (Power Apps self-service trial, started on first use)"
+  ],
+  "blocked": "Microsoft Copilot in canvas apps (needs a Microsoft 365 Copilot licence) and apps built in Copilot Studio (needs Copilot Credits) are not recorded; they are not part of the four screens."
+}

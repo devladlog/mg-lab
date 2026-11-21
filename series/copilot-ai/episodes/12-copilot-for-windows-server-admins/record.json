@@ -1,0 +1,123 @@
+{
+  "note": "Copilot & AI #12. Needs the throwaway VM CON-ARC01 (Windows Server 2025 Datacenter Evaluation, Desktop Experience, 2 vCPU / 4 GB / 60 GB, MGLab-NAT, 10.50.0.45, not domain-joined, see series/LAB-REQUESTS.md). It is not created here. The kit credential must be valid for PowerShell Direct on CON-ARC01 (a non-domain VM needs its local Administrator: if the CONTOSO\\ prefix is rejected the whatif scene cannot connect). No shared VM is changed. Never enable Windows Server management benefits, Essential Machine Management, Defender, Update Manager or any extension. Copilot's drafts are saved by the owner in the episode out folder (copilot-draft.ps1, copilot-change.ps1, copilot-nowhatif.ps1). A screen that needs a second capture of another kind lists it under 'then'.",
+  "prepare": [
+    "$v = $PSVersionTable.PSVersion.ToString(); $msi = Join-Path $env:TEMP \"PowerShell-$v-win-x64.msi\"",
+    "$s = New-PSSession -VMName CON-ARC01 -Credential $cred",
+    "Invoke-Command -Session $s { New-Item -ItemType Directory -Force C:\\lab | Out-Null; Remove-Item C:\\lab\\ep12 -Recurse -Force -ErrorAction SilentlyContinue }",
+    "Copy-Item -ToSession $s -Path (Join-Path (Get-Location).Path 'src') -Destination C:\\lab\\ep12 -Recurse -Force",
+    "if (-not (Invoke-Command -Session $s { Test-Path 'C:\\Program Files\\PowerShell\\7\\pwsh.exe' })) { if (-not (Test-Path $msi)) { Invoke-WebRequest \"https://github.com/PowerShell/PowerShell/releases/download/v$v/PowerShell-$v-win-x64.msi\" -OutFile $msi }; Copy-Item -ToSession $s -Path $msi -Destination C:\\lab\\pwsh.msi -Force; Invoke-Command -Session $s { Start-Process msiexec.exe '/i C:\\lab\\pwsh.msi /quiet ADD_PATH=1 ENABLE_PSREMOTING=1' -Wait } }",
+    "Remove-PSSession $s",
+    "New-Item -ItemType Directory -Force ./out | Out-Null",
+    "Push-Location src; pwsh -NoProfile -File Invoke-AdminGate.ps1 scripts/Get-ServerHealth.ps1 -SkipResolution; Pop-Location",
+    "# owner signs in (browser) as labadmin",
+    "az login --only-show-errors | Out-Null",
+    "az group create --name rg-mglab-copilot-ai-12 --location westeurope -o none",
+    "az provider register --namespace Microsoft.HybridCompute --only-show-errors",
+    "az provider register --namespace Microsoft.GuestConfiguration --only-show-errors",
+    "# manual (owner, on CON-ARC01): sign in as local Administrator (typed off camera), run the Azure Arc Setup wizard from the Start menu and connect to the resource group; wait for Connected in the portal; evaluation edition may not be accepted by Arc: say so on camera and use a licensed or Azure VM instead",
+    "# manual (owner): scratch repo with src\\copilot-config\\copilot-instructions.md copied to .github\\copilot-instructions.md, opened in VS Code; clear old Copilot chats, one conversation per prompt; confirm the GitHub Copilot plan"
+  ],
+  "screens": [
+    {
+      "name": "arc-onboard",
+      "kind": "browser",
+      "url": "https://portal.azure.com/#view/Microsoft_Azure_HybridCompute/AzureArcCenterBlade/~/servers",
+      "account": "labadmin",
+      "steps": [
+        "Open Azure Arc, Servers",
+        "Show CON-ARC01 with operating system Windows Server 2025, status Connected and resource group rg-mglab-copilot-ai-12",
+        "Pause three seconds"
+      ],
+      "mask": [
+        "subscription id",
+        "tenant name and account e-mail"
+      ],
+      "then": [
+        {
+          "name": "arc-setup-wizard",
+          "kind": "app",
+          "app": "Azure Arc Setup wizard on CON-ARC01 (Hyper-V console)",
+          "steps": [
+            "Only for the take where the agent is installed: Start menu, Azure Arc Setup, walk through the wizard to the connection step",
+            "Sign-in prompts are typed or approved by the owner off camera"
+          ],
+          "mask": [
+            "subscription id and tenant id in the wizard",
+            "device code"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "azure-copilot",
+      "kind": "browser",
+      "url": "https://portal.azure.com/",
+      "account": "labadmin",
+      "steps": [
+        "Open the Copilot pane in the portal",
+        "Ask: List my Azure Arc-enabled servers and their agent status",
+        "Ask (a new conversation): Help me troubleshoot my Arc server extension (Learn's own sample)",
+        "Capture the real answers, also if vague or wrong, and any request for a resource ID or any limits message",
+        "Optional take: ask Write a Resource Graph query for Arc servers with their OS and agent version and compare with src\\azure\\arc-servers.kql"
+      ],
+      "mask": [
+        "subscription id",
+        "tenant name and account e-mail"
+      ]
+    },
+    {
+      "name": "vscode-script",
+      "kind": "app",
+      "app": "VS Code",
+      "steps": [
+        "Open the scratch repo (with .github\\copilot-instructions.md) and a new Chat or Agent conversation signed in with the owner's GitHub account",
+        "Prompt: Write a read-only PowerShell 7 health check for one Windows Server: disks under 15 percent free, automatic services not running, pending reboot, uptime, last hotfix.",
+        "Save Copilot's real answer as copilot-draft.ps1 (also copy it to the episode out folder) beside src\\scripts\\Get-ServerHealth.ps1 and show both",
+        "In the VS Code terminal run: pwsh -NoProfile -File <episode>\\src\\Invoke-AdminGate.ps1 copilot-draft.ps1 and show the findings, whatever they are",
+        "Run src\\scripts\\Get-ServerHealth.ps1 on CON-ARC01 (PowerShell Direct, lab credential typed off camera) and show its output"
+      ],
+      "mask": [
+        "GitHub account name if personal",
+        "Windows user name in terminal paths"
+      ]
+    },
+    {
+      "name": "whatif",
+      "kind": "terminal",
+      "target": "CON-ARC01",
+      "workdir": "C:\\lab\\ep12",
+      "prompt": "PS CON-ARC01> ",
+      "configurationName": "PowerShell.7",
+      "prepare": [
+        "foreach ($f in 'copilot-change.ps1','copilot-nowhatif.ps1') { if (-not (Test-Path (Join-Path ./out $f))) { throw \"Save Copilot's draft as ./out/$f first (demo.md whatif)\" } }",
+        "$s = New-PSSession -VMName CON-ARC01 -Credential $cred",
+        "Copy-Item -ToSession $s -Path ./out/copilot-change.ps1, ./out/copilot-nowhatif.ps1 -Destination C:\\lab\\ep12\\ -Force",
+        "Remove-PSSession $s"
+      ],
+      "commands": [
+        "./Invoke-AdminGate.ps1 ./copilot-change.ps1 -Mode Change",
+        "#pause 3",
+        "./copilot-change.ps1 -WhatIf",
+        "#pause 3",
+        "./Invoke-AdminGate.ps1 ./copilot-nowhatif.ps1 -Mode Change",
+        "./copilot-nowhatif.ps1 -WhatIf",
+        "#pause 4"
+      ],
+      "note": "Only on CON-ARC01. copilot-change.ps1 is Copilot's script for a harmless target (stop and start the Print Spooler on this one server) with SupportsShouldProcess; copilot-nowhatif.ps1 is a draft without it, where -WhatIf must fail. Neither is ever run without -WhatIf."
+    }
+  ],
+  "teardown": [
+    "Invoke-Command -VMName CON-ARC01 -Credential $cred { Remove-Item C:\\lab\\ep12, C:\\lab\\pwsh.msi -Recurse -Force -ErrorAction SilentlyContinue }",
+    "# manual (owner, on CON-ARC01, elevated): azcmagent disconnect (needs the lab credential)",
+    "if ((az group exists --name rg-mglab-copilot-ai-12) -eq 'true') { az group delete --name rg-mglab-copilot-ai-12 --yes --no-wait }",
+    "Remove-Item ./out -Recurse -Force -ErrorAction SilentlyContinue",
+    "# manual (owner): Hyper-V, stop and delete CON-ARC01 and its VHDX; remove the scratch repo and copilot-draft.ps1; sign out of GitHub in VS Code if personal"
+  ],
+  "needs": [
+    "vm:CON-ARC01",
+    "tenant",
+    "azure",
+    "licence:github-copilot (owner's plan)"
+  ],
+  "blocked": "CON-ARC01 does not exist yet (VM request in series/LAB-REQUESTS.md); all four screens need it or the Arc resource. Whether a Windows Server evaluation edition can connect to Azure Arc is unverified. Windows Server management benefits and Essential Machine Management are not enabled and not recorded."
+}

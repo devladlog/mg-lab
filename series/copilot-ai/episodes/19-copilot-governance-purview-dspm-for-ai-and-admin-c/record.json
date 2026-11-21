@@ -1,0 +1,138 @@
+{
+  "note": "Copilot & AI #19. No Microsoft 365 Copilot licence, no SharePoint Advanced Management, no pay-as-you-go: Copilot interaction numbers in DSPM are expected to be empty (say so). The two Purview screens need setup days earlier (DSPM initial tasks at least 5 days before; default data risk assessment has a 4 day delay). Sign-ins for the three PowerShell modules happen at the start of each terminal scene (owner signs in) and the screen is cleared before the script runs, because the connections live only inside that terminal. prompt-block is CONDITIONAL: only if the preview 'block sensitive information types in prompts' is in the tenant; otherwise drop the scene and its narration. A screen that needs a second capture of another kind lists it under 'then'.",
+  "prepare": [
+    "python -m pip install -r src/requirements.txt --quiet",
+    "python -m pytest -q",
+    "foreach ($m in 'ExchangeOnlineManagement','Microsoft.Online.SharePoint.PowerShell') { if (-not (Get-Module -ListAvailable -Name $m)) { Install-Module $m -Scope CurrentUser -Force } }",
+    "if (-not $env:MG_TENANT) { $env:MG_TENANT = Read-Host 'Lab tenant short name (owner types, never shown)' }",
+    "# manual (owner, 5+ days before): purview.microsoft.com, Solutions, DSPM (not the classic entries): accept the initial setup tasks",
+    "# manual (owner): create the throwaway sites MG Lab - HR Salaries (Microsoft 365 group, public, deliberately overshared) and MG Lab - Marketing (private); in HR Salaries upload the fictional salary-bands-2026.xlsx and holiday-calendar.docx, create one Anyone link on salary-bands-2026.xlsx and one People in your organization link on both files (note Get-SPOTenant SharingCapability first and restore it in teardown); open the files as alex.demo and sam.demo a few times",
+    "# manual (owner): Purview, Information Protection: confirm a published label named Highly Confidential exists (create it with a label policy for all users if not, and note it for teardown)",
+    "# manual (owner, day before): run the snapshot once off camera as the safety take and read G03 and the warnings; if the default data risk assessment is empty create a custom assessment for the two sites and wait 48 hours"
+  ],
+  "screens": [
+    {
+      "name": "dspm-posture",
+      "kind": "browser",
+      "url": "https://purview.microsoft.com/",
+      "account": "labadmin",
+      "steps": [
+        "Purview portal, Solutions, DSPM (NOT the classic entries)",
+        "Show Posture; then Objectives with the cards Prevent oversharing of sensitive data and Prevent data exposure in Microsoft 365 Copilot and Microsoft Copilot interactions; then Setup tasks",
+        "Record the real state; Copilot interaction numbers will be empty (no Copilot licence): say so"
+      ],
+      "mask": [
+        "tenant name in the address bar and account menu"
+      ]
+    },
+    {
+      "name": "risk-assessment",
+      "kind": "browser",
+      "url": "https://purview.microsoft.com/",
+      "account": "labadmin",
+      "steps": [
+        "DSPM, Discover, Data risk assessments, Microsoft 365 tab",
+        "Show the default assessment summary (items found, sensitive items, links sharing data with anyone)",
+        "Open one site's flyout and show Overview, Identify, Protect and Monitor",
+        "If the default assessment has no results yet use the custom assessment for the two lab sites (needs 48 hours)"
+      ],
+      "mask": [
+        "tenant name",
+        "site URLs that contain the tenant name"
+      ]
+    },
+    {
+      "name": "posture-before",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\copilot-ai\\episodes\\19-copilot-governance-purview-dspm-for-ai-and-admin-c",
+      "prompt": "PS> ",
+      "commands": [
+        "Connect-ExchangeOnline -ShowBanner:$false",
+        "Connect-IPPSSession -ShowBanner:$false",
+        "Connect-SPOService -Url \"https://$($env:MG_TENANT)-admin.sharepoint.com\"",
+        "#clear",
+        "./src/scripts/Export-CopilotGovernanceSnapshot.ps1 -OutFile before.json",
+        "Set-Location src",
+        "python -m copilot_governance ../before.json | ForEach-Object { $_ -replace '(?i)https://[\\w-]+\\.sharepoint\\.com','https://<tenant>.sharepoint.com' -replace '@[\\w.-]+','@<domain>' }",
+        "#pause 6"
+      ],
+      "mask": [
+        "tenant domain and SharePoint host replaced in the command",
+        "before.json is never printed (tenant data)"
+      ],
+      "note": "Expect FAIL on G03 (no Copilot DLP policy) and WARN lines for the Everyone except external users claim and external sharing; any ???? (not collected) line is real, explain it. Sign-ins happen before the screen is cleared."
+    },
+    {
+      "name": "dlp-policy",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\copilot-ai\\episodes\\19-copilot-governance-purview-dspm-for-ai-and-admin-c",
+      "prompt": "PS> ",
+      "commands": [
+        "Connect-ExchangeOnline -ShowBanner:$false",
+        "Connect-IPPSSession -ShowBanner:$false",
+        "Connect-SPOService -Url \"https://$($env:MG_TENANT)-admin.sharepoint.com\"",
+        "#clear",
+        "./src/scripts/New-CopilotLabelDlpPolicy.ps1 -LabelName 'Highly Confidential'",
+        "#pause 4",
+        "./src/scripts/New-CopilotLabelDlpPolicy.ps1 -LabelName 'Highly Confidential' -Apply",
+        "#pause 3",
+        "./src/scripts/Export-CopilotGovernanceSnapshot.ps1 -OutFile after.json",
+        "Set-Location src",
+        "python -m copilot_governance ../after.json | ForEach-Object { $_ -replace '(?i)https://[\\w-]+\\.sharepoint\\.com','https://<tenant>.sharepoint.com' -replace '@[\\w.-]+','@<domain>' }",
+        "#pause 6"
+      ],
+      "mask": [
+        "tenant domain and SharePoint host replaced in the command"
+      ],
+      "then": [
+        {
+          "name": "dlp-policy-portal",
+          "kind": "browser",
+          "url": "https://purview.microsoft.com/",
+          "account": "labadmin",
+          "steps": [
+            "Data Loss Prevention, Policies: open MG Lab - Copilot: block labelled content",
+            "Show location Microsoft Copilot, Copilot Chat, and Copilot Cowork and mode in simulation (it may show PendingDeletion later)"
+          ],
+          "mask": [
+            "tenant name in the address bar and account menu"
+          ]
+        }
+      ],
+      "note": "First run without -Apply prints the dry-run JSON; the second creates the policy in simulation mode; the re-run should pass G03 and warn on G04 (simulation). Needs the label Highly Confidential."
+    },
+    {
+      "name": "prompt-block",
+      "kind": "browser",
+      "url": "https://purview.microsoft.com/",
+      "account": "labadmin",
+      "steps": [
+        "FIRST check that the preview 'block sensitive information types in prompts' exists in the tenant; if not, drop this scene and its narration and say so",
+        "Edit the policy MG Lab - Copilot: block labelled content: add a second rule, Content contains, Sensitive information types, Credit Card Number, action Prevent Copilot from processing content, Processing prompts; set the mode to Enable; wait up to four hours",
+        "As alex.demo in Copilot Chat (copilot.cloud.microsoft) paste a prompt containing the public test card number 4111 1111 1111 1111",
+        "Capture the real block message; if nothing is blocked drop the scene"
+      ],
+      "mask": [
+        "tenant name",
+        "account e-mail"
+      ],
+      "note": "Conditional scene. alex.demo has no Copilot add-on: the location Copilot Chat is the one that applies."
+    }
+  ],
+  "teardown": [
+    "# owner signs in (Security & Compliance PowerShell)",
+    "Connect-IPPSSession -ShowBanner:$false",
+    "Remove-DlpCompliancePolicy -Identity 'MG Lab - Copilot: block labelled content' -Confirm:$false -ErrorAction SilentlyContinue",
+    "Remove-Item ./before.json, ./after.json, ./scan.json -Force -ErrorAction SilentlyContinue",
+    "Disconnect-ExchangeOnline -Confirm:$false -ErrorAction SilentlyContinue",
+    "# manual (owner): delete both throwaway sites and empty the SharePoint recycle bin (Deleted sites); restore SharingCapability if it was changed; remove any label or label policy created for this episode; delete the custom data risk assessment if created; the policy shows PendingDeletion for a while"
+  ],
+  "needs": [
+    "tenant",
+    "purview-dspm (set up 5+ days before)",
+    "label:Highly Confidential"
+  ],
+  "blocked": "prompt-block depends on the preview 'block sensitive information types in prompts' reaching the lab tenant (check first, else drop the scene); NEEDS COPILOT LICENCE inserts (Restricted Content Discovery, data access governance reports, DSPM on a licensed user) are not recorded."
+}

@@ -1,0 +1,117 @@
+{
+  "note": "Copilot & AI #14. The demo copy is C:\\demo\\mcp-demo (the src folder including hidden .vscode, .github and .mcp.json, no tests). The Azure MCP Server runs read only and RG is created EMPTY (no cost). The GitHub MCP server authenticates through OAuth in the browser by the owner (no PAT); the throwaway repo mglab-mcp-demo is created and deleted by the owner's gh. Permission level stays Manual: never Allow all. Write must never run in the readonly-gotcha scene; if the agent claims it created something stop and check the repo. A screen that needs a second capture of another kind lists it under 'then'.",
+  "prepare": [
+    "python -m pip install -r src/requirements.txt --quiet",
+    "python -m pytest -q",
+    "New-Item -ItemType Directory -Force C:\\demo | Out-Null",
+    "if (-not (Test-Path C:\\demo\\mcp-demo)) { Copy-Item .\\src C:\\demo\\mcp-demo -Recurse }",
+    "python -m pip install \"mcp>=2.3,<3\" --quiet",
+    "Push-Location C:\\demo\\mcp-demo; python -m mcpconf check .mcp.json; Pop-Location",
+    "# owner signs in (browser or device code) as the Azure owner account, off camera",
+    "az login --only-show-errors | Out-Null",
+    "az group create --name rg-mglab-copilot-ai-14 --location westeurope -o none",
+    "# owner signs in to GitHub with gh if not yet (gh auth login, off camera)",
+    "$owner = gh api user --jq .login",
+    "if (-not (gh repo view \"$owner/mglab-mcp-demo\" --json name 2>$null)) { gh repo create mglab-mcp-demo --private --add-readme; gh issue create --repo \"$owner/mglab-mcp-demo\" --title 'Renewal report shows wrong total' --body 'The total in the renewal report does not match the vendor list.'; gh issue create --repo \"$owner/mglab-mcp-demo\" --title 'Add notice deadline to the report' --body 'Show renewal date minus notice days for each vendor.' }",
+    "# manual (owner): open C:\\demo\\mcp-demo in VS Code, trust the workspace; Chat, Session Target Copilot, Chat: Open Customizations, MCP Servers: do the four servers appear? If not enable chat.mcp.workspaceRootConfig.enabled and say so; authenticate github (browser), start azure (first start downloads the npm package: do it before recording); dry-run the four prompts and start a fresh chat for each take"
+  ],
+  "screens": [
+    {
+      "name": "mcp-servers",
+      "kind": "app",
+      "app": "VS Code",
+      "steps": [
+        "Open C:\\demo\\mcp-demo (trusted); Chat view, new chat, Session Target Copilot",
+        "Chat: Open Customizations, MCP Servers: show microsoftLearn, azure, github and contosoVendors with their state and tool counts",
+        "Authenticate github in the browser (off camera if needed); start azure (after az login)",
+        "Briefly show the server output view for contosoVendors"
+      ],
+      "mask": [
+        "GitHub account name and avatar (Status Bar, Copilot dashboard, account menu)",
+        "Azure subscription id and tenant id",
+        "Windows user name in any path"
+      ]
+    },
+    {
+      "name": "learn-call",
+      "kind": "app",
+      "app": "VS Code",
+      "steps": [
+        "New chat, Agent, Copilot harness",
+        "Prompt: Use the Microsoft Learn MCP tools to find the official documentation for the Kusto Query Language where operator. Summarize its syntax and link to the documentation. Do not change files.",
+        "Approve the tool when asked; expand the tool call: tool name microsoft_docs_search (or fetch), the query and the result",
+        "Show the final answer with its link; if the answer is plausible but there was no tool call say so (it does not count)"
+      ],
+      "mask": [
+        "GitHub account name and avatar (Status Bar, Copilot dashboard, account menu)"
+      ]
+    },
+    {
+      "name": "vendors-call",
+      "kind": "app",
+      "app": "VS Code",
+      "steps": [
+        "Same chat or a new one, Agent",
+        "Prompt: Which Contoso vendors have a notice deadline that has already passed, and what is the total yearly cost of the vendors renewing in the next 400 days? Use today's date.",
+        "Expand the tool calls list_renewals and total_cost with their arguments and JSON results",
+        "Compare the final answer with the tool output on screen"
+      ],
+      "mask": [
+        "GitHub account name and avatar (Status Bar, Copilot dashboard, account menu)"
+      ],
+      "then": [
+        {
+          "name": "vendors-call-tests",
+          "kind": "terminal",
+          "target": "host",
+          "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\copilot-ai\\episodes\\14-github-copilot-with-mcp-servers-learn-azure-github",
+          "prompt": "PS> ",
+          "commands": [
+            "python -m pytest tests/test_vendor_mcp_stdio.py -q",
+            "#pause 4"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "azure-github",
+      "kind": "app",
+      "app": "VS Code",
+      "steps": [
+        "After az login (subscription: the lab pay-as-you-go one, rg-mglab-copilot-ai-14 created empty): new chat, Agent",
+        "Prompt 1: List my Azure resource groups. Show the tool approval prompt with its options and the result (it must include rg-mglab-copilot-ai-14)",
+        "Prompt 2: List the open issues in mglab-mcp-demo and summarise them (two seeded issues)"
+      ],
+      "mask": [
+        "Azure subscription id, tenant id and UPN",
+        "GitHub account name and avatar (Status Bar, Copilot dashboard, account menu)"
+      ]
+    },
+    {
+      "name": "readonly",
+      "kind": "app",
+      "app": "VS Code",
+      "steps": [
+        "github server on https://api.githubcopilot.com/mcp/readonly (as committed in .mcp.json)",
+        "Prompt: Create an issue titled mcp write test in mglab-mcp-demo.",
+        "Record what the agent does and open the server's tool list (no issue write tool expected)",
+        "Show the one line in .mcp.json that makes the server read only; temporarily point the same server at https://api.githubcopilot.com/mcp/ and show the write tools appearing in the tool list; do NOT run a write; restore the file afterwards"
+      ],
+      "mask": [
+        "GitHub account name and avatar (Status Bar, Copilot dashboard, account menu)"
+      ]
+    }
+  ],
+  "teardown": [
+    "az group delete --name rg-mglab-copilot-ai-14 --yes --no-wait",
+    "$owner = gh api user --jq .login; gh repo delete \"$owner/mglab-mcp-demo\" --yes   # needs the delete_repo scope: gh auth refresh -s delete_repo",
+    "Remove-Item C:\\demo\\mcp-demo -Recurse -Force -ErrorAction SilentlyContinue",
+    "# manual (owner): VS Code, MCP: Reset Trust, stop the servers; revoke the GitHub OAuth authorization for VS Code MCP (GitHub Settings, Applications) if it was only for the recording; confirm in the Azure cost view that nothing was billed"
+  ],
+  "needs": [
+    "azure",
+    "licence:github-copilot (owner's plan)",
+    "node-lts",
+    "github-cli"
+  ]
+}

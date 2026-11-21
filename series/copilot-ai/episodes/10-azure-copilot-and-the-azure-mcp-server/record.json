@@ -1,0 +1,113 @@
+{
+  "note": "Copilot & AI #10. Azure resources in rg-mglab-copilot-10 (West Europe): storage account with a CanNotDelete lock, key vault with one dummy secret, optional Reader assignment for sam.demo; estimated under 0.10 EUR for 24 h. Do not use the Observability agent and do not elevate access in the Azure Copilot admin center without the owner's OK. The azmcp server is installed in C:\\MGLab\\work\\azmcp (outside the repo). A screen that needs a second capture of another kind lists it under 'then'.",
+  "prepare": [
+    "python -m pip install -r src/requirements.txt --quiet",
+    "# owner signs in (browser or device code) as labadmin",
+    "az login --only-show-errors | Out-Null",
+    "az bicep install --only-show-errors",
+    "New-Item -ItemType Directory -Force C:\\MGLab\\work\\azmcp | Out-Null",
+    "if (-not (Test-Path C:\\MGLab\\work\\azmcp\\node_modules\\@azure\\mcp)) { Push-Location C:\\MGLab\\work\\azmcp; npm init -y | Out-Null; npm install @azure/mcp@4.0.0-beta.9 --no-fund --no-audit; Pop-Location }",
+    "$env:AZMCP_BIN = 'node C:\\MGLab\\work\\azmcp\\node_modules\\@azure\\mcp\\index.js'",
+    "python -m pytest -q",
+    "az group create --name rg-mglab-copilot-10 --location westeurope -o none",
+    "$rid = az ad user list --filter \"startswith(userPrincipalName,'sam.demo@')\" --query '[0].id' -o tsv",
+    "az deployment group create --resource-group rg-mglab-copilot-10 --template-file src/infra/main.bicep --parameters readerObjectId=$rid --query properties.outputs -o json",
+    "$me = az ad signed-in-user show --query id -o tsv",
+    "$kv = az keyvault list --resource-group rg-mglab-copilot-10 --query '[0].id' -o tsv",
+    "az role assignment create --assignee-object-id $me --assignee-principal-type User --role 'Key Vault Secrets User' --scope $kv -o none",
+    "# manual (owner): in the portal as labadmin confirm the Copilot icon opens Azure Copilot (if it says unauthorized ask the owner before elevating access); rehearse the prompts of ask and guardrails once as labadmin and as sam.demo",
+    "# note: the storage account name stmglab10... for the guardrails prompt is printed by the deployment output above (storageAccountName)"
+  ],
+  "screens": [
+    {
+      "name": "azure-copilot",
+      "kind": "browser",
+      "url": "https://portal.azure.com/#view/HubsExtension/BrowseResourceGroups",
+      "account": "labadmin",
+      "steps": [
+        "Open the resource group rg-mglab-copilot-10",
+        "Select the Copilot icon in the portal header",
+        "Type: List the resources in resource group rg-mglab-copilot-10 with their SKU",
+        "Wait for the answer and keep it as it is",
+        "Then type: Show me my cost recommendations from Azure Advisor (if Advisor has nothing record that)"
+      ],
+      "mask": [
+        "subscription id in the breadcrumb and answers",
+        "tenant name and account e-mail",
+        "any resource group that is not rg-mglab-*"
+      ]
+    },
+    {
+      "name": "guardrails",
+      "kind": "browser",
+      "url": "https://portal.azure.com/",
+      "account": "labadmin",
+      "steps": [
+        "Take 1 as labadmin (Owner), in rg-mglab-copilot-10: ask Azure Copilot to delete the storage account stmglab10... (name from the deployment output)",
+        "Read the confirmation it asks for before pressing anything, then show what the CanNotDelete lock does",
+        "Take 2: sign in as sam.demo (Reader on the resource group) and ask the same; record the real wording of the refusal",
+        "Do not retake for a nicer answer"
+      ],
+      "mask": [
+        "subscription id",
+        "tenant name and account e-mails",
+        "sam.demo object id"
+      ],
+      "note": "Two takes in one scene: labadmin then sam.demo."
+    },
+    {
+      "name": "probe",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\copilot-ai\\episodes\\10-azure-copilot-and-the-azure-mcp-server\\src",
+      "prompt": "PS> ",
+      "commands": [
+        "python -m azmcp_audit report policies/contoso-dev-writer.json --azmcp $env:AZMCP_BIN",
+        "#pause 4",
+        "python -m azmcp_audit probe policies/contoso-ops-reader.json --azmcp $env:AZMCP_BIN",
+        "#pause 4",
+        "python -m azmcp_audit probe policies/contoso-ops-reader.json --azmcp $env:AZMCP_BIN --call group_list | ForEach-Object { $_ -replace '/subscriptions/[0-9A-Fa-f-]{36}','/subscriptions/<subscription-id>' }",
+        "#pause 5"
+      ],
+      "mask": [
+        "subscription id replaced in the command",
+        "resource groups that are not rg-mglab-*: check the real output and crop or re-take if other groups show"
+      ],
+      "note": "Expected: 16 findings (numbers may differ with the full catalog), Published 36 tool(s) with Match: yes. If a count differs on the day record it as it is."
+    },
+    {
+      "name": "vscode",
+      "kind": "app",
+      "app": "VS Code",
+      "steps": [
+        "Open a scratch folder; in its terminal run: python -m azmcp_audit config policies/contoso-ops-reader.json --azmcp $env:AZMCP_BIN | Set-Content .vscode/mcp.json -Encoding utf8NoBOM (run from the episode src folder, then copy .vscode/mcp.json into the scratch folder)",
+        "Start the server from the mcp.json CodeLens; open Copilot Chat in agent mode",
+        "Ask: List my resource groups (real answer)",
+        "Ask: Create a storage account named mglabx in rg-mglab-copilot-10 (expect: no tool for it)",
+        "Regenerate mcp.json from policies/contoso-dev-writer.json, restart the server and ask: Get the value of the secret demo-secret in the key vault of rg-mglab-copilot-10",
+        "Record the confirmation prompt (elicitation) before the dummy value appears"
+      ],
+      "mask": [
+        "subscription id",
+        "GitHub account name and avatar",
+        "key vault name if it reveals the subscription",
+        "the dummy secret value if the vault is reused"
+      ]
+    }
+  ],
+  "teardown": [
+    "$st = az storage account list --resource-group rg-mglab-copilot-10 --query '[0].name' -o tsv; if ($st) { az lock delete --name lock-do-not-delete --resource-group rg-mglab-copilot-10 --resource-name $st --resource-type Microsoft.Storage/storageAccounts }",
+    "$kvn = az keyvault list --resource-group rg-mglab-copilot-10 --query '[0].name' -o tsv",
+    "az group delete --name rg-mglab-copilot-10 --yes",
+    "if ($kvn) { az keyvault purge --name $kvn --location westeurope }",
+    "az group exists --name rg-mglab-copilot-10",
+    "Remove-Item C:\\MGLab\\work\\azmcp -Recurse -Force -ErrorAction SilentlyContinue",
+    "# manual (owner): delete any scratch .vscode/mcp.json and the out folder; sign sam.demo out; check Cost Management the next day (cents or nothing)"
+  ],
+  "needs": [
+    "tenant",
+    "azure",
+    "node-22",
+    "licence:github-copilot (owner's plan, vscode screen only)"
+  ]
+}

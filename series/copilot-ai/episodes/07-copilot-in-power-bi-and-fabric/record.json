@@ -1,0 +1,130 @@
+{
+  "note": "Copilot & AI #7. BILLED: Fabric capacity F2 (about 0.395 EUR per hour while running, owner decision). The F2 must exist at least 24 hours before recording (Copilot can take 24 h to recognise it): run this prepare once the day before (the create statement is idempotent), then pause it; every take resumes it and teardown pauses and deletes the resource group. Only trial-no-copilot runs on the Fabric trial capacity. Manual setup the script cannot do: workspaces Contoso Copilot Lab (on the F2) and Contoso Trial Lab (on the trial), lakehouse lh_contoso with the five CSVs, notebook nb_copilot_demo, charts for verified answers, Power BI Pro or trial for labadmin. A screen that needs a second capture of another kind lists it under 'then'.",
+  "prepare": [
+    "python -m pip install -r src/requirements.txt --quiet",
+    "python -m pytest -q",
+    "# owner signs in (browser or device code) as labadmin",
+    "az login --only-show-errors | Out-Null",
+    "if (-not $env:MG_LABADMIN_UPN) { $env:MG_LABADMIN_UPN = Read-Host 'labadmin sign-in name (owner types, never shown)' }",
+    "az group create --name rg-mglab-copilot-07 --location westeurope --tags purpose=mglab-copilot-ep07 -o none",
+    "az extension add --name microsoft-fabric --only-show-errors",
+    "if (-not (az fabric capacity show --resource-group rg-mglab-copilot-07 --capacity-name mglabcopilotf2 --query name -o tsv 2>$null)) { az fabric capacity create --resource-group rg-mglab-copilot-07 --capacity-name mglabcopilotf2 --location westeurope --sku '{name:F2,tier:Fabric}' --administration \"{members:[$env:MG_LABADMIN_UPN]}\" --tags purpose=mglab-copilot-ep07 -o none }",
+    "az fabric capacity resume --resource-group rg-mglab-copilot-07 --capacity-name mglabcopilotf2 2>$null",
+    "New-Item -ItemType Directory -Force C:\\MGLab\\work\\copilot-07 | Out-Null",
+    "if (-not (Test-Path C:\\MGLab\\work\\copilot-07\\before)) { Copy-Item ..\\..\\..\\power-bi\\episodes\\01-data-modeling-star-schema\\src C:\\MGLab\\work\\copilot-07\\before -Recurse }",
+    "Push-Location src; python -m copilot_pbi lint C:\\MGLab\\work\\copilot-07\\before\\ContosoSales.SemanticModel; Pop-Location",
+    "Push-Location src; if (-not (Test-Path C:\\MGLab\\work\\copilot-07\\after)) { New-Item -ItemType Directory -Force C:\\MGLab\\work\\copilot-07\\after | Out-Null; python -m copilot_pbi describe C:\\MGLab\\work\\copilot-07\\before\\ContosoSales.SemanticModel data\\descriptions-contoso-bikes.json --out C:\\MGLab\\work\\copilot-07\\after\\ContosoSales.SemanticModel; Copy-Item C:\\MGLab\\work\\copilot-07\\before\\ContosoSales.pbip, C:\\MGLab\\work\\copilot-07\\before\\ContosoSales.Report C:\\MGLab\\work\\copilot-07\\after\\ -Recurse }; Pop-Location",
+    "Push-Location src; python -m copilot_pbi lint C:\\MGLab\\work\\copilot-07\\after\\ContosoSales.SemanticModel --instructions data\\ai-instructions-contoso-bikes.md --verified data\\verified-answers-plan.json --fail-on info; Pop-Location",
+    "# manual (owner): Fabric admin portal, Tenant settings, Copilot and Azure OpenAI Service: confirm Users can use Copilot and other features powered by Azure OpenAI is on (change nothing)",
+    "# manual (owner): the star-schema CSV files of Power BI episode 1 must be in C:\\MGLab\\power-bi\\star\\ (DataFolder parameter, keep the trailing backslash)",
+    "# manual (owner): open both projects once in Power BI Desktop, add a clustered bar chart Sales Amount by Category and a line chart Margin % by Year Month to the page, save; check Orders Shipped shows 149 for June 2025 by Date[Year Month]"
+  ],
+  "screens": [
+    {
+      "name": "trial-no-copilot",
+      "kind": "browser",
+      "url": "https://app.fabric.microsoft.com/",
+      "account": "labadmin",
+      "steps": [
+        "Open the workspace Contoso Trial Lab (on the Fabric trial capacity), then Workspace settings, License info and show the trial capacity",
+        "Open a report in the workspace",
+        "Show the real Copilot state: button missing, or the message that none of the workspaces has the necessary capacity",
+        "If Copilot DOES work on the trial stop: the script, the needs slide and the README must be rewritten"
+      ],
+      "mask": [
+        "tenant name in the top bar and address bar",
+        "capacity ids",
+        "account e-mail"
+      ]
+    },
+    {
+      "name": "copilot-before",
+      "kind": "app",
+      "app": "Power BI Desktop",
+      "steps": [
+        "Open C:\\MGLab\\work\\copilot-07\\before\\ContosoSales.pbip (DataFolder parameter set), Settings gear: Copilot workspace = Contoso Copilot Lab (F2 resumed)",
+        "Open the Copilot pane, skill picker Answer questions about the data",
+        "Ask: Show sales by country for 2025 (country is ambiguous: customer vs store)",
+        "Ask: How many orders were shipped in June 2025? (validated: 149 shipped, 145 ordered)",
+        "Open How Copilot arrived at this for both answers; keep whatever Copilot answers, right or wrong"
+      ],
+      "mask": [
+        "tenant name and account e-mail in the Desktop title area and sign-in card",
+        "workspace ids"
+      ]
+    },
+    {
+      "name": "prep-data-ai",
+      "kind": "app",
+      "app": "Power BI Desktop",
+      "steps": [
+        "Open C:\\MGLab\\work\\copilot-07\\after\\ContosoSales.pbip, Home ribbon, Prep data for AI (turn on Q&A first if the tabs are disabled)",
+        "Tab Add AI instructions: paste the text of src\\data\\ai-instructions-contoso-bikes.md",
+        "Tab Simplify data schema, then one verified answer on the bar chart with three trigger phrases from src\\data\\verified-answers-plan.json",
+        "Apply; then open the Properties pane of [Sales Amount] and show its description"
+      ],
+      "mask": [
+        "tenant name and account e-mail"
+      ]
+    },
+    {
+      "name": "copilot-after",
+      "kind": "app",
+      "app": "Power BI Desktop",
+      "steps": [
+        "Close and reopen the Copilot pane after Apply (required for the changes to take effect)",
+        "Ask again: Show sales by country for 2025 and How many orders were shipped in June 2025?",
+        "Ask: Which product category made the most margin in 2025? (validated: Bikes 312,551.80)",
+        "Show the answers next to the validated results; if one is still wrong keep it (outputs are nondeterministic)"
+      ],
+      "mask": [
+        "tenant name and account e-mail"
+      ],
+      "then": [
+        {
+          "name": "copilot-after-golden",
+          "kind": "terminal",
+          "target": "host",
+          "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\copilot-ai\\episodes\\07-copilot-in-power-bi-and-fabric\\src",
+          "prompt": "PS> ",
+          "commands": [
+            "python -m copilot_pbi golden",
+            "#pause 6"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "fabric-notebook",
+      "kind": "browser",
+      "url": "https://app.fabric.microsoft.com/",
+      "account": "labadmin",
+      "steps": [
+        "Open workspace Contoso Copilot Lab (F2), lakehouse lh_contoso with the five CSV files loaded as tables",
+        "Open notebook nb_copilot_demo attached to it and open the Copilot chat pane",
+        "Use the starter prompt: Profile my table to check columns, missing values, and duplicates",
+        "Show Copilot asking permission to add a code cell, approve, show the result",
+        "Then pause the capacity (teardown does it too)"
+      ],
+      "mask": [
+        "tenant name in the address bar and top bar",
+        "workspace and capacity ids",
+        "account e-mail"
+      ]
+    }
+  ],
+  "teardown": [
+    "az fabric capacity suspend --resource-group rg-mglab-copilot-07 --capacity-name mglabcopilotf2 2>$null",
+    "az group delete --name rg-mglab-copilot-07 --yes",
+    "Remove-Item C:\\MGLab\\work\\copilot-07 -Recurse -Force -ErrorAction SilentlyContinue",
+    "# manual (owner): delete the workspaces Contoso Copilot Lab and Contoso Trial Lab (with lakehouse, notebook, semantic model); in Desktop clear the Copilot workspace choice; check Cost Management shows nothing else billed"
+  ],
+  "needs": [
+    "tenant",
+    "azure",
+    "paid:fabric-f2 (about 0.395 EUR/hour, pause after every take, delete the resource group)",
+    "licence:power-bi-pro-or-trial (labadmin)",
+    "power-bi-desktop"
+  ],
+  "blocked": "copilot-before, prep-data-ai, copilot-after and fabric-notebook need the paid F2 capacity (owner decision, created at least 24 hours earlier); only trial-no-copilot can be recorded without it."
+}

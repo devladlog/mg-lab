@@ -1,0 +1,101 @@
+{
+  "note": "Copilot & AI #18. Only check is free and offline. embedded, plugin and agent need Security Copilot capacity: with Microsoft 365 E5 it is auto-provisioned (400 SCU a month per 1,000 licences); otherwise provision 1 SCU with overage 0 (US$4 per SCU per hour, billed per started hour) and delete it right after recording. agent also needs Microsoft Entra ID P1. Never invent an incident: use a real one in the lab or skip embedded. Never apply the Conditional Access suggestion. A screen that needs a second capture of another kind lists it under 'then'.",
+  "prepare": [
+    "dotnet build src/SecCopilotKit.Cli --nologo -v q",
+    "# manual (owner): sign in to security.microsoft.com, the Entra admin center and securitycopilot.microsoft.com as alex.demo (Security Administrator); about 12 failed sign-ins for jordan.demo (wrong password in a private window)",
+    "# manual (owner): capacity: option (a) E5 auto-provisioned, nothing to do; option (b) in-product Provision capacity within Security Copilot, 1 SCU, overage 0, note the start time (the clock hour is billed)",
+    "# manual (owner): upload plugin\\contoso-soc-hunting.yaml (Plugin button, Manage plugins, Custom, Add plugin) and optionally agent\\contoso-signin-triage-agent.yaml (prerelease)"
+  ],
+  "screens": [
+    {
+      "name": "check",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\copilot-ai\\episodes\\18-security-copilot-in-defender-and-entra",
+      "prompt": "PS> ",
+      "commands": [
+        "dotnet test src/SecCopilotKit.Tests -m:1",
+        "#pause 3",
+        "dotnet run --project src/SecCopilotKit.Cli -- check plugin/contoso-soc-hunting.yaml",
+        "#pause 3",
+        "dotnet run --project src/SecCopilotKit.Cli -- check samples/broken-plugin.yaml",
+        "#pause 5"
+      ],
+      "note": "Expected: Passed: 115, 0 errors 0 warnings, then the red lines of the broken plugin (unquoted placeholder, AccountUPN, old table name, gpt-4o)."
+    },
+    {
+      "name": "plugin",
+      "kind": "browser",
+      "url": "https://securitycopilot.microsoft.com/",
+      "account": "alex.demo",
+      "steps": [
+        "Open Security Copilot standalone; Plugin button on the prompt bar, Custom: show Contoso SOC hunting listed",
+        "Type: Show failed sign-ins for jordan.demo@contoso.example",
+        "Record the real answer and the skill name in the activity trail (GetFailedSignInsByUser; it may need the input upn typed in the prompt)"
+      ],
+      "mask": [
+        "tenant name in the address bar and account menu",
+        "capacity name and subscription id on the capacity page",
+        "real IP addresses of real sign-ins"
+      ],
+      "then": [
+        {
+          "name": "plugin-render",
+          "kind": "terminal",
+          "target": "host",
+          "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\copilot-ai\\episodes\\18-security-copilot-in-defender-and-entra",
+          "prompt": "PS> ",
+          "commands": [
+            "dotnet run --project src/SecCopilotKit.Cli -- render plugin/contoso-soc-hunting.yaml GetFailedSignInsByUser \"upn=jordan.demo@contoso.example\"",
+            "#pause 5"
+          ]
+        }
+      ],
+      "note": "Needs Security Copilot capacity."
+    },
+    {
+      "name": "embedded",
+      "kind": "browser",
+      "url": "https://security.microsoft.com/incidents",
+      "account": "alex.demo",
+      "steps": [
+        "Defender portal, Incidents: open a REAL incident, Copilot tab: show the generated summary, then Recommendations",
+        "Entra admin center, Protection, ID Protection, Risky users: open a user and select Summarize",
+        "Record what the tenant really produces; if no real incident exists skip this scene (a test alert from the Defender portal is fine)"
+      ],
+      "mask": [
+        "tenant name in every address bar and profile menu",
+        "real user names in incidents",
+        "real IP addresses"
+      ],
+      "note": "Needs Security Copilot capacity."
+    },
+    {
+      "name": "agent",
+      "kind": "browser",
+      "url": "https://entra.microsoft.com/",
+      "account": "alex.demo",
+      "steps": [
+        "Entra admin center, Agents, Conditional Access Optimization, Start agent as Security Administrator (no PIM-activated role)",
+        "Show the activity map and one suggestion (policy in report-only mode)",
+        "Do NOT apply the suggestion"
+      ],
+      "mask": [
+        "tenant name in the address bar and profile menu",
+        "policy names that contain the real domain"
+      ],
+      "note": "Needs Security Copilot capacity and Microsoft Entra ID P1 (P2 for the risky-user suggestions)."
+    }
+  ],
+  "teardown": [
+    "Get-ChildItem src -Directory | ForEach-Object { Remove-Item (Join-Path $_.FullName 'bin'), (Join-Path $_.FullName 'obj') -Recurse -Force -ErrorAction SilentlyContinue }",
+    "# manual (owner): DELETE the Security Copilot capacity (option b) and confirm no provisioned SCU remains; remove the custom plugin and agent from Custom; leave Conditional Access Optimization suggestions unapplied and turn the agent off; remove the Phishing Triage Agent if set up; remove or reset the jordan.demo test user; sign out of all portals"
+  ],
+  "needs": [
+    "tenant",
+    "paid:security-copilot-capacity (E5 auto-provisioned, or 1 SCU at US$4 per started hour; delete after recording)",
+    "licence:entra-id-p1 (agent screen)",
+    "dotnet-10-sdk"
+  ],
+  "blocked": "plugin, embedded and agent need Security Copilot capacity (owner decision, billed per started hour unless E5 auto-provisions it); agent also needs Microsoft Entra ID P1; embedded needs a real Defender incident. Only check can be recorded now."
+}

@@ -1,0 +1,105 @@
+{
+  "note": "Copilot & AI #20. BILLED per token (not verified: read each model's price on the Azure pricing page before recording and put the real prices in config.json); Foundry resource in Sweden Central, 2 or 3 GlobalStandard deployments, Application Insights for tracing. The owner chooses the 2 or 3 deployable models and writes them to C:\\MGLab\\work\\copilot-20\\deployments.json and config.json (real deployment names and prices); prepare refuses to continue while config.json still has REPLACE- placeholders. Delete the resource group right after the take. A screen that needs a second capture of another kind lists it under 'then'.",
+  "prepare": [
+    "python -m pip install -r src/requirements.txt --quiet",
+    "python -m pytest -q",
+    "$env:PYTHONPATH = (Resolve-Path src).Path",
+    "New-Item -ItemType Directory -Force C:\\MGLab\\work\\copilot-20 | Out-Null",
+    "if (-not (Test-Path C:\\MGLab\\work\\copilot-20\\config.json)) { Copy-Item src/samples/config.json, src/samples/tasks.json C:\\MGLab\\work\\copilot-20\\ }",
+    "if (Select-String -Path C:\\MGLab\\work\\copilot-20\\config.json -Pattern 'REPLACE-' -Quiet) { throw 'Edit C:\\MGLab\\work\\copilot-20\\config.json first: real deployment names and the real per-token prices (see demo.md Setup 6)' }",
+    "if (-not (Test-Path C:\\MGLab\\work\\copilot-20\\deployments.json)) { throw 'Write the 2 or 3 deployable models as C:\\MGLab\\work\\copilot-20\\deployments.json (array of name, format, model, version, sku, capacity; see src/infra/main.bicepparam)' }",
+    "# owner signs in (browser or device code) as labadmin",
+    "az login --only-show-errors | Out-Null",
+    "az bicep install --only-show-errors",
+    "az group create --name rg-mglab-copilot-ai-20 --location swedencentral -o none",
+    "$o = az deployment group create --resource-group rg-mglab-copilot-ai-20 --template-file src/infra/main.bicep --parameters accountName=mglabfoundry20 deployments=@C:\\MGLab\\work\\copilot-20\\deployments.json --query properties.outputs -o json | ConvertFrom-Json",
+    "$env:FOUNDRY_PROJECT_ENDPOINT = $o.projectEndpoint.value",
+    "$me = az ad signed-in-user show --query id -o tsv",
+    "az role assignment create --assignee-object-id $me --assignee-principal-type User --role 'Foundry User' --scope $o.projectResourceId.value -o none",
+    "# manual (owner): connect Application Insights to the project in the Foundry portal (Learn quickstart, Connect Application Insights for agent tracing) and make sure labadmin can read traces",
+    "# manual (owner): first run off camera as the safety take: python -m foundry_multimodel run --config config.json --tasks tasks.json --out safety.json (in the work folder); a model that fails because of the tool is a script bug to fix"
+  ],
+  "screens": [
+    {
+      "name": "foundry-models",
+      "kind": "browser",
+      "url": "https://ai.azure.com/",
+      "account": "labadmin",
+      "steps": [
+        "Open the project created by src/infra/main.bicep",
+        "Open Models + endpoints (deployments) and show every deployment used in the run with the deployment name column visible"
+      ],
+      "mask": [
+        "subscription id",
+        "resource and project names that contain the tenant name",
+        "tenant name and account e-mail"
+      ]
+    },
+    {
+      "name": "run-report",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "C:\\MGLab\\work\\copilot-20",
+      "prompt": "PS> ",
+      "prepare": [
+        "$env:PYTHONPATH = (Resolve-Path src).Path"
+      ],
+      "commands": [
+        "python -m foundry_multimodel plan --config config.json --tasks tasks.json",
+        "#pause 3",
+        "python -m foundry_multimodel run --config config.json --tasks tasks.json --out results.json --keep-agents | ForEach-Object { $_ -replace '[\\w-]+(\\.services\\.ai\\.azure\\.com)','<resource>$1' }",
+        "#pause 8"
+      ],
+      "mask": [
+        "resource name replaced in the output",
+        "results.json is never printed (it contains the resource name)"
+      ],
+      "note": "Record the REAL results: plan line (models x tasks = requests), scorecard, routing lines, failed checks. If every model scores 1.00 the tasks were too easy: add a harder task before publishing. If a deployment errors show the setup-errors line."
+    },
+    {
+      "name": "foundry-agents",
+      "kind": "browser",
+      "url": "https://ai.azure.com/",
+      "account": "labadmin",
+      "steps": [
+        "Same project, Agents page, while the agents of the --keep-agents run still exist",
+        "Show one agent per model named mglab-ep20-<model>, version 1",
+        "Open one agent and show its definition: the model deployment and the instructions",
+        "Then delete the agents (the teardown also removes the whole resource group)"
+      ],
+      "mask": [
+        "subscription id",
+        "resource and project names that contain the tenant name",
+        "tenant name and account e-mail"
+      ]
+    },
+    {
+      "name": "foundry-trace",
+      "kind": "browser",
+      "url": "https://ai.azure.com/",
+      "account": "labadmin",
+      "steps": [
+        "Same project, Tracing (Application Insights connected beforehand)",
+        "Open one trace from the run and show the model call with input and output tokens and its duration",
+        "If tracing is not connected or shows nothing, drop the scene and its narration (never fake it)"
+      ],
+      "mask": [
+        "subscription id",
+        "resource and project names",
+        "tenant name and account e-mail"
+      ]
+    }
+  ],
+  "teardown": [
+    "az group delete --name rg-mglab-copilot-ai-20 --yes --no-wait",
+    "Remove-Item C:\\MGLab\\work\\copilot-20 -Recurse -Force -ErrorAction SilentlyContinue",
+    "Remove-Item Env:FOUNDRY_PROJECT_ENDPOINT, Env:PYTHONPATH -ErrorAction SilentlyContinue",
+    "# manual (owner): confirm in the portal that the resource group is gone; if the next deployment complains about the account name, az cognitiveservices account list-deleted and az cognitiveservices account purge for this one; remove the Foundry User role assignment if it was scoped outside the resource group"
+  ],
+  "needs": [
+    "tenant",
+    "azure",
+    "paid:azure-foundry-model-tokens (read the price per model before recording)",
+    "app-insights (connected to the project)"
+  ]
+}

@@ -1,0 +1,91 @@
+{
+  "note": "Copilot & AI #8. All screens are in the Dynamics 365 trial environments, no terminal. Record the Sales screens before the Sales trial expires (about 21 Dec 2026). Create the Contoso demo records AFTER turning audit on and change the stage of the Tailspin opportunity once so there is an update to read. Do not buy a licence and do not turn on pay-as-you-go billing. A screen that needs a second capture of another kind lists it under 'then'.",
+  "prepare": [
+    "# manual (owner): check which licence the Sales trial gives labadmin (Sales Professional has no Copilot; Enterprise and Premium do). If Copilot does not appear, record that in setup-screen and stop the Sales screens",
+    "# manual (owner): start a Dynamics 365 Customer Service trial in its own EMEA environment at least a day before recording (not provisioned yet)",
+    "# manual (owner): Power Platform admin center, Copilot settings per environment (Sales: Copilot on; Customer Service: Enable AI-powered Copilot features) and data movement across regions if required; write down the previous values for tear-down",
+    "# manual (owner): Sales Hub, App Settings, Copilot: on, Turn audit on; Copilot Service admin center: Opt in, Copilot help pane with Use your organization's knowledge base, experience profile with Copilot features, Dataverse search on",
+    "# manual (owner): create by hand, marked (sample): opportunities Tailspin fleet: 40 e-bikes (account Tailspin Tours, contact Alex Demo, revenue 48,000, close date within 3 months, 2 products, 1 quote), Proseware courier trial (no account, no products), Litware rental refresh (empty industry, no contact, 1 product), two won opportunities for history; cases CAS-1001 (long description), CAS-1002 (title Battery issue, description: Battery does not charge.), CAS-1003; knowledge articles KA-0001 (published), KA-0002 (draft), KA-0004 (published, pt-PT), KA-0005 (table only), as in src/data/sample",
+    "# manual (owner, optional): live check of the records with src/d365_copilot_ready (az login, DATAVERSE_TOKEN in the terminal, never saved) before recording",
+    "# owner signs in as labadmin in a dedicated browser profile; rehearse every prompt once"
+  ],
+  "screens": [
+    {
+      "name": "copilot-settings",
+      "kind": "browser",
+      "url": "https://make.powerapps.com/",
+      "account": "labadmin",
+      "steps": [
+        "Window 1: Sales Hub (Sales trial environment), App Settings, General Settings, Copilot: show Copilot on and Turn audit on (or audit already on)",
+        "Window 2: Copilot Service admin center, Support experience, Productivity, Copilot settings: show opt in done and the data movement status",
+        "Record the real state, whatever it is; place the two windows side by side or capture them one after the other"
+      ],
+      "mask": [
+        "organisation URL (crm4 address) in every address bar",
+        "tenant name",
+        "environment ids"
+      ],
+      "note": "Open the Sales Hub app from its own address (the Sales trial org URL) and the Copilot Service admin center from the Customer Service trial; url above is only the starting point."
+    },
+    {
+      "name": "opportunity-summary",
+      "kind": "browser",
+      "url": "https://make.powerapps.com/",
+      "account": "labadmin",
+      "steps": [
+        "Open Sales Hub in the Sales trial environment, Opportunities",
+        "Open Tailspin fleet: 40 e-bikes and expand the Copilot summary banner",
+        "Open Proseware courier trial (no account, no products) and expand its summary",
+        "Keep a second window with the Learn attribute list (estimatedvalue, estimatedclosedate, parentcontactid, parentaccountid) for comparison; record both exactly as shown"
+      ],
+      "mask": [
+        "organisation URL in the address bar",
+        "tenant name and account e-mail",
+        "contact e-mail of Alex Demo if it is a real address"
+      ]
+    },
+    {
+      "name": "case-summary",
+      "kind": "browser",
+      "url": "https://make.powerapps.com/",
+      "account": "labadmin",
+      "steps": [
+        "Open Copilot Service workspace in the Customer Service trial environment",
+        "Open case CAS-1001 (full description) and expand the Copilot case summary card",
+        "Open CAS-1002 (six words: Battery does not charge.) and show what the summary card does: a message, an empty card or a summary",
+        "Record the real behaviour; if CAS-1002 still gets a summary the 38 word rule text must change"
+      ],
+      "mask": [
+        "organisation URL in the address bar",
+        "tenant name and account e-mail"
+      ]
+    },
+    {
+      "name": "ask-a-question",
+      "kind": "browser",
+      "url": "https://make.powerapps.com/",
+      "account": "labadmin",
+      "steps": [
+        "In Copilot Service workspace open the Copilot help pane, tab Ask a question, with the organisation knowledge base as the source",
+        "Ask: How do I reset error E21 on the Contoso Volt display? (published article KA-0001) and open Check sources",
+        "Ask: What does the hub warranty cover? (only the draft article KA-0002 exists)",
+        "Record both answers and citations exactly as shown"
+      ],
+      "mask": [
+        "organisation URL in the address bar",
+        "tenant name and account e-mail"
+      ]
+    }
+  ],
+  "teardown": [
+    "# manual (owner): delete the demo records marked (sample): opportunities, accounts, contacts, cases, knowledge articles",
+    "# manual (owner): revert the admin settings changed if they were off before (audit may stay on); let the Customer Service trial environment expire or delete it in the Power Platform admin center; the Sales trial stays for the Dynamics 365 category",
+    "# manual (owner): close any terminal that held DATAVERSE_TOKEN; az logout only if the recorder logged in for this episode"
+  ],
+  "needs": [
+    "tenant",
+    "trial:dynamics-365-sales (existing)",
+    "trial:dynamics-365-customer-service (not provisioned, owner decision)"
+  ],
+  "blocked": "case-summary and ask-a-question cannot be recorded until the Dynamics 365 Customer Service trial exists; opportunity-summary and copilot-settings depend on the Sales trial licence including Copilot (Enterprise or Premium). The Sales agent in Microsoft 365 Copilot needs a Microsoft 365 Copilot licence and is not recorded."
+}

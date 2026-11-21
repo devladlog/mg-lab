@@ -1,0 +1,115 @@
+{
+  "note": "Copilot & AI #24. The owner's own API keys (typed by the owner, not echoed, never written anywhere) and a private working folder C:\\MGLab\\work\\copilot-24 outside the repo holding config.json (real model ids and per-million prices), a copy of samples, copilot-answers.json (Copilot Chat answers collected BY HAND as alex.demo, one new chat per task, unedited, JSON-escaped), results.json, review-sheet.md, review-key.json and scores.json. Decide before recording whether model-written Python runs (--allow-code-exec, restricted runner, not a security boundary) or is skipped, and tell the viewer. Cost depends on the models chosen (not verified): set low spending limits in each vendor console. Whatever Copilot answers is the take; if every AI scores 1.00 on a task add a harder one before publishing. Score the review sheet for real (1 to 5) BEFORE opening review-key.json. A screen that needs a second capture of another kind lists it under 'then'.",
+  "prepare": [
+    "python -m pip install -r src/requirements.txt --quiet",
+    "python -m pytest -q",
+    "$env:PYTHONPATH = (Resolve-Path src).Path",
+    "New-Item -ItemType Directory -Force C:\\MGLab\\work\\copilot-24 | Out-Null",
+    "if (-not (Test-Path C:\\MGLab\\work\\copilot-24\\config.json)) { Copy-Item src/samples/config.json C:\\MGLab\\work\\copilot-24\\config.json; Copy-Item src/samples C:\\MGLab\\work\\copilot-24\\samples -Recurse -Force }",
+    "if (Select-String -Path C:\\MGLab\\work\\copilot-24\\config.json -Pattern 'REPLACE-' -Quiet) { throw 'Edit C:\\MGLab\\work\\copilot-24\\config.json first: the four REPLACE- model ids (claude, gpt, gemini, local from ollama list) and the real per-million prices' }",
+    "if (-not $env:OPENAI_API_KEY) { $env:OPENAI_API_KEY = Read-Host 'OpenAI API key (owner types, not echoed)' -AsSecureString | ConvertFrom-SecureString -AsPlainText }",
+    "if (-not $env:ANTHROPIC_API_KEY) { $env:ANTHROPIC_API_KEY = Read-Host 'Anthropic API key (owner types, not echoed)' -AsSecureString | ConvertFrom-SecureString -AsPlainText }",
+    "if (-not $env:GEMINI_API_KEY) { $env:GEMINI_API_KEY = Read-Host 'Gemini API key (owner types, not echoed)' -AsSecureString | ConvertFrom-SecureString -AsPlainText }",
+    "Push-Location C:\\MGLab\\work\\copilot-24; python -m five_ais plan --config config.json --tasks samples/tasks.json; if (-not (Test-Path copilot-answers.json)) { python -m five_ais prompts --config config.json --tasks samples/tasks.json --write-template copilot-answers.json }; Pop-Location",
+    "# manual (owner): in Copilot Chat as alex.demo open a NEW chat for each task, paste the printed prompt text, copy Copilot's answer UNEDITED into copilot-answers.json (note date and time); plan must show OK for claude, gpt, gemini and local",
+    "# manual (owner): ollama running with the model from episode 23 (http://127.0.0.1:11434/v1); safety take: python -m five_ais run --config config.json --tasks samples/tasks.json --out safety.json --allow-code-exec"
+  ],
+  "screens": [
+    {
+      "name": "chat-api-licence",
+      "kind": "browser",
+      "url": "https://learn.microsoft.com/microsoft-365/copilot/extensibility/api/ai-services/chat/overview",
+      "account": "none (public Microsoft Learn page)",
+      "steps": [
+        "Open Overview of the Microsoft 365 Copilot Chat API (preview)",
+        "Scroll so both the title with (preview) and the Licensing section are visible",
+        "Show: available to users with a Microsoft 365 Copilot add-on licence; support without it is not currently available",
+        "Pause three seconds; Microsoft's own page, unedited"
+      ],
+      "mask": [
+        "any signed-in account avatar in the browser window"
+      ]
+    },
+    {
+      "name": "copilot-chat",
+      "kind": "browser",
+      "url": "https://copilot.cloud.microsoft/",
+      "account": "alex.demo",
+      "steps": [
+        "Open Microsoft Copilot Chat as alex.demo (no Copilot add-on) and start a NEW chat",
+        "Paste the printed prompt of the policy-unanswerable or invoice-json task (python -m five_ais prompts ...)",
+        "Show Copilot's real answer; no regeneration unless the first attempt errored",
+        "If web search is on for the account, say so on camera"
+      ],
+      "mask": [
+        "tenant name",
+        "account e-mail in the account menu"
+      ]
+    },
+    {
+      "name": "run",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "C:\\MGLab\\work\\copilot-24",
+      "prompt": "PS> ",
+      "prepare": [
+        "$env:PYTHONPATH = (Resolve-Path src).Path"
+      ],
+      "commands": [
+        "python -m five_ais run --config config.json --tasks samples/tasks.json --out results.json --allow-code-exec",
+        "#pause 10"
+      ],
+      "mask": [
+        "the three API keys are never printed (check the terminal history and prompt)"
+      ],
+      "note": "Progress lines per provider and task, the scorecard (mean score, full passes, errors, seconds, tokens, cost), the per-category table and the Errors and Failed checks lists. Real output only; if a provider errored show it as it is. Drop --allow-code-exec to show the skipped rows instead if that was decided."
+    },
+    {
+      "name": "blind-review",
+      "kind": "app",
+      "app": "VS Code",
+      "steps": [
+        "Open C:\\MGLab\\work\\copilot-24\\review-sheet.md (made by python -m five_ais blind results.json) at one task with answers labelled A to E and no provider names",
+        "Show it split beside the terminal; the human scores (1 to 5) were entered before the take WITHOUT opening review-key.json",
+        "In the terminal the unblind report shows the human score column filled"
+      ],
+      "mask": [
+        "tenant name and account e-mail if any appear",
+        "Windows user name in paths"
+      ],
+      "prepare": [
+        "if (-not (Test-Path C:\\MGLab\\work\\copilot-24\\results.json)) { throw 'Record the run scene first (results.json is needed)' }",
+        "Push-Location C:\\MGLab\\work\\copilot-24; if (-not (Test-Path review-sheet.md)) { python -m five_ais blind results.json }; Pop-Location",
+        "$env:PYTHONPATH = (Resolve-Path src).Path"
+      ],
+      "then": [
+        {
+          "name": "blind-review-unblind",
+          "kind": "terminal",
+          "target": "host",
+          "workdir": "C:\\MGLab\\work\\copilot-24",
+          "prompt": "PS> ",
+          "commands": [
+            "python -m five_ais unblind results.json --key review-key.json --scores scores.json",
+            "#pause 8"
+          ],
+          "note": "Workdir is the private working folder; scores.json holds the owner's real scores."
+        }
+      ]
+    }
+  ],
+  "teardown": [
+    "Remove-Item C:\\MGLab\\work\\copilot-24 -Recurse -Force -ErrorAction SilentlyContinue",
+    "Remove-Item Env:OPENAI_API_KEY, Env:ANTHROPIC_API_KEY, Env:GEMINI_API_KEY, Env:PYTHONPATH -ErrorAction SilentlyContinue",
+    "ollama list",
+    "# manual (owner): ollama stop <model>; delete the Copilot Chat conversations created for the recording from alex.demo's history; revoke or delete any API key created only for the recording and undo spending-limit changes you no longer need; clear the terminal so the key variables disappear"
+  ],
+  "needs": [
+    "tenant",
+    "api-key:openai",
+    "api-key:anthropic",
+    "api-key:gemini",
+    "ollama (model from episode 23)",
+    "licence:none (alex.demo has no Microsoft 365 Copilot add-on)"
+  ]
+}

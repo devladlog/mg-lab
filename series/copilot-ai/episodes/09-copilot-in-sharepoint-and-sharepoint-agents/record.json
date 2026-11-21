@@ -1,0 +1,108 @@
+{
+  "note": "Copilot & AI #9. ask, siteai and skills-page need a Microsoft 365 Copilot licence on labadmin (owner decision, not bought); without it record what labadmin sees and say so. Do not create a spending policy, do not connect SharePoint agents billing, do not accept a prompt that spends Copilot Credits. A screen that needs a second capture of another kind lists it under 'then'.",
+  "prepare": [
+    "python -m pip install -r src/requirements.txt --quiet",
+    "if (-not (Get-Module -ListAvailable -Name PnP.PowerShell)) { Install-Module PnP.PowerShell -Scope CurrentUser -Force }",
+    "if (-not $env:MG_TENANT) { $env:MG_TENANT = Read-Host 'Lab tenant short name (owner types, never shown)' }",
+    "if (-not $env:PNP_CLIENT_ID) { $env:PNP_CLIENT_ID = Read-Host 'PnP app client id, MGLab PnP (owner types, never shown)' }",
+    "New-Item -ItemType Directory -Force ./out | Out-Null",
+    "# manual (owner): the site contoso-vmo (libraries Policies and Restricted) from episode 3 must exist; re-create it with episode 3 New-VendorKnowledgeSite.ps1 if it was torn down",
+    "# manual (owner, only with the licence): assign one Microsoft 365 Copilot seat to labadmin, wait until the Copilot button shows on the site; two sample vendor requests as .docx in Policies (one complete: security, 12,000 euros a year; one with no justification and 30,000 euros a year)",
+    "# manual (owner): only if the tenant still creates .agent files, create the three sample agents (Vendor Desk, Renewals Helper, one on another site) with a few views each"
+  ],
+  "screens": [
+    {
+      "name": "copilot-sharepoint",
+      "kind": "browser",
+      "url": "https://<tenant>.sharepoint.com/sites/contoso-vmo",
+      "account": "labadmin",
+      "steps": [
+        "Open the site contoso-vmo, Policies library, as labadmin",
+        "Open Copilot (needs the Microsoft 365 Copilot licence) and ask: Which vendor requests above 25,000 euros need a security review, and who approves them?",
+        "Expected: finance director after a security review, from the onboarding policy; show the citations",
+        "Without the licence record what labadmin sees instead (no Copilot button) and say so; optional second take as sam.demo"
+      ],
+      "mask": [
+        "tenant name in the address bar and site URL",
+        "account e-mail"
+      ]
+    },
+    {
+      "name": "site-ai",
+      "kind": "browser",
+      "url": "https://<tenant>.sharepoint.com/sites/contoso-vmo",
+      "account": "labadmin",
+      "steps": [
+        "Site settings gear, Site AI",
+        "Show the three options: which agent opens from the header (Copilot in SharePoint or a custom agent), hide the Copilot button for visitors, advanced document processing",
+        "Change nothing and do not turn on advanced document processing (it can use credits)",
+        "If the panel is missing record that and note the licence state"
+      ],
+      "mask": [
+        "tenant name in the address bar and site URL",
+        "account e-mail"
+      ]
+    },
+    {
+      "name": "inventory",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\copilot-ai\\episodes\\09-copilot-in-sharepoint-and-sharepoint-agents\\src",
+      "prompt": "PS> ",
+      "commands": [
+        "./scripts/Get-AgentFileInventory.ps1 -TenantUrl \"https://$($env:MG_TENANT).sharepoint.com\" -ClientId $env:PNP_CLIENT_ID -OutFile ../out/agent-files.csv",
+        "python -m agentfiles inventory ../out/agent-files.csv",
+        "#pause 5"
+      ],
+      "mask": [
+        "tenant URL and client id are passed from the environment and never typed",
+        "no tenant URL in the output"
+      ],
+      "note": "The PnP interactive sign-in (labadmin) is done by the owner in the browser. If there are no .agent files the real output is the 'No .agent files visible to you' line: record it and say so, do not fabricate files."
+    },
+    {
+      "name": "site-skills",
+      "kind": "browser",
+      "url": "https://<tenant>.sharepoint.com/sites/contoso-vmo",
+      "account": "labadmin",
+      "steps": [
+        "Settings gear, Site skills, Create or upload, Upload: choose src\\skills\\vendor-intake-check\\SKILL.md from the episode folder",
+        "Show the skill in the list as enabled (name, source, status); if Upload rejects the file record the message",
+        "In Policies select the two sample vendor requests and ask Copilot: Run vendor-intake-check on the selected documents",
+        "Record the real answer and the Vendor intake issues list it creates; if Copilot asks to spend Copilot Credits decline and record the prompt"
+      ],
+      "mask": [
+        "tenant name in the address bar and site URL",
+        "account e-mail",
+        "Windows user name in the file picker path"
+      ]
+    },
+    {
+      "name": "admin-agents",
+      "kind": "browser",
+      "url": "https://admin.microsoft.com/",
+      "account": "labadmin",
+      "steps": [
+        "Microsoft 365 admin center, Copilot, Billing & usage, Pay-as-you-go services, Connect a service",
+        "Show SharePoint agents in the list; do NOT connect it and do not create a policy",
+        "Then open Agents (Copilot Control System), the inventory of agents used in Copilot Chat; read only",
+        "Record empty states or missing pages as they are"
+      ],
+      "mask": [
+        "tenant name in the top bar and address bar",
+        "account e-mail"
+      ]
+    }
+  ],
+  "teardown": [
+    "Remove-Item ./out -Recurse -Force -ErrorAction SilentlyContinue",
+    "# manual (owner): remove the Copilot seat from labadmin and cancel or let the purchase lapse as decided; disable or delete the vendor-intake-check site skill, the Vendor intake issues list, the two sample requests and any .agent files created (empty the recycle bin)",
+    "# manual (owner): if the VMO site was created only for this episode remove it with episode 3 New-VendorKnowledgeSite.ps1 -Remove; delete the Entra app registration MGLab PnP and browser sign-ins not needed"
+  ],
+  "needs": [
+    "tenant",
+    "licence:microsoft-365-copilot (1 seat for labadmin, owner decision, not bought)",
+    "sharepoint-site:contoso-vmo"
+  ],
+  "blocked": "copilot-sharepoint, site-ai and site-skills need a Microsoft 365 Copilot licence on labadmin (owner decision, not bought); inventory and admin-agents can be recorded without it."
+}

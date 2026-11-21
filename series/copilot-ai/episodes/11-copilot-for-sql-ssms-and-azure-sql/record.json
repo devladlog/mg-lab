@@ -1,0 +1,101 @@
+{
+  "note": "Copilot & AI #11. Uses ONLY the shared CON-SQL01: creates database ContosoCopilot and login copilot_demo_analyst and drops them in teardown. The analyst login secret is typed by the owner when prepare asks (not echoed, never stored). 03-constitution.sql is NOT run in prepare: the denied screen runs it on camera. Azure SQL free offer in rg-mglab-copilot-ai-11 (auto-pause at the free limit, never continue for additional charges). Before each SSMS take check the Copilot Free Status and clear tool approvals (Tools, Options, GitHub, Copilot, Tools) so Allow always is not set. A screen that needs a second capture of another kind lists it under 'then'.",
+  "prepare": [
+    "python -m pip install -r src/requirements.txt --quiet",
+    "python -m pytest -q",
+    "$sq = New-PSSession -VMName CON-SQL01 -Credential $cred",
+    "Invoke-Command -Session $sq { New-Item -ItemType Directory -Force C:\\lab\\ep11 | Out-Null }",
+    "Copy-Item -ToSession $sq -Path .\\src\\sql\\* -Destination C:\\lab\\ep11\\ -Force",
+    "$sec = Read-Host 'Analyst login secret (owner types, not echoed)' -AsSecureString; $plain = ConvertFrom-SecureString $sec -AsPlainText",
+    "Invoke-Command -Session $sq { param($s) Set-Item Env:AnalystPassword $s; Set-Location C:\\lab\\ep11; sqlcmd -S localhost -E -b -i 00-create-database.sql; sqlcmd -S localhost -E -b -d ContosoCopilot -i 01-contoso-copilot.sql; sqlcmd -S localhost -E -b -d ContosoCopilot -i 02-copilot-user.sql; sqlcmd -S localhost -E -b -d ContosoCopilot -h -1 -Q 'SELECT COUNT(*) FROM Sales.Orders' } -ArgumentList $plain",
+    "Remove-Variable plain, sec",
+    "Remove-PSSession $sq",
+    "# owner signs in (browser) as labadmin",
+    "az login --only-show-errors | Out-Null",
+    "if (-not $env:MG_LABADMIN_UPN) { $env:MG_LABADMIN_UPN = Read-Host 'labadmin sign-in name (owner types, never shown)' }",
+    "az group create --name rg-mglab-copilot-ai-11 --location westeurope -o none",
+    "$me = az ad signed-in-user show --query id -o tsv",
+    "$srv = az sql server list --resource-group rg-mglab-copilot-ai-11 --query '[0].name' -o tsv",
+    "if (-not $srv) { $srv = 'mglabsql11' + (Get-Random -Minimum 1000 -Maximum 9999); az sql server create --resource-group rg-mglab-copilot-ai-11 --name $srv --location westeurope --enable-ad-only-auth --external-admin-principal-type User --external-admin-name $env:MG_LABADMIN_UPN --external-admin-sid $me -o none }",
+    "if (-not (az sql db list --resource-group rg-mglab-copilot-ai-11 --server $srv --query \"[?name=='sqldb-copilot-demo'].name\" -o tsv)) { az sql db create --resource-group rg-mglab-copilot-ai-11 --server $srv --name sqldb-copilot-demo --edition GeneralPurpose --compute-model Serverless --family Gen5 --capacity 2 --use-free-limit --free-limit-exhaustion-behavior AutoPause --sample-name AdventureWorksLT -o none }",
+    "# manual (owner): SSMS 22.7 or later with the AI Assistance workload, signed in to GitHub from the Copilot badge (confirm the plan); connect to 10.50.0.30 as copilot_demo_analyst (SQL authentication, trust the lab certificate) with a query window on ContosoCopilot; second window with Windows authentication for 03-constitution.sql",
+    "# manual (owner): reset Copilot tool approvals in SSMS (Tools, Options, GitHub, Copilot, Tools); check the Copilot Free Status in the badge menu before each take"
+  ],
+  "screens": [
+    {
+      "name": "ssms-ask",
+      "kind": "app",
+      "app": "SSMS 22",
+      "steps": [
+        "Query window connected to ContosoCopilot on CON-SQL01 as copilot_demo_analyst; open Copilot Chat in Ask mode",
+        "Type: Top 5 customers by revenue in September 2026, revenue is quantity times unit price, cancelled orders excluded",
+        "Show Copilot's T-SQL, press Apply (diff view, Tab) and run it",
+        "Show the result grid next to the results of src\\queries\\q01-top-customers.sql (expected: Graca Mockup 5,916.00; Hugo Dummy 4,582.00; Carla Example 379.00; Filipe Fictional 348.00; Rita Sample 232.00); say whether they match, keep a wrong answer"
+      ],
+      "mask": [
+        "GitHub account name and avatar (crop if personal)"
+      ]
+    },
+    {
+      "name": "ssms-agent",
+      "kind": "app",
+      "app": "SSMS 22",
+      "steps": [
+        "Copilot Chat in Agent mode; open the tools icon and show sql-tools",
+        "Type: In the ContosoCopilot database on the CON-SQL01 server, which customers have never placed an order?",
+        "Capture the approval pause with the Allow dropdown open (Allow once, Allow for this session, Allow always); pick Allow once, NEVER Allow always",
+        "Show the final answer (expected: Eva Newcustomer, customer 6)"
+      ],
+      "mask": [
+        "GitHub account name and avatar (crop if personal)"
+      ]
+    },
+    {
+      "name": "denied",
+      "kind": "app",
+      "app": "SSMS 22",
+      "steps": [
+        "Second query window with Windows authentication as the lab Administrator: run src\\sql\\03-constitution.sql",
+        "In Copilot Chat ask: Does this database have a constitution set?",
+        "As copilot_demo_analyst run src\\sql\\04-verify-copilot-user.sql",
+        "Show the grids: running_as = GHCP_DB_User, visible_orders = 30, the permission list (SELECT only), the UPDATE failing with error 229, and rows_changed_as_analyst = 1 (rolled back)",
+        "Optional take: switch sql-tools to READ_WRITE, ask Agent mode: Cancel order 1 in ContosoCopilot on CON-SQL01, record what Copilot reports, then switch back to READ_ONLY"
+      ],
+      "mask": [
+        "GitHub account name and avatar (crop if personal)"
+      ]
+    },
+    {
+      "name": "azure-copilot",
+      "kind": "browser",
+      "url": "https://portal.azure.com/",
+      "account": "labadmin",
+      "steps": [
+        "Open resource group rg-mglab-copilot-ai-11, then the database sqldb-copilot-demo",
+        "Select the Copilot icon in the page header",
+        "Ask: What's the size of this database?",
+        "Ask: What are the most expensive queries in my workload?",
+        "Capture the real answers; do not use the Observability agent"
+      ],
+      "mask": [
+        "subscription id",
+        "logical server name",
+        "tenant name and account e-mail"
+      ]
+    }
+  ],
+  "teardown": [
+    "$sq = New-PSSession -VMName CON-SQL01 -Credential $cred",
+    "Invoke-Command -Session $sq { Set-Location C:\\lab\\ep11; sqlcmd -S localhost -E -b -i 99-teardown.sql; Remove-Item C:\\lab\\ep11 -Recurse -Force -ErrorAction SilentlyContinue }",
+    "Remove-PSSession $sq",
+    "az group delete --name rg-mglab-copilot-ai-11 --yes --no-wait",
+    "# manual (owner): in SSMS reset the Copilot tool approvals, disconnect every connection to the Azure SQL database (open connections use the free allowance), restore sql-tools to READ_ONLY if edited, sign out of GitHub in SSMS if the account is personal; confirm in Cost Management that nothing accrues"
+  ],
+  "needs": [
+    "lab-vms",
+    "tenant",
+    "azure",
+    "licence:github-copilot (owner's plan, Free is enough for chat)",
+    "ssms-22.7+"
+  ]
+}

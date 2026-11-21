@@ -1,0 +1,118 @@
+{
+  "note": "Copilot & AI #3. All five screens are Copilot Studio in environment DEV (labadmin has the Copilot Studio trial licence; it builds and tests but cannot publish, so nothing is published). Prepare the day before: SharePoint indexing needs time; if search does not find 'walk-away' after a few hours use Re-index site. A screen that needs a second capture of another kind lists it under 'then'.",
+  "prepare": [
+    "python -m pip install -r src/requirements.txt --quiet",
+    "if (-not (Get-Module -ListAvailable -Name PnP.PowerShell)) { Install-Module PnP.PowerShell -Scope CurrentUser -Force }",
+    "if (-not $env:MG_TENANT) { $env:MG_TENANT = Read-Host 'Lab tenant short name (owner types, never shown)' }",
+    "if (-not $env:PNP_CLIENT_ID) { $env:PNP_CLIENT_ID = Read-Host 'PnP app client id, MGLab PnP (owner types, never shown)' }",
+    "if (-not $env:MG_LABADMIN_UPN) { $env:MG_LABADMIN_UPN = Read-Host 'labadmin sign-in name (owner types, never shown)' }",
+    "if (-not $env:MG_SAM_UPN) { $env:MG_SAM_UPN = Read-Host 'sam.demo sign-in name (owner types, never shown)' }",
+    "Push-Location src; python -m kbpack build --out ../out/docs; python -m kbpack check ../out/docs/Policies; python -m kbpack testset --docs ../out/docs --out ../out/eval; Pop-Location",
+    "# owner signs in (PnP interactive, labadmin)",
+    "Connect-PnPOnline -Url \"https://$($env:MG_TENANT)-admin.sharepoint.com\" -Interactive -ClientId $env:PNP_CLIENT_ID",
+    "if (-not (Get-PnPTenantSite -Identity \"https://$($env:MG_TENANT).sharepoint.com/sites/contoso-vmo\" -ErrorAction SilentlyContinue)) { ./src/scripts/New-VendorKnowledgeSite.ps1 -TenantUrl \"https://$($env:MG_TENANT).sharepoint.com\" -ClientId $env:PNP_CLIENT_ID -OwnerUpn $env:MG_LABADMIN_UPN -RestrictedUserUpn $env:MG_LABADMIN_UPN -ReaderUpns $env:MG_SAM_UPN -DocsPath ./out/docs }",
+    "# manual (owner): as sam.demo confirm Policies opens and Restricted shows access denied; as labadmin both open",
+    "# manual (owner): in the site search as labadmin find 'walk-away' (Restricted) and 'Thursday' (Policies) before recording; if not, Site Information, View all site settings, Search and offline availability, Re-index site",
+    "# manual (owner): Copilot Studio, labadmin, DEV: share the agent for edit with sam.demo (Overview, Share) before the trimmed take; do NOT turn on Tenant graph grounding (needs a Microsoft 365 Copilot licence)"
+  ],
+  "screens": [
+    {
+      "name": "create-agent",
+      "kind": "browser",
+      "url": "https://copilotstudio.microsoft.com/",
+      "account": "labadmin",
+      "steps": [
+        "Select environment DEV in the top bar",
+        "Create, New agent; turn the New experience toggle OFF if it is offered (say so if only the new experience exists)",
+        "Describe it: Answer Contoso employees' questions about vendor onboarding, payment terms, security requirements and renewals. Use only the knowledge sources.",
+        "Create the agent and name it Contoso Vendor Desk on the Overview page",
+        "Edit the generated instructions to: answer only from the knowledge sources; if there is no answer say so and suggest asking the Vendor Management Office",
+        "Pause on the Overview page with the instructions visible"
+      ],
+      "mask": [
+        "tenant name in the address bar, top bar and account menu",
+        "e-mail domain of every user",
+        "environment name in the address bar if it shows the tenant"
+      ]
+    },
+    {
+      "name": "add-knowledge",
+      "kind": "browser",
+      "url": "https://copilotstudio.microsoft.com/",
+      "account": "labadmin",
+      "steps": [
+        "Open the agent Contoso Vendor Desk, Knowledge, Add knowledge",
+        "Choose SharePoint from the Featured section (not the one under Upload file)",
+        "Paste the Policies library address (tenant name masked on screen), name it Vendor policies, description: Contoso vendor onboarding, approval tiers, payment terms, security requirements, renewals and offboarding.",
+        "Add it and wait until the knowledge list shows the source as Ready",
+        "Open Settings, Generative AI: turn Web Search OFF and Use general knowledge OFF"
+      ],
+      "mask": [
+        "tenant name in the address bar, top bar and account menu",
+        "e-mail domain of every user",
+        "SharePoint address pasted in the knowledge dialog and shown in the list"
+      ]
+    },
+    {
+      "name": "ask",
+      "kind": "browser",
+      "url": "https://copilotstudio.microsoft.com/",
+      "account": "labadmin",
+      "steps": [
+        "Open the Test your agent panel as labadmin",
+        "Type: Who has to approve a new vendor that costs 12,000 euros a year?",
+        "Expected: procurement manager for 5,000 to 24,999 euros a year, citing vendor-onboarding-policy; open the citation",
+        "If the answer is different or empty record it and say so: do not retake until it works"
+      ],
+      "mask": [
+        "tenant name in the address bar, top bar and account menu",
+        "e-mail domain of every user"
+      ]
+    },
+    {
+      "name": "trimmed",
+      "kind": "browser",
+      "url": "https://copilotstudio.microsoft.com/",
+      "account": "sam.demo",
+      "steps": [
+        "Take 1, signed in as sam.demo (no access to the Restricted library): open Contoso Vendor Desk and its Test your agent panel",
+        "Type: What discount does Contoso aim for when it negotiates a hosting renewal?",
+        "Record the real non-answer wording",
+        "Take 2, switch the sign-in to labadmin (show the sign-in switch), same question in the test panel: the answer is 12 percent"
+      ],
+      "mask": [
+        "tenant name in the address bar, top bar and account menu",
+        "e-mail domain of every user"
+      ],
+      "note": "Two takes in one scene: sam.demo first, then labadmin. Record the sign-in switch between them."
+    },
+    {
+      "name": "evaluation",
+      "kind": "browser",
+      "url": "https://copilotstudio.microsoft.com/",
+      "account": "labadmin",
+      "steps": [
+        "Open the agent, Evaluation, New evaluation, Single responses, Import",
+        "Choose out/eval/vendor-desk-testset.csv from the episode folder (11 test cases: 9 from the documents, 2 out of scope)",
+        "Review the data set; test methods General quality and Compare meaning with the default pass score",
+        "Read the Uses Copilot Credits badge, if any, before pressing Run; if it asks for a pay-as-you-go plan stop and tell the owner",
+        "Run as labadmin and show the results page with per-question pass/fail and the two out-of-scope questions; keep the real scores"
+      ],
+      "mask": [
+        "tenant name in the address bar, top bar and account menu",
+        "e-mail domain of every user",
+        "Windows user name in the file picker path"
+      ]
+    }
+  ],
+  "teardown": [
+    "# manual (owner): Copilot Studio, delete the agent Contoso Vendor Desk (its evaluation test sets go with it)",
+    "./src/scripts/New-VendorKnowledgeSite.ps1 -TenantUrl \"https://$($env:MG_TENANT).sharepoint.com\" -ClientId $env:PNP_CLIENT_ID -OwnerUpn $env:MG_LABADMIN_UPN -Remove -Confirm:$false   # owner signs in",
+    "Remove-Item ./out -Recurse -Force -ErrorAction SilentlyContinue",
+    "# manual (owner): Entra admin center, delete the app registration MGLab PnP; remove browser sign-ins that are not needed"
+  ],
+  "needs": [
+    "tenant",
+    "licence:copilot-studio-trial (labadmin, sam.demo)"
+  ]
+}

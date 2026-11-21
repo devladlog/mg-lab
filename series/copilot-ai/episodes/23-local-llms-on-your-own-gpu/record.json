@@ -1,0 +1,87 @@
+{
+  "note": "Copilot & AI #23. Nothing leaves the laptop: no tenant, no account, no key, no cloud cost. The two Ollama models are chosen on the day (one small, one too big for the 24 GB GPU) and passed in the environment variables MG_SMALL_MODEL and MG_BIG_MODEL (typed by the owner when prepare asks), so the on-screen commands show the variable names. Close other GPU-hungry apps first so the free-memory number is honest; stop both models before bench so the warm-up load time is a real cold load. Hide the Windows user name: short prompt, no paths in view. Foundry Local is optional (winget install Microsoft.FoundryLocal). A screen that needs a second capture of another kind lists it under 'then'.",
+  "prepare": [
+    "python -m pip install -r src/requirements.txt --quiet",
+    "python -m pytest -q",
+    "if (-not $env:MG_SMALL_MODEL) { $env:MG_SMALL_MODEL = Read-Host 'Small Ollama model (about 8B or less, from ollama list; owner types)' }",
+    "if (-not $env:MG_BIG_MODEL) { $env:MG_BIG_MODEL = Read-Host 'Big Ollama model that does not fit the GPU (owner types)' }",
+    "ollama pull $env:MG_SMALL_MODEL",
+    "ollama pull $env:MG_BIG_MODEL",
+    "$env:MG_FOUNDRY_URL = if ($env:MG_FOUNDRY_URL) { $env:MG_FOUNDRY_URL } else { Read-Host 'Foundry Local base URL, http://127.0.0.1:<port>/v1 (foundry server status; owner types, or http://127.0.0.1:1/v1 if not installed)' }",
+    "# manual (owner): start the Ollama app/service; LM Studio: load one small model, Developer tab, Start server (or lms server start), base URL http://localhost:1234/v1; optional Foundry Local: foundry model list --device gpu, foundry chat <alias> once, keep the model running",
+    "# manual (owner): one full dry run of every command below as the safety take"
+  ],
+  "screens": [
+    {
+      "name": "sizing",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\copilot-ai\\episodes\\23-local-llms-on-your-own-gpu\\src",
+      "prompt": "PS mg-lab> ",
+      "commands": [
+        "nvidia-smi --query-gpu=name,driver_version,memory.total,memory.used,memory.free --format=csv",
+        "#pause 3",
+        "python -m local_llm sizing $env:MG_SMALL_MODEL $env:MG_BIG_MODEL --context 4096 32768",
+        "#pause 5",
+        "ollama run $env:MG_BIG_MODEL \"Reply with one word: ready\"",
+        "ollama ps",
+        "#pause 6"
+      ],
+      "note": "Real output only. The query form of nvidia-smi is used so no process paths with the Windows user name appear; say whatever GPU the machine reports (RTX 5090 Laptop, 24 GB expected). Compare the estimate with the real CPU/GPU split of ollama ps."
+    },
+    {
+      "name": "bench",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\copilot-ai\\episodes\\23-local-llms-on-your-own-gpu\\src",
+      "prompt": "PS mg-lab> ",
+      "prepare": [
+        "ollama stop $env:MG_SMALL_MODEL; ollama stop $env:MG_BIG_MODEL"
+      ],
+      "commands": [
+        "python -m local_llm bench $env:MG_SMALL_MODEL $env:MG_BIG_MODEL --repeats 3",
+        "#pause 8"
+      ],
+      "note": "Record the REAL numbers unedited. If the big model is 100% GPU as well, say so and pick a larger one before publishing."
+    },
+    {
+      "name": "extract",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\copilot-ai\\episodes\\23-local-llms-on-your-own-gpu\\src",
+      "prompt": "PS mg-lab> ",
+      "commands": [
+        "Get-Content samples/invoice-email.txt",
+        "#pause 5",
+        "python -m local_llm extract $env:MG_SMALL_MODEL --email samples/invoice-email.txt --schema samples/invoice.schema.json --expected samples/invoice-expected.json",
+        "#pause 8"
+      ],
+      "note": "Show the email first (the SYSTEM NOTE injection line and the bank-details change). Keep whatever the model really answers: a failure is a lesson, not a retake."
+    },
+    {
+      "name": "probe",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\copilot-ai\\episodes\\23-local-llms-on-your-own-gpu\\src",
+      "prompt": "PS mg-lab> ",
+      "commands": [
+        "python -m local_llm probe --extra foundry=$env:MG_FOUNDRY_URL",
+        "#pause 5",
+        "python -m local_llm --host http://example.com models",
+        "#pause 5"
+      ],
+      "note": "One line per server (Ollama, LM Studio and, if installed, Foundry Local) with its model ids; the second command shows the non-local refusal, which fails before any network call. Skip the Foundry line if it is not installed."
+    }
+  ],
+  "teardown": [
+    "ollama stop $env:MG_SMALL_MODEL; ollama stop $env:MG_BIG_MODEL",
+    "Remove-Item Env:MG_SMALL_MODEL, Env:MG_BIG_MODEL, Env:MG_FOUNDRY_URL -ErrorAction SilentlyContinue",
+    "# manual (owner): switch off the LM Studio server toggle; stop Foundry Local if started (check foundry --help for the stop command); ollama rm <model> for models pulled only for the recording if disk space matters"
+  ],
+  "needs": [
+    "gpu:rtx-5090-laptop-24gb",
+    "ollama",
+    "lm-studio",
+    "foundry-local (optional)"
+  ]
+}

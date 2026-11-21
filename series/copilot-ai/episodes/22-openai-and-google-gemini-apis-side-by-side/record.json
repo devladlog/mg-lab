@@ -1,0 +1,88 @@
+{
+  "note": "Copilot & AI #22. No Microsoft tenant, no Azure. The two API keys are typed by the owner (not echoed) into this session only and never written anywhere; use the PAID-tier Gemini key (free-tier content is used to improve Google products). Cost is a few cents (the run prints its own estimate). Model names gpt-6.2-sol and gemini-3.8-flash and the prices in src/samples/prices.json must be re-checked on the recording day; pass --openai-model / --gemini-model if the projects have no access. A screen that needs a second capture of another kind lists it under 'then'.",
+  "prepare": [
+    "python -m pip install -r src/requirements.txt --quiet",
+    "python -m pytest -q",
+    "if (-not $env:OPENAI_API_KEY) { $env:OPENAI_API_KEY = Read-Host 'OpenAI API key (owner types, not echoed)' -AsSecureString | ConvertFrom-SecureString -AsPlainText }",
+    "if (-not $env:GEMINI_API_KEY) { $env:GEMINI_API_KEY = Read-Host 'Gemini API key, paid tier (owner types, not echoed)' -AsSecureString | ConvertFrom-SecureString -AsPlainText }",
+    "# manual (owner): off camera run run extract, run tool and run truncate once each as the safety take; the tool run must list get_vendor_renewals and a total for Litware Security and Fabrikam Cloud (30,900 euros)"
+  ],
+  "screens": [
+    {
+      "name": "schema-conversion",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\copilot-ai\\episodes\\22-openai-and-google-gemini-apis-side-by-side\\src",
+      "prompt": "PS> ",
+      "commands": [
+        "python -m llm_sidebyside schema",
+        "#pause 6",
+        "python -m llm_sidebyside payloads extract",
+        "#pause 6"
+      ],
+      "note": "No key and no network needed: a real run, nothing mocked."
+    },
+    {
+      "name": "extract-run",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\copilot-ai\\episodes\\22-openai-and-google-gemini-apis-side-by-side\\src",
+      "prompt": "PS> ",
+      "prepare": [
+        "if (-not $env:OPENAI_API_KEY) { $env:OPENAI_API_KEY = Read-Host 'OpenAI API key (owner types, not echoed)' -AsSecureString | ConvertFrom-SecureString -AsPlainText }",
+        "if (-not $env:GEMINI_API_KEY) { $env:GEMINI_API_KEY = Read-Host 'Gemini API key, paid tier (owner types, not echoed)' -AsSecureString | ConvertFrom-SecureString -AsPlainText }"
+      ],
+      "commands": [
+        "python -m llm_sidebyside run extract --vendor both",
+        "#pause 8"
+      ],
+      "mask": [
+        "the API keys are never typed or printed"
+      ],
+      "note": "One line per vendor with model, status, requests, tokens in, out, reasoning, cached, estimated cost, then the JSON and any PROBLEM lines. Real output whatever it is; keep a second take only if both are real."
+    },
+    {
+      "name": "truncate-run",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\copilot-ai\\episodes\\22-openai-and-google-gemini-apis-side-by-side\\src",
+      "prompt": "PS> ",
+      "prepare": [
+        "if (-not $env:OPENAI_API_KEY) { $env:OPENAI_API_KEY = Read-Host 'OpenAI API key (owner types, not echoed)' -AsSecureString | ConvertFrom-SecureString -AsPlainText }",
+        "if (-not $env:GEMINI_API_KEY) { $env:GEMINI_API_KEY = Read-Host 'Gemini API key, paid tier (owner types, not echoed)' -AsSecureString | ConvertFrom-SecureString -AsPlainText }"
+      ],
+      "commands": [
+        "python -m llm_sidebyside run truncate --vendor both",
+        "#pause 8"
+      ],
+      "mask": [
+        "the API keys are never typed or printed"
+      ],
+      "note": "A reasoning model may spend the 16 tokens before any visible text: that is the point. If a vendor returns visible text say so."
+    },
+    {
+      "name": "gemini-pricing-free-vs-paid",
+      "kind": "browser",
+      "url": "https://ai.google.dev/gemini-api/docs/pricing",
+      "account": "none (public page, no sign-in)",
+      "steps": [
+        "Open the Gemini API pricing page and find Gemini 3.8 Flash",
+        "Select the Standard tab: show the free tier and paid tier columns",
+        "Show the row Used to improve our products: Yes for the free tier, No for the paid tier",
+        "Do not show the owner's keys or any signed-in console"
+      ],
+      "mask": [
+        "any signed-in account avatar in the browser window"
+      ]
+    }
+  ],
+  "teardown": [
+    "Remove-Item Env:OPENAI_API_KEY, Env:GEMINI_API_KEY -ErrorAction SilentlyContinue",
+    "# manual (owner): close the terminal so the key variables disappear and check the shell history has no key: Get-Content (Get-PSReadLineOption).HistorySavePath | Select-String KEY",
+    "# manual (owner): rotate or revoke either API key if it appeared in any recording; delete unused takes"
+  ],
+  "needs": [
+    "api-key:openai",
+    "api-key:gemini (paid tier)"
+  ]
+}

@@ -1,0 +1,107 @@
+{
+  "note": "Copilot & AI #16. Visual Studio on the laptop is Professional 2022: the Learn page needs VS 2026 or 2022 17.14.17 or later with the .NET desktop and ASP.NET workloads, the GitHub Copilot and GitHub Copilot app modernization components and the .NET Framework 4.7.2 and 4.8 targeting packs; nothing is installed on the owner's behalf. The working copy is $HOME\\contoso-quotes in Git (the agent commits as it works). Shared CON-SQL01 only gets the database contoso_pricing and the login pricing_app, dropped in teardown. The connection string lives only in the PRICING_CONN environment variable of the recording session: it is never echoed. Pick a strong reasoning model in Copilot Chat and say which one on screen. The run length is unknown: waits are cut in editing and said so. A screen that needs a second capture of another kind lists it under 'then'.",
+  "prepare": [
+    "dotnet test tests/ModernizationScan.Tests -m:1 --nologo -v q",
+    "dotnet test tests/Pricing.Characterization -m:1 -p:Impl=legacy --nologo -v q",
+    "dotnet test tests/Pricing.Characterization -m:1 -p:Impl=naive --nologo -v q",
+    "if (-not (Test-Path $HOME\\contoso-quotes)) { Copy-Item .\\src\\legacy-contoso $HOME\\contoso-quotes -Recurse; Push-Location $HOME\\contoso-quotes; git init -b main | Out-Null; git add -A; git -c user.name='MG Lab' -c user.email='lab@example.invalid' commit -q -m 'Contoso Bikes quote service on .NET Framework 4.7.2'; Pop-Location }",
+    "Push-Location src; dotnet run --project ModernizationScan -- scan $HOME\\contoso-quotes --md $HOME\\prescan.md; dotnet run --project ModernizationScan -- lint-instruction legacy-contoso/upgrade-instructions/replace_newtonsoft_with_system_text_json.md; Pop-Location",
+    "dotnet build src/expected-after/Contoso.Pricing.Probe --nologo -v q",
+    "$sql = New-PSSession -VMName CON-SQL01 -Credential $cred",
+    "Invoke-Command -Session $sql { New-Item -ItemType Directory -Force C:\\lab\\ep16 | Out-Null }",
+    "Copy-Item -ToSession $sql -Path .\\src\\legacy-contoso\\sql\\001-price-list.sql -Destination C:\\lab\\ep16\\ -Force",
+    "$sec = Read-Host 'pricing_app login secret (owner types, not echoed)' -AsSecureString; $plain = ConvertFrom-SecureString $sec -AsPlainText",
+    "Invoke-Command -Session $sql { param($s) Set-Item Env:PricingSecret $s; Set-Location C:\\lab\\ep16; sqlcmd -S localhost -E -b -i 001-price-list.sql; sqlcmd -S localhost -E -b -d contoso_pricing -Q 'IF SUSER_ID(N''pricing_app'') IS NULL EXEC sp_addlogin ''pricing_app'', ''$(PricingSecret)'', ''contoso_pricing''; IF USER_ID(N''pricing_app'') IS NULL CREATE USER pricing_app FOR LOGIN pricing_app; ALTER ROLE db_datareader ADD MEMBER pricing_app;' } -ArgumentList $plain",
+    "$b = [System.Data.Common.DbConnectionStringBuilder]::new(); $b['Data Source'] = '10.50.0.30'; $b['Initial Catalog'] = 'contoso_pricing'; $b['User ID'] = 'pricing_app'; $b['Password'] = $plain; $env:PRICING_CONN = $b.ConnectionString",
+    "Remove-Variable plain, sec, b",
+    "Remove-PSSession $sql",
+    "# manual (owner): open $HOME\\contoso-quotes\\Contoso.sln in Visual Studio, install a missing .NET Framework targeting pack if the dialog appears, build, run the 3 NUnit tests and note any fixture failure; sign in to GitHub Copilot in Visual Studio (confirm the plan)"
+  ],
+  "screens": [
+    {
+      "name": "modernize-start",
+      "kind": "app",
+      "app": "Visual Studio (2022 17.14.17+ or 2026)",
+      "steps": [
+        "Open Contoso.sln from the working copy $HOME\\contoso-quotes (hide the Windows user name in the title)",
+        "Right-click the solution in Solution Explorer, Modernize; Copilot Chat opens with the agent",
+        "Type: Upgrade everything to .NET 10; choose a strong reasoning model and show its name",
+        "Answer the pre-initialization questions (target framework, Git strategy, workflow mode Guided) and show whatever the real agent asks"
+      ],
+      "mask": [
+        "GitHub account and e-mail in Visual Studio",
+        "Windows user name in paths"
+      ]
+    },
+    {
+      "name": "assessment",
+      "kind": "app",
+      "app": "Visual Studio (2022 17.14.17+ or 2026)",
+      "steps": [
+        "Open .github\\upgrades\\<scenarioId>\\assessment.md as generated, without editing it",
+        "Show the executive summary, the project and package compatibility tables and the Newtonsoft.Json and System.Data.SqlClient entries; scroll to the Newtonsoft.Json 12.0.3 vulnerability if flagged",
+        "Then upgrade-options.md (strategy, in-place vs side-by-side for the web app); if the agent offers the custom instruction show it being retrieved, if not say so"
+      ],
+      "mask": [
+        "GitHub account and e-mail",
+        "Windows user name in paths"
+      ]
+    },
+    {
+      "name": "tasks-progress",
+      "kind": "app",
+      "app": "Visual Studio (2022 17.14.17+ or 2026)",
+      "steps": [
+        "Open tasks.md mid-run: show the progress line and the task headings going from [ ] to [✓]",
+        "Open the Git Changes window and show the agent's commits per the chosen Git strategy"
+      ],
+      "mask": [
+        "GitHub account and e-mail",
+        "Windows user name in paths"
+      ],
+      "then": [
+        {
+          "name": "tasks-progress-check",
+          "kind": "terminal",
+          "target": "host",
+          "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\copilot-ai\\episodes\\16-github-copilot-for-net-modernization\\src",
+          "prompt": "PS> ",
+          "commands": [
+            "dotnet run --project ModernizationScan -- check-upgrade $HOME\\contoso-quotes",
+            "#pause 5"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "sql-encrypt",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\copilot-ai\\episodes\\16-github-copilot-for-net-modernization\\src\\expected-after\\Contoso.Pricing.Probe",
+      "prompt": "PS> ",
+      "commands": [
+        "dotnet run -- BIKE-100",
+        "#pause 4",
+        "$env:PRICING_CONN = \"$env:PRICING_CONN;Trust Server Certificate=True\"",
+        "dotnet run -- BIKE-100",
+        "#pause 4"
+      ],
+      "mask": [
+        "PRICING_CONN is never echoed (set in the session before the scene)"
+      ],
+      "note": "Lab-only trusting string; say that production needs a trusted certificate. Show whatever exception the server really returns first (expected: certificate chain not trusted)."
+    }
+  ],
+  "teardown": [
+    "Remove-Item $HOME\\contoso-quotes, $HOME\\prescan.md -Recurse -Force -ErrorAction SilentlyContinue",
+    "Invoke-Command -VMName CON-SQL01 -Credential $cred { sqlcmd -S localhost -E -Q 'IF DB_ID(N''contoso_pricing'') IS NOT NULL BEGIN ALTER DATABASE contoso_pricing SET SINGLE_USER WITH ROLLBACK IMMEDIATE; DROP DATABASE contoso_pricing; END; IF SUSER_ID(N''pricing_app'') IS NOT NULL DROP LOGIN pricing_app;'; Remove-Item C:\\lab\\ep16 -Recurse -Force -ErrorAction SilentlyContinue }",
+    "Remove-Item Env:PRICING_CONN -ErrorAction SilentlyContinue",
+    "# manual (owner): close Visual Studio; sign the GitHub account out of Visual Studio if the laptop is shared"
+  ],
+  "needs": [
+    "lab-vms",
+    "licence:github-copilot (owner's plan; Free may run out during a multi-task upgrade)",
+    "visual-studio (2022 17.14.17+ or 2026 with the app modernization component)",
+    "dotnet-10-sdk"
+  ]
+}

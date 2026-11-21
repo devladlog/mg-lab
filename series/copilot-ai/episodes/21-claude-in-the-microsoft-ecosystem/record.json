@@ -1,0 +1,111 @@
+{
+  "note": "Copilot & AI #21. OWNER APPROVAL NEEDED BEFORE ANYTHING RUNS: (1) deploying accepts the Anthropic Marketplace terms and the attestation in src/infra/main.bicepparam (organizationName, countryCode, industry) on behalf of the organisation; (2) admin-center-anthropic turns Anthropic on for the lab users although the tenant is in Portugal (EU) and Claude is processed outside the EU Data Boundary; teardown turns it off again. Billed per token as Claude Consumption Units on the Azure invoice (read the Sonnet 5.5 and Haiku 5.5 rates on the recording day). Subscription eligibility and Claude quota are unverified: a 'subscription eligibility error' means the three Foundry/terminal screens cannot be recorded. Nothing is published in Copilot Studio; Microsoft 365 Copilot features with Claude are not recorded (no licence). A screen that needs a second capture of another kind lists it under 'then'.",
+  "prepare": [
+    "python -m pip install -r src/requirements.txt --quiet",
+    "python -m pytest -q",
+    "# owner signs in (browser or device code) as labadmin",
+    "az login --only-show-errors | Out-Null",
+    "az bicep install --only-show-errors",
+    "az group create --name rg-mglab-copilot-ai-21 --location swedencentral -o none",
+    "$me = az ad signed-in-user show --query id -o tsv",
+    "az deployment group create --resource-group rg-mglab-copilot-ai-21 --template-file src/infra/main.bicep --parameters src/infra/main.bicepparam principalId=$me --query properties.outputs -o json",
+    "$env:ANTHROPIC_FOUNDRY_RESOURCE = 'mglabfoundry21'",
+    "# manual (owner): in the Foundry portal catalogue (New Foundry on) check Hosted on Azure, region availability and the Marketplace text for Claude Sonnet 5.5 and Haiku 5.5; if the deployment needs a version put it in main.bicepparam; model deployments can keep provisioning after a gateway timeout: check the portal before re-running",
+    "# manual (owner): first run off camera as the safety take: cd src; python -m claude_ms triage --deployment claude-sonnet-5-5 (401/403 means token scope or role, allow a few minutes)",
+    "# manual (owner, after approval): Power Platform admin center: allow external LLMs for DEV; Claude Code installed with the native installer"
+  ],
+  "screens": [
+    {
+      "name": "admin-center-anthropic",
+      "kind": "browser",
+      "url": "https://admin.microsoft.com/",
+      "account": "labadmin",
+      "steps": [
+        "Microsoft 365 admin center, Copilot, Settings, View all, AI providers operating as Microsoft subprocessors, select Anthropic",
+        "First show the default state of Choose who can access Anthropic models (EU tenant: off, No users)",
+        "Then, as the owner approved, set it to the lab users only and save"
+      ],
+      "mask": [
+        "tenant name in the top bar and address bar",
+        "account e-mail"
+      ]
+    },
+    {
+      "name": "copilot-studio-model",
+      "kind": "browser",
+      "url": "https://copilotstudio.microsoft.com/",
+      "account": "labadmin",
+      "steps": [
+        "Open an agent that uses the Microsoft Copilot harness (trial licence, DEV)",
+        "Open the model selector and show the Claude entries next to the GPT ones; do not publish anything",
+        "If the selector shows no Claude entries, record the Power Platform admin center setting that blocks it (allow external language models) and say so"
+      ],
+      "mask": [
+        "tenant name and org URL in the address bar",
+        "account e-mail"
+      ]
+    },
+    {
+      "name": "foundry-claude-deployments",
+      "kind": "browser",
+      "url": "https://ai.azure.com/",
+      "account": "labadmin",
+      "steps": [
+        "Foundry portal with the New Foundry toggle on, the project created by src/infra/main.bicep",
+        "Show the model deployments list with the Claude deployments",
+        "Open one deployment's Details and show the target URI and status Succeeded"
+      ],
+      "mask": [
+        "subscription id",
+        "resource and project names that contain the tenant name",
+        "tenant name and account e-mail"
+      ]
+    },
+    {
+      "name": "claude-triage-run",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\copilot-ai\\episodes\\21-claude-in-the-microsoft-ecosystem\\src",
+      "prompt": "PS> ",
+      "commands": [
+        "python -m claude_ms triage --deployment claude-sonnet-5-5 --vendors samples/vendors.json",
+        "#pause 8"
+      ],
+      "mask": [
+        "resource name if it contains the tenant name (ANTHROPIC_FOUNDRY_RESOURCE is the name only)"
+      ],
+      "note": "Visible: resource and auth line (auth=entra), the tool_use line with within_days, the answer, the turns and token line. The sample data contains a supplier note with instructions: show whether the model ignored it. Real output only; a second take is kept only if both are real."
+    },
+    {
+      "name": "claude-code-status",
+      "kind": "app",
+      "app": "Claude Code (terminal)",
+      "steps": [
+        "In a terminal in the episode src folder run: python -m claude_ms code-env --resource mglabfoundry21 --sonnet claude-sonnet-5-5 --haiku claude-haiku-5-5 | Invoke-Expression",
+        "Run: claude, then /status: show API provider Microsoft Foundry, the resource name and the model",
+        "Give one short prompt such as: summarize this folder",
+        "Then open the Foundry portal Monitor tab of the deployment and show the request counted"
+      ],
+      "mask": [
+        "resource name if it contains the tenant name",
+        "subscription id",
+        "Windows user name in paths"
+      ]
+    }
+  ],
+  "teardown": [
+    "az group delete --name rg-mglab-copilot-ai-21 --yes --no-wait",
+    "az cognitiveservices account list-deleted -o table",
+    "Remove-Item Env:CLAUDE_CODE_USE_FOUNDRY, Env:ANTHROPIC_FOUNDRY_RESOURCE -ErrorAction SilentlyContinue",
+    "Get-ChildItem Env:ANTHROPIC_DEFAULT_* -ErrorAction SilentlyContinue | ForEach-Object { Remove-Item \"Env:$($_.Name)\" }",
+    "# manual (owner): the soft-deleted Foundry account can hold Claude quota for up to 48 hours: az cognitiveservices account purge for this one; Microsoft 365 admin center: set Anthropic back to No users; Power Platform admin center: turn the external LLM setting back off for DEV; remove the Claude Code variables from the terminal profile; do not commit any saved outputs"
+  ],
+  "needs": [
+    "tenant",
+    "azure",
+    "paid:claude-on-foundry (Claude Consumption Units, pay-as-you-go eligibility to be checked)",
+    "owner-approval:anthropic-marketplace-terms-and-data-boundary",
+    "licence:copilot-studio-trial (labadmin)"
+  ],
+  "blocked": "Not recorded without a Microsoft 365 Copilot licence: Researcher, Copilot in Excel/Word/PowerPoint and Copilot Cowork with Claude. The three Foundry/terminal screens are blocked until the subscription is confirmed eligible for Claude with quota above 0, and the admin center screen until the owner approves turning Anthropic on."
+}

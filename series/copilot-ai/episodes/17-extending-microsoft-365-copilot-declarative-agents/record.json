@@ -1,0 +1,100 @@
+{
+  "note": "Copilot & AI #17. Needs the Teams setup policy Upload custom apps turned on for alex.demo a day before (it can take 24 h to apply). The API runs on the laptop in its own visible terminal window (the reminder screen shows it receiving the request), exposed by a dev tunnel; the API key is typed by the owner (a random string made off camera), never shown. No licence bought: custom actions work in Copilot Chat without usage-based billing. Never run pac auth. A screen that needs a second capture of another kind lists it under 'then'.",
+  "prepare": [
+    "python -m pip install -r src/requirements.txt --quiet",
+    "python -m pytest -q",
+    "if (-not $env:VENDOR_API_KEY) { $env:VENDOR_API_KEY = Read-Host 'API key for the vendor API, same value as in the Developer Portal registration (owner types, not echoed)' -AsSecureString | ConvertFrom-SecureString -AsPlainText }",
+    "if (-not (Get-NetTCPConnection -LocalPort 8080 -State Listen -ErrorAction SilentlyContinue)) { $api = Start-Process python -ArgumentList '-m','vendor_api','--today','2026-11-21','--port','8080' -WorkingDirectory (Resolve-Path src).Path -PassThru; $env:MG_API_PID = $api.Id }",
+    "# manual (owner): devtunnel user login (device code, off camera); devtunnel host -p 8080 --allow-anonymous in a second terminal; curl the tunnel URL: 401 without the key, JSON with it",
+    "# manual (owner): Teams Developer Portal (dev.teams.microsoft.com/tools) as alex.demo, API key registration, New: name Contoso Vendor API, base URL = the tunnel URL, primary key = the same random key; note the registration id",
+    "if (-not $env:MG_TUNNEL_URL) { $env:MG_TUNNEL_URL = Read-Host 'dev tunnel URL, https://... (owner types, never shown)' }",
+    "if (-not $env:MG_APIKEY_REGID) { $env:MG_APIKEY_REGID = Read-Host 'API key registration id from the Developer Portal (owner types)' }",
+    "if (-not (Test-Path ./vendor-desk.zip)) { Push-Location src; python -m dakit package agent/appPackage --out ../vendor-desk.zip --app-id (python -c \"import uuid;print(uuid.uuid4())\") --api-url $env:MG_TUNNEL_URL --auth-id $env:MG_APIKEY_REGID --version 1.0.0; Pop-Location }",
+    "# manual (owner): Teams admin center, Teams apps, Setup policies, Upload custom apps for alex.demo (24 h before); then as alex.demo Teams (web), Apps, Manage your apps, Upload an app, Upload a custom app, vendor-desk.zip"
+  ],
+  "screens": [
+    {
+      "name": "tests",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\copilot-ai\\episodes\\17-extending-microsoft-365-copilot-declarative-agents",
+      "prompt": "PS> ",
+      "commands": [
+        "python -m pytest -q",
+        "#pause 2",
+        "Set-Location src",
+        "python -m dakit validate agent/appPackage",
+        "#pause 2",
+        "$m = Get-Content -Raw agent/appPackage/manifest.json",
+        "$m -replace '\"manifestVersion\": \"1.30\"','\"manifestVersion\": \"1.19\"' | Set-Content -NoNewline agent/appPackage/manifest.json",
+        "python -m dakit validate agent/appPackage",
+        "#pause 3",
+        "$m | Set-Content -NoNewline agent/appPackage/manifest.json",
+        "python -m dakit validate agent/appPackage",
+        "#pause 3"
+      ],
+      "note": "Expected: 78 passed, 0 errors 0 warnings, then the schema error for manifestVersion 1.19, then 0 errors again after the undo."
+    },
+    {
+      "name": "portal",
+      "kind": "browser",
+      "url": "https://dev.teams.microsoft.com/tools",
+      "account": "alex.demo",
+      "steps": [
+        "Developer Portal, Tools, API key registration, New",
+        "Name Contoso Vendor API, base URL = the dev tunnel URL, key typed off camera (field blank or masked on screen)",
+        "Save and show the registration id"
+      ],
+      "mask": [
+        "tunnel host name",
+        "the API key (never shown)",
+        "tenant name and account e-mail",
+        "registration id if preferred"
+      ]
+    },
+    {
+      "name": "chat",
+      "kind": "browser",
+      "url": "https://teams.microsoft.com/",
+      "account": "alex.demo",
+      "steps": [
+        "Teams, Apps, Manage your apps, Upload an app, Upload a custom app, choose vendor-desk.zip (episode folder)",
+        "Open Microsoft 365 Copilot (Copilot Chat), Agents, Contoso Vendor Desk",
+        "Ask: Which renewals need a decision in the next 60 days?",
+        "Record the real answer and the card (expected from the API with --today 2026-11-21: Fabrikam Cloud, decide by 2026-12-31); if the upload shows an error record the text; if the agent only appears with a licence record that"
+      ],
+      "mask": [
+        "tunnel host name",
+        "tenant name and account e-mail",
+        "Windows user name in the file picker path"
+      ]
+    },
+    {
+      "name": "reminder",
+      "kind": "browser",
+      "url": "https://teams.microsoft.com/",
+      "account": "alex.demo",
+      "steps": [
+        "In the Contoso Vendor Desk chat ask: Remind Jordan Demo to decide on Fabrikam Cloud on 1 December 2026.",
+        "Show the confirmation dialog, confirm, and show the answer with a reminder id like rem-0001",
+        "Show the API terminal window receiving the POST request next to the browser"
+      ],
+      "mask": [
+        "tunnel host name",
+        "tenant name and account e-mail",
+        "API key if it ever appears in the API terminal"
+      ]
+    }
+  ],
+  "teardown": [
+    "if ($env:MG_API_PID) { Stop-Process -Id $env:MG_API_PID -ErrorAction SilentlyContinue }",
+    "Remove-Item ./vendor-desk.zip -Force -ErrorAction SilentlyContinue",
+    "Remove-Item Env:VENDOR_API_KEY, Env:MG_TUNNEL_URL, Env:MG_APIKEY_REGID -ErrorAction SilentlyContinue",
+    "# manual (owner): stop devtunnel host (Ctrl+C), devtunnel delete <tunnel id>, devtunnel user logout; Developer Portal: delete the API key registration; Teams: remove Contoso Vendor Desk; switch the Upload custom apps policy back if it was off; clear the shell history line that contains the key"
+  ],
+  "needs": [
+    "tenant",
+    "dev-tunnels-cli",
+    "teams-policy:upload-custom-apps (alex.demo, 24 h lead)"
+  ]
+}

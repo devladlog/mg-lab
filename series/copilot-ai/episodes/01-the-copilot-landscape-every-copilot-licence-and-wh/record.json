@@ -1,0 +1,87 @@
+{
+  "note": "Copilot & AI #1. Two portal screens, two terminal screens. Nothing is bought; no Microsoft 365 Copilot licence is assigned. skus.json goes to C:\\MGLab\\work, never into the repo, and is never printed. A screen that needs a second capture of another kind lists it under 'then'.",
+  "prepare": [
+    "python -m pip install -r src/requirements.txt --quiet",
+    "if (-not (Get-Module -ListAvailable -Name Microsoft.Graph.Identity.DirectoryManagement)) { Install-Module Microsoft.Graph.Identity.DirectoryManagement -Scope CurrentUser -Force }",
+    "New-Item -ItemType Directory -Force C:\\MGLab\\work | Out-Null",
+    "# manual (owner): as alex.demo check that copilot.cloud.microsoft opens Copilot Chat (Work label, green shield); if it shows a block page fix it first in the admin center, Copilot, Settings",
+    "# manual (owner): re-check every non-null price in src/data/copilot-catalog.yaml against its price_source and update the file if a figure changed",
+    "# owner signs in as labadmin when Export-SubscribedSkus.ps1 opens the browser (consent: LicenseAssignment.Read.All)"
+  ],
+  "screens": [
+    {
+      "name": "copilot-chat-work",
+      "kind": "browser",
+      "url": "https://copilot.cloud.microsoft/",
+      "account": "alex.demo",
+      "steps": [
+        "Sign in as alex.demo in the alex.demo browser profile (owner signs in)",
+        "Show the Work label under the profile and the green data protection shield",
+        "Type: What is the difference between a Copilot Studio agent and a declarative agent?",
+        "Wait for the answer; leave the source links and the cited web results visible",
+        "Pause three seconds"
+      ],
+      "mask": [
+        "tenant name in the profile card and address bar",
+        "e-mail domain in the account menu"
+      ]
+    },
+    {
+      "name": "admin-licences",
+      "kind": "browser",
+      "url": "https://admin.microsoft.com/",
+      "account": "labadmin",
+      "steps": [
+        "Sign in as labadmin in the labadmin browser profile (owner signs in)",
+        "Open Billing, then Licenses",
+        "Show Microsoft 365 E5 (trial), Microsoft 365 Business Standard and the Copilot Studio trial",
+        "Scroll the whole product list to show that there is no Microsoft 365 Copilot row",
+        "Pause three seconds"
+      ],
+      "mask": [
+        "tenant name in the top bar and account menu",
+        "tenant name in the address bar"
+      ]
+    },
+    {
+      "name": "audit-run",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\copilot-ai\\episodes\\01-the-copilot-landscape-every-copilot-licence-and-wh",
+      "prompt": "PS> ",
+      "commands": [
+        "./src/scripts/Export-SubscribedSkus.ps1 -OutFile C:/MGLab/work/skus.json",
+        "Set-Location src",
+        "python -m copilot_landscape audit --skus C:/MGLab/work/skus.json",
+        "#pause 5"
+      ],
+      "mask": [
+        "skus.json is never printed: it holds the account id and subscription ids of the tenant",
+        "Graph sign-in window stays off the recorded terminal"
+      ],
+      "note": "The browser sign-in (labadmin, consent LicenseAssignment.Read.All) is done by the owner when Export-SubscribedSkus.ps1 connects."
+    },
+    {
+      "name": "tests-catalog",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\copilot-ai\\episodes\\01-the-copilot-landscape-every-copilot-licence-and-wh",
+      "prompt": "PS> ",
+      "commands": [
+        "python -m pytest -q",
+        "#pause 2",
+        "Set-Location src",
+        "python -m copilot_landscape catalog --free",
+        "#pause 5"
+      ]
+    }
+  ],
+  "teardown": [
+    "Remove-Item C:\\MGLab\\work\\skus.json -Force -ErrorAction SilentlyContinue",
+    "Disconnect-MgGraph -ErrorAction SilentlyContinue | Out-Null",
+    "# optional (owner): Entra admin center, Enterprise applications, Microsoft Graph Command Line Tools, Permissions: remove the LicenseAssignment.Read.All consent if it is not needed for other episodes"
+  ],
+  "needs": [
+    "tenant"
+  ]
+}

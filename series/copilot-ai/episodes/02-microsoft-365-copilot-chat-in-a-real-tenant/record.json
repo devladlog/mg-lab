@@ -1,0 +1,112 @@
+{
+  "note": "Copilot & AI #2. alex.demo has NO Microsoft 365 Copilot add-on in every Copilot screen. Do the prompts of the first three screens once the day before so the audit export has records (audit data is not instant). If Copilot reads the mailbox in chat-graph, stop: the script claim is wrong. A screen that needs a second capture of another kind lists it under 'then'.",
+  "prepare": [
+    "python -m pip install -r src/requirements.txt python-docx --quiet",
+    "if (-not (Get-Module -ListAvailable -Name ExchangeOnlineManagement)) { Install-Module ExchangeOnlineManagement -Scope CurrentUser -Force }",
+    "New-Item -ItemType Directory -Force C:\\MGLab\\work | Out-Null",
+    "python -c \"import docx,pathlib; d=docx.Document(); [d.add_paragraph(l) for l in pathlib.Path('src/samples/contoso-vendor-summary.txt').read_text(encoding='utf-8').splitlines() if l.strip()]; d.save(r'C:\\MGLab\\work\\contoso-vendor-summary.docx')\"",
+    "# manual (owner, day before): as alex.demo run the prompts of chat-web, chat-upload and chat-graph plus two or three more, optionally one or two as sam.demo, so CopilotInteraction records exist",
+    "# manual (owner): confirm auditing is on: Connect-ExchangeOnline, then Get-AdminAuditLogConfig | Format-List UnifiedAuditLogIngestionEnabled (must be True)",
+    "# owner signs in: alex.demo and labadmin in two separate browser profiles; labadmin signs in to Exchange Online when the scene connects"
+  ],
+  "screens": [
+    {
+      "name": "chat-web",
+      "kind": "browser",
+      "url": "https://copilot.cloud.microsoft/",
+      "account": "alex.demo",
+      "steps": [
+        "Open a new chat in Copilot Chat as alex.demo and show the Work label and the green data protection shield",
+        "Type: What is the difference between a Copilot Studio agent and a declarative agent?",
+        "Wait for the answer and its citations",
+        "Open the citation section and show the web search queries it lists",
+        "Pause three seconds"
+      ],
+      "mask": [
+        "tenant name",
+        "e-mail domain in the account menu"
+      ]
+    },
+    {
+      "name": "chat-upload",
+      "kind": "browser",
+      "url": "https://copilot.cloud.microsoft/",
+      "account": "alex.demo",
+      "steps": [
+        "Start a NEW chat as alex.demo",
+        "Attach C:\\MGLab\\work\\contoso-vendor-summary.docx with the upload button",
+        "Type: Which vendor renews first in the calendar year, and what is the total yearly cost?",
+        "Show the answer exactly as given (expected: Fabrikam Cloud, 31 March, 45,000 euros); if the arithmetic is wrong keep it, it is a lesson",
+        "Pause three seconds"
+      ],
+      "mask": [
+        "tenant name",
+        "e-mail domain in the account menu",
+        "file path with the Windows user name in the upload dialog"
+      ]
+    },
+    {
+      "name": "chat-graph",
+      "kind": "browser",
+      "url": "https://copilot.cloud.microsoft/",
+      "account": "alex.demo",
+      "steps": [
+        "Same Copilot Chat as alex.demo",
+        "Type: Summarise my last five emails",
+        "Record whatever it really answers (expected: it cannot reach the mailbox, or asks for pasted content)",
+        "If it DOES read the mailbox, stop recording and rewrite the script before publishing",
+        "Pause three seconds"
+      ],
+      "mask": [
+        "tenant name",
+        "e-mail domain in the account menu",
+        "any real mailbox content if it appears"
+      ]
+    },
+    {
+      "name": "web-search-policy",
+      "kind": "browser",
+      "url": "https://config.office.com/",
+      "account": "labadmin",
+      "steps": [
+        "Open Microsoft 365 Cloud Policy, then the policy setting Allow web search in Copilot (open it, do not save)",
+        "Show its three options: Enabled in Microsoft Copilot and Microsoft Copilot Chat; Disabled in both; Disabled in Copilot Work mode, enabled in Web mode and Copilot Chat",
+        "Close the pane without saving",
+        "Optional second capture: Microsoft 365 admin center, Copilot, Settings, Pin Microsoft Copilot Chat (change nothing)"
+      ],
+      "mask": [
+        "tenant name in the address bar and top bar",
+        "account e-mail in the account menu"
+      ]
+    },
+    {
+      "name": "audit-summary",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\copilot-ai\\episodes\\02-microsoft-365-copilot-chat-in-a-real-tenant",
+      "prompt": "PS> ",
+      "commands": [
+        "Connect-ExchangeOnline -ShowBanner:$false",
+        "#clear",
+        "./src/scripts/Export-CopilotInteractions.ps1 -StartDate (Get-Date).AddDays(-2) -OutFile C:/MGLab/work/copilot-interactions.csv",
+        "Set-Location src",
+        "python -m copilot_chat_audit C:/MGLab/work/copilot-interactions.csv | ForEach-Object { $_ -replace '@[\\w.-]+','@contoso.example' }",
+        "#pause 5"
+      ],
+      "mask": [
+        "tenant domain in every UPN is replaced by contoso.example in the command",
+        "the CSV (OrganizationId, ClientIP, real UPNs) stays in C:\\MGLab\\work and is never printed"
+      ],
+      "note": "The Exchange Online sign-in (labadmin) is done by the owner in the browser; the screen is cleared before the export starts."
+    }
+  ],
+  "teardown": [
+    "Remove-Item C:\\MGLab\\work\\copilot-interactions.csv, C:\\MGLab\\work\\contoso-vendor-summary.docx -Force -ErrorAction SilentlyContinue",
+    "Disconnect-ExchangeOnline -Confirm:$false -ErrorAction SilentlyContinue",
+    "# manual (owner): delete contoso-vendor-summary.docx from alex.demo's OneDrive if it was saved there, and delete the demo conversations from the Copilot Chat history of alex.demo (and sam.demo)",
+    "# manual (owner): revert anything changed in Copilot settings or Cloud Policy (the scenes change nothing)"
+  ],
+  "needs": [
+    "tenant"
+  ]
+}

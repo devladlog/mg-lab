@@ -1,0 +1,166 @@
+{
+  "note": "Copilot & AI #4. Run the screens in order: table, flow, topic, chat (creates VR-0001), row, mcp. Environment DEV (Dataverse); nothing is published and no pay-as-you-go plan is linked. $org and the token are never typed or printed on screen: the org URL comes from the owner's environment variable. A screen that needs a second capture of another kind lists it under 'then'.",
+  "prepare": [
+    "if (-not (Get-Module -ListAvailable -Name Az.Accounts)) { Install-Module Az.Accounts -Scope CurrentUser -Force }",
+    "dotnet test src/PowerFxRules.Tests -m:1 --nologo -v q",
+    "if (-not $env:MG_DV_ORG) { $env:MG_DV_ORG = Read-Host 'Dataverse instance URL of DEV, Settings, Session details (owner types, never shown)' }",
+    "# owner signs in as labadmin (browser)",
+    "Connect-AzAccount | Out-Null",
+    "# manual (owner, maker portal as labadmin, DEV): solution MGLab Vendor Desk (name MGLabVendorDesk), publisher MG Lab, name mglab, prefix mgl, choice value prefix 72700",
+    "# manual (owner, Copilot Studio): reuse or create the agent Contoso Vendor Desk in DEV, turn generative orchestration on, add it to the solution; build the agent flow, topic and the Dataverse MCP tool as described in demo.md Setup 4 to 7 and write down the real wording first",
+    "# note: the table is NOT created here, the table screen creates it on camera"
+  ],
+  "screens": [
+    {
+      "name": "table",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\copilot-ai\\episodes\\04-copilot-studio-actions-agent-flows-and-dataverse",
+      "prompt": "PS> ",
+      "commands": [
+        "Import-Module ./src/scripts/VendorRequest.psm1 -Force",
+        "$org = $env:MG_DV_ORG",
+        "$token = Get-AzAccessToken -ResourceUrl $org -AsSecureString",
+        "Install-VendorRequestTable -OrgUrl $org -AccessToken $token -SolutionUniqueName MGLabVendorDesk -WhatIf",
+        "#pause 3",
+        "Install-VendorRequestTable -OrgUrl $org -AccessToken $token -SolutionUniqueName MGLabVendorDesk",
+        "#pause 3"
+      ],
+      "mask": [
+        "$org and $token are variables: neither value is printed",
+        "org URL in any address bar of the follow-up capture"
+      ],
+      "then": [
+        {
+          "name": "table-portal",
+          "kind": "browser",
+          "url": "https://make.powerapps.com/",
+          "account": "labadmin",
+          "steps": [
+            "Select environment DEV, then Solutions, then MGLab Vendor Desk",
+            "Refresh, open the table Vendor Request, then Columns",
+            "Show Request Number (autonumber), Vendor Name, Category, Estimated Annual Cost, Justification, Approval Tier, Status",
+            "Pause three seconds"
+          ],
+          "mask": [
+            "org URL in the address bar and environment picker",
+            "tenant name in the top bar"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "agent-flow",
+      "kind": "browser",
+      "url": "https://copilotstudio.microsoft.com/",
+      "account": "labadmin",
+      "steps": [
+        "Open Contoso Vendor Desk in DEV, Tools, Add tool, Agent flow, Create new",
+        "Show the trigger When an agent calls the flow with VendorName, Category, Justification (text), EstimatedAnnualCost (number) and ApprovalTier (text)",
+        "Show the Microsoft Dataverse action Add a new row on the Vendor Request table with the fields mapped (Status Submitted, Request Number left empty)",
+        "Show Respond to the agent with outputs RequestNumber and a status text; open Settings, Networking and show Asynchronous response OFF",
+        "Name the flow Create vendor request and Publish; show the published state"
+      ],
+      "mask": [
+        "org URL in the address bar",
+        "tenant name and account e-mail"
+      ]
+    },
+    {
+      "name": "topic",
+      "kind": "browser",
+      "url": "https://copilotstudio.microsoft.com/",
+      "account": "labadmin",
+      "steps": [
+        "Open the agent with generative orchestration on, Topics, Add a topic, From blank, name File a vendor request",
+        "Show the trigger description: Use when the user wants to onboard or request a new vendor. Collects vendor name, category, estimated yearly cost and justification, files the request and returns the request number and the approver. Do not use for policy questions.",
+        "Show the four inputs (VendorName, Category, EstimatedAnnualCost, Justification) with their descriptions",
+        "Show the Set variable value nodes (ValidateRequest and ApprovalTier Power Fx), the Condition on Topic.ValidationError, the Add a tool node for the flow Create vendor request and the output Answer with the ConfirmationMessage formula",
+        "Open Code editor for about one second, then close it"
+      ],
+      "mask": [
+        "org URL in the address bar",
+        "tenant name and account e-mail"
+      ]
+    },
+    {
+      "name": "chat",
+      "kind": "browser",
+      "url": "https://copilotstudio.microsoft.com/",
+      "account": "labadmin",
+      "steps": [
+        "Open Test your agent in a fresh session",
+        "Type: We need to onboard Northwind Print for contract printing, about 4,200 euros a year. We print contracts for clients.",
+        "Answer any question the agent asks for a missing value",
+        "Show the activity map with the topic and the flow tool call",
+        "Show the answer (expected: a request number like VR-0001 and the approver Team lead); keep the real wording if it differs"
+      ],
+      "mask": [
+        "org URL in the address bar",
+        "tenant name and account e-mail"
+      ]
+    },
+    {
+      "name": "row",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\copilot-ai\\episodes\\04-copilot-studio-actions-agent-flows-and-dataverse",
+      "prompt": "PS> ",
+      "commands": [
+        "Import-Module ./src/scripts/VendorRequest.psm1 -Force",
+        "$org = $env:MG_DV_ORG",
+        "$token = Get-AzAccessToken -ResourceUrl $org -AsSecureString",
+        "Get-VendorRequest -OrgUrl $org -AccessToken $token -Top 3 | Format-Table",
+        "#pause 5"
+      ],
+      "mask": [
+        "org URL is held in $org, never printed",
+        "the token is never printed"
+      ],
+      "then": [
+        {
+          "name": "row-portal",
+          "kind": "browser",
+          "url": "https://make.powerapps.com/",
+          "account": "labadmin",
+          "steps": [
+            "Open Solutions, MGLab Vendor Desk, Vendor Request, Data (table view)",
+            "Show the same row: VR-0001, Northwind Print, Printing, 4,200, Team lead, Submitted"
+          ],
+          "mask": [
+            "org URL in the address bar",
+            "tenant name in the top bar"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "mcp",
+      "kind": "browser",
+      "url": "https://copilotstudio.microsoft.com/",
+      "account": "labadmin",
+      "steps": [
+        "Open the agent, Tools, Add tool, Model Context Protocol, Microsoft Dataverse MCP Server, Add to agent (sign in with a Dataverse connection as labadmin)",
+        "Show the tool in the agent's Tools list",
+        "In Test your agent type: How many vendor requests have the status Submitted?",
+        "Show the real answer and which MCP tool the activity map shows (read_query expected)",
+        "If the tool is not offered, show Power Platform admin center, the environment, Settings, Features, Dataverse Model Context Protocol and say so"
+      ],
+      "mask": [
+        "org URL in the address bar",
+        "tenant name and account e-mail"
+      ]
+    }
+  ],
+  "teardown": [
+    "Import-Module ./src/scripts/VendorRequest.psm1 -Force",
+    "$t = Get-AzAccessToken -ResourceUrl $env:MG_DV_ORG -AsSecureString; Remove-VendorRequestTable -OrgUrl $env:MG_DV_ORG -AccessToken $t -Confirm:$false",
+    "Disconnect-AzAccount | Out-Null",
+    "# manual (owner): Copilot Studio, delete the agent and the flow Create vendor request; maker portal, delete the solution MGLabVendorDesk and, if nothing else uses it, the publisher mglab; close the browser profile"
+  ],
+  "needs": [
+    "tenant",
+    "licence:copilot-studio-trial (labadmin)",
+    "dataverse-env:DEV"
+  ]
+}

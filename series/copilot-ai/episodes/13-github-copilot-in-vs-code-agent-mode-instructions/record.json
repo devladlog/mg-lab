@@ -1,0 +1,82 @@
+{
+  "note": "Copilot & AI #13. The demo copy lives in C:\\demo\\contoso-vendor-tools (short path, no Windows user name) with a baseline git commit so the agent's changes show in git diff; acceptance\\reference-solution.patch is removed from the copy so the agent cannot read it. Permission level stays Manual: never use Allow all. Confirm the owner's Copilot plan on the day (Copilot Free allowance may run out during the take). Record the real agent result: if it breaks a rule or fails the acceptance test, keep the take and rewrite the narration. A screen that needs a second capture of another kind lists it under 'then'.",
+  "prepare": [
+    "python -m pip install -r src/requirements.txt --quiet",
+    "python -m pytest -q",
+    "New-Item -ItemType Directory -Force C:\\demo | Out-Null",
+    "if (-not (Test-Path C:\\demo\\contoso-vendor-tools)) { Copy-Item .\\src\\contoso-vendor-tools C:\\demo\\contoso-vendor-tools -Recurse; Remove-Item C:\\demo\\contoso-vendor-tools\\acceptance\\reference-solution.patch -Force -ErrorAction SilentlyContinue; Get-ChildItem C:\\demo\\contoso-vendor-tools -Recurse -Directory -Filter __pycache__ | Remove-Item -Recurse -Force; Push-Location C:\\demo\\contoso-vendor-tools; git init -b main | Out-Null; Add-Content .git/info/exclude '__pycache__/'; Add-Content .git/info/exclude '.pytest_cache/'; git add .; git -c user.name='MG Lab' -c user.email='lab@example.invalid' commit -q -m baseline; Pop-Location }",
+    "Push-Location C:\\demo\\contoso-vendor-tools; python -m pytest -q; python -m pytest acceptance -q; Pop-Location",
+    "Push-Location src; python -m customcheck check C:\\demo\\contoso-vendor-tools; Pop-Location",
+    "# manual (owner): open C:\\demo\\contoso-vendor-tools in VS Code and trust the workspace; Copilot icon in the Status Bar, Use AI Features, sign in with the owner's GitHub account off camera; confirm the plan and note whether Session Target offers Copilot and Local",
+    "# manual (owner): run the task once off camera to learn the run length, then reset the demo copy with git checkout . ; git clean -fd"
+  ],
+  "screens": [
+    {
+      "name": "harness",
+      "kind": "app",
+      "app": "VS Code",
+      "steps": [
+        "Open the folder C:\\demo\\contoso-vendor-tools; Chat view, new chat, Session Target set to Copilot",
+        "Open the agent picker: show Ask, Agent, Plan and the custom agent Renewal reviewer",
+        "Command Palette, Chat: Open Customizations, Instructions: show copilot-instructions.md, python-tests and cli listed"
+      ],
+      "mask": [
+        "GitHub account name and avatar (Status Bar, Copilot dashboard, account menu)"
+      ]
+    },
+    {
+      "name": "agent-run",
+      "kind": "app",
+      "app": "VS Code",
+      "steps": [
+        "New chat, Agent selected, Session Target Copilot, permission level Manual",
+        "Prompt exactly: Show the notice deadline (renewal date minus notice_days) for each vendor in the renewals report, and flag vendors whose deadline has already passed.",
+        "Record the real run: files it opens, edits to renewals.py and cli.py, tests it adds, python -m pytest in the terminal, and approve each permission prompt on camera",
+        "At the end open the final answer with the References section expanded so the instruction files are visible",
+        "Do not retake to make it look better; if the agent ignores a rule keep that take"
+      ],
+      "mask": [
+        "GitHub account name and avatar (Status Bar, Copilot dashboard, account menu)",
+        "any path that shows the Windows user name"
+      ]
+    },
+    {
+      "name": "acceptance",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "C:\\demo\\contoso-vendor-tools",
+      "prompt": "PS> ",
+      "commands": [
+        "python -m pytest",
+        "python -m pytest acceptance -q",
+        "git add -N .",
+        "git diff --stat",
+        "git diff -- tests",
+        "Select-String -Path tests\\*.py -Pattern \"date.today\"",
+        "#pause 6"
+      ],
+      "note": "Runs in the demo copy C:\\demo\\contoso-vendor-tools. Record the real verdict, pass or fail."
+    },
+    {
+      "name": "prompt-local",
+      "kind": "app",
+      "app": "VS Code",
+      "steps": [
+        "In a new Session Target Copilot chat type / and record which entries appear (the skill renewal-report should; record whether renewal-report-prompt does)",
+        "If the Local harness is still offered: new chat with Session Target Local, type / and show the prompt file",
+        "Command Palette, Chat: Open Customizations, Migrations: show the Convert Prompt to Skills section",
+        "If Local is gone say so and record only the Copilot chat and the Migrations tab (and put the narration about February 2027 in the past tense)"
+      ],
+      "mask": [
+        "GitHub account name and avatar (Status Bar, Copilot dashboard, account menu)"
+      ]
+    }
+  ],
+  "teardown": [
+    "Remove-Item C:\\demo\\contoso-vendor-tools -Recurse -Force -ErrorAction SilentlyContinue",
+    "# manual (owner): close and archive the chat sessions (Manage Sessions); restore the Copilot plan if it was changed for the recording"
+  ],
+  "needs": [
+    "licence:github-copilot (owner's plan, confirm on the day)"
+  ]
+}

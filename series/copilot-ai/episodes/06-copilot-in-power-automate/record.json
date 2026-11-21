@@ -1,0 +1,112 @@
+{
+  "note": "Copilot & AI #6. Never run pac auth: pac solution unpack works on the local zip. After create-flow the owner exports the solution Loan reminders as unmanaged and saves it as LoanReminders.zip in the episode folder (never committed). The expression written by Copilot goes into expression.mylab.txt. A screen that needs a second capture of another kind lists it under 'then'.",
+  "prepare": [
+    "python -m pip install -r requirements-test.txt --quiet",
+    "pac --version",
+    "# manual (owner): SharePoint site Contoso Facilities with list Equipment loans (Title = item, Borrower, BorrowerEmail, DueDate, Status Out/Returned) and three overdue rows for Alex Demo, Sam Demo, Robin Demo; Teams team Contoso Facilities with channel General; confirm the SharePoint, Outlook and Teams connections in Data, Connections",
+    "# manual (owner): Power Platform admin center, DEV: write down the region and the cross-geo setting; confirm labadmin has a licence that covers Copilot in the designer; rehearse the Copilot prompt once and delete what it created"
+  ],
+  "screens": [
+    {
+      "name": "create-flow",
+      "kind": "browser",
+      "url": "https://make.powerautomate.com/",
+      "account": "labadmin",
+      "steps": [
+        "Select environment DEV, Home, Create with Copilot",
+        "Type the prompt exactly: Every weekday at 8:00, get the overdue items from the SharePoint list Equipment loans, email each borrower a reminder with Outlook, then post the number of overdue loans in the Teams channel General.",
+        "Show the suggested trigger and actions, then Keep it and continue",
+        "Show the connections step with green checks, then Create flow",
+        "Show the designer with the Copilot pane; Save, then add the flow to the solution Loan reminders (Solutions, Add existing, Cloud flow)",
+        "If the structure differs from expectations (extra condition, other trigger) keep it and say so"
+      ],
+      "mask": [
+        "SharePoint site URL in the trigger and address bar",
+        "tenant name and account e-mail",
+        "environment URL"
+      ]
+    },
+    {
+      "name": "review-draft",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\copilot-ai\\episodes\\06-copilot-in-power-automate",
+      "prompt": "PS> ",
+      "prepare": [
+        "if (-not (Test-Path ./LoanReminders.zip)) { throw 'Export the solution Loan reminders as unmanaged to LoanReminders.zip in the episode folder first' }",
+        "Remove-Item ./unpacked -Recurse -Force -ErrorAction SilentlyContinue"
+      ],
+      "commands": [
+        "pac solution unpack --zipfile LoanReminders.zip --folder unpacked",
+        "Set-Location src",
+        "python -m copilot_flow_review flow ../unpacked",
+        "#pause 5"
+      ],
+      "mask": [
+        "unpacked folders contain connection reference names and the site URL: the output must not print them; stop and mask if it does"
+      ],
+      "note": "If the real flow is cleaner than the sample say so: that is the result. If the flow file is not found pass the Workflows JSON path directly."
+    },
+    {
+      "name": "expression",
+      "kind": "browser",
+      "url": "https://make.powerautomate.com/",
+      "account": "labadmin",
+      "steps": [
+        "In the designer add a Compose action holding utcNow(), then a second Compose",
+        "Click the second Compose field, select fx, then Create expression with Copilot",
+        "Type: Format TriggerDate to 'DD-MM' format (adapt the name to the real dynamic value)",
+        "Capture the expression Copilot returns, press OK, Save, Test with a manual or recent run, open the Compose output",
+        "Paste the returned expression into expression.mylab.txt for the terminal check"
+      ],
+      "mask": [
+        "SharePoint site URL",
+        "tenant name and account e-mail",
+        "environment URL"
+      ],
+      "then": [
+        {
+          "name": "expression-terminal",
+          "kind": "terminal",
+          "target": "host",
+          "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\copilot-ai\\episodes\\06-copilot-in-power-automate\\src",
+          "prompt": "PS> ",
+          "prepare": [
+            "if (-not (Test-Path ./expression.mylab.txt)) { throw 'Save the expression Copilot returned to expression.mylab.txt in the episode folder first' }"
+          ],
+          "commands": [
+            "python -m copilot_flow_review expr (Get-Content ../expression.mylab.txt -Raw).Trim()",
+            "#pause 5"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "troubleshoot",
+      "kind": "browser",
+      "url": "https://make.powerautomate.com/",
+      "account": "labadmin",
+      "steps": [
+        "Break the flow on purpose: in the Teams action point the channel at one the connection cannot post to (or break the list name), then Test",
+        "In the failed run open the red action and select Troubleshoot in Copilot (new designer)",
+        "Capture the error, Copilot's summary and its suggested fix; if the suggestion is wrong keep it",
+        "Restore the flow afterwards"
+      ],
+      "mask": [
+        "SharePoint site URL",
+        "tenant name and account e-mail",
+        "environment URL"
+      ]
+    }
+  ],
+  "teardown": [
+    "Remove-Item ./LoanReminders.zip, ./unpacked, ./expression.mylab.txt -Recurse -Force -ErrorAction SilentlyContinue",
+    "# manual (owner): delete the flow, the solution Loan reminders and run history you do not need; delete the SharePoint list, rows and Teams channel if created for this episode; put the cross-geo setting back to the written-down state"
+  ],
+  "needs": [
+    "tenant",
+    "dataverse-env:DEV",
+    "licence:power-automate-covering-copilot (standalone, seeded M365, Power Apps or Dynamics 365)"
+  ],
+  "blocked": "Copilot Credits for AI prompts inside flows and Copilot Studio agents called from flows are not recorded (usage-based billing, not set up)."
+}
