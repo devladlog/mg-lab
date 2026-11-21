@@ -64,10 +64,40 @@ function Wait-WindowByTitle([string]$Title, [int]$TimeoutSeconds = 20) {
     throw "No window with '$Title' in its title appeared"
 }
 
-function Set-RecordingWindow([IntPtr]$Handle, [int]$Width = 1600, [int]$Height = 900) {
+if (-not ('MgRec.Win3' -as [type])) {
+    Add-Type -Namespace MgRec -Name Win3 -MemberDefinition @'
+[StructLayout(LayoutKind.Sequential)] public struct RECT { public int Left, Top, Right, Bottom; }
+[DllImport("user32.dll")] public static extern IntPtr SetThreadDpiAwarenessContext(IntPtr ctx);
+[DllImport("dwmapi.dll")] public static extern int DwmGetWindowAttribute(IntPtr h, int attr, out RECT r, int size);
+public static int[] Bounds(IntPtr h) {
+    RECT r; DwmGetWindowAttribute(h, 9, out r, System.Runtime.InteropServices.Marshal.SizeOf(typeof(RECT)));  // DWMWA_EXTENDED_FRAME_BOUNDS
+    return new int[] { r.Left, r.Top, r.Right - r.Left, r.Bottom - r.Top };
+}
+'@
+}
+
+function Get-WindowBounds([IntPtr]$Handle) {
+    # visible frame in physical pixels (per-monitor DPI aware on this thread), for a screen-region capture
+    [void][MgRec.Win3]::SetThreadDpiAwarenessContext([IntPtr]::new(-4))
+    return [MgRec.Win3]::Bounds($Handle)
+}
+
+function Start-RegionCapture([string]$Ffmpeg, [int[]]$Bounds, [string]$OutFile, [switch]$DrawMouse) {
+    # Screen-region capture: works for GPU-composed apps (Power BI, browsers, WebView2) that a window capture shows blank
+    $x, $y, $w, $h = $Bounds; $w -= $w % 2; $h -= $h % 2
+    $psi = [Diagnostics.ProcessStartInfo]::new($Ffmpeg)
+    $mouse = if ($DrawMouse) { '1' } else { '0' }
+    foreach ($a in @('-loglevel', 'error', '-y', '-f', 'gdigrab', '-framerate', '30', '-draw_mouse', $mouse,
+            '-offset_x', "$x", '-offset_y', "$y", '-video_size', "${w}x${h}", '-i', 'desktop',
+            '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '18', '-pix_fmt', 'yuv420p', '-movflags', '+faststart', $OutFile)) { $psi.ArgumentList.Add($a) }
+    $psi.RedirectStandardInput = $true; $psi.UseShellExecute = $false; $psi.CreateNoWindow = $true
+    return [Diagnostics.Process]::Start($psi)
+}
+
+function Set-RecordingWindow([IntPtr]$Handle, [int]$Width = 1600, [int]$Height = 900, [int]$X = 40, [int]$Y = 40) {
     # top-most, fixed size, on the primary screen, so nothing covers it while it is captured
     [void][MgRec.Win2]::ShowWindow($Handle, 1)
-    [void][MgRec.Win2]::SetWindowPos($Handle, [IntPtr]::new(-1), 40, 40, $Width, $Height, 0x0040)
+    [void][MgRec.Win2]::SetWindowPos($Handle, [IntPtr]::new(-1), $X, $Y, $Width, $Height, 0x0040)
     [void][MgRec.Win2]::SetForegroundWindow($Handle)
 }
 

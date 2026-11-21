@@ -21,11 +21,14 @@ $win = Wait-WindowByTitle -Title $cfg.title -TimeoutSeconds 10
 $title = $win.Title
 # same framing as the terminal scenes: top-most so nothing covers it, fixed size (window.json width/height override)
 $w = if ($cfg.width) { [int]$cfg.width } else { 1600 }; $h = if ($cfg.height) { [int]$cfg.height } else { 900 }
-Set-RecordingWindow -Handle $win.Handle -Width $w -Height $h
+$x = if ($null -ne $cfg.x) { [int]$cfg.x } else { 40 }; $y = if ($null -ne $cfg.y) { [int]$cfg.y } else { 40 }
+Set-RecordingWindow -Handle $win.Handle -Width $w -Height $h -X $x -Y $y
 Start-Sleep -Milliseconds 800
-Write-Host "Recording window: $title -> $out" -ForegroundColor Cyan
+$bounds = Get-WindowBounds $win.Handle
+Write-Host "Recording window: $title [$($bounds -join ',')] -> $out" -ForegroundColor Cyan
 New-Item -ItemType File -Force -Path (Join-Path $dir 'recording') | Out-Null
-$rec = Start-WindowCapture -Ffmpeg (Get-FfmpegPath) -Title $title -OutFile $out -DrawMouse
+# screen region, not the window handle: GPU-composed apps (Power BI, browsers) capture blank through the handle
+$rec = Start-RegionCapture -Ffmpeg (Get-FfmpegPath) -Bounds $bounds -OutFile $out -DrawMouse
 $end = (Get-Date).AddSeconds($(if ($cfg.maxSeconds) { $cfg.maxSeconds } else { 300 }))
 try {
     while (-not (Test-Path $stop) -and (Get-Date) -lt $end -and -not $rec.HasExited) { Start-Sleep -Milliseconds 300 }
