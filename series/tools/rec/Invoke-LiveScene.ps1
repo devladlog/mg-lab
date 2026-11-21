@@ -12,6 +12,10 @@ param([Parameter(Mandatory)] [string] $SceneFile)
 $ErrorActionPreference = 'Continue'
 $scene = Get-Content -LiteralPath $SceneFile -Raw | ConvertFrom-Json
 $Host.UI.RawUI.WindowTitle = 'MG-REC'
+if ($scene.markerDir) {
+    New-Item -ItemType File -Force -Path (Join-Path $scene.markerDir 'started') | Out-Null
+    try { Start-Transcript -Path (Join-Path $scene.markerDir 'scene.log') -Force | Out-Null } catch {}
+}
 try { $Host.UI.RawUI.BackgroundColor = 'Black'; $Host.UI.RawUI.ForegroundColor = 'Gray' } catch {}
 Clear-Host
 

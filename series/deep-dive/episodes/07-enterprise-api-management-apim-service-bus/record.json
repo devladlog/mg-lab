@@ -9,7 +9,7 @@
     "$ids = ./apim/entra/New-GatewayApps.ps1   # prints tenantId, apiClientId, callerClientId; secret stays in $env:PURCHASE_CALLER_SECRET",
     "$env:MG_TENANT_ID = $ids.tenantId; $env:MG_API_CLIENT = $ids.apiClientId; $env:MG_CALLER_CLIENT = $ids.callerClientId",
     "az group create -n rg-mglab-deep-dive-07 -l westeurope -o none",
-    "az deployment group create -g rg-mglab-deep-dive-07 -f infra/main.bicep -p apiClientId=$ids.apiClientId publisherEmail=(az ad signed-in-user show --query userPrincipalName -o tsv) receiverPrincipalId=(az ad signed-in-user show --query id -o tsv) --query properties.outputs -o json > $env:TEMP\\apim-outputs.json",
+    "az deployment group create -g rg-mglab-deep-dive-07 -f infra/main.bicep -p \"apiClientId=$($ids.apiClientId)\" \"publisherEmail=$(az ad signed-in-user show --query userPrincipalName -o tsv)\" \"receiverPrincipalId=$(az ad signed-in-user show --query id -o tsv)\" --query properties.outputs -o json > $env:TEMP\\apim-outputs.json",
     "$out = Get-Content $env:TEMP\\apim-outputs.json | ConvertFrom-Json; $env:MG_GATEWAY_URL = $out.gatewayUrl.value; $env:MG_SB_FQDN = $out.serviceBusNamespaceFqdn.value; $env:MG_APIM07 = $out.apimName.value",
     "Start-Sleep -Seconds 300   # role assignments can take about five minutes",
     "$sub = az account show --query id -o tsv",

@@ -5,7 +5,6 @@
     "Invoke-Pester ./tests",
     "# owner signs in (device code), not recorded",
     "az login --use-device-code --allow-no-subscriptions",
-    "Connect-MgGraph -Scopes Application.ReadWrite.All -NoWelcome   # owner signs in (for Initialize-ExternalId, as the external tenant's admin)",
     "# manual: Entra admin center > Manage tenants > Create > External, name 'Contoso customers', domain contosocustomers (or next free), location Europe, subscription = lab, resource group rg-mglab-deep-dive-06",
     "# manual: Dataverse table 'Support request' in solution 'Customer portal' (DEV) exactly as dataverse/support-request-table.json, main form with the Document Locations subgrid, document management on",
     "# manual: accounts Northwind Traders and Adventure Works; contacts Riley Demo, Alex Demo (Northwind), Taylor Demo (Adventure Works) with the exact e-mail they sign up with; one seed request each for Alex and Taylor",
@@ -92,7 +91,7 @@
     "# manual: SharePoint: delete the 'Customer docs' site and remove it from the deleted sites",
     "# manual: external tenant: delete every user except the admin, the user flow, all app registrations including b2c-extensions-app, then Manage tenants > Delete 'Contoso customers'",
     "az group delete -n rg-mglab-deep-dive-06 --yes   # once the tenant resource is gone",
-    "Remove-Item Env:MG_EXT_TENANT, Env:MG_REPLY_URL -ErrorAction SilentlyContinue; Disconnect-MgGraph"
+    "Remove-Item Env:MG_EXT_TENANT, Env:MG_REPLY_URL -ErrorAction SilentlyContinue"
   ],
   "needs": [
     "tenant",

@@ -9,7 +9,7 @@
     "az ad group create --display-name 'SQL Admins - Purchase Requests' --mail-nickname sqladmins-purchreq -o none",
     "az ad group member add --group 'SQL Admins - Purchase Requests' --member-id (az ad signed-in-user show --query id -o tsv)",
     "az group create -n rg-mglab-deep-dive-03 -l westeurope -o none",
-    "az deployment group create -g rg-mglab-deep-dive-03 -f infra/main.bicep -p infra/main.bicepparam -p apiClientId=$env:MG_API_CLIENT sqlAdminLogin='SQL Admins - Purchase Requests' sqlAdminObjectId=$(az ad group show -g 'SQL Admins - Purchase Requests' --query id -o tsv) --query properties.outputs -o json > $env:TEMP\\purchreq-outputs.json",
+    "az deployment group create -g rg-mglab-deep-dive-03 -f infra/main.bicep -p infra/main.bicepparam -p apiClientId=$env:MG_API_CLIENT \"sqlAdminLogin=SQL Admins - Purchase Requests\" sqlAdminObjectId=$(az ad group show -g 'SQL Admins - Purchase Requests' --query id -o tsv) --query properties.outputs -o json > $env:TEMP\\purchreq-outputs.json",
     "$o = Get-Content $env:TEMP\\purchreq-outputs.json | ConvertFrom-Json; $env:MG_SQL03 = $o.sqlServerFqdn.value; $env:MG_WEB03 = $o.webAppName.value",
     "dotnet publish src/PurchaseRequests.Api -c Release -o publish; Compress-Archive -Path publish/* -DestinationPath app.zip -Force",
     "az webapp deploy -g rg-mglab-deep-dive-03 -n $o.webAppName.value --src-path app.zip --type zip",

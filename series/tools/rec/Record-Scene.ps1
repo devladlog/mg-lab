@@ -44,7 +44,15 @@ $jpg = Join-Path $screens "$Screen.jpg"
 # 1. the window to record (classic console host, so the font and size are ours)
 $live = Join-Path $PSScriptRoot 'Invoke-LiveScene.ps1'
 $p = Start-Process conhost.exe -ArgumentList "`"$pwsh`" -NoProfile -NoLogo -File `"$live`" -SceneFile `"$sceneJson`"" -PassThru
-$win = Wait-WindowByTitle -Title 'MG-REC' -TimeoutSeconds 30
+try { $win = Wait-WindowByTitle -Title 'MG-REC' -TimeoutSeconds 30 }
+catch {
+    # keep what the scene window left behind, so the reason can be read: recordings\failed-<screen>\
+    $keep = Join-Path $Root "recordings\failed-$Screen"
+    New-Item -ItemType Directory -Force -Path $keep | Out-Null
+    Copy-Item -Path (Join-Path $markers '*') -Destination $keep -Force -ErrorAction SilentlyContinue
+    "conhost exited: $($p.HasExited) exit code: $(if ($p.HasExited) { $p.ExitCode })" | Set-Content (Join-Path $keep 'process.txt')
+    throw
+}
 Start-Sleep -Milliseconds 500
 Set-RecordingWindow -Handle $win.Handle -Width $(if ($s.width) { $s.width } else { 1600 }) -Height $(if ($s.height) { $s.height } else { 900 })
 
