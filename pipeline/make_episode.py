@@ -403,7 +403,8 @@ def make_short(scene, script, wav, dur, slide_png, out, workdir, clip=None):
     if clip is not None and scene.get("crop"):
         slide, vbox = live_short_panel(scene)
         rate = float(scene.get("video_rate", 1.0))
-        extra = max(0.0, video_duration(clip) / rate + 0.5 - dur)
+        # the clip may run past the narration, but a Short stays under 60 s (end card included)
+        extra = min(max(0.0, video_duration(clip) / rate + 0.5 - dur), max(0.0, 55.0 - dur))
     else:
         slide, extra = short_panel(scene, script["episode"]), 0.0
     frames_dir = workdir / f"short_{scene['id']}"
