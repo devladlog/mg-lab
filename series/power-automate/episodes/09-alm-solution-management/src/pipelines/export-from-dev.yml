@@ -1,0 +1,79 @@
+# Export IT Request Notices from DEV, unpack both package types, check, commit.
+# Run by hand when a maker says "this is ready". Needs the Power Platform Build Tools extension and a
+# Power Platform service connection to DEV (variable devServiceConnection).
+trigger: none
+
+parameters:
+  - name: solutionName
+    type: string
+    default: ITRequestNotices
+  - name: solutionVersion
+    type: string
+    default: 1.1.0.0
+
+pool:
+  vmImage: ubuntu-latest
+
+variables:
+  - name: devServiceConnection
+    value: mglab-dev
+
+steps:
+  - checkout: self
+    persistCredentials: true
+
+  - task: microsoft-IsvExpTools.PowerPlatform-BuildTools.tool-installer.PowerPlatformToolInstaller@2
+    displayName: Power Platform Tool Installer
+    inputs:
+      AddToolsToPath: true
+
+  - task: microsoft-IsvExpTools.PowerPlatform-BuildTools.set-solution-version.PowerPlatformSetSolutionVersion@2
+    displayName: Set the version in DEV
+    inputs:
+      authenticationType: PowerPlatformSPN
+      PowerPlatformSPN: $(devServiceConnection)
+      SolutionName: ${{ parameters.solutionName }}
+      SolutionVersionNumber: ${{ parameters.solutionVersion }}
+
+  - task: microsoft-IsvExpTools.PowerPlatform-BuildTools.export-solution.PowerPlatformExportSolution@2
+    displayName: Export unmanaged
+    inputs:
+      authenticationType: PowerPlatformSPN
+      PowerPlatformSPN: $(devServiceConnection)
+      SolutionName: ${{ parameters.solutionName }}
+      SolutionOutputFile: $(Build.ArtifactStagingDirectory)/${{ parameters.solutionName }}.zip
+      Managed: false
+      AsyncOperation: true
+      MaxAsyncWaitTime: 30
+
+  - task: microsoft-IsvExpTools.PowerPlatform-BuildTools.export-solution.PowerPlatformExportSolution@2
+    displayName: Export managed
+    inputs:
+      authenticationType: PowerPlatformSPN
+      PowerPlatformSPN: $(devServiceConnection)
+      SolutionName: ${{ parameters.solutionName }}
+      SolutionOutputFile: $(Build.ArtifactStagingDirectory)/${{ parameters.solutionName }}_managed.zip
+      Managed: true
+      AsyncOperation: true
+      MaxAsyncWaitTime: 30
+
+  # Both: the tool reads NAME.zip and NAME_managed.zip from the same folder and writes one source folder.
+  - task: microsoft-IsvExpTools.PowerPlatform-BuildTools.unpack-solution.PowerPlatformUnpackSolution@2
+    displayName: Unpack unmanaged and managed
+    inputs:
+      SolutionInputFile: $(Build.ArtifactStagingDirectory)/${{ parameters.solutionName }}.zip
+      SolutionTargetFolder: src/solution
+      SolutionType: Both
+
+  - bash: python3 -m almkit check src/solution --templates deploy/settings.test.json deploy/settings.prod.json
+    displayName: almkit check
+    env:
+      PYTHONPATH: src
+
+  - bash: |
+      git config user.name "Pipeline"
+      git config user.email "pipeline@contoso.com"
+      git add src/solution
+      git diff --cached --quiet || git commit -m "Export ${{ parameters.solutionName }} ${{ parameters.solutionVersion }} from DEV"
+      git push origin HEAD:$(Build.SourceBranchName)
+    displayName: Commit the unpacked solution

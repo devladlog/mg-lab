@@ -1,0 +1,264 @@
+# DEVLADLOG Power Automate — episode 09 (draft: material built and tested locally, demo still to record)
+episode: 9
+slug: alm-solution-management
+series_label: "POWER AUTOMATE"
+series_name: "DEVLADLOG Power Automate"
+file_prefix: "power-automate"
+title: "From DEV to TEST without touching the flow"
+subtitle: "Solutions, connection references, environment variables and a deployment settings file"
+voice: am_michael
+thumbnail_text: "ALM FOR\nCLOUD FLOWS\nDEV TO TEST"
+youtube:
+  title: "Power Automate ALM: Solutions, Connection References, Environment Variables, Deploy | DEVLADLOG Power Automate #9"
+  tags: [Power Automate, ALM, solutions, connection references, environment variables, deployment settings, pac CLI, Azure DevOps, Power Platform Build Tools, Power Platform]
+sources:
+  - https://www.devladlog.com/articles/power-automate/2025-07-09-alm-solution-management-complete-guide-2025/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Our first export could not be packed as managed"
+    sub: "ALM for cloud flows: one word in one file"
+    short: hook
+    narration: >
+      Our first export from DEV could not be packed as a managed solution. The error said the package type did
+      not match, and the cause was one word in one file. In this episode we move a cloud flow from DEV to TEST
+      without opening it, and we use a checker to catch this kind of mistake before the pipeline does.
+
+  - id: why
+    type: bullets
+    heading: "What has to change between environments"
+    bullets:
+      - "The flow lives in a solution"
+      - "Connection reference: which connection to use"
+      - "Environment variable: site, list, mailbox"
+      - "Deployment settings file: values per environment"
+      - "Managed solution in TEST and production"
+    narration: >
+      The flows from episode one have the site address typed into the trigger. That works in DEV and nowhere
+      else. In a solution, the flow uses a connection reference for who it signs in as, and environment variables
+      for what differs: the site, the list, the mailbox. A deployment settings file gives each environment its
+      values, and downstream environments get the managed solution.
+
+  - id: solution
+    type: screen
+    heading: "The solution in DEV"
+    image: screens/solution.jpg
+    bar: "Power Apps · Solutions · IT Request Notices"
+    demo: >
+      make.powerapps.com, environment DEV, solution IT Request Notices (unique name ITRequestNotices, version
+      1.1.0.0) open on All: one cloud flow Acknowledge IT request, four environment variables (IT site URL, IT
+      Requests list, Service desk mailbox, Environment label) and two connection references (SharePoint, Office 365
+      Outlook). Mask the environment URL and the account.
+    narration: >
+      This is the solution in DEV. One flow, four environment variables, two connection references. Nothing
+      about the flow itself says which site or which mailbox.
+
+  - id: envvar
+    type: code
+    heading: "No site address in the flow"
+    lang: json
+    code: |
+      "triggers": { "When_an_IT_request_is_created": { "inputs": { "parameters": {
+        "dataset": "@parameters('IT site URL (cts_ITSiteUrl)')",
+        "table":   "@parameters('IT Requests list (cts_ITRequestsList)')" } } } }
+
+      "Send_acknowledgement": { "inputs": { "parameters": {
+        "emailMessage/Cc": "@parameters('Service desk mailbox (cts_ServiceDeskMailbox)')",
+        "emailMessage/Subject": "IT request #@{triggerBody()?['ID']} received
+                                 [@{parameters('Environment label (cts_EnvironmentLabel)')}]" } } }
+    narration: >
+      In the flow, the site, the list and the mailbox are parameters that point at environment variables. The
+      subject ends with the environment label, so a test email says test, and nobody mistakes it for the real
+      thing.
+
+  - id: check
+    type: code
+    heading: "A checker before the pipeline"
+    lang: text
+    code: |
+      $ python -m almkit check solution --previous releases/1.0.0.0
+      0 error(s), 0 warning(s)
+
+      # a copy with a site URL typed into the trigger:
+      ERROR A06 ...json: a SharePoint URL typed into the flow
+            ('https://contoso.sharepoint.com/sites/ITHelpdesk'):
+            put it in an environment variable
+      ERROR A05 ... binds a connection directly instead of a
+            connection reference
+    narration: >
+      Our checker reads the unpacked solution. It fails on a site address typed into an action, on a flow bound
+      to a connection instead of a connection reference, on a version that did not go up, and on a variable that
+      ships its own value. Learn says environment variables should not carry the value from DEV.
+
+  - id: both
+    type: code
+    heading: "Pack managed from a folder unpacked as both"
+    lang: text
+    code: |
+      <Managed>0</Managed>   <- unpacked as unmanaged only
+      $ pac solution pack --folder solution --packagetype Managed
+      Error: Solution package type did not match requested type.
+
+      Learn: the packager can't convert unmanaged to managed.
+      Export twice, then unpack both into one folder:
+      $ pac solution unpack --zipfile ITRequestNotices.zip --folder solution --packagetype Both
+      $ pac solution pack --folder solution --packagetype Managed
+      Packed Solution.
+    short: both
+    narration: >
+      Here is the error from the start. We had unpacked only the unmanaged export, and pack as managed refused.
+      Learn is clear: the packager cannot convert one type to the other. You export the solution twice, as
+      unmanaged and as managed, and unpack both into one folder. Then the same folder packs as managed or as unmanaged.
+
+  - id: settings
+    type: code
+    heading: "One settings file per environment"
+    lang: json
+    code: |
+      { "EnvironmentVariables": [
+          { "SchemaName": "cts_EnvironmentLabel", "Value": "TEST" },
+          { "SchemaName": "cts_ITSiteUrl", "Value": "${IT_SITE_URL}" } ],
+        "ConnectionReferences": [
+          { "LogicalName": "cts_sharedsharepointonline_itnotices",
+            "ConnectionId": "${CONN_SHAREPOINT}",
+            "ConnectorId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline" } ] }
+
+      $ python -m almkit render-settings deploy/settings.test.json ...
+      Can't render: no value for CONN_OFFICE365, CONN_SHAREPOINT
+    narration: >
+      The settings file lists every variable and every connection reference. P A C creates it empty with
+      create settings. We commit it with placeholders for what only the target knows, like connection I Ds, and
+      the pipeline fills them in. If one has no value, the render stops and names it. The checker also compares
+      the file with the solution, so a new variable in the next release cannot be forgotten.
+
+  - id: pipeline
+    type: code
+    heading: "The import task in the pipeline"
+    lang: yaml
+    code: |
+      - task: ...PowerPlatformImportSolution@2
+        inputs:
+          authenticationType: PowerPlatformSPN
+          PowerPlatformSPN: ${{ parameters.serviceConnection }}
+          SolutionInputFile: $(Pipeline.Workspace)/solution/ITRequestNotices_managed.zip
+          UseDeploymentSettingsFile: true
+          DeploymentSettingsFile: $(Pipeline.Workspace)/settings.json
+          PublishWorkflows: true
+          ${{ if eq(parameters.mode, 'Upgrade') }}:
+            HoldingSolution: true
+    narration: >
+      In Azure Pipelines, the Power Platform Build Tools import task takes the settings file. We pack managed
+      once, deploy that same file to test, and to production after an approval. A test checks every task and
+      input in our pipelines against the list on Learn.
+
+  - id: pipelinerun
+    type: screen
+    heading: "The release pipeline run"
+    image: screens/pipeline.jpg
+    bar: "Azure DevOps · Pipelines · release"
+    demo: >
+      Azure DevOps project (private, created for the episode), Pipelines, a run of release.yml: stages Build and
+      Test green, stage Prod waiting for approval. Open the Test stage log on the step "Render the deployment
+      settings" (tokens already replaced, values masked) and "Import Upgrade". Mask the organization name, the
+      environment URLs and every connection ID.
+    narration: >
+      And the pipeline run. Build packs the managed solution once. Test imports it. Production waits for a person
+      to approve.
+
+  - id: deploy
+    type: screen
+    heading: "Deploying to TEST"
+    image: screens/deploy.jpg
+    bar: "Terminal · Deploy-Solution.ps1 -Environment TEST"
+    demo: >
+      Terminal on the lab laptop. Run python -m almkit check, then render-settings for test, then
+      Deploy-Solution.ps1 with Mode Upgrade against the TEST environment: the output shows pack, the pac import
+      command with the settings file and the final line Imported ITRequestNotices (Upgrade). Mask the environment
+      URL, the connection IDs and the site URL.
+    narration: >
+      The same steps on a laptop. Check, render the settings, then one script packs the managed solution and
+      imports it with the settings file.
+
+  - id: testenv
+    type: screen
+    heading: "In TEST: flow on, values from the file"
+    image: screens/test.jpg
+    bar: "Power Apps · TEST · IT Request Notices (managed)"
+    demo: >
+      make.powerapps.com, environment TEST, solution IT Request Notices shown as managed: the flow Acknowledge IT
+      request with status On, the connection references bound to connections, and the environment variable
+      Environment label with current value TEST. Second capture: Outlook on the web with the email "IT request #...
+      received [TEST]". Mask the environment URL and the mailbox domain.
+    narration: >
+      In test, the solution is managed. The flow is on, the connection references have connections, and the
+      environment label says test. A new request sends an email, and the subject ends with test.
+
+  - id: upgrade
+    type: code
+    heading: "Update leaves things behind. Upgrade does not."
+    lang: text
+    code: |
+      $ python -m almkit diff releases/1.0.0.0 solution
+      ITRequestNotices 1.0.0.0 -> ITRequestNotices 1.1.0.0
+        flow removed: Weekly stale summary
+        environment variable removed: cts_StaleDays
+        import mode: UPGRADE (components were removed;
+                     an update would leave them in the target)
+    short: upgrade
+    narration: >
+      Version one point one removes a flow and a variable, because the daily digest from episode one already
+      covers them. Learn says an update cannot delete components, and an upgrade removes what the new version no
+      longer has. So the diff tells us this release must be imported as an upgrade.
+
+  - id: leftover
+    type: screen
+    heading: "Update: still there. Upgrade: gone."
+    image: screens/upgrade.jpg
+    bar: "Power Apps · TEST · IT Request Notices"
+    demo: >
+      Environment TEST, solution IT Request Notices, Cloud flows view, three captures in one scene. After importing
+      1.1.0.0 as Update: both flows are listed, Weekly stale summary still present. After importing a later build
+      as Upgrade: only Acknowledge IT request remains and the variable Stale after days is gone from the
+      environment variables. Mask the environment URL.
+    narration: >
+      I import one point one as an update, and the weekly summary is still there, along with its variable. Then I
+      import the next build as an upgrade, and both are gone. Same package, different import mode, and a different
+      environment. That is why the mode is a parameter in the release pipeline, and why the diff runs first.
+
+  - id: gotcha
+    type: bullets
+    heading: "Gotcha: who owns the connection"
+    bullets:
+      - "Connections are owned by a user"
+      - "The importer must own them, or have them shared"
+      - "A pipeline's service principal is the importer"
+      - "Plan this before the first pipeline run"
+      - "We only tested the laptop path with a user"
+    narration: >
+      One honest gotcha. Connections have owners. Learn says that on import, the connections in your connection
+      references must be owned by the importer, or shared with the importer. In a pipeline the importer is the
+      service principal, so work out how it gets connections it can use before the first run, and check that the
+      flow really turns on. In our lab we deployed as a user, and the notes say what we have not tried.
+
+  - id: recap
+    type: bullets
+    heading: "Five rules for moving a flow"
+    bullets:
+      - "Solution, connection references, environment variables"
+      - "No value from DEV inside the solution"
+      - "Export both types, unpack with Both"
+      - "A settings file per environment, checked against the solution"
+      - "Removed something? Import as an upgrade"
+    narration: >
+      Five rules. Build in a solution, with connection references and environment variables. Ship no values from
+      DEV. Export both package types and unpack with both. Keep a settings file per environment and check it
+      against the solution. And when a release removes something, import it as an upgrade.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The solution, the checker, the pipelines and sixty-one tests that need no tenant are on GitHub, and the
+      complete guide is on dev lad log dot com. Next in the series: performance optimization. Subscribe so you don't miss it.

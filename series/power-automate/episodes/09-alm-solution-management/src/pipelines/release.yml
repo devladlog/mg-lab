@@ -1,0 +1,76 @@
+# Build the managed package once, then deploy that same file to TEST and, after approval, to PROD.
+# The Upgrade mode removes what the new version no longer has; use Update only when `almkit diff` shows no removals.
+trigger:
+  branches:
+    include: [main]
+  paths:
+    include: [src/solution/*]
+
+parameters:
+  - name: solutionName
+    type: string
+    default: ITRequestNotices
+  - name: mode
+    type: string
+    default: Upgrade
+    values: [Update, Upgrade]
+
+pool:
+  vmImage: ubuntu-latest
+
+variables:
+  - group: alm-test   # IT_SITE_URL, SERVICEDESK_MAILBOX, CONN_SHAREPOINT, CONN_OFFICE365 for TEST, and testServiceConnection
+  - group: alm-prod
+
+stages:
+  - stage: Build
+    jobs:
+      - job: Pack
+        steps:
+          - checkout: self
+          - task: microsoft-IsvExpTools.PowerPlatform-BuildTools.tool-installer.PowerPlatformToolInstaller@2
+            displayName: Power Platform Tool Installer
+          - bash: python3 -m almkit check src/solution --templates deploy/settings.test.json deploy/settings.prod.json
+            displayName: almkit check
+            env:
+              PYTHONPATH: src
+          - task: microsoft-IsvExpTools.PowerPlatform-BuildTools.pack-solution.PowerPlatformPackSolution@2
+            displayName: Pack managed
+            inputs:
+              SolutionSourceFolder: src/solution
+              SolutionOutputFile: $(Build.ArtifactStagingDirectory)/${{ parameters.solutionName }}_managed.zip
+              SolutionType: Managed
+          - publish: $(Build.ArtifactStagingDirectory)
+            artifact: solution
+
+  - stage: Test
+    dependsOn: Build
+    jobs:
+      - deployment: DeployTest
+        environment: test
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - template: deploy-steps.yml
+                  parameters:
+                    name: test
+                    serviceConnection: $(testServiceConnection)
+                    solutionName: ${{ parameters.solutionName }}
+                    mode: ${{ parameters.mode }}
+
+  - stage: Prod
+    dependsOn: Test
+    jobs:
+      - deployment: DeployProd
+        environment: prod   # add an approval check on this environment in Azure DevOps
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - template: deploy-steps.yml
+                  parameters:
+                    name: prod
+                    serviceConnection: $(prodServiceConnection)
+                    solutionName: ${{ parameters.solutionName }}
+                    mode: ${{ parameters.mode }}

@@ -1,0 +1,120 @@
+{
+  "properties": {
+    "connectionReferences": {
+      "shared_sharepointonline": {
+        "runtimeSource": "embedded",
+        "connection": {
+          "connectionReferenceLogicalName": "cts_sharedsharepointonline_itnotices"
+        },
+        "api": {
+          "name": "shared_sharepointonline"
+        }
+      },
+      "shared_office365": {
+        "runtimeSource": "embedded",
+        "connection": {
+          "connectionReferenceLogicalName": "cts_sharedoffice365_itnotices"
+        },
+        "api": {
+          "name": "shared_office365"
+        }
+      }
+    },
+    "definition": {
+      "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+      "contentVersion": "1.0.0.0",
+      "parameters": {
+        "$connections": {
+          "defaultValue": {},
+          "type": "Object"
+        },
+        "$authentication": {
+          "defaultValue": {},
+          "type": "SecureObject"
+        },
+        "IT site URL (cts_ITSiteUrl)": {
+          "defaultValue": "https://contoso.sharepoint.com/sites/ITHelpdesk",
+          "type": "String",
+          "metadata": {
+            "schemaName": "cts_ITSiteUrl",
+            "description": "SharePoint site that holds the IT Requests list, no trailing slash"
+          }
+        },
+        "IT Requests list (cts_ITRequestsList)": {
+          "defaultValue": "IT Requests",
+          "type": "String",
+          "metadata": {
+            "schemaName": "cts_ITRequestsList",
+            "description": "Name of the IT Requests list"
+          }
+        },
+        "Service desk mailbox (cts_ServiceDeskMailbox)": {
+          "defaultValue": "servicedesk@contoso.com",
+          "type": "String",
+          "metadata": {
+            "schemaName": "cts_ServiceDeskMailbox",
+            "description": "Gets a copy of every acknowledgement"
+          }
+        },
+        "Environment label (cts_EnvironmentLabel)": {
+          "defaultValue": "DEV",
+          "type": "String",
+          "metadata": {
+            "schemaName": "cts_EnvironmentLabel",
+            "description": "Short name of the environment (DEV, TEST, PROD), shown at the end of every subject"
+          }
+        }
+      },
+      "triggers": {
+        "When_an_IT_request_is_created": {
+          "type": "OpenApiConnection",
+          "recurrence": {
+            "interval": 1,
+            "frequency": "Minute"
+          },
+          "splitOn": "@triggerOutputs()?['body/value']",
+          "conditions": [
+            {
+              "expression": "@not(startsWith(toLower(coalesce(triggerBody()?['Title'], '')), '[test]'))"
+            }
+          ],
+          "inputs": {
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+              "connectionName": "shared_sharepointonline",
+              "operationId": "GetOnNewItems"
+            },
+            "parameters": {
+              "dataset": "@parameters('IT site URL (cts_ITSiteUrl)')",
+              "table": "@parameters('IT Requests list (cts_ITRequestsList)')"
+            },
+            "authentication": "@parameters('$authentication')"
+          }
+        }
+      },
+      "actions": {
+        "Send_acknowledgement": {
+          "type": "OpenApiConnection",
+          "runAfter": {},
+          "inputs": {
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365",
+              "connectionName": "shared_office365",
+              "operationId": "SendEmailV2"
+            },
+            "parameters": {
+              "emailMessage/To": "@triggerBody()?['Author']?['Email']",
+              "emailMessage/Cc": "@parameters('Service desk mailbox (cts_ServiceDeskMailbox)')",
+              "emailMessage/Subject": "IT request #@{triggerBody()?['ID']} received [@{parameters('Environment label (cts_EnvironmentLabel)')}]",
+              "emailMessage/Body": "<p>We have your request <b>@{triggerBody()?['Title']}</b>. The service desk will triage it today.</p>",
+              "emailMessage/Importance": "Normal"
+            },
+            "authentication": "@parameters('$authentication')"
+          }
+        }
+      }
+    },
+    "templateName": ""
+  },
+  "schemaVersion": "1.0.0.0"
+}

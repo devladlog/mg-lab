@@ -1,0 +1,51 @@
+# Steps shared by the TEST and PROD deployments (used by release.yml).
+parameters:
+  - name: name            # test | prod: picks deploy/settings.<name>.json
+    type: string
+  - name: serviceConnection
+    type: string
+  - name: solutionName
+    type: string
+  - name: mode            # Update | Upgrade
+    type: string
+
+steps:
+  - checkout: self
+
+  - task: microsoft-IsvExpTools.PowerPlatform-BuildTools.tool-installer.PowerPlatformToolInstaller@2
+    displayName: Power Platform Tool Installer
+
+  # ${TOKENS} in the committed settings file become this environment's connection IDs and URLs.
+  # render-settings stops when one has no value or the result doesn't match the solution.
+  - bash: python3 -m almkit render-settings deploy/settings.${{ parameters.name }}.json --solution src/solution --out "$(Pipeline.Workspace)/settings.json"
+    displayName: Render the deployment settings
+    env:
+      PYTHONPATH: src
+      IT_SITE_URL: $(IT_SITE_URL)
+      SERVICEDESK_MAILBOX: $(SERVICEDESK_MAILBOX)
+      CONN_SHAREPOINT: $(CONN_SHAREPOINT)
+      CONN_OFFICE365: $(CONN_OFFICE365)
+
+  - task: microsoft-IsvExpTools.PowerPlatform-BuildTools.import-solution.PowerPlatformImportSolution@2
+    displayName: Import ${{ parameters.mode }}
+    inputs:
+      authenticationType: PowerPlatformSPN
+      PowerPlatformSPN: ${{ parameters.serviceConnection }}
+      SolutionInputFile: $(Pipeline.Workspace)/solution/${{ parameters.solutionName }}_managed.zip
+      UseDeploymentSettingsFile: true
+      DeploymentSettingsFile: $(Pipeline.Workspace)/settings.json
+      PublishWorkflows: true
+      AsyncOperation: true
+      MaxAsyncWaitTime: 60
+      ${{ if eq(parameters.mode, 'Upgrade') }}:
+        HoldingSolution: true
+
+  - ${{ if eq(parameters.mode, 'Upgrade') }}:
+      - task: microsoft-IsvExpTools.PowerPlatform-BuildTools.apply-solution-upgrade.PowerPlatformApplySolutionUpgrade@2
+        displayName: Apply the upgrade
+        inputs:
+          authenticationType: PowerPlatformSPN
+          PowerPlatformSPN: ${{ parameters.serviceConnection }}
+          SolutionName: ${{ parameters.solutionName }}
+          AsyncOperation: true
+          MaxAsyncWaitTime: 60

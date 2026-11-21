@@ -1,0 +1,230 @@
+# DEVLADLOG Power Automate — episode 10 (draft: material built and tested locally, demo still to record)
+episode: 10
+slug: performance-optimization
+series_label: "POWER AUTOMATE"
+series_name: "DEVLADLOG Power Automate"
+file_prefix: "power-automate"
+title: "The nightly flow that costs eleven thousand actions"
+subtitle: "Filter at the source, run items in parallel, count what a flow costs"
+voice: am_michael
+thumbnail_text: "FLOW TOO SLOW?\n11,206 ACTIONS\nTO 1,606"
+youtube:
+  title: "Power Automate Performance: Filter, Concurrency, Action Limits | DEVLADLOG Power Automate #10"
+  tags: [Power Automate, performance, concurrency, apply to each, OData filter, SharePoint, throttling, action limits, Power Platform requests, Power Platform]
+sources:
+  - https://www.devladlog.com/articles/power-automate/2025-07-10-performance-optimization-complete-guide-2025/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Same job, eleven thousand actions or sixteen hundred"
+    sub: "Performance for cloud flows: count before you tune"
+    short: hook
+    narration: >
+      A nightly flow archives the old, finished IT requests. Written the obvious way, with four thousand items in
+      the list, a dry run counts eleven thousand two hundred and six actions. A trial licence allows ten thousand a
+      day. Tuned, the same job is sixteen hundred and six. In this episode we find out why, and how to count it
+      before it runs.
+
+  - id: why
+    type: bullets
+    heading: "Three budgets a flow spends"
+    bullets:
+      - "Actions: every trigger and action is a request"
+      - "A loop repeats its actions once per item"
+      - "Low profile: 10,000 a day (trials, Microsoft 365)"
+      - "SharePoint: 600 calls a minute per connection"
+      - "Apply to each runs one item at a time"
+    narration: >
+      A flow spends three things. First, actions. Learn says every trigger and action that runs is one request, and
+      an action inside a loop counts once per item. The Low performance profile, which includes trial licences
+      and Microsoft 365 plans, gets about ten thousand a day. Second, the connector. SharePoint allows six hundred
+      calls a minute on one connection. Third, time, because Apply to each runs one item at a time unless you
+      say otherwise.
+
+  - id: slowrun
+    type: screen
+    heading: "The first version, in run history"
+    image: screens/slowrun.jpg
+    bar: "Power Automate · Archive done IT requests (draft) · Run history"
+    demo: >
+      make.powerautomate.com, environment DEV, flow Archive done IT requests (draft), 28-day run history with the
+      test run on the seeded list. Show Start time and Duration of the run, then open the run and expand Apply to
+      each: the Get item again and the If are repeated for every item. Mask the environment URL.
+    narration: >
+      This is the first version running on the seeded list. Open the run and look at the loop. For every request in
+      the list it reads the request again, tests whether it is done and old, and only then archives it. Most of
+      those steps do nothing.
+
+  - id: slowdraft
+    type: code
+    heading: "Read everything, test every item"
+    lang: json
+    code: |
+      "Get_all_requests": { "operationId": "GetItems",
+        "parameters": { "table": "IT Requests" } }
+
+      "Apply_to_each": { "foreach": "@body('Get_all_requests')?['value']",
+        "actions": {
+          "Get_item_again": { "operationId": "GetItem" },
+          "If_done_and_old": {
+            "expression": "Status is Done and DoneOn is before the cutoff",
+            "actions": { "Archive_item": { "operationId": "PatchItem" },
+                         "Count_archived": { "type": "IncrementVariable" } } } } }
+    narration: >
+      Here is the draft. Get items with no filter, then a sequential loop that calls Get item again, tests a
+      condition, and increments a counter. Every item pays for at least two actions, even when nothing is archived.
+
+  - id: lint
+    type: code
+    heading: "A linter that reads the flow"
+    lang: text
+    code: |
+      $ python -m perfkit lint drafts/slow-archive-done-requests.json
+      4 finding(s)
+        WARNING P01 Apply_to_each runs one item at a time and calls
+                GetItem, PatchItem for every item
+        WARNING P02 Get_all_requests reads every item (no $filter) and
+                the loop tests each one with a condition
+        WARNING P03 re-reads an item of the same list that
+                Get_all_requests already returned
+        WARNING P05 variables lock exclusively and slow a loop down
+    narration: >
+      Our checker reads the flow definition and finds four things in the draft. A loop that does one item at a
+      time. A read with no filter, tested inside a loop. A re-read of data we already have. And a counter variable
+      in a loop. The tuned flow has none of them, and the rules run on your own flow files.
+
+  - id: filter
+    type: code
+    heading: "Filter at the source"
+    lang: json
+    code: |
+      "Get_done_requests": {
+        "operationId": "GetItems",
+        "runtimeConfiguration": { "paginationPolicy": { "minimumItemCount": 5000 } },
+        "parameters": {
+          "table": "IT Requests",
+          "$filter": "Status eq 'Done' and DoneOn lt '@{outputs('Cutoff')}'",
+          "$top": 5000 } }
+
+      "Send_summary": { "subject":
+        "IT housekeeping: @{length(body('Get_done_requests')?['value'])} archived" }
+    narration: >
+      The fix starts with the question. Ask SharePoint only for requests that are done and older than the cutoff,
+      with an O Data filter, and the loop gets only the work. The re-read disappears, because the item already has
+      its fields. The counter disappears, because the summary email uses length of the result.
+
+  - id: concurrency
+    type: code
+    heading: "Archive twenty at a time"
+    lang: json
+    code: |
+      "Apply_to_each": {
+        "foreach": "@body('Get_done_requests')?['value']",
+        "runtimeConfiguration": { "concurrency": { "repetitions": 20 } },
+        "actions": {
+          "Archive_item": { "operationId": "PatchItem",
+            "parameters": { "id": "@items('Apply_to_each')?['ID']",
+                            "item/Status/Value": "Archived" } } } }
+
+      Settings > Concurrency control: 1 (default) to 50
+    narration: >
+      Each archive is independent of the others, so the loop can run in parallel. Concurrency goes from one, the
+      default, up to fifty. We picked twenty. That is our choice, not a number from Learn, which says a high value
+      does not always go faster, so the demo measures one, twenty and fifty.
+
+  - id: compare
+    type: code
+    heading: "Count it before it runs"
+    lang: text
+    code: |
+      $ python -m perfkit compare drafts/slow...json solution/Workflows/*.json
+       items to archive | slow actions calls | fast actions calls
+       1000        400  |     2806    1401   |      406     401
+       2000        800  |     5606    2801   |      806     801
+       4000       1600  |    11206    5601   |     1606    1601
+                           ^ over 10,000 a day on the Low profile
+    short: compare
+    narration: >
+      The checker also runs the flow in a dry run against a fake list and counts. With forty percent of the items
+      ready to archive, the slow version costs two actions per item in the list, plus two per archived item. At
+      four thousand items that is over ten thousand actions. The tuned version costs one action per archived item.
+      These are counts from a simulation, not from the service, and the demo checks them against the real
+      Analytics page.
+
+  - id: fastrun
+    type: screen
+    heading: "The same list, tuned"
+    image: screens/fastrun.jpg
+    bar: "Power Automate · Archive done IT requests · Run history"
+    demo: >
+      Run history of the tuned flow on a freshly re-seeded list of the same size as the slow run. Show Duration for
+      concurrency 1, then 20, then 50 (Settings on Apply to each), and open the run: Get done requests returns
+      only the done, old requests and Archive item is the only action in the loop.
+    narration: >
+      Same list, same result, tuned flow. Open the run. The loop now contains only the archive. We ran it with
+      concurrency one, twenty and fifty and read the durations here, so you can see what parallelism buys on this
+      list and where more stops helping.
+
+  - id: analytics
+    type: screen
+    heading: "Actions, as Power Automate counts them"
+    image: screens/analytics.jpg
+    bar: "Power Automate · flow details · Analytics · Actions"
+    demo: >
+      Flow details page, Analytics, Actions tab, for the slow and the tuned flow on the day of the test. Compare
+      the counts with the dry run numbers on screen next to it. Mask the environment URL.
+    narration: >
+      Learn says the flow's Analytics page shows usage as actions. Here are the counts for the two runs next to the
+      numbers our dry run predicted. If they differ, trust this page and look at why.
+
+  - id: index
+    type: screen
+    heading: "Index what you filter on"
+    image: screens/listindex.jpg
+    bar: "SharePoint · IT Requests · List settings · Indexed columns"
+    demo: >
+      SharePoint list IT Requests, List settings, Indexed columns: Status and DoneOn indexed. Show the list item
+      count above five thousand if the seed was raised that far.
+    narration: >
+      A filter on a big list needs indexed columns. We indexed Status and Done on. Over five thousand items,
+      Learn lists the list view threshold as a failure that an indexed filter and a top count avoid.
+
+  - id: gotcha
+    type: bullets
+    heading: "Gotcha: no pagination, no error, no items"
+    bullets:
+      - "List over 5,000 items, filter set, pagination off"
+      - "Only the first 5,000 items are searched"
+      - "No match there means no items back"
+      - "The flow still succeeds"
+      - "Fix: turn pagination on in Get items settings"
+    short: gotcha
+    narration: >
+      One honest gotcha. On a list of more than five thousand items, a filtered Get items with pagination off can
+      return nothing, when no match sits in the first five thousand. Learn calls it a known limitation. The flow
+      succeeds and archives nothing, which looks like a quiet night. We reproduce it in our tests with a fake list,
+      so treat that as our model of the documented behavior, not a measurement of the service.
+
+  - id: recap
+    type: bullets
+    heading: "Five rules for a faster flow"
+    bullets:
+      - "Count actions before you ship"
+      - "Filter at the source, on indexed columns"
+      - "Use what the item already gave you"
+      - "Parallel loop, no variables inside"
+      - "Pagination on for lists over 5,000"
+    narration: >
+      Five rules. Count the actions before you ship. Filter at the source, on indexed columns. Use the fields the
+      item already has instead of reading it again. Run independent items in parallel and keep variables out of
+      the loop. And turn pagination on when the list is large.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The two flows, the checker, the cost counter, the seed script and the tests that need no tenant are on
+      GitHub, and the complete guide is on dev lad log dot com. Next in the series: security and data loss prevention.
+      Subscribe so you don't miss it.

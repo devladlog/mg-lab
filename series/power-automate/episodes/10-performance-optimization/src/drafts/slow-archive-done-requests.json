@@ -1,0 +1,249 @@
+{
+  "properties": {
+    "connectionReferences": {
+      "shared_sharepointonline": {
+        "runtimeSource": "embedded",
+        "connection": {
+          "connectionReferenceLogicalName": "cts_sharedsharepointonline_ithousekeeping"
+        },
+        "api": {
+          "name": "shared_sharepointonline"
+        }
+      },
+      "shared_office365": {
+        "runtimeSource": "embedded",
+        "connection": {
+          "connectionReferenceLogicalName": "cts_sharedoffice365_ithousekeeping"
+        },
+        "api": {
+          "name": "shared_office365"
+        }
+      }
+    },
+    "definition": {
+      "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+      "contentVersion": "1.0.0.0",
+      "parameters": {
+        "$connections": {
+          "defaultValue": {},
+          "type": "Object"
+        },
+        "$authentication": {
+          "defaultValue": {},
+          "type": "SecureObject"
+        },
+        "IT site URL (cts_ITSiteUrl)": {
+          "defaultValue": "https://contoso.sharepoint.com/sites/ITHelpdesk",
+          "type": "String",
+          "metadata": {
+            "schemaName": "cts_ITSiteUrl",
+            "description": "Site that holds the IT Requests list"
+          }
+        },
+        "IT Requests list (cts_ITRequestsList)": {
+          "defaultValue": "IT Requests",
+          "type": "String",
+          "metadata": {
+            "schemaName": "cts_ITRequestsList",
+            "description": "Name of the IT Requests list"
+          }
+        },
+        "Archive after days (cts_ArchiveAfterDays)": {
+          "defaultValue": "30",
+          "type": "String",
+          "metadata": {
+            "schemaName": "cts_ArchiveAfterDays",
+            "description": "Days a request stays Done before it is archived"
+          }
+        },
+        "Service desk mailbox (cts_ServiceDeskMailbox)": {
+          "defaultValue": "servicedesk@contoso.com",
+          "type": "String",
+          "metadata": {
+            "schemaName": "cts_ServiceDeskMailbox",
+            "description": "Gets the nightly summary"
+          }
+        }
+      },
+      "triggers": {
+        "Every_night_at_2": {
+          "type": "Recurrence",
+          "recurrence": {
+            "frequency": "Day",
+            "interval": 1,
+            "timeZone": "GMT Standard Time",
+            "schedule": {
+              "hours": [
+                "2"
+              ],
+              "minutes": [
+                0
+              ]
+            }
+          }
+        }
+      },
+      "actions": {
+        "Cutoff": {
+          "type": "Compose",
+          "runAfter": {},
+          "inputs": "@formatDateTime(addDays(utcNow(), mul(-1, int(parameters('Archive after days (cts_ArchiveAfterDays)')))), 'yyyy-MM-ddTHH:mm:ssZ')"
+        },
+        "Get_all_requests": {
+          "type": "OpenApiConnection",
+          "runAfter": {
+            "Cutoff": [
+              "Succeeded"
+            ]
+          },
+          "runtimeConfiguration": {
+            "paginationPolicy": {
+              "minimumItemCount": 5000
+            }
+          },
+          "inputs": {
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+              "connectionName": "shared_sharepointonline",
+              "operationId": "GetItems"
+            },
+            "parameters": {
+              "dataset": "@parameters('IT site URL (cts_ITSiteUrl)')",
+              "table": "@parameters('IT Requests list (cts_ITRequestsList)')"
+            },
+            "authentication": "@parameters('$authentication')"
+          }
+        },
+        "Init_archived_count": {
+          "type": "InitializeVariable",
+          "runAfter": {
+            "Get_all_requests": [
+              "Succeeded"
+            ]
+          },
+          "inputs": {
+            "variables": [
+              {
+                "name": "archivedCount",
+                "type": "integer",
+                "value": 0
+              }
+            ]
+          }
+        },
+        "Apply_to_each": {
+          "type": "Foreach",
+          "runAfter": {
+            "Init_archived_count": [
+              "Succeeded"
+            ]
+          },
+          "foreach": "@body('Get_all_requests')?['value']",
+          "actions": {
+            "Get_item_again": {
+              "type": "OpenApiConnection",
+              "runAfter": {},
+              "inputs": {
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                  "connectionName": "shared_sharepointonline",
+                  "operationId": "GetItem"
+                },
+                "parameters": {
+                  "dataset": "@parameters('IT site URL (cts_ITSiteUrl)')",
+                  "table": "@parameters('IT Requests list (cts_ITRequestsList)')",
+                  "id": "@items('Apply_to_each')?['ID']"
+                },
+                "authentication": "@parameters('$authentication')"
+              }
+            },
+            "Is_done_and_old": {
+              "type": "If",
+              "runAfter": {
+                "Get_item_again": [
+                  "Succeeded"
+                ]
+              },
+              "expression": {
+                "and": [
+                  {
+                    "equals": [
+                      "@body('Get_item_again')?['Status']?['Value']",
+                      "Done"
+                    ]
+                  },
+                  {
+                    "less": [
+                      "@ticks(coalesce(body('Get_item_again')?['DoneOn'], '9999-12-31T00:00:00Z'))",
+                      "@ticks(outputs('Cutoff'))"
+                    ]
+                  }
+                ]
+              },
+              "actions": {
+                "Archive_item": {
+                  "type": "OpenApiConnection",
+                  "runAfter": {},
+                  "inputs": {
+                    "host": {
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                      "connectionName": "shared_sharepointonline",
+                      "operationId": "PatchItem"
+                    },
+                    "parameters": {
+                      "dataset": "@parameters('IT site URL (cts_ITSiteUrl)')",
+                      "table": "@parameters('IT Requests list (cts_ITRequestsList)')",
+                      "id": "@items('Apply_to_each')?['ID']",
+                      "item/Title": "@items('Apply_to_each')?['Title']",
+                      "item/Status/Value": "Archived"
+                    },
+                    "authentication": "@parameters('$authentication')"
+                  }
+                },
+                "Count_archived": {
+                  "type": "IncrementVariable",
+                  "runAfter": {
+                    "Archive_item": [
+                      "Succeeded"
+                    ]
+                  },
+                  "inputs": {
+                    "name": "archivedCount",
+                    "value": 1
+                  }
+                }
+              },
+              "else": {
+                "actions": {}
+              }
+            }
+          }
+        },
+        "Send_summary": {
+          "type": "OpenApiConnection",
+          "inputs": {
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365",
+              "connectionName": "shared_office365",
+              "operationId": "SendEmailV2"
+            },
+            "parameters": {
+              "emailMessage/To": "@parameters('Service desk mailbox (cts_ServiceDeskMailbox)')",
+              "emailMessage/Subject": "IT housekeeping: @{variables('archivedCount')} requests archived",
+              "emailMessage/Body": "<p>@{variables('archivedCount')} requests were Done for @{parameters('Archive after days (cts_ArchiveAfterDays)')} days or more and are now Archived.</p>",
+              "emailMessage/Importance": "Normal"
+            },
+            "authentication": "@parameters('$authentication')"
+          },
+          "runAfter": {
+            "Apply_to_each": [
+              "Succeeded"
+            ]
+          }
+        }
+      }
+    },
+    "templateName": ""
+  },
+  "schemaVersion": "1.0.0.0"
+}

@@ -1,0 +1,163 @@
+{
+  "properties": {
+    "connectionReferences": {
+      "shared_sharepointonline": {
+        "runtimeSource": "embedded",
+        "connection": {
+          "connectionReferenceLogicalName": "cts_sharedsharepointonline_itnotices"
+        },
+        "api": {
+          "name": "shared_sharepointonline"
+        }
+      },
+      "shared_office365": {
+        "runtimeSource": "embedded",
+        "connection": {
+          "connectionReferenceLogicalName": "cts_sharedoffice365_itnotices"
+        },
+        "api": {
+          "name": "shared_office365"
+        }
+      }
+    },
+    "definition": {
+      "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+      "contentVersion": "1.0.0.0",
+      "parameters": {
+        "$connections": {
+          "defaultValue": {},
+          "type": "Object"
+        },
+        "$authentication": {
+          "defaultValue": {},
+          "type": "SecureObject"
+        },
+        "IT site URL (cts_ITSiteUrl)": {
+          "defaultValue": "https://contoso.sharepoint.com/sites/ITHelpdesk",
+          "type": "String",
+          "metadata": {
+            "schemaName": "cts_ITSiteUrl",
+            "description": "SharePoint site that holds the IT Requests list, no trailing slash"
+          }
+        },
+        "IT Requests list (cts_ITRequestsList)": {
+          "defaultValue": "IT Requests",
+          "type": "String",
+          "metadata": {
+            "schemaName": "cts_ITRequestsList",
+            "description": "Name of the IT Requests list"
+          }
+        },
+        "Service desk mailbox (cts_ServiceDeskMailbox)": {
+          "defaultValue": "servicedesk@contoso.com",
+          "type": "String",
+          "metadata": {
+            "schemaName": "cts_ServiceDeskMailbox",
+            "description": "Gets a copy of every acknowledgement"
+          }
+        },
+        "Stale after days (cts_StaleDays)": {
+          "defaultValue": "5",
+          "type": "String",
+          "metadata": {
+            "schemaName": "cts_StaleDays",
+            "description": "Days without a change after which a triaged request is stale"
+          }
+        }
+      },
+      "triggers": {
+        "Every_Monday_at_7": {
+          "type": "Recurrence",
+          "recurrence": {
+            "frequency": "Week",
+            "interval": 1,
+            "timeZone": "GMT Standard Time",
+            "schedule": {
+              "weekDays": [
+                "Monday"
+              ],
+              "hours": [
+                "7"
+              ],
+              "minutes": [
+                0
+              ]
+            }
+          }
+        }
+      },
+      "actions": {
+        "Stale_cutoff": {
+          "type": "Compose",
+          "runAfter": {},
+          "inputs": "@formatDateTime(addDays(utcNow(), mul(-1, int(parameters('Stale after days (cts_StaleDays)')))), 'yyyy-MM-ddTHH:mm:ssZ')"
+        },
+        "Get_stale_requests": {
+          "type": "OpenApiConnection",
+          "runAfter": {
+            "Stale_cutoff": [
+              "Succeeded"
+            ]
+          },
+          "inputs": {
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+              "connectionName": "shared_sharepointonline",
+              "operationId": "GetItems"
+            },
+            "parameters": {
+              "dataset": "@parameters('IT site URL (cts_ITSiteUrl)')",
+              "table": "@parameters('IT Requests list (cts_ITRequestsList)')",
+              "$filter": "Status eq 'Triaged' and Modified lt '@{outputs('Stale_cutoff')}'",
+              "$top": 500
+            },
+            "authentication": "@parameters('$authentication')"
+          }
+        },
+        "Any_stale": {
+          "type": "If",
+          "runAfter": {
+            "Get_stale_requests": [
+              "Succeeded"
+            ]
+          },
+          "expression": {
+            "and": [
+              {
+                "greater": [
+                  "@length(body('Get_stale_requests')?['value'])",
+                  0
+                ]
+              }
+            ]
+          },
+          "actions": {
+            "Send_stale_summary": {
+              "type": "OpenApiConnection",
+              "runAfter": {},
+              "inputs": {
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365",
+                  "connectionName": "shared_office365",
+                  "operationId": "SendEmailV2"
+                },
+                "parameters": {
+                  "emailMessage/To": "@parameters('Service desk mailbox (cts_ServiceDeskMailbox)')",
+                  "emailMessage/Subject": "@{length(body('Get_stale_requests')?['value'])} triaged IT requests are stale",
+                  "emailMessage/Body": "<p>Triaged and not touched for @{parameters('Stale after days (cts_StaleDays)')} days or more.</p>",
+                  "emailMessage/Importance": "Normal"
+                },
+                "authentication": "@parameters('$authentication')"
+              }
+            }
+          },
+          "else": {
+            "actions": {}
+          }
+        }
+      }
+    },
+    "templateName": ""
+  },
+  "schemaVersion": "1.0.0.0"
+}
