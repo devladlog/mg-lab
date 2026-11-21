@@ -1,0 +1,29 @@
+{
+  "$comment": "Every common mistake in one document processing plan: the lint demo.",
+  "billing": { "azureSubscription": "mglab-payg" },
+  "models": [
+    {
+      "name": "Supplier Contract", "type": "unstructured", "scope": "enterprise", "language": "en",
+      "training": { "positive": 3, "negative": 0 },
+      "extractors": [ { "name": "Expiry date", "labeledFiles": 4 } ],
+      "appliesTo": ["/sites/Purchasing/SupplierDocuments"]
+    },
+    {
+      "name": "Contrato Fornecedor", "type": "prebuilt-contract", "scope": "enterprise", "language": "pt",
+      "appliesTo": ["/sites/Purchasing/SupplierDocuments"]
+    },
+    {
+      "name": "Invoices", "type": "prebuilt-invoice", "scope": "local", "language": "pt",
+      "appliesTo": ["/sites/Purchasing/Archive/Old Invoices"]
+    },
+    {
+      "name": "Delivery Notes", "type": "structuredFreeform", "scope": "local", "language": "en",
+      "appliesTo": ["/sites/Purchasing/DeliveryNotes"]
+    },
+    {
+      "name": "Mystery", "type": "magic", "scope": "local", "appliesTo": ["/sites/Purchasing/Mystery"]
+    }
+  ],
+  "expected": { "docsPerMonth": 2000, "pagesPerDoc": 8, "updatesPerDoc": 1, "fileTypes": [".pdf", ".docx", ".xlsx"] },
+  "monthlyBudgetUsd": 20
+}

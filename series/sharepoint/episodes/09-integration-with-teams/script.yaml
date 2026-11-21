@@ -1,0 +1,277 @@
+# DEVLADLOG SharePoint — episode 09 (draft: screens to be captured in the lab tenant, see demo.md)
+episode: 9
+slug: integration-with-teams
+series_label: "SHAREPOINT"
+series_name: "DEVLADLOG SharePoint"
+file_prefix: "sharepoint"
+title: "Teams and SharePoint, as code"
+subtitle: "Three channel types, two kinds of site, and where the files really go"
+voice: am_michael
+thumbnail_text: "EVERY CHANNEL\nIS A FOLDER\nEXCEPT TWO"
+youtube:
+  title: "Teams and SharePoint: Channels, Files, Private Channel Sites, Hub | DEVLADLOG SharePoint #9"
+  tags: [SharePoint, SharePoint Online, Microsoft Teams, Teams channels, private channel, shared channel, Teams-connected site, PnP PowerShell, hub site, Microsoft 365]
+sources:
+  - https://www.devladlog.com/articles/sharepoint/2026-04-17-integration-with-teams-complete-guide-2026/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Every channel is a folder. Except two."
+    sub: "Teams and SharePoint, as code"
+    short: hook
+    narration: >
+      People say a Teams channel is just a folder in SharePoint. That is true for standard channels. A private channel
+      and a shared channel each get a SharePoint site of their own, and the team owners cannot open it unless they are
+      members. In this episode we build the Contoso purchasing team as code, and find out where every file really
+      lives. Welcome to DEVLADLOG SharePoint.
+
+  - id: model
+    type: bullets
+    heading: "One team, up to many sites"
+    bullets:
+      - "Team = Microsoft 365 group + one team site"
+      - "Standard channels: a folder each, same site"
+      - "Private channel: its own site, channel members only"
+      - "Shared channel: its own site, people outside the team"
+    narration: >
+      A team is a Microsoft 365 group with one SharePoint site, the parent site. All standard channels share it, with
+      one folder per channel. Every private channel gets its own site, and only the channel's owners and members can
+      get in. Every shared channel gets its own site too. So a team with two special channels is three sites, not one.
+
+  - id: needs
+    type: bullets
+    heading: "What you need"
+    bullets:
+      - "Teams and SharePoint: in the lab's Microsoft 365 E5"
+      - "No extra licence"
+      - "Your own Entra app for PnP, delegated Graph permissions"
+      - "A team owner creates; a SharePoint admin joins the hub"
+    narration: >
+      No extra licence. The lab's Microsoft 365 E5 covers Teams and SharePoint. The script runs with p n p PowerShell
+      and your own Entra app, delegated, with the Graph permissions listed in the guide. Team owners create the team and
+      channels. Joining the team site to a hub is a SharePoint administrator's job, as in episode seven.
+
+  - id: plan
+    type: code
+    heading: "The team plan"
+    lang: json
+    code: |
+      "team": { "displayName": "Contoso Purchasing Team", "visibility": "Private",
+                "owners": ["labadmin", "jordan.demo"], "members": ["alex.demo", "sam.demo"] },
+      "channels": [
+        { "name": "Supplier Reviews", "type": "Standard" },
+        { "name": "Contract Negotiation", "type": "Private",
+          "owner": "jordan.demo", "members": ["alex.demo"] },
+        { "name": "Facilities Handover", "type": "Shared", "owner": "labadmin" } ],
+      "tabs": [ { "channel": "General", "name": "How to buy", "type": "SharePointPageAndList",
+                  "url": "/sites/Purchasing/SitePages/how-to-buy.aspx" } ],
+      "hub": { "url": "/sites/Operations" }
+    narration: >
+      The plan is one JSON file. A private team with two owners. A standard channel, a private channel with its owner and
+      one member, and a shared channel. A SharePoint page as a tab in General, the buying guide from episode three. And
+      the hub from episode seven, so the team site joins the Contoso Operations family.
+
+  - id: lint
+    type: code
+    heading: "Lint the plan first"
+    lang: text
+    code: |
+      $ ./Invoke-TeamsIntegration.ps1 -PlanPath ./bad/bad.team.json
+      ERROR   TP003  channel 'Q3/Q4 Suppliers'
+                     Not a valid channel name: contains '/'.
+      ERROR   TP003  channel 'Contracts and Negotiation Notes for the Next Financial Year Review'
+                     Not a valid channel name: 66 characters: the limit is 50.
+      ERROR   TP007  channel 'Contract Negotiation'
+                     A Private channel needs an owner (Add-PnPTeamsChannel -OwnerUPN).
+      ERROR   TP008  channel 'Contract Negotiation'
+                     riley.demo is not in the team: only existing team members can be added to a private channel.
+      ERROR   TP010  tab 'Plan' in 'Contract Negotiation'
+                     Private channels do not support Planner tabs.
+      WARNING TP013  team.owners
+                     One owner only: if that person leaves, nobody can manage the team (convention: two owners).
+      16 error(s), 2 warning(s)
+    short: lint
+    narration: >
+      A bad plan shows what the linter knows. A slash in a channel name. A name over fifty characters. A private channel
+      with no owner, and a member who is not in the team. A Planner tab in a private channel, which Learn says is not
+      supported. And a team with a single owner. Sixteen errors and two warnings, all before one call to the tenant.
+
+  - id: names
+    type: code
+    heading: "Channel names: Learn's list"
+    lang: powershell
+    code: |
+      $script:MaxChannelNameLength = 50   # Graph: create channel
+      $script:BadNameChars = [char[]]'~#%&*{}+/\:<>?|''",'
+      $script:BadNameWords = @('forms', 'CON', 'CONIN$', 'CONOUT$', 'PRN', 'AUX', 'NUL', 'desktop.ini') + (1..9 | ForEach-Object { "COM$_"; "LPT$_" })
+
+      if ($Name -match '^[_.]')   { $why += 'starts with an underscore or a period' }
+      if ($Name.EndsWith('.'))     { $why += 'ends with a period' }
+      if ($Name -like '*_vti_*')   { $why += "contains the reserved word '_vti_'" }
+    narration: >
+      The naming rules come straight from the Teams limits page on Learn. At most fifty characters, from the Graph
+      documentation. A list of forbidden characters and reserved words. No leading underscore or period, no trailing
+      period. Graph also notes that some special characters make the files folder call fail, so the linter stops them early.
+
+  - id: provision-code
+    type: code
+    heading: "Private channel, with an owner"
+    lang: powershell
+    code: |
+      $p = @{ Team = $gid; DisplayName = $ch.name }
+      if ($type -ne 'Standard') { $p.ChannelType = $type; $p.OwnerUPN = & $upn $ch.owner }
+      $live = Add-PnPTeamsChannel @p @c
+
+      $have = @(Get-PnPTeamsChannelUser -Team $gid -Channel $live.Id @c |
+                ForEach-Object { Get-MgUserKey $_.Email })
+      foreach ($m in $ch.members) {
+          if ((Get-MgUserKey $m) -in $have) { continue }
+          Add-PnPTeamsChannelUser -Team $gid -Channel $live.Id -User (& $upn $m) -Role Member @c
+      }
+    narration: >
+      Provisioning does only what is missing. A standard channel is created plainly. A private or shared channel is
+      created with its type and its owner. Then the members: read who is already in the channel, and add the rest. Run
+      it twice and the second run does nothing.
+
+  - id: provision
+    type: screen
+    heading: "Provisioning the team"
+    image: screens/provision.jpg
+    bar: "PowerShell 7 · Invoke-TeamsIntegration.ps1 -Provision"
+    demo: >
+      Terminal (dark theme, font 18+), after the device-code sign-in (done off camera):
+      ./src/Invoke-TeamsIntegration.ps1 -PlanPath ./src/teams/purchasing.team.json @t -Provision. Visible: "0 error(s),
+      0 warning(s)", "Where the files will live" with the three-site summary, then "Teams:" with CreateTeam, three
+      AddChannel lines, two AddMember lines, two AddTab lines and an Associate line. Record what really happens (the team
+      site and the channel sites can take minutes to provision) and note differences in README. Mask tenant host, client
+      id and the domain of the user names.
+    narration: >
+      Against the lab tenant. The linter finds nothing, and tells us this team will use three SharePoint sites. Then the
+      team is created, three channels, the members of the private and shared channels, two tabs, and the team site joins
+      the Operations hub.
+
+  - id: files
+    type: screen
+    heading: "Where the files really live"
+    image: screens/files.jpg
+    bar: "Microsoft Teams · Files tab · SharePoint"
+    demo: >
+      Browser as Alex Demo (a team member and a member of Contract Negotiation): Teams, Contoso Purchasing Team,
+      channel Supplier Reviews, Files tab, Open in SharePoint: the team site's Documents library with one folder per
+      standard channel (General, Supplier Reviews), and the Contoso Operations hub bar. Then channel Contract
+      Negotiation, Files tab, Open in SharePoint: a different site, different address, its own Documents library. Show
+      both address bars side by side (tenant host masked, site names visible). Then as Riley Demo (team member, not in
+      the private channel): Contract Negotiation is not in the channel list. Mask tenant URL and avatars.
+    narration: >
+      This is what it looks like. In a standard channel, the Files tab opens a folder in the team site's document
+      library, under the Contoso Operations hub bar. In the private channel, Open in SharePoint leads to a different site,
+      with its own library and its own address. And a team member who was not added to the private channel does not even
+      see the channel.
+
+  - id: tab
+    type: screen
+    heading: "A SharePoint page as a tab"
+    image: screens/tab.jpg
+    bar: "Microsoft Teams · General · How to buy"
+    demo: >
+      Browser as Alex Demo: Contoso Purchasing Team, General channel, the tab row showing Posts, Files and How to buy;
+      the tab open and showing the buying guide page of the Contoso Purchasing site from episode 3 inside Teams. Then
+      the Supplier Reviews channel with its Supplier Documents tab (the episode 4 library). If either tab does not render
+      inside Teams, record that and say so in README. Mask tenant URL and avatar.
+    narration: >
+      The two tabs the plan added. In General, the buying guide page from the Purchasing communication site, shown inside
+      Teams. In Supplier Reviews, the supplier documents library from episode four. Teams does not own those pages. It
+      just shows SharePoint where people already are.
+
+  - id: gotcha
+    type: bullets
+    heading: "The gotchas"
+    bullets:
+      - "Private and shared channels: a site each"
+      - "Team owners are not channel members by default"
+      - "A channel's type can't be changed"
+      - "Don't hardcode channel folder URLs"
+    short: gotcha
+    narration: >
+      The gotchas. Private and shared channels each have a site of their own. Learn says people in the parent team and
+      admins do not have access to a private channel site unless they are channel members. A channel type cannot be
+      changed after creation. And do not hardcode folder addresses: the Graph files folder call returns the right drive
+      and folder for every channel type. Older write-ups also quote a limit of thirty private channels per team.
+      Learn now says private channels count toward the overall limit of one thousand channels.
+
+  - id: state-code
+    type: code
+    heading: "Ask Graph where the files are"
+    lang: powershell
+    code: |
+      $folder = Get-PnPTeamsChannelFilesFolder -Team $gid -Channel $ch.Id @c   # Graph: filesFolder
+      [pscustomobject]@{
+          Id = $ch.Id; Name = $ch.DisplayName; Type = "$($ch.MembershipType)"
+          FilesWebUrl = "$($folder.webUrl)"; Tabs = $tabs; Members = $members
+      }
+      # Test-MgTeamLive: standard channels share the team site, the others don't
+      if ($l.Type -ieq 'Standard' -and $teamSite -and $k -ne $teamSite) {
+          $f.Add((New-MgFinding 'TL006' 'Warning' "channel '$($l.Name)'" "Standard channel files are on $k, not on the team site $teamSite."))
+      }
+    narration: >
+      The read-back does not guess addresses. For every channel it asks Graph for the files folder, and compares the
+      site. Standard channels must share the team site. Private and shared channels must not. If they do, the check says so.
+
+  - id: check
+    type: screen
+    heading: "Read it back, catch the drift"
+    image: screens/check.jpg
+    bar: "PowerShell 7 · Invoke-TeamsIntegration.ps1 -Check"
+    demo: >
+      Terminal: ./src/Invoke-TeamsIntegration.ps1 -PlanPath ./src/teams/purchasing.team.json @t -Check right after
+      provisioning: the team line, one line per channel with its site (/sites/... for the team site, a different site
+      for each private and shared channel), "No findings.". Then in Teams, as the owner of Contract Negotiation (Jordan
+      Demo, Manage channel), remove Alex Demo from the channel; run -Check again: TL004 "alex.demo is not a member of the
+      channel" and "1 error(s)". Capture both runs. Then run -Provision again to add Alex back. If -Check reports
+      differences right after provisioning, record them: they are the gaps in README "Not verified yet". Mask tenant host.
+    narration: >
+      Then we read it back. Right after provisioning there are no findings, and each private and shared channel shows
+      its own site. Remove a person from the private channel in Teams, run the check again, and the drift is reported.
+      Run provision again and the plan wins.
+
+  - id: tests
+    type: code
+    heading: "28 Pester tests, real PnP signatures"
+    lang: text
+    code: |
+      $ Invoke-Pester ./tests -Output Detailed
+      Describing Channel names (Learn: Limits and specifications for Teams)
+        [+] rejects the characters, the words, the edges and the length Learn lists
+      Describing Test-MgTeamPlan
+        [+] finds every mistake in the bad plan: 16 errors, 2 warnings
+      Describing Tenant functions (PnP cmdlets mocked)
+        [+] adds a standard channel plainly, a private and a shared channel with type and owner, then the missing members
+        [+] does nothing when the tenant already matches the plan (idempotent)
+      Tests Passed: 28, Failed: 0, Skipped: 0
+    narration: >
+      Twenty-eight Pester tests. The naming rules, the plan rules, the drift check, and the provisioning with the real
+      p n p cmdlets mocked, so a wrong parameter name fails the test. Even the idempotence is tested: a matching tenant
+      gets no writes.
+
+  - id: recap
+    type: bullets
+    heading: "Five rules"
+    bullets:
+      - "Count the sites: team site + one per special channel"
+      - "Private channel? Add its owner and members on purpose"
+      - "Pick the type at creation; it can't change"
+      - "Lint names and tabs before you create anything"
+      - "Read the folders back from Graph, don't hardcode"
+    narration: >
+      Five rules. Count the sites: the team site plus one for every private or shared channel. Add the owner and the
+      members of a private channel on purpose. Pick the channel type at creation, because it cannot change. Lint names
+      and tabs first. And read folders back from Graph. Next episode: SharePoint Syntex, now called document processing.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The module, the plan and the tests are on GitHub, and the full guide is on devladlog dot com. Links are in the
+      description. See you in the next one.

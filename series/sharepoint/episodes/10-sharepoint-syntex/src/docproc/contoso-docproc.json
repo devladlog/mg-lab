@@ -1,0 +1,26 @@
+{
+  "$comment": "Contoso document processing plan: billing, one content center, one unstructured model for supplier contracts applied to the Supplier Documents library from episode 4. URLs are server-relative. Names of Azure resources are fictional.",
+  "billing": {
+    "azureSubscription": "mglab-payg",
+    "resourceGroup": "rg-mglab-sharepoint-10",
+    "region": "West Europe"
+  },
+  "contentCenter": { "url": "/sites/ContentCenter", "title": "Contoso Content Center" },
+  "models": [
+    {
+      "name": "Supplier Contract",
+      "type": "unstructured",
+      "scope": "enterprise",
+      "language": "en",
+      "contentType": "Supplier Contract",
+      "training": { "positive": 6, "negative": 3 },
+      "extractors": [
+        { "name": "Contract number", "labeledFiles": 5 },
+        { "name": "Expiry date", "labeledFiles": 5 }
+      ],
+      "appliesTo": ["/sites/Purchasing/SupplierDocuments"]
+    }
+  ],
+  "expected": { "docsPerMonth": 40, "pagesPerDoc": 3, "updatesPerDoc": 0.5, "fileTypes": [".pdf", ".docx"] },
+  "monthlyBudgetUsd": 5
+}

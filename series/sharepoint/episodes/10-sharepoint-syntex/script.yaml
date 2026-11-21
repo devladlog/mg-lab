@@ -1,0 +1,271 @@
+# DEVLADLOG SharePoint — episode 10 (draft: screens to be captured in the lab tenant, see demo.md)
+episode: 10
+slug: sharepoint-syntex
+series_label: "SHAREPOINT"
+series_name: "DEVLADLOG SharePoint"
+file_prefix: "sharepoint"
+title: "SharePoint Syntex, now document processing"
+subtitle: "Teach the model in the browser, script everything around it"
+voice: am_michael
+thumbnail_text: "THE MODEL\nCAN'T BE\nSCRIPTED"
+youtube:
+  title: "SharePoint Syntex Document Processing: Plan, Cost, Pre-flight, Read-back | DEVLADLOG SharePoint #10"
+  tags: [SharePoint, SharePoint Online, Syntex, document processing, content center, unstructured document processing, pay-as-you-go, PnP PowerShell, Pester, Microsoft 365]
+sources:
+  - https://www.devladlog.com/articles/sharepoint/2026-04-06-sharepoint-syntex-complete-guide-2026/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "The Syntex model can't be scripted. The bill can."
+    sub: "SharePoint Syntex, now document processing"
+    short: hook
+    narration: >
+      Contoso's contracts arrive as scan zero zero zero one dot p d f, and nobody types in the expiry date. Syntex can
+      read them for you, but it is a pay-as-you-go service, and the model cannot be created by script. So in this
+      episode we teach the model in the browser, and put everything around it in code. Welcome to DEVLADLOG SharePoint.
+
+  - id: honest
+    type: bullets
+    heading: "What is code, what is browser"
+    bullets:
+      - "Syntex is now called document processing"
+      - "Models are taught in a content center, in the browser"
+      - "PnP Syntex cmdlets: marked obsolete"
+      - "Code: plan lint, file pre-flight, cost, read-back"
+    narration: >
+      Microsoft now calls Syntex document processing, and the features are the same. Models are taught in a content
+      center: example files, a classifier, extractors. The p n p PowerShell Syntex cmdlets are marked obsolete in
+      their own documentation, so we do not call them. What we can script and test is the plan, the files, the cost and
+      the result.
+
+  - id: needs
+    type: bullets
+    heading: "What you need"
+    bullets:
+      - "Pay-as-you-go: an Azure subscription and a resource group"
+      - "A SharePoint admin who can use that subscription"
+      - "A content center site"
+      - "No Advanced Management, no AI Builder for this model"
+    narration: >
+      Applying a model needs pay-as-you-go billing: an Azure subscription in your tenant and a resource group, linked in
+      the Microsoft 365 admin center by a SharePoint or Global Administrator. Anyone can create a model, but without
+      billing it cannot be applied. The free capacity ended in June. And a SharePoint admin creates the content center.
+
+  - id: plan
+    type: code
+    heading: "The model plan"
+    lang: json
+    code: |
+      "billing": { "azureSubscription": "mglab-payg", "resourceGroup": "rg-mglab-sharepoint-10",
+                   "region": "West Europe" },
+      "models": [ {
+        "name": "Supplier Contract", "type": "unstructured", "scope": "enterprise", "language": "en",
+        "training": { "positive": 6, "negative": 3 },
+        "extractors": [ { "name": "Contract number", "labeledFiles": 5 },
+                        { "name": "Expiry date",     "labeledFiles": 5 } ],
+        "appliesTo": [ "/sites/Purchasing/SupplierDocuments" ] } ],
+      "expected": { "docsPerMonth": 40, "pagesPerDoc": 3, "updatesPerDoc": 0.5,
+                    "fileTypes": [".pdf", ".docx"] },
+      "monthlyBudgetUsd": 5
+    narration: >
+      The plan is one JSON file. Billing. One unstructured model, Supplier Contract, with six positive and three negative
+      examples, and two extractors, each labeled in five files. It is applied to the supplier library from episode
+      four. And the volume we expect, with a budget.
+
+  - id: lint
+    type: code
+    heading: "Lint the plan first"
+    lang: text
+    code: |
+      $ ./Invoke-DocProcessing.ps1 -PlanPath ./bad/bad-docproc.json
+      ERROR   DP001  billing.resourceGroup
+                    Not set. Pay-as-you-go billing needs an Azure subscription, a resource group and a region
+      ERROR   DP003  model 'Supplier Contract'
+                    3 positive and 0 negative example files: use at least 5 positive and at least 1 negative.
+      ERROR   DP004  model 'Contrato Fornecedor'
+                    Language 'pt': prebuilt-contract supports en.
+      WARNING DP005  model 'Invoices'
+                    '/sites/Purchasing/Archive/Old Invoices' is not /sites/<site>/<library>: ... subsites are not supported.
+      WARNING DP006  /sites/purchasing/supplierdocuments
+                    2 models on one library (Supplier Contract, Contrato Fornecedor): every model processes (and bills) every file
+      8 error(s), 8 warning(s)
+    narration: >
+      A bad plan shows what the linter knows. No resource group. Three examples where Learn asks for five, and no
+      negative one. A Portuguese contract for the prebuilt contract model, which is English only. A library inside a
+      subsite, which is not supported. And two models on one library. Eight errors, eight warnings, before anything
+      is created.
+
+  - id: cost
+    type: code
+    heading: "What the bad plan would cost"
+    lang: text
+    code: |
+      Cost, from the plan (2000 files a month per library, 8 pages each, 1 updates each):
+        Supplier Contract      unstructured                   32,000 x 0.005  =    160.00 USD
+        Contrato Fornecedor    prebuilt-contract              32,000 x 0.01   =    320.00 USD
+        Invoices               prebuilt-invoice               32,000 x 0.01   =    320.00 USD
+        Delivery Notes         structuredFreeform             32,000 x 0.05   =  1,600.00 USD
+        Total per month                                                          2,400.00 USD
+      WARNING DP008  monthlyBudgetUsd
+                    The plan costs about 2400 USD a month, the budget is 20 USD.
+    short: cost
+    narration: >
+      The meters come from Learn. Unstructured, half a cent a page. Prebuilt, one cent. Structured and freeform, five
+      cents. And every model applied to a library is billed for every file, on upload and on every update. So two
+      thousand files a month on four models is twenty-four hundred dollars. The Contoso plan, one model and forty
+      files, is ninety cents.
+
+  - id: billing
+    type: screen
+    heading: "Billing and the model"
+    image: screens/billing.jpg
+    bar: "Microsoft 365 admin center · Pay-as-you-go · Content center"
+    demo: >
+      Browser as the lab admin: Microsoft 365 admin center, Settings, Org settings, Pay-as-you-go services, showing the
+      linked Azure subscription and the resource group rg-mglab-sharepoint-10. Then the content center home with the
+      model Supplier Contract open: the two extractors Contract number and Expiry date, and the counts of example files.
+      Record what really happens. Mask subscription id and tenant name.
+    narration: >
+      In the lab. Pay-as-you-go linked to a resource group that holds nothing, only the meter. Then the content center,
+      and the model taught from six contracts and three invoices, with its two extractors. This part is clicks, and
+      Learn documents each one.
+
+  - id: preflight
+    type: code
+    heading: "Pre-flight the files"
+    lang: text
+    code: |
+      $ ./Invoke-DocProcessing.ps1 -PlanPath ./docproc/contoso-docproc.json -SamplesPath ./sample-files
+      Pre-flight for 'Supplier Contract' (unstructured):
+        meeting-notes.pdf               1 page(s)
+        scan_0001.pdf                   2 page(s)
+        scan_0002.pdf                   1 page(s)
+        contract-fabrikam.pdf           2 page(s)
+        ... 8 more files
+      No findings.
+        one upload of these files:
+        Supplier Contract      unstructured                       19 x 0.005  =      0.10 USD
+    narration: >
+      Before files reach a library, the same module checks them. Types, page counts, sizes, image dimensions, encrypted
+      PDFs, the eleven by seventeen inch page limit. It counts pages the way the meter does: pages of a PDF, sheets of
+      a workbook, slides of a deck. Our twelve sample files are nineteen pages, ten cents.
+
+  - id: upload
+    type: screen
+    heading: "Upload, idempotently"
+    image: screens/upload.jpg
+    bar: "PowerShell 7 · Invoke-DocProcessing.ps1 -Upload"
+    demo: >
+      Terminal (dark theme, font 18+), after the device-code sign-in (done off camera):
+      ./src/Invoke-DocProcessing.ps1 -PlanPath ./src/docproc/contoso-docproc.json @t -Upload ./src/sample-files/inbox
+      -WhatIf, then the real run: three Upload lines each time; a second real run prints no Upload lines. Record what
+      really happens. Mask tenant host and client id.
+    narration: >
+      Against the lab tenant. With what-if it lists the three uploads and writes nothing. The real run uploads them.
+      Run it again and it does nothing, because the files are there.
+
+  - id: library
+    type: screen
+    heading: "What the model did"
+    image: screens/library.jpg
+    bar: "SharePoint · Supplier Documents · Contract number, Expiry date"
+    demo: >
+      Browser as Alex Demo: the SupplierDocuments library with the columns Content type, Contract number, Expiry date and
+      Classification Date. scan_0001.pdf is classified as Supplier Contract with both values filled; scan_0002.pdf and
+      meeting-notes.pdf are not classified. If classification has not run yet (Learn: up to 24 hours), capture it the next
+      day and say so in README. Mask tenant URL and avatar.
+    narration: >
+      And the library. The file nobody named is now a Supplier Contract, with a contract number and an expiry date. The
+      invoice and the meeting notes are left alone. Classification can take up to twenty-four hours, so do not panic at
+      an empty column.
+
+  - id: gotcha
+    type: bullets
+    heading: "The gotchas"
+    bullets:
+      - "Each model on a library bills every file"
+      - "Prebuilt contract model: English only"
+      - "Subsites are not supported"
+      - "AI Builder credits end 1 Nov 2026"
+    short: gotcha
+    narration: >
+      The gotchas. Every model on a library processes and bills every file, and the best average confidence wins. The
+      prebuilt contract model reads English only, so Portuguese contracts need your own model. Subsites are not
+      supported. The free monthly capacity is over. And structured and freeform models rest on AI Builder, whose
+      credits Learn says end on the first of November.
+
+  - id: report-code
+    type: code
+    heading: "Read the library back"
+    lang: powershell
+    code: |
+      $r = Get-MgExtractionReport -Items $state.Items -ContentType $ctName -Columns $titles
+      # Test-MgLibraryLive
+      if (-not $State.HasClassificationDate) { $f.Add((New-MgFinding 'DL004' 'Warning' $lib
+          "No 'Classification Date' column: the column is added when a custom model is applied.")) }
+      foreach ($c in $r.Columns) {
+          if ($r.OfContentType -gt 0 -and $c.Empty -gt 0) {
+              $f.Add((New-MgFinding 'DL006' 'Warning' $lib
+                  "$($c.Empty) of $($r.OfContentType) classified '$ctName' file(s) have no value in '$($c.Column)'."))
+          }
+      }
+    narration: >
+      The read-back finds the extractor columns by their titles and reads every file. It reports files not classified
+      after a day, a missing Classification Date column, and classified files with an empty extracted value.
+
+  - id: report
+    type: screen
+    heading: "Report, with findings"
+    image: screens/report.jpg
+    bar: "PowerShell 7 · Invoke-DocProcessing.ps1 -Report"
+    demo: >
+      Terminal: ./src/Invoke-DocProcessing.ps1 -PlanPath ./src/docproc/contoso-docproc.json @t -Report. Visible: the counts
+      line (files, classified, not classified, of type Supplier Contract), filled and empty counts for Contract number and
+      Expiry date, and any findings (DL005 or DL006) or "No findings.". Record what really happens, and compare with the
+      library screen. Mask tenant host.
+    narration: >
+      The report says what the model did. Files, how many were classified, and for each extracted column how many have a
+      value. If the model missed an expiry date, you see it here, not three months later at renewal time.
+
+  - id: tests
+    type: code
+    heading: "66 Pester tests, real PnP signatures"
+    lang: text
+    code: |
+      $ Invoke-Pester ./tests -Output Detailed
+      Describing PDF writer and reader
+        [+] agrees with qpdf on the page count and the file is structurally valid
+      Describing Get-MgBillablePages (Learn: pay-as-you-go pricing)
+        [+] the Learn example: two models on a library, five pages, are 10 transactions
+      Describing Test-MgDocProcPlan
+        [+] the bad plan gives 8 errors and 8 warnings
+      Describing Tenant functions (PnP cmdlets mocked)
+        [+] uploads what is not there yet, and skips what is
+      Tests Passed: 66, Failed: 0, Skipped: 0
+    narration: >
+      Sixty-six Pester tests. The PDF writer is cross-checked with qpdf, the page counts follow Learn's pricing example,
+      and the upload and the read-back run against the real p n p cmdlets, mocked. One test even caught a PowerShell
+      byte shift that read a six hundred forty pixel image as one hundred twenty-eight.
+
+  - id: recap
+    type: bullets
+    heading: "Five rules"
+    bullets:
+      - "Teach the model in the browser; script the rest"
+      - "Lint the plan: examples, labels, language, library"
+      - "Count pages and models before you upload"
+      - "One model per library, unless you want the bill"
+      - "Read it back, and wait up to a day"
+    narration: >
+      Five rules. Teach the model in the browser, script everything around it. Lint the plan first. Count pages and
+      models before you upload. One model per library unless you want the bill. And read the result back, after waiting
+      up to a day. That is SharePoint for now. Thanks for following the series.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The module, the plan and the tests are on GitHub, and the full guide is on devladlog dot com. Links are in the
+      description. See you in the next one.
