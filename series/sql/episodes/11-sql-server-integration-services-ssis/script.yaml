@@ -1,0 +1,181 @@
+# DEVLADLOG SQL — episode 11 (draft: screen scenes need the recording described in demo.md)
+episode: 11
+slug: sql-server-integration-services-ssis
+series_label: "SQL"
+series_name: "DEVLADLOG SQL"
+file_prefix: "sql"
+title: "SQL Server Integration Services (SSIS)"
+subtitle: "A partner file, one package, and a load you can safely run twice"
+voice: am_michael
+thumbnail_text: "SAME FILE\nTWICE\nZERO DUPLICATES"
+youtube:
+  title: "SSIS on SQL Server 2022: Load a Partner File Safely, Run It Twice | DEVLADLOG SQL #11"
+  tags: [SQL Server, SSIS, SQL Server Integration Services, ETL, SSISDB, Integration Services catalog, data flow, Conditional Split, logging level, T-SQL]
+sources:
+  - https://www.devladlog.com/articles/sql/2025-08-15-sql-server-integration-services-ssis-complete-guide-2025/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "A dealer sent the same file twice."
+    sub: "SSIS on SQL Server 2022, with a load you can run again"
+    short: hook
+    narration: >
+      Every morning a bike dealer sends a file of yesterday's sales. This morning it arrived twice. If your load
+      is not built for that, you now have duplicate sales, and nobody will notice until the month end report.
+      Today we build an Integration Services package that reads the file, throws out the bad rows, and can run
+      again without doing any harm.
+
+  - id: plan
+    type: bullets
+    heading: "One file, three tasks, one catalog"
+    bullets:
+      - "Partner CSV: eight lines, three of them wrong"
+      - "Package: prepare, data flow, merge"
+      - "Deployed to the SSIS catalog, run with T-SQL"
+      - "Three runs, each checked against an expected result"
+    narration: >
+      The scenario continues Contoso Bikes. A dealer file with eight sales lines, three of them wrong. A
+      package with three tasks: prepare, a data flow, and a merge. We deploy it to the Integration Services
+      catalog on SQL Server 2022, run it from T-SQL, and compare each run with an expected result. Same data, three situations: a first load, a repeat, and a correction.
+
+  - id: designer-screen
+    type: screen
+    heading: "The package in Visual Studio"
+    image: screens/ssis-designer.jpg
+    bar: "Visual Studio 2022 · PartnerSalesProject · PartnerSalesLoad.dtsx"
+    demo: "Visual Studio 2022 on the lab laptop with the SQL Server Integration Services Projects extension. PartnerSalesLoad.dtsx open in the designer. Control Flow tab: three tasks in a row, Prepare load, Load partner file, Merge into Sales.PartnerSales, joined by green precedence arrows. Then the Data Flow tab of Load partner file: Flat File Source, Conditional Split, and two OLE DB destinations named Staging table and Rejected rows table. Solution Explorer shows the Package Parameters tab with InputFile and ServerName."
+    narration: >
+      This is the package in Visual Studio. Control flow first: prepare, load, merge, in that order. Inside the
+      load, a flat file source reads the dealer file, and a conditional split sends every row one of two ways.
+      Quantity above zero and a price that is not negative goes to staging. Everything else goes to a table of
+      rejected rows, with the reason added later.
+
+  - id: merge
+    type: code
+    heading: "The merge that makes a rerun harmless"
+    lang: sql
+    code: |
+      INSERT INTO Sales.PartnerSales (DealerCode, PartnerOrderRef, LineNumber, SaleDate, ProductId, Qty, UnitPrice, LoadedRunLogId)
+      SELECT s.DealerCode, s.PartnerOrderRef, s.LineNumber, s.SaleDate, s.ProductId, s.Quantity, s.UnitPrice, @RunLogId
+      FROM Stg.PartnerSales AS s
+      WHERE EXISTS (SELECT 1 FROM Sales.Products AS p WHERE p.ProductId = s.ProductId)
+      AND NOT EXISTS (SELECT 1 FROM Sales.PartnerSales AS t
+      WHERE t.DealerCode = s.DealerCode AND t.PartnerOrderRef = s.PartnerOrderRef AND t.LineNumber = s.LineNumber);
+    short: idempotent
+    narration: >
+      The package only moves rows. The rules live in a stored procedure, so you can test them without
+      Integration Services. A line is inserted only if its product exists and its key is not already there.
+      Load the same file twice, and the second run finds every line present, and inserts nothing. A line the dealer
+      corrected is updated by the step before this one.
+
+  - id: deploy-screen
+    type: screen
+    heading: "Deployed to the SSIS catalog"
+    image: screens/ssis-catalog.jpg
+    bar: "SSMS · CON-SQL01 · Integration Services Catalogs · SSISDB"
+    demo: "SSMS connected to CON-SQL01 (masked). Object Explorer expanded: Integration Services Catalogs, SSISDB, MGLab, Projects, PartnerSalesProject, Packages, PartnerSalesLoad.dtsx, and Environments, Lab. Query window with c00-deploy-project.sql after running: the result grid shows FolderName MGLab, ProjectName PartnerSalesProject, PackageName PartnerSalesLoad.dtsx. Then c01-environment.sql grid: environment Lab, variable ServerName, value localhost."
+    narration: >
+      Deployment puts the whole project into the catalog, a database called SSISDB. Here it is, in a folder, with
+      its package. The server name is not in the package. It comes from a catalog environment, a variable
+      called server name, so the same project can move between servers without being rebuilt.
+
+  - id: run
+    type: code
+    heading: "Run it from T-SQL, wait for it"
+    lang: sql
+    code: |
+      EXEC catalog.create_execution @folder_name = N'MGLab', @project_name = N'PartnerSalesProject', @package_name = N'PartnerSalesLoad.dtsx',
+      @reference_id = @reference_id, @use32bitruntime = 0, @execution_id = @execution_id OUTPUT;
+      EXEC catalog.set_execution_parameter_value @execution_id, @object_type = 50, @parameter_name = N'LOGGING_LEVEL', @parameter_value = @LoggingLevel;
+      EXEC catalog.set_execution_parameter_value @execution_id, @object_type = 50, @parameter_name = N'SYNCHRONIZED', @parameter_value = 1;
+      EXEC catalog.start_execution @execution_id;
+    narration: >
+      Running from the catalog is three calls. Create an execution, set its parameters, start it. Object type
+      fifty is for settings like the logging level and synchronized, which makes the call wait until the package
+      is done. A package parameter, like the input file, uses object type thirty. The dtexec utility makes the same
+      calls underneath.
+
+  - id: basic-screen
+    type: screen
+    heading: "Run one: three bad rows, none loaded"
+    image: screens/ssis-run1.jpg
+    bar: "SSMS · CON-SQL01 · ContosoBikesEtl · c03-results.sql"
+    demo: "SSMS, after c02-run-package.sql has run with LoggingLevel 1 and the 21 May file. c03-results.sql grid, seven rows: Execution status Succeeded; Rows staged 6; Rows rejected 3; Lines inserted 5; Lines updated 0; Lines in Sales.PartnerSales 5; Rows sent by Flat File Source (data statistics) 0. In a second tab SELECT * FROM Etl.RejectedRows showing PO-88010 line 2 and PO-88011 line 1 with the quantity reason, and PO-99001 line 1 with Unknown ProductId."
+    narration: >
+      Run one. Eight lines read, six staged, three rejected, five inserted. Two lines failed the quantity rule in
+      the data flow. A third had a product that does not exist, and the procedure caught it. Each rejected row is
+      kept with its reason, so somebody can phone the dealer.
+
+  - id: gotcha-screen
+    type: screen
+    heading: "Gotcha: Basic logging hides the row counts"
+    image: screens/ssis-run2-verbose.jpg
+    bar: "SSMS · CON-SQL01 · ContosoBikesEtl · c03-results.sql"
+    short: gotcha
+    demo: "SSMS, after run two: c02-run-package.sql edited to LoggingLevel 3 and run again on the same 21 May file. c03-results.sql grid: Execution status Succeeded; Rows staged 6; Rows rejected 3; Lines inserted 0; Lines updated 0; Lines in Sales.PartnerSales 5; Rows sent by Flat File Source (data statistics) 8. Keep the last row visible, and the earlier run-one grid next to it showing 0."
+    narration: >
+      Now the gotcha, and the proof of the rerun. Same file again, logging level three, verbose. Nothing inserted,
+      nothing updated, five lines still. And look at the last row. At the default basic level, the catalog records
+      no row counts for the data flow, so run one showed zero. Only verbose fills the data statistics view, eight
+      rows left the source. If you debug a data flow from the catalog, set the logging level first.
+
+  - id: encryption
+    type: bullets
+    heading: "What bites on a fresh lab"
+    bullets:
+      - "OLE DB Driver 19: Encrypt defaults to Mandatory"
+      - "Self-signed server certificate needs TrustServerCertificate"
+      - "Install the driver on the laptop and on the SSIS server"
+      - "Learn: a trusted certificate is the real fix"
+    narration: >
+      One thing from the Microsoft documentation, because it bites on every new lab. The package uses the version
+      nineteen OLE DB driver. That driver encrypts by default, and if the server certificate is self signed, the
+      connection fails until you trust it. The lab package does, and says so. Microsoft's own advice is a
+      certificate the client trusts. The driver must also be installed wherever the package runs.
+
+  - id: correction-screen
+    type: screen
+    heading: "Run three: a correction arrives"
+    image: screens/ssis-run3.jpg
+    bar: "SSMS · CON-SQL01 · ContosoBikesEtl · c03-results.sql"
+    demo: "SSMS, after run three: c02-run-package.sql with LoggingLevel 3 and the 22 May file. c03-results.sql grid: Execution status Succeeded; Rows staged 3; Rows rejected 0; Lines inserted 2; Lines updated 1; Lines in Sales.PartnerSales 7; Rows sent by Flat File Source (data statistics) 3. Then SELECT Qty, LoadedRunLogId FROM Sales.PartnerSales WHERE PartnerOrderRef = 'PO-77001' AND LineNumber = 1 returning 3 and 3."
+    narration: >
+      Run three is the next day's file. Two new lines, and one correction: the dealer changed a quantity from two
+      to three. The package inserts two, updates one, and stamps that line with the run that changed it. Seven
+      lines in total, and a trail for every one.
+
+  - id: tests
+    type: code
+    heading: "Tested without SSIS"
+    lang: python
+    code: |
+      valid = [r for r in rows if evaluate_rule(rule, r)]
+      return valid, [r for r in rows if not evaluate_rule(rule, r)]
+    narration: >
+      A package cannot run on my build machine, so the tests check what they can. The split rule is read out of
+      the package file itself and applied to the sample data. The merge statements run on a local engine. Every
+      reference inside the package must resolve, and every column must match the staging table. Whether
+      Integration Services accepts the file, and runs it, is exactly what this recording proves, on a real server.
+
+  - id: recap
+    type: bullets
+    heading: "Five rules"
+    bullets:
+      - "Make the load safe to run twice"
+      - "Keep the rules in T-SQL, the package moves rows"
+      - "Reject with a reason, never silently"
+      - "Set the logging level before you debug"
+      - "Settings in an environment, not in the package"
+    narration: >
+      Five rules. Make the load safe to run twice. Keep the rules in T SQL and let the package move rows. Reject
+      bad rows with a reason, never silently. Set the logging level before you debug. And keep settings in a
+      catalog environment, not in the package.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The package, the procedures and the tests are on GitHub, and the complete guide is on dev lad log dot com.
+      Next time: SQL Server Reporting Services. This was dev lad log SQL, by Momento Galático.
