@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Tests for the Core library AND for the app's real XAML pages.
+       The pages (Views/*.xaml and code-behind) are linked from the MAUI app project and compiled here with the MAUI XAML source generator
+       against plain net10.0 + the Microsoft.Maui.Controls package: that needs no workload and runs on Linux. A binding to a property that
+       doesn't exist on the view model (MAUIG2045) fails this build. Not a replacement for running the app on a device. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <RootNamespace>Contoso.Mobile.Tests</RootNamespace>
+    <MauiXamlInflator>SourceGen</MauiXamlInflator>
+    <EnableDefaultMauiXamlItems>false</EnableDefaultMauiXamlItems>
+    <WarningsAsErrors>$(WarningsAsErrors);MAUIG2045</WarningsAsErrors>
+    <NoWarn>$(NoWarn);xUnit1051</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="xunit.v3" Version="4.0.3" />
+    <PackageReference Include="Microsoft.Maui.Controls" Version="10.0.130" />
+    <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" Version="10.11.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+    <Using Include="Microsoft.Maui.Controls" />
+    <Using Include="Microsoft.Maui" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/Contoso.Mobile.Core/Contoso.Mobile.Core.csproj" />
+    <MauiXaml Include="../../src/Contoso.Mobile/Views/*.xaml" Link="Views/%(Filename)%(Extension)" />
+    <Compile Include="../../src/Contoso.Mobile/Views/*.xaml.cs" Link="Views/%(Filename)%(Extension)" />
+  </ItemGroup>
+
+</Project>

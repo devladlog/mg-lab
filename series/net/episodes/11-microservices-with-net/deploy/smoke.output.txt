@@ -1,0 +1,32 @@
+Starting Budget, Requests, Gateway (logs in /tmp/ep11-smoke-8954e0)
+
+1. Happy path through the gateway
+  PASS  POST /api/requests -> 201 Reserved (201 Reserved, 12.3s)
+  PASS  Budget service shows 12,000 reserved for FIN 
+  PASS  Gateway /health/services is Healthy 
+
+2. Same Idempotency-Key twice
+  PASS  first 201, second 200 with the same id (ids 2/2)
+  PASS  OPS reserved once (3,000) 
+
+3. One trace id across three processes
+  PASS  trace id 67f7ab3aed4aaad75e3ea2281574b2ce appears in the gateway, requests and budget logs (line counts: 2, 4, 2)
+
+4. Budget service stopped
+  PASS  POST -> 202 Pending after the retries (202 Pending, 0.7s)
+  PASS  next POST -> 202 Pending, fast (circuit open) (202, 0.4s)
+  PASS  Gateway /health/services is Degraded, budget not reachable 
+  PASS  GET /api/requests still works through the gateway 
+  PASS  GET /api/budgets/FIN -> 502 (the gateway cannot reach it) (502)
+  PASS  Requests /health is still Healthy 
+
+5. Budget service back: the re-check worker finishes the pending requests (up to ~30 s)
+  PASS  both pending requests are Reserved (after ~13 s)
+  PASS  IT reserved 10,000 (9,000 + 1,000), once each 
+
+6. A lost answer (fault injection): the reservation is made, the answer is lost twice
+  PASS  POST -> 201 Reserved after two lost answers (201 Reserved, 2s)
+  PASS  FIN reserved exactly 5,000 (not 15,000) (budget restarted: its ledger is in memory)
+  PASS  the Budget service logged the two lost answers (2)
+
+All checks passed.

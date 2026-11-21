@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:vm="clr-namespace:Contoso.Mobile.Core.ViewModels;assembly=Contoso.Mobile.Core"
+             x:Class="Contoso.Mobile.Views.NewRequestPage"
+             x:DataType="vm:NewRequestViewModel"
+             Title="New request">
+
+    <ScrollView>
+        <VerticalStackLayout Padding="16" Spacing="10">
+
+            <Label Text="Title" />
+            <Entry Text="{Binding Title}" Placeholder="What do you need?" AutomationId="TitleEntry" />
+
+            <Label Text="Department" />
+            <Picker ItemsSource="{Binding Departments}" SelectedItem="{Binding DepartmentCode}" Title="Pick one" AutomationId="DepartmentPicker" />
+
+            <Label Text="Amount" />
+            <Entry Text="{Binding AmountText}" Keyboard="Numeric" Placeholder="12000" AutomationId="AmountEntry" />
+
+            <Label Text="Requested by" />
+            <Entry Text="{Binding RequestedBy}" Keyboard="Email" Placeholder="alex.demo@contoso.com" AutomationId="RequestedByEntry" />
+
+            <Label Text="{Binding Errors}" TextColor="{StaticResource Warning}" AutomationId="ErrorsLabel" />
+
+            <Button Text="Submit" Command="{Binding SubmitCommand}" AutomationId="SubmitButton" />
+            <ActivityIndicator IsRunning="{Binding IsBusy}" />
+            <Label Text="{Binding Result}" AutomationId="ResultLabel" />
+
+        </VerticalStackLayout>
+    </ScrollView>
+</ContentPage>

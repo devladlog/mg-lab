@@ -1,0 +1,44 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<!-- .NET MAUI single project. Needs the maui workload (Visual Studio 2026 / VS Code + .NET MAUI extension / `dotnet workload install maui`).
+	     Targets: Android everywhere, Windows only when building on Windows. iOS and Mac Catalyst are left out on purpose:
+	     building for them needs a Mac (Learn), and this series records on a Windows laptop. -->
+	<PropertyGroup>
+		<TargetFrameworks>net10.0-android</TargetFrameworks>
+		<TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('windows'))">$(TargetFrameworks);net10.0-windows10.0.19041.0</TargetFrameworks>
+
+		<OutputType>Exe</OutputType>
+		<RootNamespace>Contoso.Mobile</RootNamespace>
+		<UseMaui>true</UseMaui>
+		<SingleProject>true</SingleProject>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<Nullable>enable</Nullable>
+
+		<!-- XAML source generation, as in the .NET 10 template. It also reports bindings that don't exist on the x:DataType (MAUIG2045). -->
+		<MauiXamlInflator>SourceGen</MauiXamlInflator>
+
+		<ApplicationTitle>Contoso Requests</ApplicationTitle>
+		<ApplicationId>com.contoso.requests</ApplicationId>
+		<ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>
+		<ApplicationVersion>1</ApplicationVersion>
+
+		<!-- Unpackaged on Windows: runs with F5 / dotnet build -t:Run, no signing. See https://aka.ms/MauiTemplateUnpackaged -->
+		<WindowsPackageType>None</WindowsPackageType>
+
+		<SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">21.0</SupportedOSPlatformVersion>
+		<SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">10.0.17763.0</SupportedOSPlatformVersion>
+		<TargetPlatformMinVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">10.0.17763.0</TargetPlatformMinVersion>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<MauiIcon Include="Resources\AppIcon\appicon.svg" ForegroundFile="Resources\AppIcon\appiconfg.svg" Color="#0B5CAD" />
+		<MauiSplashScreen Include="Resources\Splash\splash.svg" Color="#0B5CAD" BaseSize="128,128" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<PackageReference Include="Microsoft.Maui.Controls" Version="$(MauiVersion)" />
+		<PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="10.0.0" />
+		<ProjectReference Include="../Contoso.Mobile.Core/Contoso.Mobile.Core.csproj" />
+	</ItemGroup>
+
+</Project>

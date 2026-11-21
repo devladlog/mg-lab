@@ -1,0 +1,243 @@
+# DEVLADLOG .NET — episode 11 (draft; screens are captured on the lab laptop, see demo.md)
+episode: 11
+slug: microservices-with-net
+series_label: ".NET"
+series_name: "DEVLADLOG .NET"
+file_prefix: "net"
+title: "Microservices with .NET"
+subtitle: "Split one service, then break it on purpose: retries, circuits and the lost answer"
+voice: am_michael
+thumbnail_text: "MICRO\nSERVICES\nIT BREAKS"
+youtube:
+  title: "Microservices with .NET 10: YARP, Resilience, Circuit Breaker, Idempotency | DEVLADLOG .NET #11"
+  tags: [microservices, .NET 10, ASP.NET Core, YARP, reverse proxy, API gateway, Microsoft.Extensions.Http.Resilience, Polly, circuit breaker, retry, idempotency, service discovery, health checks, C#]
+sources:
+  - https://www.devladlog.com/articles/dotnet/2026-05-30-microservices-with-net-complete-guide-2026/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Microservices with .NET"
+    sub: "Split it, then break it"
+    short: hook
+    narration: >
+      A microservice is easy to build. The hard part starts the first time the other service is down. This episode
+      we take the budget check out of the project requests API, put it in its own service, add a gateway, and then
+      stop that service on camera. Welcome to DEVLADLOG dot net.
+
+  - id: plan
+    type: bullets
+    heading: "What we're building"
+    bullets:
+      - "Budget service: owns the limits and the reservations"
+      - "Requests service: owns the requests, asks Budget"
+      - "Gateway: one front door, with YARP"
+      - "Shared defaults: discovery, resilience, health, trace ids"
+      - "30 tests, then three real processes"
+    narration: >
+      Three services. Budget owns the limits and the reservations. Requests owns the requests and asks Budget.
+      A gateway is the one front door. They share a small defaults project for discovery, resilience, health checks
+      and trace ids. Thirty tests, and then three real processes on Kestrel.
+
+  - id: names
+    type: code
+    heading: "Services know names, not addresses"
+    lang: csharp
+    code: |
+      // Requests.Service: the Budget service is a name
+      builder.Services.AddHttpClient<BudgetClient>(c => c.BaseAddress = new Uri("http://budget"));
+
+      // appsettings.json: where that name lives today (Kubernetes or a platform would replace this)
+      "Services": { "budget": { "http": [ "localhost:5313" ] } }
+
+      // Gateway appsettings.json: YARP routes, the same names
+      "Routes": { "requests": { "ClusterId": "requests", "Match": { "Path": "/api/requests/{**catch-all}" } } },
+      "Clusters": { "requests": { "Destinations": { "primary": { "Address": "http://requests/" } } } }
+    narration: >
+      Services know names, not addresses. The Requests service calls http budget. Service discovery turns that name
+      into an address from configuration, and a platform can replace that later. The gateway uses YARP, with routes
+      and clusters in appsettings, and the same names. One rule from Learn drives the split: each microservice owns
+      its own data. Requests never reads budget numbers. It asks.
+
+  - id: callsscreen
+    type: screen
+    heading: "One front door, three processes"
+    image: screens/gateway-calls.jpg
+    bar: "Windows Terminal · four panes: gateway, requests, budget, client"
+    demo: >
+      Lab laptop, three services running (demo.md). Client pane: POST http://localhost:5311/api/requests for FIN 12,000
+      (shows 201, budgetState Reserved, a traceId), then GET /api/budgets/FIN (reserved 12000, remaining 38000), then
+      GET /health/services (Healthy). In the three log panes, filter on that traceId: the same id appears in the
+      gateway, requests and budget logs. Nothing to mask.
+    narration: >
+      A request goes through the gateway. Created, and the budget is reserved. The budget route works too, and the
+      gateway's health page shows both services healthy. And one trace id, the same one, shows up in the logs of all
+      three processes. The gateway, the requests service and the budget service. Nobody wrote code to pass it along.
+      The H T T P client does that on its own.
+
+  - id: resilience
+    type: code
+    heading: "Retries: reads freely, writes only with a key"
+    lang: csharp
+    code: |
+      // ServiceDefaults (condensed): every HttpClient gets the standard resilience handler
+      builder.Services.ConfigureHttpClientDefaults(http =>
+      {
+          http.AddStandardResilienceHandler(o => RetryPolicy.ApplyIdempotencyRule(o.Retry));
+          http.AddServiceDiscovery();
+      });
+
+      // The standard handler retries every HTTP method. A retried POST can run twice.
+      public static bool IsSafeToRepeat(HttpRequestMessage request) =>
+          request.Method == HttpMethod.Get || request.Method == HttpMethod.Head ||
+          request.Method == HttpMethod.Options ||
+          request.Headers.Contains("Idempotency-Key");
+    narration: >
+      Every H T T P client gets the standard resilience handler. Retry, circuit breaker, timeouts. Learn is clear
+      that it retries every H T T P method by default, and that a retried post can duplicate data. So we add one
+      rule. Reads are retried freely. A write is retried only when the caller sent an idempotency key.
+
+  - id: idempotent
+    type: code
+    heading: "The Budget service remembers the key"
+    lang: csharp
+    code: |
+      // BudgetLedger.Reserve (condensed)
+      lock (_gate)   // check and add are one step: parallel calls can't both fit
+      {
+          if (_byKey.TryGetValue(key, out var existing))
+              return same ? (ReserveOutcome.Replayed, existing)               // same key, same request: first answer again
+                          : (ReserveOutcome.KeyReusedForDifferentRequest, null);   // 409
+
+          if (_reserved[department] + amount > limit) return (ReserveOutcome.OverBudget, null);   // 422
+
+          var reservation = new Reservation(Guid.NewGuid(), department, amount, reference, DateTime.UtcNow);
+          _byKey[key] = reservation;
+          _reserved[department] += amount;
+          return (ReserveOutcome.Created, reservation);
+      }
+    narration: >
+      On the other side, the Budget service stores every reservation under the caller's key. Same key, same request,
+      and you get the first answer back, without reserving again. Same key, different request, and it's a conflict.
+      Over the limit is a four twenty two. And the check and the add happen under one lock, so fifty parallel calls
+      can never go over the limit. There's a test for exactly that.
+
+  - id: downscreen
+    type: screen
+    heading: "Stop the Budget service"
+    image: screens/budget-down.jpg
+    bar: "Windows Terminal · Ctrl+C in the budget pane, then the client pane"
+    short: down
+    demo: >
+      Ctrl+C in the budget pane. Client pane: POST a request for IT 9,000 and show HTTP 202, budgetState Pending, the
+      elapsed time. POST a second one: 202 again, much faster. Then GET /health/services (Degraded, budget not
+      reachable), GET /api/requests (still works), GET /api/budgets/FIN (502 from the gateway) and
+      curl.exe http://localhost:5312/health (Healthy). In the requests pane: the retry warnings, then
+      "OnCircuitOpened", then "Circuit to the Budget service is open: failing fast". Nothing to mask.
+    narration: >
+      Now stop the Budget service. The request still comes back, as accepted, with the budget state pending. The
+      retries ran, and then the circuit opened, so the next call fails fast. The gateway reports degraded, not down.
+      The budget route gives a five oh two, and the requests service itself is still healthy.
+
+  - id: pending
+    type: code
+    heading: "Save first, ask second, finish later"
+    lang: csharp
+    code: |
+      // Create (condensed): the request is saved as Pending BEFORE Budget is asked
+      db.Requests.Add(request);                      // unique index on IdempotencyKey
+      await db.SaveChangesAsync(ct);
+
+      var result = await budget.ReserveAsync(request.Department, request.Amount, $"request-{request.Id}", key, ct);
+      BudgetRechecker.Apply(request, result);        // Reserved, Declined, or stays Pending
+      return request.BudgetState == BudgetState.Pending ? Results.Accepted(...) : Results.Created(...);
+
+      // Background worker: same key as the first attempt, so a reservation that did land comes back as a replay
+      var result = await budget.ReserveAsync(request.Department, request.Amount, $"request-{request.Id}", request.IdempotencyKey, ct);
+      if (result.Answer == BudgetAnswer.Unavailable) break;   // still down: try again next pass
+    narration: >
+      The order matters. The request is saved as pending before Budget is asked. If anything fails after that, the
+      request exists, and a background worker finishes the job. It uses the same idempotency key as the first
+      attempt. Readiness only checks the database, on purpose, so the requests service stays up when Budget is down.
+
+  - id: recoveryscreen
+    type: screen
+    heading: "Budget is back"
+    image: screens/recovery.jpg
+    bar: "Windows Terminal · restart the budget pane, watch the requests pane"
+    demo: >
+      Restart the budget pane (dotnet run --launch-profile http). Within about fifteen seconds the requests pane logs
+      "Re-check: request 2 is now Reserved" and request 3. Client pane: GET /api/requests (all Reserved) and
+      GET /api/budgets/IT (reserved 10000). Nothing to mask.
+    narration: >
+      Start Budget again. After the break duration, the worker asks again, with the same keys. Both pending requests
+      become reserved, and the reserved total is exactly the sum of the two. Nothing was lost, nothing was counted
+      twice.
+
+  - id: lostscreen
+    type: screen
+    heading: "The lost answer"
+    image: screens/lost-answer.jpg
+    bar: "Windows Terminal · budget started with fault injection"
+    short: lostanswer
+    demo: >
+      Stop Budget. In the budget pane run, in PowerShell: $env:Faults__FailFirstAttemptsPerKey='2';
+      $env:Faults__FailAfterCommit='true'; dotnet run --launch-profile http. Wait about fifteen seconds for the circuit
+      to close. Client pane: POST FIN 5,000. In frame: 201, Reserved. Budget pane: two warnings "Fault injection:
+      reservation made, answer lost" and then the replay. GET /api/budgets/FIN: reserved 5000, not 15000.
+      Say on screen that this switch is demo only and off by default. Nothing to mask.
+    narration: >
+      The nastiest failure. The money is reserved, and the answer is lost. Twice. The requests service retries, with
+      the same key, and the third answer is the first reservation again. Five thousand reserved, not fifteen
+      thousand. Without the key, that retry would have spent the budget three times.
+
+  - id: gotchas
+    type: bullets
+    heading: "Gotchas we hit"
+    bullets:
+      - "Default breaker: needs 100 calls. We tuned it for a laptop"
+      - "Service back, circuit still open until the break ends"
+      - "RemoveAllResilienceHandlers is marked experimental"
+      - "No broker: Budget and Requests still call each other directly"
+    narration: >
+      Honest gotchas. The default circuit breaker needs a hundred calls in thirty seconds before it opens, so we
+      tuned it. When a service comes back, the circuit stays open until the break duration ends, and a test shows it.
+      The method that removes the default handler is marked experimental, so it needs a pragma. And we used direct
+      calls. No message broker, so Requests and Budget are still coupled in time.
+
+  - id: tests
+    type: screen
+    heading: "Real services, in memory"
+    image: screens/tests.jpg
+    bar: "VS Code terminal · dotnet test"
+    demo: >
+      VS Code terminal in the episode folder: Clear-Host; dotnet test. In frame: total 30, succeeded 30. Optional:
+      Testing view with BudgetServiceTests, RequestsServiceTests, RetryRuleTests and GatewayTests expanded.
+      Compare deploy/tests.output.txt.
+    narration: >
+      All of this runs as tests. The real Requests service calls the real Budget service, through the real client
+      pipeline, with the retries and the circuit breaker. Lost answers, parallel keys, the gateway routes, the
+      degraded health page. The only fake is the network between the services. Thirty tests, all green.
+
+  - id: takeaways
+    type: bullets
+    heading: "Take this with you"
+    bullets:
+      - "Each service owns its data: ask, don't read"
+      - "Names, not addresses: service discovery"
+      - "Retry reads; retry writes only with an idempotency key"
+      - "Save first, finish later: the request must survive an outage"
+      - "Readiness checks your own dependencies, not your neighbours"
+    narration: >
+      To recap. Each service owns its data. Use names, not addresses. Retry reads, and retry writes only with an
+      idempotency key. Save the work first and finish it later. And keep readiness to your own dependencies, so one
+      outage doesn't take everyone down.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The three services, the gateway and all thirty tests are on GitHub, and the full guide is on devladlog dot
+      com. Next time: dot net M A U I, the same requests from a phone and a Windows app. Subscribe so you don't
+      miss it. This was DEVLADLOG dot net, by Momento Galático.

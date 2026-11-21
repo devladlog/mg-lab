@@ -1,0 +1,228 @@
+# DEVLADLOG .NET — episode 12 (draft; screens are captured on the lab laptop, see demo.md)
+episode: 12
+slug: net-maui-cross-platform-apps
+series_label: ".NET"
+series_name: "DEVLADLOG .NET"
+file_prefix: "net"
+title: ".NET MAUI Cross-Platform Apps"
+subtitle: "One app for Android and Windows, with a request queue that survives no network"
+voice: am_michael
+thumbnail_text: "MAUI\nOFFLINE\nFIRST"
+youtube:
+  title: ".NET MAUI 10 App: Android + Windows, MVVM, Offline Outbox, Idempotency | DEVLADLOG .NET #12"
+  tags: [.NET MAUI, MAUI, .NET 10, Android, Windows, MVVM, CommunityToolkit.Mvvm, offline first, XAML, compiled bindings, idempotency, C#, cross-platform]
+sources:
+  - https://www.devladlog.com/articles/dotnet/2026-04-27-net-maui-cross-platform-apps-complete-guide-2026/
+
+scenes:
+  - id: hook
+    type: title
+    heading: ".NET MAUI Cross-Platform Apps"
+    sub: "Type it on the train, send it later"
+    short: hook
+    narration: >
+      A phone app lives where the network comes and goes. This episode we build a dot net M A U I app for the
+      requests service from last time. You type a request with no network, it waits on the device, and it is sent
+      once, even if the send is retried. Welcome to DEVLADLOG dot net.
+
+  - id: plan
+    type: bullets
+    heading: "What we're building"
+    bullets:
+      - "A list of requests and a form, from one MAUI project"
+      - "Android and Windows. No Apple targets: they need a Mac"
+      - "Logic in a plain library, so it is testable"
+      - "An outbox: save on the device first, send second"
+      - "59 tests, then the real app"
+    narration: >
+      One MAUI project, two pages: the list and the form. It runs on Android and Windows. Apple targets are out,
+      because building them needs a Mac. The logic lives in a plain library so we can test it. And the outbox: save on
+      the device first, send second. Fifty nine tests, and then the real app.
+
+  - id: split
+    type: code
+    heading: "Thin app, testable core"
+    lang: xml
+    code: |
+      <!-- Contoso.Mobile.csproj: the app. Needs the maui workload -->
+      <TargetFrameworks>net10.0-android</TargetFrameworks>
+      <TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('windows'))">$(TargetFrameworks);net10.0-windows10.0.19041.0</TargetFrameworks>
+      <UseMaui>true</UseMaui>
+      <MauiXamlInflator>SourceGen</MauiXamlInflator>
+      <ProjectReference Include="../Contoso.Mobile.Core/Contoso.Mobile.Core.csproj" />
+
+      <!-- Contoso.Mobile.Core: plain net10.0. API client, outbox, sync, view models. Runs anywhere -->
+    narration: >
+      The app project is thin. It targets Android, and Windows when you build on Windows. All the logic sits in a
+      plain dot net ten library: the API client, the outbox, the sync service and the view models, with the MVVM
+      Toolkit generating the boilerplate. The app only adds pages and platform glue. That split is why most of this episode runs as tests, on any machine, in a few seconds.
+
+  - id: outbox
+    type: code
+    heading: "Outbox first, send second"
+    lang: csharp
+    code: |
+      var draft = new DraftRequest(Guid.NewGuid(), Title.Trim(), DepartmentCode!, amount,
+                                   RequestedBy.Trim(), clock.GetUtcNow().UtcDateTime);
+      await outbox.AddAsync(draft);        // on the device, before any network
+
+      var report = await sync.FlushAsync();
+      Result = left switch
+      {
+          null => "Sent.",
+          { NeedsAttention: true } => $"The server refused it: {left.Error}",
+          _ => "Saved on this device. It will be sent later.",
+      };
+    narration: >
+      Submit does two things, in this order. It writes the draft to a file on the device, with a new GUID. Then it
+      tries to send. If there is no network, or the app is killed, the request is still there. This is the same idea as
+      episode eleven. Save first, ask second. And that GUID is the idempotency key.
+
+  - id: sync
+    type: code
+    heading: "One flush, oldest first, stop when the server is gone"
+    lang: csharp
+    code: |
+      foreach (var draft in await outbox.ListAsync(ct))
+      {
+          if (draft.NeedsAttention) continue;   // the server said no: waits for the user
+
+          var result = await api.SubmitAsync(draft, ct);
+          if (result.IsStored) { await outbox.RemoveAsync(draft.Key, ct); sent++; }
+          else if (result.Outcome == SubmitOutcome.Rejected)
+          { await outbox.MarkRejectedAsync(draft.Key, result.Error ?? "Rejected.", ct); rejected++; }
+          else break;   // Unavailable: keep the rest, in order
+      }
+    narration: >
+      The sync service sends drafts oldest first. Stored means remove it. Rejected by the server, say a validation
+      error, means park it for the user, and never retry by itself. Unavailable means stop and keep the order. And
+      because every send carries the draft's key, a send that was lost after the server answered just comes back as
+      replayed. Nothing is created twice.
+
+  - id: listscreen
+    type: screen
+    heading: "The list, from the gateway"
+    image: screens/request-list.jpg
+    bar: "Windows app next to the gateway terminal"
+    demo: >
+      Episode 11 services running. Start the MAUI app on Windows (dotnet build -f net10.0-windows10.0.19041.0 -t:Run).
+      The request list shows the seeded and earlier requests with their budget state. Pull to refresh. Nothing to mask:
+      fictional data, contoso addresses only.
+    narration: >
+      Here is the Windows app, talking to the gateway on localhost, port five three one one. The list shows each
+      request and its budget state, pending, reserved or declined. On Android the same app uses the address ten dot zero dot two dot two, because
+      localhost there is the emulator itself.
+
+  - id: offlinescreen
+    type: screen
+    heading: "No network: it waits on the device"
+    image: screens/offline-submit.jpg
+    bar: "Android emulator, airplane mode on"
+    short: offline
+    demo: >
+      Android emulator (x64 image). Turn on airplane mode. Open the form: type Standing desks, FIN, 12000,
+      alex.demo@contoso.com. Tap Submit. The result line says it was saved on the device and will be sent later.
+      Nothing to mask.
+    narration: >
+      Now the emulator, with airplane mode on. Fill the form and submit. No error. The app says: saved on this device,
+      it will be sent later. The request is in the outbox file on the device, and it survives closing the app, restarting the phone, or whatever the network does next.
+
+  - id: backscreen
+    type: screen
+    heading: "Back online: sent once"
+    image: screens/back-online.jpg
+    bar: "Android emulator and the requests terminal"
+    short: online
+    demo: >
+      Turn airplane mode off. The list refreshes by itself and the new request appears as Reserved. Terminal:
+      GET http://localhost:5311/api/budgets/FIN shows 12000 reserved, once. Optional: stop the budget service first to
+      see the row stay Pending. Nothing to mask.
+    narration: >
+      Airplane mode off. The app notices, flushes the outbox, and the request appears in the list. Reserved. And the
+      budget shows twelve thousand reserved, once. Same key, so even a repeated send could not count it twice. That is the payoff of building the idempotency key into the service last time.
+
+  - id: android
+    type: code
+    heading: "Android: reach the PC, allow cleartext for it only"
+    lang: xml
+    code: |
+      <!-- Platforms/Android/Resources/xml/network_security_config.xml -->
+      <network-security-config>
+        <domain-config cleartextTrafficPermitted="true">
+          <domain includeSubdomains="true">10.0.2.2</domain>
+        </domain-config>
+      </network-security-config>
+
+      <!-- AndroidManifest.xml -->
+      <uses-permission android:name="android.permission.INTERNET" />
+      <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    narration: >
+      Android needs three small things. The host alias ten dot zero dot two dot two, which is the development machine
+      as seen from the emulator. A network security config that allows plain HTTP for that address only, because
+      cleartext traffic is blocked by default on current Android versions. And the network state permission, so the
+      connectivity API works. The microsoft learn page on local web services covers the first two.
+
+  - id: bindings
+    type: code
+    heading: "A typo in a binding is a build error"
+    lang: xml
+    code: |
+      <ContentPage x:DataType="vm:NewRequestViewModel" ...>
+        <Entry Text="{Binding Title}" AutomationId="TitleEntry" />
+        <Entry Text="{Binding AmountText}" Keyboard="Numeric" AutomationId="AmountEntry" />
+        <Button Text="Submit" Command="{Binding SubmitCommand}" AutomationId="SubmitButton" />
+      </ContentPage>
+
+      <!-- {Binding Titel} -> error MAUIG2045: property not found on NewRequestViewModel -->
+    narration: >
+      The pages use compiled bindings, with x colon DataType. A binding to a property that does not exist is a build
+      error, M A U I G two oh four five, not a silent empty field at run time. And that check also runs in our test
+      project on Linux, without the MAUI workload.
+
+  - id: gotcha
+    type: bullets
+    heading: "Gotcha: the guard is CanExecute"
+    bullets:
+      - "A Button asks ICommand.CanExecute: second tap ignored"
+      - "ExecuteAsync from code is not guarded: two drafts"
+      - "NetworkAccess.Internet is not 'the server answers'"
+      - "Android: 10.0.2.2, cleartext only for it, ACCESS_NETWORK_STATE"
+    narration: >
+      A few gotchas. A tap goes through the command's CanExecute, so a double tap is ignored while it runs. But call
+      ExecuteAsync twice from code, and you get two drafts. Network access internet does not mean the server answers,
+      so the sync treats unavailable as normal. And on Android, use ten dot zero dot two dot two, allow cleartext for
+      that address only, and ask for the network state permission.
+
+  - id: testscreen
+    type: screen
+    heading: "59 tests, no emulator"
+    image: screens/tests.jpg
+    bar: "VS Code terminal: dotnet test"
+    demo: >
+      VS Code terminal in the episode folder: Clear-Host; dotnet test --project tests/Contoso.Mobile.Tests. In frame:
+      total 59, succeeded 59. Compare deploy/tests.output.txt.
+    narration: >
+      The tests run without an emulator. The API client, the outbox files, the sync rules, the view models, and even the
+      real XAML pages, compiled and driven through their automation ids. Fifty nine tests, all green. What the tests cannot tell you is how the app looks, so the screens you just saw were recorded on a real laptop and a real emulator.
+
+  - id: takeaways
+    type: bullets
+    heading: "Take this with you"
+    bullets:
+      - "Keep logic in a plain library, pages thin"
+      - "Outbox first: the request must survive the network"
+      - "The draft's GUID is the idempotency key"
+      - "Compiled bindings turn typos into build errors"
+      - "Android emulator is 10.0.2.2, not localhost"
+    narration: >
+      To recap. Keep the logic in a plain library and the pages thin. Write to the outbox first. Let the draft's GUID
+      be the idempotency key. Use compiled bindings. And on the Android emulator, the host is ten dot zero dot two dot
+      two.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The app, the core library and all fifty nine tests are on GitHub, and the full guide is on devladlog dot com.
+      Subscribe so you don't miss the next one. This was DEVLADLOG dot net, by Momento Galático.
