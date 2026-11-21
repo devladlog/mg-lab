@@ -25,6 +25,8 @@ All demos are recorded for real. Use these shared resources before asking for ne
   and estimated cost for the recording window, and deletes the resource group in tear-down. Prefer free tiers. A €30/month budget
   ("mglab-monthly") emails alerts at 50%, 80%, 100% and forecast 100%.
 
+- Teams: the Workflows app is already allowed for everyone (Teams admin center, checked 21 Nov 2026).
+
 ## Dev services
 - Azure DevOps: existing organization `devladlog` (connected to the lab directory). Demos create their own private
   project and delete it afterwards. Billing is linked to the lab Azure subscription, so the free Microsoft-hosted grant
