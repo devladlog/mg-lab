@@ -1,0 +1,88 @@
+{
+  "note": "Live-session recording of the screen scenes (series/tools/rec). prepare/teardown run on the laptop, not recorded; terminal commands are typed and run for real. $env:MG_DEV_URL (DEV org URL) and the other MG_* variables are set by the owner as user environment variables on the laptop and never appear on screen.",
+  "prepare": [
+    "Read-Host 'Owner: episodes 1-6 are in DEV; library Equipment Desk Kit (DeskHeader, ConfirmDialog, DeskRules, LibraryTestScreen) is built and published as version 1.0; Equipment Desk (phone) is in the Equipment Desk solution with the Open loans screen; CT-0043 is open and overdue for alex.demo@contoso.com plus a second open loan. Press Enter'"
+  ],
+  "screens": [
+    {
+      "name": "library-studio",
+      "kind": "browser",
+      "url": "https://make.powerapps.com/",
+      "account": "labadmin",
+      "steps": [
+        "Solutions > Equipment Desk > Equipment Desk Kit > Edit",
+        "Components tab: DeskHeader, ConfirmDialog, DeskRules",
+        "Select DeskHeader: custom properties Title, ShowBack, Accent and OnBack (Event)",
+        "Play LibraryTestScreen: back arrow shows 'OnBack', Open dialog > Cancel shows 'OnCancel'",
+        "Show Save with version notes ('1.0 first version') and Publish"
+      ],
+      "mask": [
+        "environment name and org URL in the address bar and the environment picker",
+        "tenant name in the top bar",
+        "account name, e-mail and avatar in the account menu"
+      ]
+    },
+    {
+      "name": "import-components",
+      "kind": "browser",
+      "url": "https://make.powerapps.com/",
+      "account": "labadmin",
+      "steps": [
+        "Open 'Equipment Desk (phone)' in Studio",
+        "Settings > Updates > New: Enhanced component properties is On",
+        "Insert > Get more components > Equipment Desk Kit > Select all > Import",
+        "On LoansScreen select hdrLoans: show its properties",
+        "Select the gallery label: Color formula uses deskRules.StateColor(...)",
+        "Show Library components in the Insert pane"
+      ],
+      "mask": [
+        "environment name and org URL in the address bar and the environment picker",
+        "tenant name in the top bar",
+        "account name, e-mail and avatar in the account menu"
+      ]
+    },
+    {
+      "name": "app-return",
+      "kind": "browser",
+      "url": "https://make.powerapps.com/",
+      "account": "labadmin",
+      "steps": [
+        "Play the published app in the browser (phone layout), Open loans: header with the back arrow",
+        "Returned on CT-0043: dialog 'Mark as returned?'",
+        "Cancel, then Returned again > Mark returned: banner 'CT-0043 is back and available', row gone",
+        "Open the model-driven Equipment Desk app: CT-0043 status Available"
+      ],
+      "mask": [
+        "environment name and org URL in the address bar and the environment picker",
+        "tenant name in the top bar",
+        "account name, e-mail and avatar in the account menu",
+        "any real mail domain: only the fictional *.demo@contoso.com addresses may stay"
+      ]
+    },
+    {
+      "name": "library-update",
+      "kind": "browser",
+      "url": "https://make.powerapps.com/",
+      "account": "labadmin",
+      "steps": [
+        "In the library change DeskHeader Accent default to RGBA(0, 59, 112, 1)",
+        "Save with version notes '1.1 darker header' and Publish; wait up to five minutes",
+        "Open the app for editing: 'Updates available' > Review (shows the note) > Update",
+        "Show Insert > Library components > Check for updates as the second way",
+        "Show the darker header; Save and publish the app"
+      ],
+      "mask": [
+        "environment name and org URL in the address bar and the environment picker",
+        "tenant name in the top bar",
+        "account name, e-mail and avatar in the account menu"
+      ]
+    }
+  ],
+  "teardown": [
+    "Write-Host 'Reminder: reset CT-0043 (clear Returned on, status On loan) if later episodes need it overdue; the library and the app changes stay for episode 8.'"
+  ],
+  "needs": [
+    "tenant",
+    "premium-trial"
+  ]
+}

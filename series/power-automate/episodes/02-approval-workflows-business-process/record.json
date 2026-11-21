@@ -1,0 +1,74 @@
+{
+  "note": "Live-session recording of the screen scenes (series/tools/rec). All four screens are portal screens in the lab tenant (DEV); the approvals are answered live by sam.demo and jordan.demo in their own browser profiles.",
+  "prepare": [
+    "# owner signs in: browser profiles for labadmin (make.powerautomate.com, SharePoint), alex.demo, sam.demo and jordan.demo (Outlook on the web). Nothing is typed or stored here.",
+    "# owner (tenant, demo.md Setup 1-2): site Purchasing, list Purchase Requests (Amount required, Justification, Status, DecisionBy, DecisionComments); solution Purchase Approvals (PurchaseApprovals) with the flow 'Purchase request approval' built from src/solution",
+    "# owner (Entra and Microsoft 365, set up here and undone in teardown): Sam Demo set as Manager of Alex Demo; riley.demo without a manager; Microsoft 365 groups purchasing-team (member taylor.demo) and finance-approvers (member jordan.demo). Episodes 3 and 4 reuse them.",
+    "# owner (demo.md Setup 4-6): as alex.demo create USB-C cables 120, Ergonomic chairs for the support team 1,800 and Laptops for two new developers 12,500; answer the 1,800 as sam.demo and the 12,500 as sam.demo then jordan.demo; save the lab copy of the flow with the manager timeout PT5M and leave one request unanswered for five minutes",
+    "python -m pip install -r requirements-test.txt --quiet",
+    "python -m pytest"
+  ],
+  "screens": [
+    {
+      "name": "list",
+      "kind": "browser",
+      "url": "https://<tenant>.sharepoint.com/sites/Purchasing/Lists/Purchase%20Requests/AllItems.aspx",
+      "account": "labadmin",
+      "steps": [
+        "Open the Purchasing site and the list 'Purchase Requests'",
+        "Show the columns Title, Amount (EUR), Justification, Status, Decision by, Decision comments and Created by",
+        "Point at USB-C cables 120 (Approved, 'Policy: under 500 EUR'), Ergonomic chairs 1,800 and Laptops for two new developers 12,500 (Pending)",
+        "Pause on the full list"
+      ],
+      "mask": ["tenant name in the address bar and the SharePoint header", "any e-mail address that is not a lab user"]
+    },
+    {
+      "name": "approval-outlook",
+      "kind": "browser",
+      "url": "https://outlook.office.com/mail/",
+      "account": "sam.demo",
+      "steps": [
+        "In the browser profile of Sam Demo open the inbox",
+        "Open the actionable message 'Manager approval: Laptops for two new developers (12500 EUR)'",
+        "Scroll through the requester, amount, justification (markdown) and the item link",
+        "Show the Approve and Reject buttons and click into the comment box without sending",
+        "Alternative: show the same request in the Teams Approvals app"
+      ],
+      "mask": ["real tenant domain and e-mail addresses", "approval ID in links", "tenant name in the suite bar"]
+    },
+    {
+      "name": "run-sequential",
+      "kind": "browser",
+      "url": "https://make.powerautomate.com/",
+      "account": "labadmin",
+      "steps": [
+        "Open the flow 'Purchase request approval' and its run history",
+        "Open the run for the 12,500 EUR request after both approvals",
+        "Show Manager approval and Finance approval green, Record finance response green and Record finance timeout skipped (grey)",
+        "Show Finance result green and the Route decision switch on the Approve branch",
+        "Show Mark approved and Notify requester approved green"
+      ],
+      "mask": ["environment ID in the address bar", "approval IDs in the action outputs", "tenant name"]
+    },
+    {
+      "name": "escalated",
+      "kind": "browser",
+      "url": "https://make.powerautomate.com/",
+      "account": "labadmin",
+      "steps": [
+        "Open the run history of the lab copy of the flow (manager timeout PT5M)",
+        "Open the run of the unanswered request",
+        "Show Manager approval orange (timed out) and Record manager timeout green",
+        "Show Route decision on the TimedOut branch, Mark escalated and Notify purchasing team green",
+        "Second capture, same scene: open the high-importance escalation mail in the purchasing mailbox (taylor.demo, member of purchasing-team)"
+      ],
+      "mask": ["environment ID in the address bar", "approval IDs", "tenant domain in e-mail addresses", "tenant name"]
+    }
+  ],
+  "teardown": [
+    "# owner (tenant): restore the P3D timeouts or delete the PT5M lab copy; turn the flow off; cancel pending approvals in Approvals > Sent; delete the sample requests if the list is not reused",
+    "# owner (Entra): clear Alex Demo's manager unless episode 4 is recorded next; delete the groups purchasing-team and finance-approvers only after episodes 3 and 4",
+    "Get-ChildItem -Path . -Filter 'PurchaseApprovals_*.zip' -ErrorAction SilentlyContinue | Remove-Item -Force"
+  ],
+  "needs": ["tenant"]
+}

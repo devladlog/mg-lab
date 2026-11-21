@@ -1,0 +1,93 @@
+{
+  "note": "Do not tune data, prompts or thresholds: non-repeatable temperature 0 or an uncertain answer with the handbook is the episode. The 'tokens' scene is a code scene (offline) and needs no capture.",
+  "prepare": [
+    "python -m venv .venv",
+    "$env:PATH = \"$PWD\\.venv\\Scripts;$env:PATH\"",
+    "python -m pip install -q -r requirements.txt",
+    "$env:PYTHONPATH = 'src'",
+    "# owner signs in as labadmin (device code), not on camera",
+    "az login --use-device-code --only-show-errors | Out-Null",
+    "$me = az ad signed-in-user show --query id -o tsv",
+    "az group create -n rg-mglab-ai-15 -l swedencentral -o none",
+    "$o = az deployment group create -g rg-mglab-ai-15 -f infra/main.bicep -p infra/main.bicepparam -p developerPrincipalId=$me --query properties.outputs -o json | ConvertFrom-Json",
+    "$env:LLMPROBE_ENDPOINT = $o.aoaiEndpoint.value; $env:AOAI_NAME = $o.aoaiName.value",
+    "Start-Sleep -Seconds 300   # role assignment propagation (up to 5 minutes)",
+    "python -m llmprobe budget --context-budget 400 | Out-Null   # quick check"
+  ],
+  "screens": [
+    {
+      "name": "deployment",
+      "kind": "browser",
+      "url": "https://ai.azure.com/",
+      "account": "labadmin",
+      "steps": [
+        "Open Models + endpoints (or Azure portal > the resource > Deployments)",
+        "Show 'chat': gpt-4.1-mini 2025-04-14, Standard, Sweden Central",
+        "Open the resource's authentication view and show local (key) authentication disabled"
+      ],
+      "mask": [
+        "subscription name and ID",
+        "tenant name / directory in the top bar",
+        "signed-in user name, UPN and avatar in the account menu",
+        "resource name suffix"
+      ]
+    },
+    {
+      "name": "probe",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\ai\\episodes\\15-generative-ai-llms",
+      "prompt": "PS ep15> ",
+      "commands": [
+        "python -m llmprobe probe",
+        "#pause 10"
+      ]
+    },
+    {
+      "name": "sample",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\ai\\episodes\\15-generative-ai-llms",
+      "prompt": "PS ep15> ",
+      "commands": [
+        "python -m llmprobe sample --runs 8 ; \"exit=$LASTEXITCODE\"",
+        "#pause 8"
+      ],
+      "maxMinutes": 15
+    },
+    {
+      "name": "stream",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\ai\\episodes\\15-generative-ai-llms",
+      "prompt": "PS ep15> ",
+      "commands": [
+        "python -m llmprobe stream --runs 3",
+        "#pause 8"
+      ]
+    },
+    {
+      "name": "budget",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\ai\\episodes\\15-generative-ai-llms",
+      "prompt": "PS ep15> ",
+      "commands": [
+        "python -m llmprobe budget --context-budget 120",
+        "#pause 6",
+        "python -m llmprobe budget --context-budget 400",
+        "#pause 6"
+      ]
+    }
+  ],
+  "teardown": [
+    "az group delete -n rg-mglab-ai-15 --yes",
+    "az cognitiveservices account purge -g rg-mglab-ai-15 -n $env:AOAI_NAME -l swedencentral",
+    "Remove-Item build, .venv -Recurse -Force -ErrorAction SilentlyContinue"
+  ],
+  "needs": [
+    "azure",
+    "paid:azure-openai-tokens",
+    "quota:gpt-4.1-mini-standard-swedencentral"
+  ]
+}

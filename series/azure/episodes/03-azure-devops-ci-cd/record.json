@@ -1,0 +1,111 @@
+{
+  "note": "Live-session recording of the screen scenes (series/tools/rec). prepare/teardown run on the laptop, not recorded; commands are typed and run for real in Git Bash scripts via 'bash'. Azure DevOps objects that need the portal are listed as owner steps in prepare.",
+  "prepare": [
+    "# laptop toolchain for the bash scripts: Git Bash first on PATH, python3 and zip shims in %TEMP% (the laptop has neither)",
+    "$shim = Join-Path $env:TEMP 'mgshim'; New-Item -ItemType Directory -Force $shim | Out-Null; [IO.File]::WriteAllText(\"$shim\\python3\", \"#!/bin/bash`nexec python `\"`$@`\"`n\"); [IO.File]::WriteAllText(\"$shim\\zip.py\", \"import sys,os,zipfile`nz=zipfile.ZipFile(os.path.abspath(sys.argv[-2]),'w',zipfile.ZIP_DEFLATED)`n[z.write(os.path.join(r,n),os.path.relpath(os.path.join(r,n),'.').replace(os.sep,'/')) for r,d,f in os.walk('.') for n in f]`nz.close()`n\"); [IO.File]::WriteAllText(\"$shim\\zip\", \"#!/bin/bash`nexec python `\"`$(dirname `\"`$0`\")/zip.py`\" `\"`$@`\"`n\")",
+    "$env:PATH = \"$shim;C:\\Program Files\\Git\\bin;$env:USERPROFILE\\.azure\\bin;$env:LOCALAPPDATA\\Microsoft\\WinGet\\Links;$env:PATH\"",
+    "az account show --query name -o none 2>$null; if ($LASTEXITCODE -ne 0) { az login --use-device-code }   # owner signs in as labadmin",
+    "az extension add --name azure-devops --only-show-errors",
+    "az devops configure --defaults organization=https://dev.azure.com/devladlog",
+    "bash -c 'for E in lab prod; do az group create -n rg-contoso-$E -l swedencentral --tags workload=contoso environment=$E owner=platform-team -o none; az deployment group create -g rg-contoso-$E --name governance --parameters ../02-cloud-architecture/infra/env/governance.bicepparam --parameters allowedLocations=\"[\\\"swedencentral\\\"]\" -o none; done'",
+    "if (-not (az devops project list --query \"value[?name=='contoso-platform'].name | [0]\" -o tsv)) { az devops project create --name contoso-platform --visibility private --process Agile -o none }",
+    "az devops configure --defaults project=contoso-platform",
+    "az repos import create --git-source-url https://github.com/devladlog/mg-lab --repository contoso-platform -o none   # imports branch main; if the GitHub repo is private the owner adds a GitHub service connection first",
+    "# owner (browser, labadmin): Project settings > Service connections > New > Azure Resource Manager > App registration (automatic) > Workload identity federation, scope = resource group rg-contoso-lab, name sc-contoso-lab; same for rg-contoso-prod as sc-contoso-prod. Do NOT tick 'Grant access to all pipelines'; no checks on sc-contoso-prod",
+    "# owner (portal): per connection add Role Based Access Control Administrator on its resource group, constrained to Storage Blob Data Reader and Key Vault Secrets User",
+    "# owner (browser): Pipelines > Environments: contoso-lab (no checks); contoso-prod with Approvals (Alex Demo or labadmin) and Exclusive lock",
+    "az pipelines create --name contoso-workload --repository contoso-platform --repository-type tfsgit --branch main --yaml-path /series/azure/episodes/03-azure-devops-ci-cd/pipelines/azure-pipelines.yml --skip-first-run -o none",
+    "# owner (browser): Repos > Branches > main > Branch policies > Build validation = contoso-workload (automatic, required)",
+    "az pipelines run --name contoso-workload --branch main -o none   # first run: authorize the service connections and environments when prompted; wait about 10-15 minutes until ci, lab and prod_plan are green and prod shows Waiting"
+  ],
+  "screens": [
+    {
+      "name": "pipeline-run",
+      "kind": "browser",
+      "url": "https://dev.azure.com/devladlog/contoso-platform/_build",
+      "account": "labadmin",
+      "steps": [
+        "Open Pipelines > contoso-workload",
+        "Open the latest run on main",
+        "Show the run summary with the stages ci, lab, prod_plan green and prod Waiting with the Review button",
+        "Optional extra shot: the 'This pipeline needs permission' prompt from the first run"
+      ],
+      "mask": [
+        "organization and project names in the URL and breadcrumb",
+        "user names and avatars except the fictional approver",
+        "subscription ID and tenant ID",
+        "resource name suffixes"
+      ]
+    },
+    {
+      "name": "tests-tab",
+      "kind": "browser",
+      "url": "https://dev.azure.com/devladlog/contoso-platform/_build",
+      "account": "labadmin",
+      "steps": [
+        "Open the same run",
+        "Open the Tests tab",
+        "Show 66 passed (pytest 44 + 15 merged into one run, xUnit 7), 0 failed, with the two test run titles visible",
+        "If the count differs, tell the episode builder to update the narration number"
+      ],
+      "mask": [
+        "organization and project names in the URL and breadcrumb",
+        "user names and avatars except the fictional approver",
+        "subscription ID and tenant ID",
+        "resource name suffixes"
+      ]
+    },
+    {
+      "name": "approval",
+      "kind": "browser",
+      "url": "https://dev.azure.com/devladlog/contoso-platform/_build",
+      "account": "alex.demo",
+      "steps": [
+        "Open the same run",
+        "Open the Extensions tab and show the summary 'What-if gate: rg-contoso-prod: GO' (all Create on the empty prod group)",
+        "Go back to the run summary and click Review on the prod stage to show the approval dialog with Approve and Reject",
+        "Click Reject with the comment 'demo: prod stays empty'",
+        "Download the whatif-prod_plan artifact and hand whatif.json to the episode builder (subscription ID zeroed) as tests/fixtures/whatif-real-prod.json"
+      ],
+      "mask": [
+        "organization and project names in the URL and breadcrumb",
+        "user names and avatars except the fictional approver",
+        "subscription ID and tenant ID",
+        "resource name suffixes"
+      ],
+      "note": "Sign in as alex.demo in a second browser profile, or keep labadmin as approver if the requester-cannot-approve option is off."
+    },
+    {
+      "name": "environment-history",
+      "kind": "browser",
+      "url": "https://dev.azure.com/devladlog/contoso-platform/_environments",
+      "account": "labadmin",
+      "steps": [
+        "Open Pipelines > Environments > contoso-prod",
+        "Show the Deployments tab with the rejected run listed",
+        "Open Approvals and checks and show Approvals and Exclusive lock (do not open the service connection Edit pane)"
+      ],
+      "mask": [
+        "organization and project names in the URL and breadcrumb",
+        "user names and avatars except the fictional approver",
+        "subscription ID and tenant ID",
+        "resource name suffixes"
+      ]
+    }
+  ],
+  "teardown": [
+    "$kv = az keyvault list -g rg-contoso-lab --query \"[0].name\" -o tsv",
+    "az group delete -n rg-contoso-lab --yes --no-wait",
+    "az group delete -n rg-contoso-prod --yes",
+    "if ($kv) { Start-Sleep -Seconds 60; az keyvault purge --name $kv }   # lab vault has purge protection off (episode 2)",
+    "$pid_ = az devops project show --project contoso-platform --query id -o tsv; if ($pid_) { az devops project delete --id $pid_ --yes }   # removes repo, pipeline, environments and service connections",
+    "az ad app list --filter \"startswith(displayName,'devladlog-contoso-platform')\" --query \"[].id\" -o tsv | ForEach-Object { az ad app delete --id $_ }   # app registrations made by the automatic service connections",
+    "az group exists --name rg-contoso-lab"
+  ],
+  "needs": [
+    "azure",
+    "tenant",
+    "azure-devops",
+    "owner:ado-service-connections-environments-branch-policy"
+  ]
+}

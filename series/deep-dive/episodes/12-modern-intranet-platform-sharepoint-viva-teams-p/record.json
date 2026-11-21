@@ -1,0 +1,97 @@
+{
+  "note": "Deep-dive #12. Hub changes can take 2 to 4 hours: record hub and later screens after the wait. Browser sign-in windows open during the provision run (owner signs in as labadmin, no passwords or codes on screen).",
+  "prepare": [
+    "Invoke-Pester ./tests",
+    "if (-not (Get-Module -ListAvailable PnP.PowerShell)) { Install-Module PnP.PowerShell -Scope CurrentUser -Force }",
+    "$env:MG_TENANT = Read-Host 'Lab tenant short name (owner types)'",
+    "Register-PnPEntraIDAppForInteractiveLogin -ApplicationName 'contoso-intranet-pnp' -Tenant \"$($env:MG_TENANT).onmicrosoft.com\"   # owner signs in, grants admin consent, notes the client id",
+    "$env:PNP_CLIENT_ID = Read-Host 'client id of contoso-intranet-pnp (owner types)'",
+    "# clean slate: remove leftovers of a rehearsal (idempotent)",
+    "Connect-PnPOnline -Url \"https://$($env:MG_TENANT)-admin.sharepoint.com\" -Interactive -ClientId $env:PNP_CLIENT_ID   # owner signs in",
+    "Remove-PnPHomeSite -Force -ErrorAction SilentlyContinue; Unregister-PnPHubSite -Site \"https://$($env:MG_TENANT).sharepoint.com/sites/contoso-home\" -ErrorAction SilentlyContinue",
+    "'contoso-ops','contoso-it','contoso-hr','contoso-home' | ForEach-Object { Remove-PnPTenantSite -Url \"https://$($env:MG_TENANT).sharepoint.com/sites/$_\" -SkipRecycleBin -Force -ErrorAction SilentlyContinue }",
+    "Get-PnPSiteDesign | Where-Object Title -eq 'Contoso intranet site' | ForEach-Object { Remove-PnPSiteDesign -Identity $_.Id -Force }; Get-PnPSiteScript | Where-Object Title -eq 'Contoso intranet site script' | ForEach-Object { Remove-PnPSiteScript -Identity $_.Id -Force }",
+    "# manual: build the flow 'News request approval' in DEV as labadmin (trigger SharePoint When an item is created on News Requests; Approvals Start and wait; Condition; Update item Approved / Rejected) after the provision screen has created the list; assigned to sam.demo; mgl_CommsApprover = sam.demo's e-mail; compare with flow/news-approval.definition.json",
+    "# manual: Teams admin center > Teams apps > Setup policies > Global > Pinned apps: add the SharePoint / Viva Connections app (on camera in the viva screen); SharePoint admin center > Settings > Home sites"
+  ],
+  "screens": [
+    {
+      "name": "provision",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\deep-dive\\episodes\\12-modern-intranet-platform-sharepoint-viva-teams-p",
+      "prompt": "PS ...\\12-intranet> ",
+      "commands": [
+        "./provision/Initialize-Intranet.ps1 -TenantName $env:MG_TENANT -ClientId $env:PNP_CLIENT_ID -WhatIf",
+        "#pause 3",
+        "./provision/Initialize-Intranet.ps1 -TenantName $env:MG_TENANT -ClientId $env:PNP_CLIENT_ID",
+        "#pause 3",
+        "./provision/Initialize-Intranet.ps1 -TenantName $env:MG_TENANT -ClientId $env:PNP_CLIENT_ID",
+        "#pause 3",
+        "./provision/Test-Intranet.ps1 -TenantName $env:MG_TENANT -ClientId $env:PNP_CLIENT_ID",
+        "#pause 4"
+      ],
+      "also": [
+        "Expected tables: WhatIf (Site x4, Hub, Association x3, HubNavigation x4, HomeSite), then Created/Registered/Associated/Added/Set, then every line Exists, then Test-Intranet all Pass. The tenant name and client id are held in environment variables and are not printed."
+      ]
+    },
+    {
+      "name": "hub",
+      "kind": "browser",
+      "url": "https://<tenant>.sharepoint.com/sites/contoso-home",
+      "account": "labadmin",
+      "steps": [
+        "Open the Contoso Home site: hub navigation across the top (People and Culture, IT Help, Operations, Expenses)",
+        "Click People and Culture: the same navigation bar is on the department site",
+        "SharePoint admin center > Sites > Active sites: Contoso Home as hub with its three associated department sites"
+      ],
+      "mask": [
+        "tenant name in the address bar and the admin center URL"
+      ]
+    },
+    {
+      "name": "flow",
+      "kind": "browser",
+      "url": "https://make.powerautomate.com/",
+      "account": "labadmin (flow), alex.demo (submits), sam.demo (approves)",
+      "steps": [
+        "As labadmin open the flow News request approval in the designer (three actions and the condition)",
+        "As alex.demo add an item to News Requests on the hub site: Title, Summary, Department; status Submitted",
+        "As sam.demo answer the real approval in the Approvals app in Teams (or the e-mail, whichever arrives) with a comment",
+        "Refresh the list item: News status Approved and the message filled",
+        "Back as labadmin: run history shows Succeeded"
+      ],
+      "mask": [
+        "tenant name",
+        "Power Automate environment URL and id",
+        "e-mail domains (lab users only: keep alex.demo and sam.demo)"
+      ]
+    },
+    {
+      "name": "viva",
+      "kind": "browser",
+      "url": "https://admin.teams.microsoft.com/",
+      "account": "labadmin (admin centers), alex.demo (Teams desktop)",
+      "steps": [
+        "Teams admin center > Teams apps > Setup policies > Global > Pinned apps: the SharePoint / Viva Connections app added",
+        "SharePoint admin center > Settings > Home sites: Contoso Home (Draft, then enabled)",
+        "Teams desktop as alex.demo: the app pinned on the left bar, the home site open inside Teams"
+      ],
+      "mask": [
+        "tenant name",
+        "admin center URLs"
+      ]
+    }
+  ],
+  "teardown": [
+    "Connect-PnPOnline -Url \"https://$($env:MG_TENANT)-admin.sharepoint.com\" -Interactive -ClientId $env:PNP_CLIENT_ID   # owner signs in",
+    "Remove-PnPHomeSite -Force -ErrorAction SilentlyContinue; Unregister-PnPHubSite -Site \"https://$($env:MG_TENANT).sharepoint.com/sites/contoso-home\" -ErrorAction SilentlyContinue",
+    "'contoso-ops','contoso-it','contoso-hr','contoso-home' | ForEach-Object { Remove-PnPTenantSite -Url \"https://$($env:MG_TENANT).sharepoint.com/sites/$_\" -SkipRecycleBin -Force -ErrorAction SilentlyContinue }",
+    "Get-PnPSiteDesign | Where-Object Title -eq 'Contoso intranet site' | ForEach-Object { Remove-PnPSiteDesign -Identity $_.Id -Force }; Get-PnPSiteScript | Where-Object Title -eq 'Contoso intranet site script' | ForEach-Object { Remove-PnPSiteScript -Identity $_.Id -Force }",
+    "# manual: delete the flow 'News request approval'; remove the app from the Global pinned apps list if it was not pinned before; delete the app registration contoso-intranet-pnp and permanently from Deleted applications",
+    "Remove-Item Env:PNP_CLIENT_ID, Env:MG_TENANT -ErrorAction SilentlyContinue"
+  ],
+  "needs": [
+    "tenant"
+  ]
+}

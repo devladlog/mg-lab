@@ -1,0 +1,98 @@
+{
+  "note": "Live-session recording of the screen scenes (series/tools/rec). prepare/teardown run on the laptop, not recorded; commands are typed and run for real. Steps of browser/app screens are done by hand by the person recording.",
+  "prepare": [
+    "New-Item -ItemType Directory -Force C:\\MGLab\\power-bi | Out-Null",
+    "Remove-Item C:\\MGLab\\power-bi\\ep15 -Recurse -Force -ErrorAction SilentlyContinue",
+    "Copy-Item -Path (Get-Location).Path -Destination C:\\MGLab\\power-bi\\ep15 -Recurse -Force",
+    "Import-Module MicrosoftPowerBIMgmt.Profile",
+    "Connect-PowerBIServiceAccount   # owner signs in as labadmin (interactive)",
+    "Connect-AzAccount   # owner signs in as labadmin (interactive)",
+    "$fabric = (Get-AzAccessToken -ResourceUrl 'https://api.fabric.microsoft.com' -AsSecureString).Token",
+    "Import-Module ./PbiGovernance/PbiGovernance.psd1 -Force",
+    "Export-PbiTenantBaseline -Setting @(Get-PbiTenantSetting -FabricToken $fabric) -Path ./policy/tenant-baseline.json   # run in the episode src folder; owner reviews the file and keeps only the settings the episode talks about"
+  ],
+  "screens": [
+    {
+      "name": "governance-report",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "C:\\MGLab\\power-bi\\ep15\\src",
+      "prompt": "PS C:\\MGLab\\power-bi\\ep15\\src> ",
+      "commands": [
+        "./Invoke-GovernanceAudit.ps1 -BaselinePath ./policy/tenant-baseline.json -FabricToken $fabric",
+        "$out = Get-ChildItem ./out/governance-*.md | Sort-Object LastWriteTime | Select-Object -Last 1; Get-Content $out.FullName | Select-Object -First 70",
+        "#pause 5",
+        "./Invoke-GovernanceAudit.ps1 -ScanResultPath ../tests/fixtures/scan-result.json -SkipActivity -OutDir ./out-offline",
+        "$LASTEXITCODE",
+        "#pause 4"
+      ],
+      "prepare": [
+        "Import-Module MicrosoftPowerBIMgmt.Profile",
+        "Connect-PowerBIServiceAccount   # owner signs in as labadmin (interactive)",
+        "Connect-AzAccount   # owner signs in as labadmin (interactive)",
+        "$fabric = (Get-AzAccessToken -ResourceUrl 'https://api.fabric.microsoft.com' -AsSecureString).Token",
+        "Import-Module ./PbiGovernance/PbiGovernance.psd1 -Force"
+      ],
+      "note": "Real run needs the tenant; the offline run on the fixture yields 12 findings, exit code 1. Optional: open the .md in the VS Code preview beside the terminal."
+    },
+    {
+      "name": "settings-drift",
+      "kind": "browser",
+      "url": "https://app.powerbi.com/admin-portal/tenantSettings",
+      "account": "labadmin",
+      "steps": [
+        "Admin portal > Tenant settings: switch one harmless baseline setting off (for example Certification, group Contoso Certifiers (Lab)) and Apply; note which one",
+        "After the wait (see gotcha), terminal at C:\\MGLab\\power-bi\\ep15\\src: ./Invoke-GovernanceAudit.ps1 -BaselinePath ./policy/tenant-baseline.json -FabricToken $fabric ($fabric set before recording) and show the Tenant settings drift section: EnabledChanged: enabled=True -> enabled=False",
+        "Switch the setting back on, wait, run again: No difference from the baseline"
+      ],
+      "mask": [
+        "tenant name and domain",
+        "group names that identify the tenant",
+        "account picture and name"
+      ]
+    },
+    {
+      "name": "activity-summary",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "C:\\MGLab\\power-bi\\ep15\\src",
+      "prompt": "PS C:\\MGLab\\power-bi\\ep15\\src> ",
+      "commands": [
+        "Get-PbiActivitySummary -Event @(Get-PbiActivityEvent -Date (Get-Date).AddDays(-1))",
+        "#pause 6"
+      ],
+      "prepare": [
+        "Import-Module MicrosoftPowerBIMgmt.Profile",
+        "Connect-PowerBIServiceAccount   # owner signs in as labadmin (interactive)",
+        "Connect-AzAccount   # owner signs in as labadmin (interactive)",
+        "$fabric = (Get-AzAccessToken -ResourceUrl 'https://api.fabric.microsoft.com' -AsSecureString).Token",
+        "Import-Module ./PbiGovernance/PbiGovernance.psd1 -Force"
+      ],
+      "note": "Needs activity from the day before: labadmin, alex.demo, sam.demo, jordan.demo, riley.demo, taylor.demo open and export a few reports. Aliases only; record which operation names appear."
+    },
+    {
+      "name": "lag",
+      "kind": "browser",
+      "url": "https://app.powerbi.com/admin-portal/tenantSettings",
+      "account": "labadmin",
+      "steps": [
+        "Apply a tenant setting change and have sam.demo export a report, with a clock visible",
+        "Immediately run the audit in the terminal ($fabric set before recording): neither the drift nor the export event shows",
+        "Wait and run again until both show; record the real delays (Learn: up to 15 minutes for settings, 30 to 60 minutes for activity events)"
+      ],
+      "mask": [
+        "tenant name and domain",
+        "account picture and name"
+      ]
+    }
+  ],
+  "teardown": [
+    "Remove-Item C:\\MGLab\\power-bi\\ep15 -Recurse -Force -ErrorAction SilentlyContinue",
+    "# owner: make sure the tenant setting changed for the drift take is switched back on; delete the optional workspace Contoso Orphan (Lab)"
+  ],
+  "needs": [
+    "tenant",
+    "premium-trial"
+  ],
+  "owner_notes": "The baseline file holds group names of the lab tenant and stays outside the repository (written into the working copy only)."
+}

@@ -1,0 +1,104 @@
+{
+  "note": "Live-session recording of the SharePoint episode screens (series/tools/rec). prepare/teardown run on the laptop, not recorded. Set MG_TENANT, MG_UPN_DOMAIN and MG_PNP_CLIENT_ID in the environment before queueing (never in a file). Sign-ins are device-code, done by the owner. Episodes 1-9 chain: set MG_KEEP_CHAIN=1 while recording them in order so teardown keeps what the next episode uses; unset it for a full clean-up. Two sessions: day 1 provisioning, schema mapping and re-index; day 2 (after the crawl) the search tests. MG_EP4_DATE must be the date episode 4's sample files were generated (yyyy-MM-dd).",
+  "prepare": [
+    "if (-not $env:MG_TENANT -or -not $env:MG_UPN_DOMAIN -or -not $env:MG_PNP_CLIENT_ID) { throw 'Set MG_TENANT (lab tenant short name), MG_UPN_DOMAIN (sign-in domain of the lab users) and MG_PNP_CLIENT_ID (the MG Lab PnP app) in the environment first' }",
+    "if (-not (Get-Module -ListAvailable PnP.PowerShell)) { Install-Module PnP.PowerShell -Scope CurrentUser -Force }",
+    "$env:MG_TENANT_URL = \"https://${env:MG_TENANT}.sharepoint.com\"; $env:MG_ADMIN_URL = \"https://${env:MG_TENANT}-admin.sharepoint.com\"; $env:MG_EP = (Get-Location).Path",
+    "$env:MG_LABADMIN_UPN = \"labadmin@$env:MG_UPN_DOMAIN\"; $env:MG_ALEX_UPN = \"alex.demo@$env:MG_UPN_DOMAIN\"; $env:MG_SAM_UPN = \"sam.demo@$env:MG_UPN_DOMAIN\"; $env:MG_JORDAN_UPN = \"jordan.demo@$env:MG_UPN_DOMAIN\"; $env:MG_RILEY_UPN = \"riley.demo@$env:MG_UPN_DOMAIN\"",
+    "$env:MG_SITE = \"$env:MG_TENANT_URL/sites/Purchasing\"",
+    "$p = @{ PlanPath = './src/search/search-plan.json'; TermSetPath = './src/search/purchasing-categories.termset.json'; TestsPath = './src/search/search-tests.json'; SiteUrl = $env:MG_SITE; ClientId = $env:MG_PNP_CLIENT_ID }",
+    "./src/Invoke-SearchMetadata.ps1 @p -Provision"
+  ],
+  "screens": [
+    {
+      "name": "termstore",
+      "kind": "browser",
+      "url": "https://<tenant>-admin.sharepoint.com/_layouts/15/termstoremanager.aspx",
+      "account": "labadmin",
+      "steps": [
+        "Open SharePoint admin center > Content services > Term store",
+        "Expand Contoso Purchasing > Purchasing Categories",
+        "Select the term 'Facilities' (children Cleaning, Maintenance)",
+        "Hold on the General tab with the Unique Identifier ending in ...1e10"
+      ],
+      "mask": [
+        "tenant name and admin host in the address bar",
+        "admin account in the top bar"
+      ]
+    },
+    {
+      "name": "library-category",
+      "kind": "browser",
+      "url": "https://<tenant>.sharepoint.com/sites/Purchasing/SupplierDocuments/Forms/AllItems.aspx",
+      "account": "labadmin",
+      "steps": [
+        "Open Supplier Documents and switch to a flat view ('Show all items without folders') with Name, Supplier, Category, Expiry date",
+        "Hold on Fabrikam = Cleaning, Northwind Traders = Paper and Toner, Tailspin Toys = Merchandise, Adventure Works = Vehicle Leasing, scan_0001.txt without a category"
+      ],
+      "mask": [
+        "tenant host in the address bar (pipeline/mask.js)",
+        "account avatar and display name in the top bar",
+        "Modified By names"
+      ]
+    },
+    {
+      "name": "schema",
+      "kind": "browser",
+      "url": "https://<tenant>.sharepoint.com/sites/Purchasing/_layouts/15/listmanagedproperties.aspx?level=sitecol",
+      "account": "labadmin",
+      "steps": [
+        "Site settings > Site Collection Administration > Search Schema > Managed Properties",
+        "Filter 'Refinable' and open RefinableDate00 (Edit Managed Property)",
+        "Hold on Alias 'PurchExpiry' and the mapping to the ExpiryDate crawled property (ows_q_DATE_ExpiryDate or ows_ExpiryDate, whichever is listed)",
+        "Second capture: the list filtered 'Refinable' showing RefinableString00 PurchSupplier, RefinableString01 PurchDept, RefinableDate00 PurchExpiry, RefinableDate01 PurchInvoiceDate",
+        "After saving the four mappings, off camera in a terminal run: ./src/Invoke-SearchMetadata.ps1 @p -CheckMapping -Reindex (expect 'No findings'), then wait for the crawl"
+      ],
+      "mask": [
+        "tenant host in the address bar",
+        "account avatar and display name"
+      ],
+      "note": "Day 1. Write the crawled property names you chose into search-plan.json afterwards."
+    },
+    {
+      "name": "search-tests",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\sharepoint\\episodes\\06-search-metadata",
+      "prompt": "PS sharepoint-06> ",
+      "prepare": [
+        "if (-not $env:MG_TENANT -or -not $env:MG_UPN_DOMAIN -or -not $env:MG_PNP_CLIENT_ID) { throw 'Set MG_TENANT (lab tenant short name), MG_UPN_DOMAIN (sign-in domain of the lab users) and MG_PNP_CLIENT_ID (the MG Lab PnP app) in the environment first' }",
+        "if (-not (Get-Module -ListAvailable PnP.PowerShell)) { Install-Module PnP.PowerShell -Scope CurrentUser -Force }",
+        "$env:MG_TENANT_URL = \"https://${env:MG_TENANT}.sharepoint.com\"; $env:MG_ADMIN_URL = \"https://${env:MG_TENANT}-admin.sharepoint.com\"; $env:MG_EP = (Get-Location).Path",
+        "$env:MG_LABADMIN_UPN = \"labadmin@$env:MG_UPN_DOMAIN\"; $env:MG_ALEX_UPN = \"alex.demo@$env:MG_UPN_DOMAIN\"; $env:MG_SAM_UPN = \"sam.demo@$env:MG_UPN_DOMAIN\"; $env:MG_JORDAN_UPN = \"jordan.demo@$env:MG_UPN_DOMAIN\"; $env:MG_RILEY_UPN = \"riley.demo@$env:MG_UPN_DOMAIN\"",
+        "$env:MG_SITE = \"$env:MG_TENANT_URL/sites/Purchasing\"",
+        "if (-not $env:MG_EP4_DATE) { throw 'Set MG_EP4_DATE to the date the episode 4 sample files were generated (yyyy-MM-dd)' }"
+      ],
+      "commands": [
+        "$p = @{ PlanPath = './src/search/search-plan.json'; TermSetPath = './src/search/purchasing-categories.termset.json'; TestsPath = './src/search/search-tests.json'; SiteUrl = $env:MG_SITE; ClientId = $env:MG_PNP_CLIENT_ID }",
+        "#clear",
+        "./src/Invoke-SearchMetadata.ps1 @p -CheckMapping -RunTests -Today $env:MG_EP4_DATE",
+        "#pause 8"
+      ],
+      "note": "Day 2, after the crawl. Expect four mappings read back, 'No findings', six PASS lines, '6 passed, 0 failed'; record what it really says."
+    }
+  ],
+  "teardown": [
+    "if (-not $env:MG_TENANT -or -not $env:MG_UPN_DOMAIN -or -not $env:MG_PNP_CLIENT_ID) { throw 'Set MG_TENANT (lab tenant short name), MG_UPN_DOMAIN (sign-in domain of the lab users) and MG_PNP_CLIENT_ID (the MG Lab PnP app) in the environment first' }",
+    "if (-not (Get-Module -ListAvailable PnP.PowerShell)) { Install-Module PnP.PowerShell -Scope CurrentUser -Force }",
+    "$env:MG_TENANT_URL = \"https://${env:MG_TENANT}.sharepoint.com\"; $env:MG_ADMIN_URL = \"https://${env:MG_TENANT}-admin.sharepoint.com\"; $env:MG_EP = (Get-Location).Path",
+    "$env:MG_LABADMIN_UPN = \"labadmin@$env:MG_UPN_DOMAIN\"; $env:MG_ALEX_UPN = \"alex.demo@$env:MG_UPN_DOMAIN\"; $env:MG_SAM_UPN = \"sam.demo@$env:MG_UPN_DOMAIN\"; $env:MG_JORDAN_UPN = \"jordan.demo@$env:MG_UPN_DOMAIN\"; $env:MG_RILEY_UPN = \"riley.demo@$env:MG_UPN_DOMAIN\"",
+    "$env:MG_SITE = \"$env:MG_TENANT_URL/sites/Purchasing\"",
+    "Connect-PnPOnline -Url $env:MG_SITE -ClientId $env:MG_PNP_CLIENT_ID -DeviceLogin   # owner signs in",
+    "if ($env:MG_KEEP_CHAIN -ne '1') { Remove-PnPField -List 'Supplier Documents' -Identity PurchCategory -Force -ErrorAction SilentlyContinue; Remove-PnPField -Identity PurchCategory -Force -ErrorAction SilentlyContinue; Remove-PnPTermGroup -Identity 'Contoso Purchasing' -Force -ErrorAction SilentlyContinue }"
+  ],
+  "needs": [
+    "tenant",
+    "episode:03",
+    "episode:04",
+    "role:sharepoint-admin",
+    "role:site-collection-admin",
+    "role:term-store-admin",
+    "app:MG Lab PnP",
+    "wait:search crawl (hours, day 2)"
+  ]
+}

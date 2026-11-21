@@ -1,0 +1,89 @@
+{
+  "note": "Live-session recording (series/tools/rec). prepare/teardown run on the laptop, not recorded. Passwords are never in this file: the owner types the connection string once when prepare asks (Server=10.50.0.30,1433;Database=master;UID=<login>;<the login's password entry>;Encrypt=yes;TrustServerCertificate=yes); prepare keeps it in the MG_SQL_BASE variable of this session and derives SQL_CONNECTION_STRING for each database; teardown removes both. T-SQL set-up runs on CON-SQL01 over PowerShell Direct as the lab Administrator with Windows authentication (SQL Server's own sysadmin group is Domain Admins). Episode login: lab_demo (created once, off camera).",
+  "prepare": [
+    "$sql = { param($vm, $text) Invoke-Command -VMName $vm -Credential $cred -ArgumentList $text -ScriptBlock { param($t) $c = New-Object System.Data.SqlClient.SqlConnection 'Server=localhost;Integrated Security=SSPI;TrustServerCertificate=True'; $c.Open(); try { foreach ($b in ($t -split '(?im)^\\s*GO\\s*$')) { if ($b.Trim()) { $m = $c.CreateCommand(); $m.CommandText = $b; $m.CommandTimeout = 600; [void]$m.ExecuteNonQuery() } } } finally { $c.Close() } } }",
+    "& $sql 'CON-SQL01' \"IF SUSER_ID(N'lab_demo') IS NULL THROW 50000, N'Create the login lab_demo first (episode 3 demo.md, setup step 3; owner types its password off camera).', 1;\"",
+    "& $sql 'CON-SQL01' (Get-Content -Raw src\\sql\\00-create-database.sql)",
+    "& $sql 'CON-SQL01' \"GRANT VIEW SERVER PERFORMANCE STATE TO lab_demo;`nGO`nUSE ContosoBikesPerf;`nGO`nIF USER_ID(N'lab_demo') IS NULL CREATE USER lab_demo FOR LOGIN lab_demo;`nALTER ROLE db_owner ADD MEMBER lab_demo;\"",
+    "if (-not $env:MG_SQL_BASE) { $env:MG_SQL_BASE = Read-Host 'Connection string for lab_demo on 10.50.0.30,1433 (typed off camera, never saved; format in the note of record.json)' -MaskInput }",
+    "$env:SQL_CONNECTION_STRING = $env:MG_SQL_BASE -replace 'Database=[^;]*', 'Database=ContosoBikesPerf'",
+    "python -m pip install -q -r requirements.txt",
+    "python src/tune_lab.py --engine sqlserver --setup --scenario sargable"
+  ],
+  "screens": [
+    {
+      "name": "q01-plans",
+      "kind": "app",
+      "app": "SSMS 22",
+      "steps": [
+        "Open SSMS 22 and connect to 10.50.0.30,1433 with SQL Server Authentication as lab_demo (secret typed off camera, Remember off); in Options > Connection Properties set the database to ContosoBikesPerf and tick Trust server certificate (lab only)",
+        "Turn on Include Actual Execution Plan (Ctrl+M); paste src/sql/q01a-function-on-column.sql and q01b-date-range.sql into one query window and run both",
+        "Results tab: 4856 / 1238862.24 twice; Execution plan tab: query 1 Index Scan (IX_Orders_OrderDate), query 2 Index Seek (IX_Orders_OrderDate), relative cost per query visible"
+      ],
+      "mask": [
+        "server address 10.50.0.30 and the login name (Connect dialog, title bar, status bar, Object Explorer): connect through a hosts alias so it reads CON-SQL01, or blur",
+        "laptop machine name and Windows user name in title bars"
+      ],
+      "scene": "sargable-screen"
+    },
+    {
+      "name": "q02-convert-warning",
+      "kind": "app",
+      "app": "SSMS 22",
+      "steps": [
+        "Open SSMS 22 and connect to 10.50.0.30,1433 with SQL Server Authentication as lab_demo (secret typed off camera, Remember off); in Options > Connection Properties set the database to ContosoBikesPerf and tick Trust server certificate (lab only)",
+        "With Include Actual Execution Plan on, open and run src/sql/q02a-implicit-conversion.sql",
+        "Hover the yellow warning triangle on the SELECT operator so the tooltip shows the type conversion warning with CONVERT_IMPLICIT(int, ...AccountNumber...); the scan (no seek) is visible",
+        "Optional: run q02b-matching-type.sql below it: Index Seek (UX_Customers_AccountNumber), no warning"
+      ],
+      "mask": [
+        "server address 10.50.0.30 and the login name (Connect dialog, title bar, status bar, Object Explorer): connect through a hosts alias so it reads CON-SQL01, or blur",
+        "laptop machine name and Windows user name in title bars"
+      ],
+      "scene": "conversion-screen"
+    },
+    {
+      "name": "runner-sniffing",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\sql\\episodes\\04-query-optimization",
+      "prompt": "PS> ",
+      "commands": [
+        "python src/tune_lab.py --engine sqlserver --scenario sniffing --save-plans plans",
+        "#pause 6"
+      ],
+      "maxMinutes": 10,
+      "scene": "sniffing-screen"
+    },
+    {
+      "name": "query-store-forced",
+      "kind": "app",
+      "app": "SSMS 22",
+      "prepare": [
+        "python src/tune_lab.py --engine sqlserver --scenario query-store --save-plans plans"
+      ],
+      "steps": [
+        "Open SSMS 22 and connect to 10.50.0.30,1433 with SQL Server Authentication as lab_demo (secret typed off camera, Remember off); in Options > Connection Properties set the database to ContosoBikesPerf and tick Trust server certificate (lab only)",
+        "In Object Explorer expand ContosoBikesPerf > Query Store (Refresh first) > Queries With Forced Plans",
+        "Select the GetCustomerOrders query: its plans are listed, the clustered index scan plan is marked as forced (check mark)",
+        "Optional second take: the terminal's query-store section (both forced runs Clustered Index Scan, ForceFailureCount 0)"
+      ],
+      "mask": [
+        "server address 10.50.0.30 and the login name (Connect dialog, title bar, status bar, Object Explorer): connect through a hosts alias so it reads CON-SQL01, or blur",
+        "laptop machine name and Windows user name in title bars"
+      ],
+      "note": "The query-store scenario leaves the plan forced on purpose; teardown drops the database.",
+      "scene": "forced-screen"
+    }
+  ],
+  "teardown": [
+    "$sql = { param($vm, $text) Invoke-Command -VMName $vm -Credential $cred -ArgumentList $text -ScriptBlock { param($t) $c = New-Object System.Data.SqlClient.SqlConnection 'Server=localhost;Integrated Security=SSPI;TrustServerCertificate=True'; $c.Open(); try { foreach ($b in ($t -split '(?im)^\\s*GO\\s*$')) { if ($b.Trim()) { $m = $c.CreateCommand(); $m.CommandText = $b; $m.CommandTimeout = 600; [void]$m.ExecuteNonQuery() } } } finally { $c.Close() } } }",
+    "& $sql 'CON-SQL01' \"IF DB_ID(N'ContosoBikesPerf') IS NOT NULL BEGIN ALTER DATABASE ContosoBikesPerf SET SINGLE_USER WITH ROLLBACK IMMEDIATE; DROP DATABASE ContosoBikesPerf; END\"",
+    "Remove-Item Env:SQL_CONNECTION_STRING, Env:MG_SQL_BASE -ErrorAction SilentlyContinue"
+  ],
+  "needs": [
+    "lab-vms",
+    "tool:SSMS",
+    "login:lab_demo"
+  ]
+}

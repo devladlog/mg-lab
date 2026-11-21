@@ -1,0 +1,76 @@
+{
+  "note": "Live-session recording of the screen scenes (series/tools/rec). prepare/teardown run on the laptop, not recorded; commands are typed and run for real. Steps of browser/app screens are done by hand by the person recording.",
+  "prepare": [
+    "New-Item -ItemType Directory -Force C:\\MGLab\\power-bi | Out-Null",
+    "Remove-Item C:\\MGLab\\power-bi\\ep08 -Recurse -Force -ErrorAction SilentlyContinue",
+    "Copy-Item -Path (Get-Location).Path -Destination C:\\MGLab\\power-bi\\ep08 -Recurse -Force",
+    "Push-Location C:\\MGLab\\power-bi\\ep08\\src",
+    "python data\\gen_sales.py --rows 2000000 --out C:\\ContosoBikesPerf",
+    "python tools\\expected_totals.py C:\\ContosoBikesPerf",
+    "if (-not (Test-Path results\\performance-analyzer.csv)) { Copy-Item results\\performance-analyzer.template.csv results\\performance-analyzer.csv }",
+    "Pop-Location"
+  ],
+  "screens": [
+    {
+      "name": "perf-before",
+      "kind": "app",
+      "app": "Power BI Desktop",
+      "steps": [
+        "Open C:\\MGLab\\power-bi\\ep08\\src\\ContosoPerf.Before.pbip; Transform data > Edit parameters > DataFolder = C:\\ContosoBikesPerf; Refresh and note the duration",
+        "Page Executive: Optimize ribbon > Performance Analyzer > Start recording > Refresh visuals (twice; record the second, warm run)",
+        "Expand the visuals: show the DAX query and visual display categories; keep the slowest visual and its duration in view",
+        "Type the durations into results\\performance-analyzer.csv (before_ms) for the later comparison"
+      ],
+      "mask": [
+        "account name and picture at the top right of Power BI Desktop (sign out first)",
+        "Windows user name in any file path (record from C:\\MGLab)"
+      ]
+    },
+    {
+      "name": "perf-sizes",
+      "kind": "app",
+      "app": "Power BI Desktop",
+      "steps": [
+        "Same file, DAX query view: paste queries\\01-column-sizes.dax and Run",
+        "Sort the grid by DICTIONARY_SIZE descending: Sales columns LineRef, OrderTimestamp, Note, OrderNumber on top (record the real order and sizes)"
+      ],
+      "mask": [
+        "account name and picture at the top right of Power BI Desktop (sign out first)",
+        "Windows user name in any file path (record from C:\\MGLab)"
+      ]
+    },
+    {
+      "name": "perf-after",
+      "kind": "app",
+      "app": "Power BI Desktop",
+      "steps": [
+        "Open C:\\MGLab\\power-bi\\ep08\\src\\ContosoPerf.After.pbip, same DataFolder, Refresh (note duration)",
+        "Executive page: Performance Analyzer, same year selection, Start recording, Refresh visuals (second run); type after_ms into the csv (leave tableLines empty)",
+        "DAX query view: 01-column-sizes.dax again: the big dictionaries gone (no LineRef, Note, OrderTimestamp)"
+      ],
+      "mask": [
+        "account name and picture at the top right of Power BI Desktop (sign out first)",
+        "Windows user name in any file path (record from C:\\MGLab)"
+      ]
+    },
+    {
+      "name": "perf-compare",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "C:\\MGLab\\power-bi\\ep08\\src",
+      "prompt": "PS C:\\MGLab\\power-bi\\ep08\\src> ",
+      "commands": [
+        "python tools\\perf_compare.py results\\performance-analyzer.csv",
+        "#pause 5"
+      ],
+      "note": "results\\performance-analyzer.csv holds the numbers typed from the two Performance Analyzer recordings (done by hand during pabefore and afterscreen). Then show both reports' cards side by side in Desktop (identical: Sales amount 2,846,324,198.90, Margin 40.0%)."
+    }
+  ],
+  "teardown": [
+    "Remove-Item C:\\MGLab\\power-bi\\ep08 -Recurse -Force -ErrorAction SilentlyContinue",
+    "Remove-Item C:\\ContosoBikesPerf -Recurse -Force -ErrorAction SilentlyContinue",
+    "Remove-Item C:\\ContosoBikesPerf200k -Recurse -Force -ErrorAction SilentlyContinue"
+  ],
+  "needs": [],
+  "owner_notes": "Local only; at least 16 GB RAM advised (laptop has 191 GB). No tenant sign-in."
+}

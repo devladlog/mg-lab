@@ -1,0 +1,102 @@
+{
+  "note": "Deploys infra/main.bicep (APIM Basic v2 is billed per hour while it exists: deploy right before, tear down right after). Subscription keys go straight into environment variables and are never printed. Record 'metrics' last (custom metrics lag by minutes).",
+  "prepare": [
+    "python -m venv .venv",
+    "$env:PATH = \"$PWD\\.venv\\Scripts;$env:PATH\"",
+    "python -m pip install -q -r requirements.txt",
+    "$env:PYTHONPATH = 'src'",
+    "# owner signs in as labadmin (device code), not on camera",
+    "az login --use-device-code --only-show-errors | Out-Null",
+    "az group create -n rg-mglab-ai-02 -l swedencentral -o none",
+    "$o = az deployment group create -g rg-mglab-ai-2 -f infra/main.bicep -p infra/main.bicepparam --query properties.outputs -o json | ConvertFrom-Json",
+    "$apim = $o.apimName.value; $env:APIM_NAME = $apim; $env:APIM_GATEWAY_URL = \"https://$apim.azure-api.net\"",
+    "$sid = az account show --query id -o tsv",
+    "$env:HR_KEY = az rest --method post --uri \"https://management.azure.com/subscriptions/$sid/resourceGroups/rg-mglab-ai-02/providers/Microsoft.ApiManagement/service/$apim/subscriptions/hr-bot/listSecrets?api-version=2022-08-01\" --query primaryKey -o tsv",
+    "$env:SALES_KEY = az rest --method post --uri \"https://management.azure.com/subscriptions/$sid/resourceGroups/rg-mglab-ai-02/providers/Microsoft.ApiManagement/service/$apim/subscriptions/sales-copilot/listSecrets?api-version=2022-08-01\" --query primaryKey -o tsv",
+    "Start-Sleep -Seconds 300   # role assignment propagation (up to 5 minutes)",
+    "$env:APIM_SUBSCRIPTION_KEY = $env:SALES_KEY; python -m aoai_gateway.smoke --requests 1 | Out-Null   # warm-up: must print one 200",
+    "Start-Sleep -Seconds 90   # fresh tokens-per-minute counter"
+  ],
+  "screens": [
+    {
+      "name": "deployed",
+      "kind": "browser",
+      "url": "https://portal.azure.com/",
+      "account": "labadmin",
+      "steps": [
+        "Open Resource groups > rg-mglab-ai-02 > Overview",
+        "Show the API Management service (Basic v2), the two Azure OpenAI accounts with their two regions in the Location column, Application Insights and the Log Analytics workspace",
+        "Optional B-roll: APIM > Backends > aoai-pool (members with priority 1 and 2) and the circuit-breaker rule on aoai-primary"
+      ],
+      "mask": [
+        "subscription name and ID",
+        "tenant name / directory in the top bar",
+        "signed-in user name, UPN and avatar in the account menu",
+        "resource name suffix",
+        "APIM name and gateway host (<apim>.azure-api.net)",
+        "account names mglab-aoai-p-... and mglab-aoai-s-..."
+      ]
+    },
+    {
+      "name": "burst",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\ai\\episodes\\02-azure-openai-enterprise-patterns",
+      "prompt": "PS ep02> ",
+      "commands": [
+        "$env:APIM_SUBSCRIPTION_KEY = $env:HR_KEY",
+        "python -m aoai_gateway.smoke --requests 12",
+        "#pause 6"
+      ],
+      "mask": [
+        "the key is only in an environment variable and is never printed"
+      ]
+    },
+    {
+      "name": "other-team",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\ai\\episodes\\02-azure-openai-enterprise-patterns",
+      "prompt": "PS ep02> ",
+      "commands": [
+        "$env:APIM_SUBSCRIPTION_KEY = $env:SALES_KEY",
+        "python -m aoai_gateway.smoke --requests 2",
+        "#pause 5"
+      ]
+    },
+    {
+      "name": "metrics",
+      "kind": "browser",
+      "url": "https://portal.azure.com/",
+      "account": "labadmin",
+      "steps": [
+        "Open the Application Insights resource in rg-mglab-ai-02 > Metrics",
+        "Metric namespace 'aoai-gateway', metric total tokens",
+        "Apply splitting by 'Subscription ID'; time range last 30 minutes",
+        "Both hr-bot and sales-copilot visible (if the chart is empty wait a few minutes and refresh)"
+      ],
+      "mask": [
+        "subscription name and ID",
+        "tenant name / directory in the top bar",
+        "signed-in user name, UPN and avatar in the account menu",
+        "resource name suffix",
+        "Application Insights resource name",
+        "never open Show/hide keys on the APIM Subscriptions page"
+      ]
+    }
+  ],
+  "teardown": [
+    "$accts = az cognitiveservices account list -g rg-mglab-ai-02 --query \"[].{n:name,l:location}\" -o json | ConvertFrom-Json",
+    "az group delete -n rg-mglab-ai-02 --yes",
+    "az apim deletedservice purge --service-name $env:APIM_NAME --location swedencentral",
+    "foreach ($a in $accts) { az cognitiveservices account purge -g rg-mglab-ai-02 -n $a.n -l $a.l }",
+    "Remove-Item Env:HR_KEY, Env:SALES_KEY, Env:APIM_SUBSCRIPTION_KEY -ErrorAction SilentlyContinue",
+    "Remove-Item .venv -Recurse -Force -ErrorAction SilentlyContinue"
+  ],
+  "needs": [
+    "azure",
+    "paid:api-management-basic-v2-hourly",
+    "paid:azure-openai-tokens",
+    "quota:gpt-5-mini-DataZoneStandard-swedencentral-and-germanywestcentral"
+  ]
+}

@@ -1,0 +1,118 @@
+{
+  "note": "Live-session recording of the screen scenes (series/tools/rec). prepare/teardown run on the laptop, not recorded; commands are typed and run for real. Screens that mix a terminal and a portal carry the second half in also[] (when = before/after the main part). Scenes read MG_LAB_ADMIN_UPN / MG_LAB_DOMAIN (set by prepare, derived from the signed-in labadmin).",
+  "prepare": [
+    "if (-not (Get-Module -ListAvailable -Name Microsoft.Graph.Authentication)) { Install-Module Microsoft.Graph.Authentication -Scope CurrentUser -Force -AllowClobber }",
+    "Connect-MgGraph -Scopes User.ReadWrite.All, Group.ReadWrite.All, Directory.ReadWrite.All, User.Invite.All, Team.Create, TeamMember.ReadWrite.All, Team.ReadBasic.All, TeamMember.Read.All, Reports.Read.All, Policy.ReadWrite.ApplicationConfiguration -NoWelcome  # owner signs in (browser)",
+    "function Set-LabVar($n, $v) { [Environment]::SetEnvironmentVariable($n, \"$v\", 'User'); Set-Item \"env:$n\" \"$v\" }",
+    "$upn = (Invoke-MgGraphRequest -Uri /v1.0/me).userPrincipalName; Set-LabVar MG_LAB_ADMIN_UPN $upn; Set-LabVar MG_LAB_DOMAIN $upn.Split('@')[1]",
+    "function Get-LabUserId($n) { (Invoke-MgGraphRequest -Uri \"/v1.0/users/$n@$env:MG_LAB_DOMAIN\").id }",
+    "$alex = Get-LabUserId 'alex.demo'; $jordan = Get-LabUserId 'jordan.demo'; Set-LabVar MG_ALEX_ID $alex; Set-LabVar MG_JORDAN_ID $jordan",
+    "# Alex: Department Finance (cleared in teardown)",
+    "Invoke-MgGraphRequest -Method PATCH -Uri \"/v1.0/users/$alex\" -Body @{ department = 'Finance' }",
+    "# security group Team Creators with Alex as member",
+    "$tc = (Invoke-MgGraphRequest -Uri \"/v1.0/groups?`$filter=displayName eq 'Team Creators'\").value | Select-Object -First 1; if (-not $tc) { $tc = Invoke-MgGraphRequest -Method POST -Uri /v1.0/groups -Body @{ displayName = 'Team Creators'; mailEnabled = $false; mailNickname = 'team-creators'; securityEnabled = $true; 'members@odata.bind' = @(\"https://graph.microsoft.com/v1.0/users/$alex\") } }; Set-LabVar MG_TEAMCREATORS_ID $tc.id",
+    "# throwaway owner temp.owner (random one-off sign-in secret, never stored) and one fictional guest invited without e-mail",
+    "$sec = [guid]::NewGuid().ToString('N') + 'aA1!'; $tmp = Invoke-MgGraphRequest -Method POST -Uri /v1.0/users -Body (\"{`\"accountEnabled`\":true,`\"displayName`\":`\"Temp Owner`\",`\"mailNickname`\":`\"temp.owner`\",`\"userPrincipalName`\":`\"temp.owner@$env:MG_LAB_DOMAIN`\",`\"usageLocation`\":`\"PT`\",`\"passwordProfile`\":{`\"forceChangePasswordNextSignIn`\":false,`\"password`\":`\"$sec`\"}}\"); $sec = $null",
+    "$guest = Invoke-MgGraphRequest -Method POST -Uri /v1.0/invitations -Body @{ invitedUserEmailAddress = 'partner.demo@fabrikam.example'; invitedUserDisplayName = 'Partner Demo'; inviteRedirectUrl = 'https://myapps.microsoft.com'; sendInvitationMessage = $false }",
+    "$skus = (Invoke-MgGraphRequest -Uri /v1.0/subscribedSkus).value; $e5 = $skus | Where-Object skuPartNumber -eq 'SPE_E5'; Invoke-MgGraphRequest -Method POST -Uri \"/v1.0/users/$($tmp.id)/assignLicense\" -Body @{ addLicenses = @(@{ skuId = $e5.skuId; disabledPlans = @() }); removeLicenses = @() } | Out-Null; Start-Sleep -Seconds 60",
+    "function New-LabTeam($name, $vis, $ownerIds) { $m = @(foreach ($o in $ownerIds) { @{ '@odata.type' = '#microsoft.graph.aadUserConversationMember'; roles = @('owner'); 'user@odata.bind' = \"https://graph.microsoft.com/v1.0/users('$o')\" } }); Invoke-MgGraphRequest -Method POST -Uri /v1.0/teams -Body @{ 'template@odata.bind' = \"https://graph.microsoft.com/v1.0/teamsTemplates('standard')\"; displayName = $name; visibility = $vis; members = $m } | Out-Null }",
+    "# teams are seeded BEFORE the naming policy is applied",
+    "New-LabTeam 'Project Falcon' 'private' @($alex)",
+    "New-LabTeam 'Sales Partner Portal' 'public' @($alex, $jordan)",
+    "New-LabTeam 'Old Offsite 2024' 'private' @($tmp.id)",
+    "Start-Sleep -Seconds 120   # team creation is asynchronous",
+    "$g = { param($n) (Invoke-MgGraphRequest -Uri \"/v1.0/groups?`$filter=displayName eq '$n'\").value[0].id }; $sp = & $g 'Sales Partner Portal'; Invoke-MgGraphRequest -Method POST -Uri \"/v1.0/teams/$sp/members\" -Body @{ '@odata.type' = '#microsoft.graph.aadUserConversationMember'; roles = @(); 'user@odata.bind' = \"https://graph.microsoft.com/v1.0/users('$($guest.invitedUser.id)')\" } | Out-Null",
+    "# deleting the owner is how Old Offsite 2024 becomes ownerless",
+    "Invoke-MgGraphRequest -Method DELETE -Uri \"/v1.0/users/$($tmp.id)\"; Start-Sleep -Seconds 20; Invoke-MgGraphRequest -Method DELETE -Uri \"/v1.0/directory/deletedItems/$($tmp.id)\"",
+    "# local copy of the policy with the Team Creators id (never committed)",
+    "$p = Get-Content ./src/governance.json -Raw | ConvertFrom-Json; $p.creation.allowedGroupId = $tc.id; $p | ConvertTo-Json -Depth 8 | Set-Content ./src/governance.lab.json"
+  ],
+  "screens": [
+    {
+      "name": "create",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\microsoft-365\\episodes\\02-microsoft-teams-architecture-governance\\src",
+      "prompt": "PS> ",
+      "commands": [
+        "Connect-MgGraph -Scopes Team.Create -NoWelcome",
+        "./Invoke-TeamsGovernance.ps1 -PolicyFile ./governance.lab.json -NewTeam 'Budget 2027' -Department Finance -OwnerIds $env:MG_ALEX_ID, $env:MG_JORDAN_ID -WhatIf",
+        "./Invoke-TeamsGovernance.ps1 -PolicyFile ./governance.lab.json -NewTeam 'Budget 2027' -Department Finance -OwnerIds $env:MG_ALEX_ID, $env:MG_JORDAN_ID -Confirm:$false",
+        "./Invoke-TeamsGovernance.ps1 -PolicyFile ./governance.lab.json -NewTeam 'CEO office' -Department Finance -OwnerIds $env:MG_ALEX_ID, $env:MG_JORDAN_ID -WhatIf",
+        "#pause 4"
+      ]
+    },
+    {
+      "name": "admin-center",
+      "kind": "browser",
+      "url": "https://admin.teams.microsoft.com/",
+      "account": "labadmin",
+      "steps": [
+        "Open Teams > Manage teams",
+        "Search for 'TEAM_'",
+        "Select 'TEAM_Finance_Budget 2027': show Privacy = Private",
+        "Open the Members tab: note whether the owners are exactly Alex Demo and Jordan Demo or the signed-in admin was added too (say what is really there)"
+      ],
+      "mask": [
+        "tenant name in the top bar",
+        "labadmin e-mail in the account menu",
+        "any member that is not a fictional lab user"
+      ]
+    },
+    {
+      "name": "audit",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\microsoft-365\\episodes\\02-microsoft-teams-architecture-governance\\src",
+      "prompt": "PS> ",
+      "commands": [
+        "Connect-MgGraph -Scopes Team.ReadBasic.All, TeamMember.Read.All, Reports.Read.All -NoWelcome",
+        "./Invoke-TeamsGovernance.ps1 -PolicyFile ./governance.lab.json -Audit -OutFile ./teams-audit.md -SaveInventory ./inventory.json",
+        "#pause 6"
+      ]
+    },
+    {
+      "name": "exempt",
+      "kind": "browser",
+      "url": "https://entra.microsoft.com/",
+      "account": "labadmin (Global Administrator) + alex.demo in a second browser profile",
+      "steps": [
+        "(Before the screen, off camera: the per-screen prepare applied the policy and waited 30 minutes for the group-creation restriction)",
+        "Entra admin center > Groups > Naming policy: show the prefix TEAM_[Department]_[GroupName] and the blocked words",
+        "Second profile, signed in as Alex Demo: Teams > Join or create a team > Create team > From scratch, name 'CEO office': show the blocked-word error",
+        "Back as labadmin: Entra admin center > Groups > All groups > New group, type Microsoft 365, name 'CEO office': it is created without prefix and without error",
+        "Delete the test group 'CEO office' afterwards"
+      ],
+      "mask": [
+        "tenant name",
+        "labadmin e-mail",
+        "Alex e-mail beyond the lab alias"
+      ],
+      "prepare": [
+        "Connect-MgGraph -Scopes Group.ReadWrite.All, Directory.ReadWrite.All -NoWelcome",
+        "./src/Invoke-TeamsGovernance.ps1 -PolicyFile ./src/governance.lab.json -ApplyTenantPolicy -Confirm:$false",
+        "Start-Sleep -Seconds 1800   # Microsoft: the creation restriction can take 30 minutes or more"
+      ]
+    }
+  ],
+  "teardown": [
+    "Connect-MgGraph -Scopes Group.ReadWrite.All, Directory.ReadWrite.All, User.ReadWrite.All -NoWelcome",
+    "$p = Get-Content ./src/governance.lab.json -Raw | ConvertFrom-Json; $p.creation.restrict = $false; $p.naming.prefixSuffix = ''; $p.naming.blockedWords = @(); $p | ConvertTo-Json -Depth 8 | Set-Content ./src/governance.lab.json",
+    "./src/Invoke-TeamsGovernance.ps1 -PolicyFile ./src/governance.lab.json -ApplyTenantPolicy -Confirm:$false",
+    "foreach ($n in 'CEO office', 'Project Falcon', 'Sales Partner Portal', 'Old Offsite 2024', 'TEAM_Finance_Budget 2027', 'Team Creators') { foreach ($x in (Invoke-MgGraphRequest -Uri \"/v1.0/groups?`$filter=displayName eq '$n'\").value) { Invoke-MgGraphRequest -Method DELETE -Uri \"/v1.0/groups/$($x.id)\" } }   # skip the seeded teams here if episodes 3 and 15 still need them",
+    "Invoke-MgGraphRequest -Method PATCH -Uri \"/v1.0/users/$env:MG_ALEX_ID\" -Body @{ department = $null }",
+    "foreach ($u in (Invoke-MgGraphRequest -Uri \"/v1.0/users?`$filter=startswith(userPrincipalName,'partner.demo')\").value) { Invoke-MgGraphRequest -Method DELETE -Uri \"/v1.0/users/$($u.id)\" }",
+    "Remove-Item ./src/governance.lab.json, ./src/inventory.json, ./src/teams-audit.md -ErrorAction SilentlyContinue",
+    "Disconnect-MgGraph",
+    "foreach ($n in 'MG_ALEX_ID', 'MG_JORDAN_ID', 'MG_TEAMCREATORS_ID') { [Environment]::SetEnvironmentVariable($n, $null, 'User') }"
+  ],
+  "needs": [
+    "tenant",
+    "trial:Entra ID P1 (in E5)",
+    "role:Groups Administrator + Teams Administrator + Global Administrator (labadmin)",
+    "browser-profile:alex.demo",
+    "wait:30min after applying the naming policy (screen exempt)",
+    "spare-licence:1 E5 seat while temp.owner exists"
+  ],
+  "note_ep": "If episodes 3 and 15 are recorded next, skip deleting the seeded teams in teardown."
+}

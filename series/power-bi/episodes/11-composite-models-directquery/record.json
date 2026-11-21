@@ -1,0 +1,75 @@
+{
+  "note": "Live-session recording of the screen scenes (series/tools/rec). prepare/teardown run on the laptop, not recorded; commands are typed and run for real. Steps of browser/app screens are done by hand by the person recording.",
+  "prepare": [
+    "New-Item -ItemType Directory -Force C:\\MGLab\\power-bi | Out-Null",
+    "Remove-Item C:\\MGLab\\power-bi\\ep11 -Recurse -Force -ErrorAction SilentlyContinue",
+    "Copy-Item -Path (Get-Location).Path -Destination C:\\MGLab\\power-bi\\ep11 -Recurse -Force",
+    "$s = New-PSSession -VMName CON-SQL01 -Credential $cred",
+    "Invoke-Command -Session $s { New-Item -ItemType Directory -Force C:\\lab\\ep11 | Out-Null }",
+    "Copy-Item -ToSession $s -Path .\\src\\sql\\* -Destination C:\\lab\\ep11\\ -Force",
+    "$have = Invoke-Command -Session $s { sqlcmd -S localhost -E -h -1 -W -Q \"SET NOCOUNT ON; SELECT COALESCE(DB_ID('ContosoBikesDW'),0)\" }",
+    "if ([int]($have | Select-Object -First 1) -eq 0) { Invoke-Command -Session $s { sqlcmd -S localhost -E -b -i C:\\lab\\ep11\\01-create-database.sql; sqlcmd -S localhost -E -b -i C:\\lab\\ep11\\02-load-data.sql; sqlcmd -S localhost -E -b -i C:\\lab\\ep11\\03-agg-view.sql } }",
+    "Invoke-Command -Session $s { sqlcmd -S localhost -E -b -i C:\\lab\\ep11\\05-checks.sql }",
+    "Remove-PSSession $s",
+    "Import-Module MicrosoftPowerBIMgmt.Profile, MicrosoftPowerBIMgmt.Workspaces, MicrosoftPowerBIMgmt.Data, MicrosoftPowerBIMgmt.Reports",
+    "Connect-PowerBIServiceAccount   # owner signs in as labadmin (Part B only)"
+  ],
+  "screens": [
+    {
+      "name": "model-view",
+      "kind": "app",
+      "app": "Power BI Desktop",
+      "steps": [
+        "Open C:\\MGLab\\power-bi\\ep11\\src\\ContosoSalesComposite.pbip (preview feature Power BI Project save option on); sign in to 10.50.0.30 with the lab SQL login (db_owner on ContosoBikesDW)",
+        "Model view, properties pane: Sales = DirectQuery, Sales Agg = Import and hidden, Date, Product, Customer, Store = Dual; relationships solid lines",
+        "Select Sales Agg > Manage aggregations: mapping of the five columns"
+      ],
+      "mask": [
+        "account picture and name",
+        "account name and picture at the top right of Power BI Desktop (sign out first)",
+        "Windows user name in any file path (record from C:\\MGLab)"
+      ]
+    },
+    {
+      "name": "sql-observe",
+      "kind": "app",
+      "app": "SSMS 22 + Power BI Desktop",
+      "steps": [
+        "SSMS connected to 10.50.0.30 (lab SQL login or CONTOSO sysadmin): run sql\\07-clear-plan-cache.sql",
+        "Desktop DAX query view: run queries\\01-hit-sales-by-year-category.dax",
+        "SSMS: run sql\\06-observe-directquery.sql: record whether the hit leaves no row",
+        "Desktop: run queries\\02-miss-sales-by-customer-country.dax; SSMS: run 06 again: one statement over FactSales and DimCustomer"
+      ],
+      "mask": [
+        "Windows user name in SSMS recent files",
+        "SQL login name if it shows"
+      ]
+    },
+    {
+      "name": "budget-composite",
+      "kind": "browser",
+      "url": "https://app.powerbi.com/",
+      "account": "labadmin",
+      "steps": [
+        "Open a report on the published ContosoSales model (live connection) > Make changes to this model",
+        "Add data from C:\\MGLab\\power-bi\\ep11\\src\\data\\budget\\budget.csv as Import; relate Budget to Store (store name) and Date; show the relationships drawn as limited",
+        "Matrix by store for 2025 with Sales Amount, Budget Amount and the measure from queries\\06-sales-vs-budget.dax"
+      ],
+      "mask": [
+        "tenant domain, browser URL ids, account picture and name"
+      ]
+    }
+  ],
+  "teardown": [
+    "Remove-Item C:\\MGLab\\power-bi\\ep11 -Recurse -Force -ErrorAction SilentlyContinue",
+    "$s = New-PSSession -VMName CON-SQL01 -Credential $cred",
+    "Invoke-Command -Session $s { sqlcmd -S localhost -E -Q \"IF DB_ID('ContosoBikesDW') IS NOT NULL BEGIN ALTER DATABASE ContosoBikesDW SET SINGLE_USER WITH ROLLBACK IMMEDIATE; DROP DATABASE ContosoBikesDW END\"; Remove-Item C:\\lab\\ep11 -Recurse -Force -ErrorAction SilentlyContinue }",
+    "Remove-PSSession $s"
+  ],
+  "needs": [
+    "lab-vms",
+    "tenant",
+    "premium-trial"
+  ],
+  "owner_notes": "Owner: create the SQL login with db_owner on ContosoBikesDW and run sql\\04-scale-up.sql (adds 499 copies of the lines) before the observe screen if the big table is wanted; password is typed in Desktop's credential dialog only. Episode 14 reuses ContosoBikesDW: do not tear down if 14 is recorded next. Part B needs ContosoSales published from episode 1."
+}

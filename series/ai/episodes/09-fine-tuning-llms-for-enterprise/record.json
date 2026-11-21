@@ -1,0 +1,99 @@
+{
+  "note": "Schedule per demo.md: prepare runs the real fine-tuning job (queue time can be minutes to hours; do not resubmit a queued job). Do not edit the dataset, thresholds or prompts to improve the result: DO NOT PROMOTE is a valid outcome. The 'job' screen also needs the terminal line 'fine-tuned model: ...ft-...' from submit (read it from build/job.json in a terminal, suffix masked). Developer deployments expire after 24 hours.",
+  "prepare": [
+    "python -m venv .venv",
+    "$env:PATH = \"$PWD\\.venv\\Scripts;$env:PATH\"",
+    "python -m pip install -q -r requirements.txt",
+    "$env:PYTHONPATH = 'src'",
+    "# owner signs in as labadmin (device code), not on camera",
+    "az login --use-device-code --only-show-errors | Out-Null",
+    "$me = az ad signed-in-user show --query id -o tsv",
+    "az group create -n rg-mglab-ai-9 -l swedencentral -o none",
+    "$o = az deployment group create -g rg-mglab-ai-9 -f infra/main.bicep -p infra/main.bicepparam -p developerPrincipalId=$me --query properties.outputs -o json | ConvertFrom-Json",
+    "$env:AOAI = $o.aoaiEndpoint.value; $env:AOAI_NAME = $o.aoaiName.value; $env:SUB = az account show --query id -o tsv",
+    "# owner reads the training price per million tokens for gpt-4.1-mini from the Azure OpenAI pricing page (not shown on camera)",
+    "$env:FT_PRICE_PER_MILLION = Read-Host 'Training price per million tokens'",
+    "Start-Sleep -Seconds 300   # role assignment propagation (up to 5 minutes)",
+    "if (-not (Test-Path build/job.json)) { python -m fttriage prepare --out build --price-per-million $env:FT_PRICE_PER_MILLION | Out-Null; python -m fttriage submit --endpoint $env:AOAI --out build }",
+    "python -m fttriage deploy --subscription $env:SUB --resource-group rg-mglab-ai-09 --account $env:AOAI_NAME --out build"
+  ],
+  "screens": [
+    {
+      "name": "prepare",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\ai\\episodes\\09-fine-tuning-llms-for-enterprise",
+      "prompt": "PS ep09> ",
+      "commands": [
+        "python -m fttriage prepare --out build --price-per-million $env:FT_PRICE_PER_MILLION",
+        "#pause 6"
+      ],
+      "mask": [
+        "do not show the pricing page"
+      ]
+    },
+    {
+      "name": "job",
+      "kind": "browser",
+      "url": "https://ai.azure.com/",
+      "account": "labadmin",
+      "steps": [
+        "Open the resource in rg-mglab-ai-09 > Fine-tuning and open the finished job",
+        "Show status Succeeded, base model gpt-4.1-mini, training type Standard",
+        "Open the metrics view: training loss and full validation loss and accuracy",
+        "Then show in a terminal: (Get-Content build/job.json | ConvertFrom-Json).fine_tuned_model with the id suffix masked"
+      ],
+      "mask": [
+        "subscription name and ID",
+        "tenant name / directory in the top bar",
+        "signed-in user name, UPN and avatar in the account menu",
+        "resource name suffix",
+        "fine-tuned model id suffix",
+        "no Cost Management blade or pricing page"
+      ]
+    },
+    {
+      "name": "deployments",
+      "kind": "browser",
+      "url": "https://ai.azure.com/",
+      "account": "labadmin",
+      "steps": [
+        "Open Models + endpoints (or Azure portal > the Azure OpenAI resource > Deployments)",
+        "Show 'base' (gpt-4.1-mini 2025-04-14, Standard) and 'triage-ft' (fine-tuned, deployment type Developer, state Succeeded)"
+      ],
+      "mask": [
+        "subscription name and ID",
+        "tenant name / directory in the top bar",
+        "signed-in user name, UPN and avatar in the account menu",
+        "resource name suffix",
+        "fine-tuned model id suffix"
+      ]
+    },
+    {
+      "name": "evaluate",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\ai\\episodes\\09-fine-tuning-llms-for-enterprise",
+      "prompt": "PS ep09> ",
+      "commands": [
+        "python -m fttriage evaluate --endpoint $env:AOAI --out build ; \"exit=$LASTEXITCODE\"",
+        "#pause 10"
+      ],
+      "maxMinutes": 15
+    }
+  ],
+  "teardown": [
+    "python -m fttriage cleanup --subscription $env:SUB --resource-group rg-mglab-ai-09 --account $env:AOAI_NAME --endpoint $env:AOAI --out build",
+    "az group delete -n rg-mglab-ai-09 --yes",
+    "az cognitiveservices account purge -g rg-mglab-ai-09 -n $env:AOAI_NAME -l swedencentral",
+    "Remove-Item build, .venv -Recurse -Force -ErrorAction SilentlyContinue"
+  ],
+  "needs": [
+    "azure",
+    "paid:azure-openai-fine-tuning-training-tokens",
+    "paid:azure-openai-tokens",
+    "quota:gpt-4.1-mini-standard-fine-tuning-swedencentral",
+    "quota:gpt-4.1-mini-finetune-deployment",
+    "owner-input:training-price-per-million-tokens"
+  ]
+}

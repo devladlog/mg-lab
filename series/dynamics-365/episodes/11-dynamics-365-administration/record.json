@@ -1,0 +1,128 @@
+{
+  "note": "Live-session recording of the screen scenes (series/tools/rec). prepare/teardown run on the laptop, not recorded; commands are typed and run for real. Extra keys (note, followup, manual_prepare, manual_teardown) are for the recorder person; the kit ignores them. DATAVERSE_URL must point at the Sales trial environment (trial ends about 21 Dec 2026). Every python command opens its own MSAL interactive sign-in (the token cache is in memory): the owner signs in as labadmin when the browser asks, or exports the app-registration variables in the shell before recording (never in a file).",
+  "prepare": [
+    "python -m pip install --user -q -r requirements.txt",
+    "if (-not $env:DATAVERSE_URL) { throw 'Set $env:DATAVERSE_URL to the lab environment URL in this shell first (the owner does this; it is never written in a file).' }"
+  ],
+  "manual_prepare": [
+    "Confirm labadmin is in System Administrator in the Sales trial environment (otherwise pac admin self-elevate, owner signed in).",
+    "Assign System Administrator to alex.demo, sam.demo, jordan.demo and riley.demo; optionally disable riley.demo.",
+    "Run adminkit admins, settings and jobs once; write down the current audit values for teardown."
+  ],
+  "screens": [
+    {
+      "name": "admin-environments",
+      "kind": "browser",
+      "url": "https://admin.powerplatform.microsoft.com/",
+      "account": "labadmin",
+      "steps": [
+        "Manage, Environments: show the list (Sales trial and DEV) with type, state, region",
+        "Open Sales trial: Details",
+        "Settings, Audit and logs"
+      ],
+      "mask": [
+        "tenant name in the top bar",
+        "environment name and org URL (address bar and header)",
+        "user e-mail and avatar in the account menu",
+        "environment URL in the details pane"
+      ]
+    },
+    {
+      "name": "adminkit-settings",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\dynamics-365\\episodes\\11-dynamics-365-administration\\src",
+      "prompt": "PS src> ",
+      "commands": [
+        "python -m adminkit settings",
+        "#pause 4",
+        "python -m adminkit audit-on --days 365",
+        "#pause 3",
+        "python -m adminkit audit-on --days 365 --apply",
+        "#pause 4",
+        "python -m adminkit settings",
+        "#pause 4"
+      ],
+      "note": "If auditing is already on with 365 days, use another --days value so a visible change happens, and say so.",
+      "followup": {
+        "kind": "browser",
+        "url": "https://admin.powerplatform.microsoft.com/",
+        "account": "labadmin",
+        "steps": [
+          "Manage, Environments, open Sales trial, Settings, Audit and logs, Audit settings: auditing on, retention period"
+        ],
+        "mask": [
+          "tenant name in the top bar",
+          "environment name and org URL (address bar and header)",
+          "user e-mail and avatar in the account menu"
+        ]
+      }
+    },
+    {
+      "name": "adminkit-jobs",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\dynamics-365\\episodes\\11-dynamics-365-administration\\src",
+      "prompt": "PS src> ",
+      "commands": [
+        "python -m adminkit jobs",
+        "#pause 4",
+        "# sample file, not the lab (only if the lab has no failed jobs):",
+        "python -m adminkit jobs --from-json ../sample/system-jobs.json --now 2027-01-15T12:00:00Z",
+        "#pause 5"
+      ],
+      "note": "Drop the sample command when the lab really has failed jobs. Label the sample on screen.",
+      "followup": {
+        "kind": "browser",
+        "url": "https://make.powerapps.com/",
+        "account": "labadmin",
+        "steps": [
+          "Open the Sales trial app, Advanced settings, System Jobs",
+          "Filter the view to Failed; open one job to show its message (if none, show the empty view honestly)"
+        ],
+        "mask": [
+          "tenant name in the top bar",
+          "environment name and org URL (address bar and header)",
+          "user e-mail and avatar in the account menu"
+        ]
+      }
+    },
+    {
+      "name": "adminkit-admins",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\dynamics-365\\episodes\\11-dynamics-365-administration\\src",
+      "prompt": "PS src> ",
+      "commands": [
+        "python -m adminkit admins",
+        "\"exit=$LASTEXITCODE\"",
+        "#pause 5"
+      ],
+      "followup": {
+        "kind": "browser",
+        "url": "https://admin.powerplatform.microsoft.com/",
+        "account": "labadmin",
+        "steps": [
+          "Manage, Environments, Sales trial, Settings, Users + permissions, Security roles, System Administrator, Members",
+          "Compare with the terminal list (people, application users, teams)"
+        ],
+        "mask": [
+          "tenant name in the top bar",
+          "environment name and org URL (address bar and header)",
+          "user e-mail and avatar in the account menu",
+          "user principal names",
+          "application ids"
+        ]
+      }
+    }
+  ],
+  "teardown": [],
+  "manual_teardown": [
+    "Restore the audit values noted in setup (audit-on --days <old> --apply restores retention only; switch auditing off in Audit settings if it was off).",
+    "Remove System Administrator from alex.demo, sam.demo, jordan.demo, riley.demo; re-enable riley.demo if disabled."
+  ],
+  "needs": [
+    "tenant",
+    "trial:Dynamics 365 Sales trial environment (ends about 21 Dec 2026)"
+  ]
+}

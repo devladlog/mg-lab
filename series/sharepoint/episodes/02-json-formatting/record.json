@@ -1,0 +1,120 @@
+{
+  "note": "Live-session recording of the SharePoint episode screens (series/tools/rec). prepare/teardown run on the laptop, not recorded. Set MG_TENANT, MG_UPN_DOMAIN and MG_PNP_CLIENT_ID in the environment before queueing (never in a file). Sign-ins are device-code, done by the owner. Episodes 1-9 chain: set MG_KEEP_CHAIN=1 while recording them in order so teardown keeps what the next episode uses; unset it for a full clean-up. The Purchase Requests list comes from episode 1 (needs episode:01 recorded with MG_KEEP_CHAIN=1).",
+  "prepare": [
+    "if (-not $env:MG_TENANT -or -not $env:MG_UPN_DOMAIN -or -not $env:MG_PNP_CLIENT_ID) { throw 'Set MG_TENANT (lab tenant short name), MG_UPN_DOMAIN (sign-in domain of the lab users) and MG_PNP_CLIENT_ID (the MG Lab PnP app) in the environment first' }",
+    "if (-not (Get-Module -ListAvailable PnP.PowerShell)) { Install-Module PnP.PowerShell -Scope CurrentUser -Force }",
+    "$env:MG_TENANT_URL = \"https://${env:MG_TENANT}.sharepoint.com\"; $env:MG_ADMIN_URL = \"https://${env:MG_TENANT}-admin.sharepoint.com\"; $env:MG_EP = (Get-Location).Path",
+    "$env:MG_LABADMIN_UPN = \"labadmin@$env:MG_UPN_DOMAIN\"; $env:MG_ALEX_UPN = \"alex.demo@$env:MG_UPN_DOMAIN\"; $env:MG_SAM_UPN = \"sam.demo@$env:MG_UPN_DOMAIN\"; $env:MG_JORDAN_UPN = \"jordan.demo@$env:MG_UPN_DOMAIN\"; $env:MG_RILEY_UPN = \"riley.demo@$env:MG_UPN_DOMAIN\"",
+    "$env:MG_SITE = \"$env:MG_TENANT_URL/sites/ListsDemo\"",
+    "$env:MG_PYTHON_CHECK = (Get-Command python -ErrorAction Stop).Source",
+    "Connect-PnPOnline -Url $env:MG_SITE -ClientId $env:MG_PNP_CLIENT_ID -DeviceLogin   # owner signs in",
+    "if (-not (Get-PnPList -Identity 'Purchase Requests' -ErrorAction SilentlyContinue)) { throw 'Purchase Requests list not found: record episode 01 first (MG_KEEP_CHAIN=1)' }",
+    "$d = (Get-Date).Date; $i = @(Get-PnPListItem -List 'Purchase Requests' -PageSize 50 | Select-Object -First 7)",
+    "Set-PnPListItem -List 'Purchase Requests' -Identity $i[0].Id -Values @{ RequestStatus = 'New'; DueDate = $d.AddDays(-3); Requester = $env:MG_LABADMIN_UPN } | Out-Null",
+    "Set-PnPListItem -List 'Purchase Requests' -Identity $i[1].Id -Values @{ RequestStatus = 'Approved'; DueDate = $d; Requester = $env:MG_ALEX_UPN } | Out-Null",
+    "Set-PnPListItem -List 'Purchase Requests' -Identity $i[2].Id -Values @{ RequestStatus = 'Ordered'; DueDate = $d.AddDays(4); Requester = $env:MG_ALEX_UPN } | Out-Null",
+    "Set-PnPListItem -List 'Purchase Requests' -Identity $i[3].Id -Values @{ RequestStatus = 'Closed'; DueDate = $d.AddDays(-60); Requester = $env:MG_ALEX_UPN } | Out-Null",
+    "Set-PnPListItem -List 'Purchase Requests' -Identity $i[4].Id -Values @{ RequestStatus = 'New'; DueDate = $null; Requester = $env:MG_LABADMIN_UPN } | Out-Null",
+    "./src/Set-ListFormatting.ps1 -SiteUrl $env:MG_SITE -ClientId $env:MG_PNP_CLIENT_ID -Reset"
+  ],
+  "screens": [
+    {
+      "name": "before",
+      "kind": "browser",
+      "url": "https://<tenant>.sharepoint.com/sites/ListsDemo/Lists/PurchaseRequests/AllItems.aspx",
+      "account": "labadmin",
+      "steps": [
+        "Open the Purchase Requests list",
+        "Switch to the view 'Open requests' with the view picker",
+        "Hold on the plain, unformatted rows: an overdue, a due-today, a closed and a no-due-date request are all visible"
+      ],
+      "mask": [
+        "tenant host in the address bar (pipeline/mask.js)",
+        "account avatar and display name in the top bar"
+      ],
+      "prepare": [
+        "if (-not $env:MG_TENANT -or -not $env:MG_UPN_DOMAIN -or -not $env:MG_PNP_CLIENT_ID) { throw 'Set MG_TENANT (lab tenant short name), MG_UPN_DOMAIN (sign-in domain of the lab users) and MG_PNP_CLIENT_ID (the MG Lab PnP app) in the environment first' }",
+        "if (-not (Get-Module -ListAvailable PnP.PowerShell)) { Install-Module PnP.PowerShell -Scope CurrentUser -Force }",
+        "$env:MG_TENANT_URL = \"https://${env:MG_TENANT}.sharepoint.com\"; $env:MG_ADMIN_URL = \"https://${env:MG_TENANT}-admin.sharepoint.com\"; $env:MG_EP = (Get-Location).Path",
+        "$env:MG_LABADMIN_UPN = \"labadmin@$env:MG_UPN_DOMAIN\"; $env:MG_ALEX_UPN = \"alex.demo@$env:MG_UPN_DOMAIN\"; $env:MG_SAM_UPN = \"sam.demo@$env:MG_UPN_DOMAIN\"; $env:MG_JORDAN_UPN = \"jordan.demo@$env:MG_UPN_DOMAIN\"; $env:MG_RILEY_UPN = \"riley.demo@$env:MG_UPN_DOMAIN\"",
+        "$env:MG_SITE = \"$env:MG_TENANT_URL/sites/ListsDemo\"",
+        "./src/Set-ListFormatting.ps1 -SiteUrl $env:MG_SITE -ClientId $env:MG_PNP_CLIENT_ID -Reset"
+      ],
+      "note": "Formatting must be reset first (prepare does it)."
+    },
+    {
+      "name": "after",
+      "kind": "browser",
+      "url": "https://<tenant>.sharepoint.com/sites/ListsDemo/Lists/PurchaseRequests/AllItems.aspx",
+      "account": "labadmin",
+      "steps": [
+        "(Optional terminal inset, run before this screen: ./src/Set-ListFormatting.ps1 -SiteUrl $site -ClientId $app prints 'No findings.', four Column rows and one View row)",
+        "Refresh the 'Open requests' view",
+        "Point at the status pills, the red bold overdue date with the warning icon, the amber due-soon dates, the amount data bars, own requests in bold and the highlighted overdue rows",
+        "Point at the row due today: it must be amber, not red. If it is red, record it as is"
+      ],
+      "mask": [
+        "tenant host in the address bar (pipeline/mask.js)",
+        "account avatar and display name in the top bar"
+      ],
+      "prepare": [
+        "if (-not $env:MG_TENANT -or -not $env:MG_UPN_DOMAIN -or -not $env:MG_PNP_CLIENT_ID) { throw 'Set MG_TENANT (lab tenant short name), MG_UPN_DOMAIN (sign-in domain of the lab users) and MG_PNP_CLIENT_ID (the MG Lab PnP app) in the environment first' }",
+        "if (-not (Get-Module -ListAvailable PnP.PowerShell)) { Install-Module PnP.PowerShell -Scope CurrentUser -Force }",
+        "$env:MG_TENANT_URL = \"https://${env:MG_TENANT}.sharepoint.com\"; $env:MG_ADMIN_URL = \"https://${env:MG_TENANT}-admin.sharepoint.com\"; $env:MG_EP = (Get-Location).Path",
+        "$env:MG_LABADMIN_UPN = \"labadmin@$env:MG_UPN_DOMAIN\"; $env:MG_ALEX_UPN = \"alex.demo@$env:MG_UPN_DOMAIN\"; $env:MG_SAM_UPN = \"sam.demo@$env:MG_UPN_DOMAIN\"; $env:MG_JORDAN_UPN = \"jordan.demo@$env:MG_UPN_DOMAIN\"; $env:MG_RILEY_UPN = \"riley.demo@$env:MG_UPN_DOMAIN\"",
+        "$env:MG_SITE = \"$env:MG_TENANT_URL/sites/ListsDemo\"",
+        "./src/Set-ListFormatting.ps1 -SiteUrl $env:MG_SITE -ClientId $env:MG_PNP_CLIENT_ID"
+      ]
+    },
+    {
+      "name": "format-pane",
+      "kind": "browser",
+      "url": "https://<tenant>.sharepoint.com/sites/ListsDemo/Lists/PurchaseRequests/AllItems.aspx",
+      "account": "labadmin",
+      "steps": [
+        "In the 'Open requests' view, select the 'Due date' column header",
+        "Choose Column settings > Format this column",
+        "Select 'Advanced mode' and scroll to the color expression with 86400000",
+        "Hold on the JSON, then choose Cancel (do not save)"
+      ],
+      "mask": [
+        "tenant host in the address bar (pipeline/mask.js)",
+        "account avatar and display name in the top bar",
+        "any people names inside the JSON preview"
+      ]
+    },
+    {
+      "name": "not-in-view",
+      "kind": "browser",
+      "url": "https://<tenant>.sharepoint.com/sites/ListsDemo/Lists/PurchaseRequests/AllItems.aspx",
+      "account": "labadmin",
+      "steps": [
+        "Open the view picker > Save view as... > name it 'Due dates only', leave 'Make this a personal view'",
+        "Edit the view columns: keep only Title and Due date (remove Status)",
+        "Find the Closed request with the old due date and show how its date renders now, compared with 'Open requests'",
+        "Record what actually happens, then delete the personal view afterwards"
+      ],
+      "mask": [
+        "tenant host in the address bar (pipeline/mask.js)",
+        "account avatar and display name in the top bar"
+      ]
+    }
+  ],
+  "teardown": [
+    "if (-not $env:MG_TENANT -or -not $env:MG_UPN_DOMAIN -or -not $env:MG_PNP_CLIENT_ID) { throw 'Set MG_TENANT (lab tenant short name), MG_UPN_DOMAIN (sign-in domain of the lab users) and MG_PNP_CLIENT_ID (the MG Lab PnP app) in the environment first' }",
+    "if (-not (Get-Module -ListAvailable PnP.PowerShell)) { Install-Module PnP.PowerShell -Scope CurrentUser -Force }",
+    "$env:MG_TENANT_URL = \"https://${env:MG_TENANT}.sharepoint.com\"; $env:MG_ADMIN_URL = \"https://${env:MG_TENANT}-admin.sharepoint.com\"; $env:MG_EP = (Get-Location).Path",
+    "$env:MG_LABADMIN_UPN = \"labadmin@$env:MG_UPN_DOMAIN\"; $env:MG_ALEX_UPN = \"alex.demo@$env:MG_UPN_DOMAIN\"; $env:MG_SAM_UPN = \"sam.demo@$env:MG_UPN_DOMAIN\"; $env:MG_JORDAN_UPN = \"jordan.demo@$env:MG_UPN_DOMAIN\"; $env:MG_RILEY_UPN = \"riley.demo@$env:MG_UPN_DOMAIN\"",
+    "$env:MG_SITE = \"$env:MG_TENANT_URL/sites/ListsDemo\"",
+    "./src/Set-ListFormatting.ps1 -SiteUrl $env:MG_SITE -ClientId $env:MG_PNP_CLIENT_ID -Reset",
+    "Connect-PnPOnline -Url $env:MG_SITE -ClientId $env:MG_PNP_CLIENT_ID -DeviceLogin   # owner signs in",
+    "Remove-PnPView -List 'Purchase Requests' -Identity 'Due dates only' -Force -ErrorAction SilentlyContinue"
+  ],
+  "needs": [
+    "tenant",
+    "episode:01",
+    "role:site-owner",
+    "app:MG Lab PnP",
+    "python"
+  ]
+}

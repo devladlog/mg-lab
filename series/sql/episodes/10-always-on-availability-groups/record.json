@@ -1,0 +1,100 @@
+{
+  "note": "Live-session recording (series/tools/rec). prepare/teardown run on the laptop, not recorded. Passwords are never in this file: the owner types the connection string once when prepare asks (Server=10.50.0.30,1433;Database=master;UID=<login>;<the login's password entry>;Encrypt=yes;TrustServerCertificate=yes); prepare keeps it in the MG_SQL_BASE variable of this session and derives SQL_CONNECTION_STRING for each database; teardown removes both. T-SQL set-up runs on CON-SQL01 over PowerShell Direct as the lab Administrator with Windows authentication (SQL Server's own sysadmin group is Domain Admins). Episode login: lab_demo on both instances (same login and secret on CON-SQL01 and CON-SQL02), made sysadmin for this episode only. The cluster is built by src/ps/Prepare-AgCluster.ps1 run on CON-SQL01 over PowerShell Direct; if the cluster or Test-Cluster steps refuse to work through PowerShell Direct (no delegation), run that script on CON-SQL01's console as the lab Administrator instead.",
+  "prepare": [
+    "Get-VM CON-SQL01, CON-SQL02 | Where-Object State -ne 'Running' | ForEach-Object { Start-VM -VM $_; Start-Sleep -Seconds 60 }",
+    "$sql = { param($vm, $text) Invoke-Command -VMName $vm -Credential $cred -ArgumentList $text -ScriptBlock { param($t) $c = New-Object System.Data.SqlClient.SqlConnection 'Server=localhost;Integrated Security=SSPI;TrustServerCertificate=True'; $c.Open(); try { foreach ($b in ($t -split '(?im)^\\s*GO\\s*$')) { if ($b.Trim()) { $m = $c.CreateCommand(); $m.CommandText = $b; $m.CommandTimeout = 600; [void]$m.ExecuteNonQuery() } } } finally { $c.Close() } } }",
+    "& $sql 'CON-SQL01' \"IF SUSER_ID(N'lab_demo') IS NULL THROW 50000, N'Create the login lab_demo first (episode 3 demo.md, setup step 3; owner types its password off camera).', 1;\"",
+    "& $sql 'CON-SQL02' \"IF SUSER_ID(N'lab_demo') IS NULL THROW 50000, N'Create the login lab_demo on CON-SQL02 too (same as episode 3, off camera).', 1;\"",
+    "& $sql 'CON-SQL01' \"IF IS_SRVROLEMEMBER(N'sysadmin', N'lab_demo') = 0 ALTER SERVER ROLE sysadmin ADD MEMBER lab_demo;\"",
+    "& $sql 'CON-SQL02' \"IF IS_SRVROLEMEMBER(N'sysadmin', N'lab_demo') = 0 ALTER SERVER ROLE sysadmin ADD MEMBER lab_demo;\"",
+    "$s = New-PSSession -VMName CON-SQL01 -Credential $cred",
+    "Invoke-Command -Session $s { New-Item -ItemType Directory -Force C:\\lab\\ep10 | Out-Null }",
+    "Copy-Item -ToSession $s -Path .\\src\\ps -Destination C:\\lab\\ep10 -Recurse -Force",
+    "Invoke-Command -Session $s { if (-not (Get-Module -ListAvailable SqlServer)) { Install-PackageProvider NuGet -Force | Out-Null; Install-Module SqlServer -Force -Scope AllUsers -AllowClobber } }",
+    "if (-not (Invoke-Command -Session $s { Get-Service ClusSvc -ErrorAction SilentlyContinue | Where-Object Status -eq 'Running' })) { Invoke-Command -Session $s -ArgumentList $cred { param($c) $PSDefaultParameterValues['Invoke-Command:Credential'] = $c; & C:\\lab\\ep10\\ps\\Prepare-AgCluster.ps1 } }",
+    "Remove-PSSession $s",
+    "if (-not $env:MG_SQL_BASE) { $env:MG_SQL_BASE = Read-Host 'Connection string for lab_demo on 10.50.0.30,1433 (typed off camera, never saved; format in the note of record.json)' -MaskInput }",
+    "$env:SQL_CONNECTION_STRING = $env:MG_SQL_BASE -replace 'Database=[^;]*', 'Database=master'",
+    "$env:SQL_CONNECTION_STRING_SQL02 = $env:MG_SQL_BASE -replace 'Database=[^;]*', 'Database=master' -replace 'Server=[^;]*', 'Server=10.50.0.42,1433'",
+    "python -m pip install -q -r requirements.txt"
+  ],
+  "screens": [
+    {
+      "name": "a07-health",
+      "kind": "app",
+      "app": "SSMS 22",
+      "prepare": [
+        "python src/ag_lab.py --engine sqlserver --setup --step a02-prereqs --step a03-endpoints --step a04-database --step a05-create-ag"
+      ],
+      "steps": [
+        "Open SSMS 22 and connect to 10.50.0.30,1433 with SQL Server Authentication as lab_demo (secret typed off camera, Remember off); in Options > Connection Properties set the database to master and tick Trust server certificate (lab only) on CON-SQL01 (10.50.0.30,1433)",
+        "Open src/sql/a07-health.sql and run it after the seed has finished",
+        "Grid, two rows: CON-SQL01 PRIMARY and CON-SQL02 SECONDARY, SYNCHRONOUS_COMMIT, AUTOMATIC, CONNECTED, SYNCHRONIZED, HEALTHY, IsSuspended 0",
+        "Optional second shot: right-click ag_contoso > Show Dashboard (Always On High Availability dashboard, all green)"
+      ],
+      "mask": [
+        "server addresses 10.50.0.30 / 10.50.0.42 and the login name (Connect dialog, title bar, Object Explorer): hosts aliases so they read CON-SQL01 / CON-SQL02, or blur",
+        "lab domain name beyond lab.contoso.com, laptop machine name and Windows user name in title bars"
+      ],
+      "scene": "health-screen"
+    },
+    {
+      "name": "a08-error-976",
+      "kind": "app",
+      "app": "SSMS 22",
+      "prepare": [
+        "python src/ag_lab.py --engine sqlserver --setup --step a02-prereqs --step a03-endpoints --step a04-database --step a05-create-ag"
+      ],
+      "steps": [
+        "Connect to CON-SQL02 (10.50.0.42,1433) as lab_demo (secret typed off camera, Remember off, Trust server certificate on), database master",
+        "Open src/sql/a08-secondary-read-fails.sql and run it: Messages tab shows Msg 976, Level 14, 'The target database, ContosoBikesAG, is participating in an availability group and is currently not accessible for queries...'",
+        "Run src/sql/a09-allow-read.sql on CON-SQL01, then run the same query on CON-SQL02 again: Orders 8, role SECONDARY"
+      ],
+      "mask": [
+        "server addresses 10.50.0.30 / 10.50.0.42 and the login name (Connect dialog, title bar, Object Explorer): hosts aliases so they read CON-SQL01 / CON-SQL02, or blur",
+        "lab domain name beyond lab.contoso.com, laptop machine name and Windows user name in title bars"
+      ],
+      "scene": "gotcha-screen"
+    },
+    {
+      "name": "a12-failover",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\sql\\episodes\\10-always-on-availability-groups",
+      "prompt": "PS> ",
+      "prepare": [
+        "python src/ag_lab.py --engine sqlserver --setup --step a02-prereqs --step a03-endpoints --step a04-database --step a05-create-ag --step a08-secondary-read-fails --step a09-allow-read --step a11-write-and-read"
+      ],
+      "commands": [
+        "python src/ag_lab.py --engine sqlserver --step a12-failover",
+        "#pause 5"
+      ],
+      "maxMinutes": 10,
+      "note": "Left half of the split screen. The SSMS half (a12 health grid: CON-SQL02 PRIMARY and CON-SQL01 SECONDARY, SYNCHRONIZED, HEALTHY, then Orders 9 with order 1009; Object Explorer ag_contoso with CON-SQL02 (Primary)) is a separate SSMS capture on CON-SQL02 taken right after the run, masked as in the other screens. Optional extras: a15-listener, and the automatic failover with --watch plus src/ps/Stop-AgPrimary.ps1.",
+      "scene": "failover-screen"
+    }
+  ],
+  "teardown": [
+    "$sql = { param($vm, $text) Invoke-Command -VMName $vm -Credential $cred -ArgumentList $text -ScriptBlock { param($t) $c = New-Object System.Data.SqlClient.SqlConnection 'Server=localhost;Integrated Security=SSPI;TrustServerCertificate=True'; $c.Open(); try { foreach ($b in ($t -split '(?im)^\\s*GO\\s*$')) { if ($b.Trim()) { $m = $c.CreateCommand(); $m.CommandText = $b; $m.CommandTimeout = 600; [void]$m.ExecuteNonQuery() } } } finally { $c.Close() } } }",
+    "if (-not $env:MG_SQL_BASE) { $env:MG_SQL_BASE = Read-Host 'Connection string for lab_demo on 10.50.0.30,1433 (typed off camera, never saved; format in the note of record.json)' -MaskInput }",
+    "$env:SQL_CONNECTION_STRING = $env:MG_SQL_BASE -replace 'Database=[^;]*', 'Database=master'",
+    "$env:SQL_CONNECTION_STRING_SQL02 = $env:MG_SQL_BASE -replace 'Database=[^;]*', 'Database=master' -replace 'Server=[^;]*', 'Server=10.50.0.42,1433'",
+    "python src/ag_lab.py --engine sqlserver --reset-only",
+    "$s = New-PSSession -VMName CON-SQL01 -Credential $cred",
+    "Invoke-Command -Session $s -ArgumentList $cred { param($c) $PSDefaultParameterValues['Invoke-Command:Credential'] = $c; & C:\\lab\\ep10\\ps\\Remove-AgCluster.ps1 }",
+    "Invoke-Command -Session $s { Remove-Item C:\\lab\\ep10 -Recurse -Force -ErrorAction SilentlyContinue }",
+    "Remove-PSSession $s",
+    "Invoke-Command -VMName CON-SQL01 -Credential $cred { $c = New-Object System.Data.SqlClient.SqlConnection 'Server=localhost;Integrated Security=SSPI;TrustServerCertificate=True'; $c.Open(); $m = $c.CreateCommand(); $m.CommandText = \"SELECT CONCAT(CONVERT(nvarchar(260), SERVERPROPERTY('InstanceDefaultBackupPath')), '|', CONVERT(nvarchar(260), SERVERPROPERTY('InstanceDefaultDataPath')), '|', CONVERT(nvarchar(260), SERVERPROPERTY('InstanceDefaultLogPath')))\"; $dirs = \"$($m.ExecuteScalar())\" -split '\\|'; $c.Close(); foreach ($d in $dirs) { if ($d) { foreach ($p in 'MGLab_ContosoBikesAG_*') { Get-ChildItem -LiteralPath $d -Filter $p -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue } } } }",
+    "& $sql 'CON-SQL01' \"IF SUSER_ID(N'CONTOSO\\CON-SQL02$') IS NOT NULL DROP LOGIN [CONTOSO\\CON-SQL02$];\"",
+    "& $sql 'CON-SQL02' \"IF SUSER_ID(N'CONTOSO\\CON-SQL01$') IS NOT NULL DROP LOGIN [CONTOSO\\CON-SQL01$];\"",
+    "& $sql 'CON-SQL01' \"IF IS_SRVROLEMEMBER(N'sysadmin', N'lab_demo') = 1 ALTER SERVER ROLE sysadmin DROP MEMBER lab_demo;\"",
+    "& $sql 'CON-SQL02' \"IF IS_SRVROLEMEMBER(N'sysadmin', N'lab_demo') = 1 ALTER SERVER ROLE sysadmin DROP MEMBER lab_demo;\"",
+    "Remove-Item Env:SQL_CONNECTION_STRING, Env:SQL_CONNECTION_STRING_SQL02, Env:MG_SQL_BASE -ErrorAction SilentlyContinue"
+  ],
+  "needs": [
+    "lab-vms",
+    "tool:SSMS",
+    "login:lab_demo on CON-SQL01 and CON-SQL02",
+    "internet: PowerShell Gallery (SqlServer module) from CON-SQL01"
+  ]
+}

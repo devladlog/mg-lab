@@ -1,0 +1,93 @@
+{
+  "note": "Live-session recording of the screen scenes (series/tools/rec). prepare/teardown run on the laptop, not recorded; commands are typed and run for real. Extra keys (note, followup, manual_prepare, manual_teardown) are for the recorder person; the kit ignores them. Every python command opens its own MSAL interactive sign-in (the token cache is in memory): the owner signs in as labadmin when the browser asks, or exports the app-registration variables in the shell before recording (never in a file). Record bpfkit-report (backfill) first, then bpfkit-status, as demo.md says; the queue order here follows script.yaml.",
+  "prepare": [
+    "python -m pip install --user -q -r requirements.txt",
+    "if (-not $env:DATAVERSE_URL) { throw 'Set $env:DATAVERSE_URL to the lab environment URL in this shell first (the owner does this; it is never written in a file).' }"
+  ],
+  "manual_prepare": [
+    "Solution MGLabDataverse: create BPF 'Project Approval' on Project Request (Submit, condition Budget >= 50000, Finance Review, Approve, Close) and activate it.",
+    "Open PR-0004 once in the app and note whether the form creates an instance; PR-0004 Budget 75,000, PR-0001 Budget 42,000.",
+    "Optionally move PR-0002 and PR-0004 to Finance Review and PR-0001 to Approve with bpfkit next before the report."
+  ],
+  "screens": [
+    {
+      "name": "bpf-designer",
+      "kind": "browser",
+      "url": "https://make.powerapps.com/",
+      "account": "labadmin",
+      "steps": [
+        "Select DEV, Solutions, MGLabDataverse",
+        "Open the business process flow 'Project Approval'",
+        "Zoom / mini-map so the whole flow fits: Submit, the condition, Finance Review, Approve, Close",
+        "Show Budget marked Required in Submit and Business Justification required in Finance Review",
+        "Header status: Activated"
+      ],
+      "mask": [
+        "tenant name in the top bar",
+        "environment name and org URL (address bar and header)",
+        "user e-mail and avatar in the account menu"
+      ]
+    },
+    {
+      "name": "bpfkit-status",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\dynamics-365\\episodes\\04-business-process-flows\\src",
+      "prompt": "PS src> ",
+      "commands": [
+        "python -m bpfkit status --code PR-0004",
+        "#pause 3",
+        "python -m bpfkit next --code PR-0004",
+        "#pause 3",
+        "python -m bpfkit status --code PR-0004",
+        "#pause 4"
+      ],
+      "prepare": [
+        "Push-Location src; python -m bpfkit back --code PR-0004 2>&1 | Out-Null; Pop-Location"
+      ],
+      "note": "The screen prepare moves PR-0004 back to Submit so the scene can be repeated."
+    },
+    {
+      "name": "app-bpf",
+      "kind": "browser",
+      "url": "https://make.powerapps.com/",
+      "account": "labadmin",
+      "steps": [
+        "Select DEV, Apps, open the model-driven app with Project Request",
+        "Open PR-0004 and refresh",
+        "Process bar: Project Approval, Submit completed, Finance Review active",
+        "Open the stage flyout: Business Justification (required) and Due Date"
+      ],
+      "mask": [
+        "tenant name in the top bar",
+        "environment name and org URL (address bar and header)",
+        "user e-mail and avatar in the account menu"
+      ]
+    },
+    {
+      "name": "bpfkit-report",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\dynamics-365\\episodes\\04-business-process-flows\\src",
+      "prompt": "PS src> ",
+      "commands": [
+        "python -m bpfkit backfill",
+        "#pause 3",
+        "python -m bpfkit backfill --apply",
+        "#pause 3",
+        "python -m bpfkit report",
+        "#pause 4"
+      ]
+    }
+  ],
+  "teardown": [],
+  "manual_teardown": [
+    "Optionally delete the Project Approval instances.",
+    "Deactivate then delete the Project Approval BPF; check Tables and delete the instance table if still listed.",
+    "Keep Business Justification and the episode 1 data if later episodes use them."
+  ],
+  "needs": [
+    "tenant",
+    "licence:Power Apps Premium (BPF use rights, lab trial)"
+  ]
+}

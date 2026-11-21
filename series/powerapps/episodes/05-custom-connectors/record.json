@@ -1,0 +1,100 @@
+{
+  "note": "Live-session recording of the screen scenes (series/tools/rec). prepare/teardown run on the laptop, not recorded; terminal commands are typed and run for real. $env:MG_DEV_URL (DEV org URL) and the other MG_* variables are set by the owner as user environment variables on the laptop and never appear on screen.",
+  "prepare": [
+    "# owner signs in: pac auth create --environment $env:MG_DEV_URL --deviceCode",
+    "pac org who",
+    "Read-Host 'Owner: if the tenant has a data policy, Contoso Holidays (or https://date.nager.at*) is in the same group as Dataverse; episodes 1-3 are in DEV. Press Enter'"
+  ],
+  "screens": [
+    {
+      "name": "connector-definition",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\powerapps\\episodes\\05-custom-connectors\\src\\connector",
+      "prompt": "PS connector> ",
+      "commands": [
+        "pac connector create --api-definition-file apiDefinition.swagger.json --api-properties-file apiProperties.json --script-file script.csx --solution-unique-name EquipmentDesk",
+        "#pause 3",
+        "pac connector list",
+        "#pause 4"
+      ],
+      "url": "https://make.powerapps.com/",
+      "account": "labadmin",
+      "steps": [
+        "After the terminal part: Solutions > Equipment Desk > Contoso Holidays > Edit",
+        "Definition tab: three actions, Get days off selected",
+        "Code tab: custom code enabled for GetDaysOff only"
+      ],
+      "mask": [
+        "environment name and org URL in the address bar and the environment picker",
+        "tenant name in the top bar",
+        "account name, e-mail and avatar in the account menu",
+        "connector id (GUID) printed by pac connector create/list, in the terminal"
+      ]
+    },
+    {
+      "name": "connector-test",
+      "kind": "browser",
+      "url": "https://make.powerapps.com/",
+      "account": "labadmin",
+      "steps": [
+        "Solutions > Equipment Desk > Contoso Holidays > Edit > Test tab",
+        "New connection (no credentials)",
+        "Operation GetDaysOff: Country PT, From Year 2026, Subdivision PT-30 > Test operation",
+        "Scroll the response: status 200, count 15, 2026-07-01 Madeira Day (PT-30), the excluded Carnival and Azores Day",
+        "Repeat with Country XX: 404 with 'The holiday source returned 404 for XX 2026: ...'"
+      ],
+      "mask": [
+        "environment name and org URL in the address bar and the environment picker",
+        "tenant name in the top bar",
+        "account name, e-mail and avatar in the account menu",
+        "the connection name if it contains a user name"
+      ]
+    },
+    {
+      "name": "app-monitor",
+      "kind": "browser",
+      "url": "https://make.powerapps.com/",
+      "account": "labadmin",
+      "steps": [
+        "Open 'Equipment Desk (phone)' in Studio",
+        "Data pane: Contoso Holidays next to Equipment and Loans",
+        "App > Formulas: show DaysOff and Holidays",
+        "Advanced tools > Monitor, then play the Open loans screen",
+        "Show one GetDaysOff row (fromYear 2025, toYear 2027, status 200)"
+      ],
+      "mask": [
+        "environment name and org URL in the address bar and the environment picker",
+        "tenant name in the top bar",
+        "account name, e-mail and avatar in the account menu"
+      ]
+    },
+    {
+      "name": "flow-dropdown",
+      "kind": "browser",
+      "url": "https://make.powerautomate.com/",
+      "account": "labadmin",
+      "steps": [
+        "Create > Instant cloud flow (manual trigger)",
+        "Add an action > Custom > Contoso Holidays > Get days off",
+        "Open the Country drop-down: country names are listed",
+        "Expand advanced options to show Subdivision; no 'List countries' action is offered",
+        "Do not save: discard the flow"
+      ],
+      "mask": [
+        "environment name and org URL in the address bar and the environment picker",
+        "tenant name in the top bar",
+        "account name, e-mail and avatar in the account menu"
+      ]
+    }
+  ],
+  "teardown": [
+    "pac auth clear",
+    "Write-Host 'Reminder: the connector and the app change stay for episode 6; make sure the unsaved test flow is discarded (My flows must not list it).'"
+  ],
+  "needs": [
+    "tenant",
+    "premium-trial",
+    "internet:date.nager.at"
+  ]
+}

@@ -1,0 +1,94 @@
+{
+  "note": "Deep-dive #9. The Office 365 sign-in is made inside CON-W11-01 as alex.demo. Log entries lag a few minutes. Order: policies, Intune (BitLocker failing), sign-in failure, fix, success, impact, then the network demo.",
+  "prepare": [
+    "Invoke-Pester ./tests",
+    "# owner signs in (device code), not recorded",
+    "az login --use-device-code",
+    "Connect-MgGraph -Scopes Policy.ReadWrite.ConditionalAccess,Policy.Read.All,Group.ReadWrite.All,DeviceManagementConfiguration.ReadWrite.All,AuditLog.Read.All -NoWelcome   # owner signs in",
+    "# manual: Entra admin center > Mobility > Microsoft Intune > MDM user scope = Some, group ct-zt-pilot (write down the previous value)",
+    "# manual: start CON-W11-01 (Hyper-V), finish Windows setup by joining Entra as alex.demo; confirm it appears in Intune > Devices > Windows",
+    "ssh-keygen -t ed25519 -f ./zt-lab -N '\"\"'",
+    "./scripts/Deploy-ZeroTrust.ps1 -WhatIf",
+    "./scripts/Deploy-ZeroTrust.ps1",
+    "# manual: add alex.demo and sam.demo to ct-zt-pilot and labadmin to ct-zt-breakglass",
+    "az group create -n rg-mglab-deep-dive-09 -l westeurope -o none",
+    "az vm list-skus -l westeurope --size Standard_B1s -o table",
+    "$o = az deployment group create -g rg-mglab-deep-dive-09 -f infra/main.bicep -p adminPublicKey=\"$(Get-Content ./zt-lab.pub -Raw)\" --query properties.outputs -o json | ConvertFrom-Json; $env:MG_VAULT09 = $o.vaultName.value; $env:MG_VM09 = $o.vmName.value",
+    "# manual (inside CON-W11-01): sign in to https://outlook.office.com as alex.demo in Edge, sync the device (Settings > Accounts > Access work or school > Info > Sync); if BitLocker is already on use Disable-BitLocker for the 'before' take"
+  ],
+  "screens": [
+    {
+      "name": "ca-policies",
+      "kind": "browser",
+      "url": "https://entra.microsoft.com/",
+      "account": "labadmin",
+      "steps": [
+        "Entra admin center > Entra ID > Conditional Access > Policies",
+        "Show CT001, CT002 and CT003, each with State 'Report-only'"
+      ],
+      "mask": [
+        "tenant name and id"
+      ]
+    },
+    {
+      "name": "intune-compliance",
+      "kind": "browser",
+      "url": "https://intune.microsoft.com/",
+      "account": "labadmin",
+      "steps": [
+        "Intune admin center > Devices > Windows > CON-W11-01 > Device compliance",
+        "Open the policy 'CT Windows corporate baseline': per-setting status with BitLocker Not compliant (take this before enabling BitLocker)"
+      ],
+      "mask": [
+        "tenant name",
+        "device serial number"
+      ]
+    },
+    {
+      "name": "signin-report-only",
+      "kind": "browser",
+      "url": "https://entra.microsoft.com/",
+      "account": "labadmin",
+      "steps": [
+        "Take 1: Entra ID > Monitoring > Sign-in logs > the Office 365 sign-in of alex.demo from CON-W11-01 > Report-only tab: CT003 Failure",
+        "Fix inside CON-W11-01 (elevated PowerShell): Enable-BitLocker -MountPoint C: -TpmProtector -UsedSpaceOnly (restart if asked), sync the device, wait for Compliant",
+        "Take 2: the next sign-in: CT003 Success",
+        "Take 3 (terminal on the laptop, after Connect-MgGraph as labadmin): Get-CaReportOnlyImpact -Hours 3 after Import-Module ./scripts/ZeroTrust.psm1 -Force: CT001 to CT003 with WouldPass, WouldFail, UserActionNeeded, NotApplied"
+      ],
+      "mask": [
+        "tenant name and id",
+        "user domain"
+      ]
+    },
+    {
+      "name": "private-access",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\deep-dive\\episodes\\09-zero-trust-network-architecture",
+      "prompt": "PS ...\\09-zero-trust> ",
+      "commands": [
+        "./scripts/Test-PrivateAccess.ps1 -ResourceGroup rg-mglab-deep-dive-09 -VaultName $env:MG_VAULT09 -VmName $env:MG_VM09",
+        "#pause 5"
+      ],
+      "also": [
+        "OUTSIDE: the vault name resolves to a public address and the call fails with Forbidden. INSIDE (VM run-command): 10.60.0.x, 'got a token', HTTP 200, the internet call fails.",
+        "Second capture (browser, labadmin): portal > Key Vault > Networking: public network access Disabled, and Private endpoint connections: Approved"
+      ]
+    }
+  ],
+  "teardown": [
+    "# manual: delete CT001-CT003 in Entra, the Intune policy 'CT Windows corporate baseline', groups ct-zt-pilot and ct-zt-breakglass; set MDM user scope back to its previous value; retire/delete CON-W11-01 in Intune and Entra if the VM is rebuilt",
+    "Invoke-MgGraphRequest -Method GET -Uri 'https://graph.microsoft.com/v1.0/identity/conditionalAccess/policies' | Select-Object -ExpandProperty value | Where-Object displayName -like 'CT0*' | ForEach-Object { Invoke-MgGraphRequest -Method DELETE -Uri \"https://graph.microsoft.com/v1.0/identity/conditionalAccess/policies/$($_.id)\" }",
+    "az group delete -n rg-mglab-deep-dive-09 --yes",
+    "az keyvault purge --name $env:MG_VAULT09 --location westeurope   # soft-deleted vault names stay reserved for 7 days otherwise",
+    "Remove-Item ./zt-lab, ./zt-lab.pub -ErrorAction SilentlyContinue; Remove-Item Env:MG_VAULT09, Env:MG_VM09 -ErrorAction SilentlyContinue",
+    "Disconnect-MgGraph"
+  ],
+  "needs": [
+    "tenant",
+    "azure",
+    "lab-vms",
+    "vm:CON-W11-01"
+  ],
+  "blocked": "intune-compliance and signin-report-only need CON-W11-01 built from the Windows 11 Enterprise evaluation ISO (E:\\MGLab\\iso\\Win11Ent-Eval.iso, presence not confirmed) and Entra-joined as alex.demo."
+}

@@ -1,0 +1,151 @@
+{
+  "note": "Live-session recording of the screen scenes (series/tools/rec). prepare/teardown run on the laptop, not recorded; commands are typed and run for real. Screens that mix a terminal and a portal carry the second half in also[] (when = before/after the main part). Scenes read MG_LAB_ADMIN_UPN / MG_LAB_DOMAIN (set by prepare, derived from the signed-in labadmin).",
+  "prepare": [
+    "if (-not (Get-Module -ListAvailable -Name ExchangeOnlineManagement)) { Install-Module ExchangeOnlineManagement -Scope CurrentUser -Force -AllowClobber }",
+    "if (-not (Get-Module -ListAvailable -Name Microsoft.Graph.Authentication)) { Install-Module Microsoft.Graph.Authentication -Scope CurrentUser -Force -AllowClobber }",
+    "Connect-MgGraph -Scopes User.Read -NoWelcome  # owner signs in (browser); only to read the labadmin address",
+    "function Set-LabVar($n, $v) { [Environment]::SetEnvironmentVariable($n, \"$v\", 'User'); Set-Item \"env:$n\" \"$v\" }",
+    "$upn = (Invoke-MgGraphRequest -Uri /v1.0/me).userPrincipalName; Set-LabVar MG_LAB_ADMIN_UPN $upn; Set-LabVar MG_LAB_DOMAIN $upn.Split('@')[1]",
+    "(Get-Content ./src/defender.json -Raw) -replace '@contoso\\.onmicrosoft\\.com', \"@$env:MG_LAB_DOMAIN\" -replace 'contoso\\.onmicrosoft\\.com', $env:MG_LAB_DOMAIN | Set-Content ./src/defender.lab.json",
+    "Connect-ExchangeOnline -UserPrincipalName $env:MG_LAB_ADMIN_UPN -ShowBanner:$false  # owner signs in (browser)",
+    "# the two groups (idempotent): Priority Accounts (labadmin, riley) and All Staff (labadmin, alex, sam, riley; Jordan and Taylor deliberately left out)",
+    "function Add-LabGroup($name, $alias, $members) { if (-not (Get-DistributionGroup -Identity \"$alias@$env:MG_LAB_DOMAIN\" -ErrorAction SilentlyContinue)) { New-DistributionGroup -Name $name -Alias $alias -Type Security -PrimarySmtpAddress \"$alias@$env:MG_LAB_DOMAIN\" -Members $members | Out-Null } }",
+    "Add-LabGroup 'Priority Accounts' 'priority-accounts' @($env:MG_LAB_ADMIN_UPN, \"riley.demo@$env:MG_LAB_DOMAIN\"); Add-LabGroup 'All Staff' 'all-staff' @($env:MG_LAB_ADMIN_UPN, \"alex.demo@$env:MG_LAB_DOMAIN\", \"sam.demo@$env:MG_LAB_DOMAIN\", \"riley.demo@$env:MG_LAB_DOMAIN\")",
+    "# an antivirus-excluded folder for EICAR.TXT must exist; the owner sets MG_EICAR_DIR once (User environment variable)",
+    "if (-not $env:MG_EICAR_DIR -or -not (Test-Path $env:MG_EICAR_DIR)) { throw 'Set MG_EICAR_DIR to a folder that is excluded from antivirus scanning before recording.' }"
+  ],
+  "screens": [
+    {
+      "name": "audit-before",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\microsoft-365\\episodes\\06-microsoft-defender-for-365\\src",
+      "prompt": "PS> ",
+      "commands": [
+        "Connect-ExchangeOnline -UserPrincipalName $env:MG_LAB_ADMIN_UPN -ShowBanner:$false",
+        "./Invoke-DefenderForOffice.ps1 -PolicyFile ./defender.lab.json -Audit -SaveInventory ./inventory.lab.json",
+        "#pause 6"
+      ]
+    },
+    {
+      "name": "apply",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\microsoft-365\\episodes\\06-microsoft-defender-for-365\\src",
+      "prompt": "PS> ",
+      "commands": [
+        "Connect-ExchangeOnline -UserPrincipalName $env:MG_LAB_ADMIN_UPN -ShowBanner:$false",
+        "./Invoke-DefenderForOffice.ps1 -PolicyFile ./defender.lab.json -ApplyPresets -WhatIf",
+        "./Invoke-DefenderForOffice.ps1 -PolicyFile ./defender.lab.json -ApplyPresets -Confirm:$false",
+        "./Invoke-DefenderForOffice.ps1 -PolicyFile ./defender.lab.json -Audit",
+        "#pause 6"
+      ],
+      "also": [
+        {
+          "kind": "browser",
+          "url": "https://security.microsoft.com/presetSecurityPolicies",
+          "account": "labadmin",
+          "steps": [
+            "Defender portal > Email & collaboration > Policies & rules > Threat policies > Preset security policies",
+            "Standard protection and Strict protection are both on; open Manage protection settings to show the recipients as in the file"
+          ],
+          "mask": [
+            "tenant name",
+            "domain names"
+          ],
+          "when": "after"
+        }
+      ]
+    },
+    {
+      "name": "eicar",
+      "kind": "browser",
+      "url": "https://outlook.office.com/mail/",
+      "account": "alex.demo (second profile) and sam.demo (third profile)",
+      "steps": [
+        "(EICAR.TXT is created by the per-screen prepare in the antivirus-excluded folder, 68 bytes)",
+        "As alex.demo: New message to sam.demo (internal), subject 'Test attachment', attach EICAR.TXT from the excluded folder, Send",
+        "As sam.demo: Inbox: the message is not there",
+        "Run the hunting commands in the terminal (see also[]); optional: Defender portal > Email & collaboration > Review > Quarantine shows the message"
+      ],
+      "mask": [
+        "tenant domain",
+        "addresses beyond the lab aliases",
+        "file path of the excluded folder"
+      ],
+      "prepare": [
+        "$e = 'X5O!P%@AP[4\\PZX54(P^)7CC)7}$' + 'EICAR-STANDARD-ANTIVIRUS-TEST-FILE!' + '$H+H*'; [IO.File]::WriteAllText((Join-Path $env:MG_EICAR_DIR 'EICAR.TXT'), $e)"
+      ],
+      "also": [
+        {
+          "kind": "terminal",
+          "steps": [],
+          "mask": [],
+          "when": "after",
+          "target": "host",
+          "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\microsoft-365\\episodes\\06-microsoft-defender-for-365\\src",
+          "prompt": "PS> ",
+          "commands": [
+            "Connect-MgGraph -Scopes ThreatHunting.Read.All -NoWelcome",
+            "./Invoke-DefenderForOffice.ps1 -Hunt -Recipient sam.demo@$env:MG_LAB_DOMAIN -Days 1",
+            "./Invoke-DefenderForOffice.ps1 -Hunt -Days 1",
+            "#pause 6"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "simulation",
+      "kind": "browser",
+      "url": "https://security.microsoft.com/attacksimulator",
+      "account": "labadmin; alex.demo and sam.demo in their own profiles",
+      "steps": [
+        "Email & collaboration > Attack simulation training > Simulations > Launch a simulation",
+        "Technique: Credential Harvest; payload: a Microsoft-provided (global) payload; target users alex.demo, sam.demo, jordan.demo, taylor.demo; assign the recommended training; launch now, short duration",
+        "As alex.demo: open the simulation message, click the link, type a made-up value on the simulated page (never a real secret)",
+        "As sam.demo: Report > Report phishing. Jordan and Taylor do nothing",
+        "When results show: portal simulation report next to the terminal output (see also[])"
+      ],
+      "mask": [
+        "tenant name",
+        "addresses beyond the lab aliases",
+        "simulation ids"
+      ],
+      "also": [
+        {
+          "kind": "terminal",
+          "steps": [],
+          "mask": [],
+          "when": "after",
+          "target": "host",
+          "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\microsoft-365\\episodes\\06-microsoft-defender-for-365\\src",
+          "prompt": "PS> ",
+          "commands": [
+            "Connect-MgGraph -Scopes AttackSimulation.Read.All -NoWelcome",
+            "./Invoke-DefenderForOffice.ps1 -SimulationReport",
+            "#pause 6"
+          ]
+        }
+      ]
+    }
+  ],
+  "teardown": [
+    "Connect-ExchangeOnline -UserPrincipalName $env:MG_LAB_ADMIN_UPN -ShowBanner:$false  # owner signs in (browser)",
+    "Disable-EOPProtectionPolicyRule -Identity 'Standard Preset Security Policy' -Confirm:$false; Disable-ATPProtectionPolicyRule -Identity 'Standard Preset Security Policy' -Confirm:$false; Disable-EOPProtectionPolicyRule -Identity 'Strict Preset Security Policy' -Confirm:$false; Disable-ATPProtectionPolicyRule -Identity 'Strict Preset Security Policy' -Confirm:$false   # or keep the presets, they are Microsoft's recommendation",
+    "Remove-DistributionGroup -Identity \"all-staff@$env:MG_LAB_DOMAIN\" -Confirm:$false",
+    "Remove-Item (Join-Path $env:MG_EICAR_DIR 'EICAR.TXT') -ErrorAction SilentlyContinue; Remove-Item ./src/defender.lab.json, ./src/inventory.lab.json -ErrorAction SilentlyContinue",
+    "Disconnect-ExchangeOnline -Confirm:$false; Disconnect-MgGraph",
+    "# by hand: release or delete the quarantined EICAR message (Defender portal > Quarantine); remove any training assigned by the simulation",
+    "foreach ($n in 'MG_LAB_ADMIN_UPN', 'MG_LAB_DOMAIN') { [Environment]::SetEnvironmentVariable($n, $null, 'User') }"
+  ],
+  "needs": [
+    "tenant",
+    "trial:Microsoft 365 E5 (Defender for Office 365 Plan 2)",
+    "role:Security Administrator (labadmin)",
+    "browser-profile:alex.demo",
+    "browser-profile:sam.demo",
+    "env:MG_EICAR_DIR (folder excluded from antivirus)",
+    "manual:turn on Standard (Domains = lab domain AND Groups = All Staff) and Strict (Groups = Priority Accounts) presets in the Defender portal, then Disable-ATPProtectionPolicyRule on the Strict rule, before screen audit-before",
+    "wait:hunting data for the eicar screen and simulation results can take a while"
+  ]
+}

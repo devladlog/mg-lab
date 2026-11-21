@@ -1,0 +1,104 @@
+{
+  "note": "Live-session recording of the screen scenes (series/tools/rec). prepare/teardown run on the laptop, not recorded; commands are typed and run for real. Extra keys (note, followup, manual_prepare, manual_teardown) are for the recorder person; the kit ignores them. Every python command opens its own MSAL interactive sign-in (the token cache is in memory): the owner signs in as labadmin when the browser asks, or exports the app-registration variables in the shell before recording (never in a file). Rehearse deploy then remove once so the recorded run is a real first run (the column stays after remove: update the narration if the line says it exists).",
+  "prepare": [
+    "python -m pip install --user -q -r requirements.txt",
+    "if (-not $env:DATAVERSE_URL) { throw 'Set $env:DATAVERSE_URL to the lab environment URL in this shell first (the owner does this; it is never written in a file).' }",
+    "Push-Location formscript; npm ci --no-audit --no-fund; npm test; Pop-Location"
+  ],
+  "manual_prepare": [
+    "Form Information (main): add Request Code, Customer Account, Budget, Due Date, Priority and Business Justification to the first section, save, publish (Business Justification exists only after the first deploy).",
+    "Business rule 'Justification for large budgets' (scope Entity, Budget >= 50000, Set Business Required, nested Show Error Message, false branch Not Business Required): validate, save, activate.",
+    "PR-0004: Budget 75,000, Customer Account Contoso Ltd, empty justification; PR-0011 and PR-0013 also Contoso Ltd."
+  ],
+  "screens": [
+    {
+      "name": "form-designer",
+      "kind": "browser",
+      "url": "https://make.powerapps.com/",
+      "account": "labadmin",
+      "steps": [
+        "Select DEV, Solutions, MGLabDataverse",
+        "Tables, Project Request, Forms",
+        "Open the main form 'Information' (modern form designer)",
+        "Show the section with Name, Request Code, Customer Account, Budget, Due Date, Priority, Business Justification",
+        "Open the Events tab or tree view (optional)"
+      ],
+      "mask": [
+        "tenant name in the top bar",
+        "environment name and org URL (address bar and header)",
+        "user e-mail and avatar in the account menu"
+      ]
+    },
+    {
+      "name": "business-rule",
+      "kind": "browser",
+      "url": "https://make.powerapps.com/",
+      "account": "labadmin",
+      "steps": [
+        "Select DEV, Solutions, MGLabDataverse, Tables, Project Request, Business rules",
+        "Open 'Justification for large budgets'",
+        "Show Scope = Entity (top right), the condition Budget >= 50000, Set Business Required and the nested Show Error Message on the true branch, Not Business Required on the false branch",
+        "Use zoom / mini-map so the whole rule fits; status Active"
+      ],
+      "mask": [
+        "tenant name in the top bar",
+        "environment name and org URL (address bar and header)",
+        "user e-mail and avatar in the account menu"
+      ]
+    },
+    {
+      "name": "deploy",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\dynamics-365\\episodes\\03-dynamics-365-customization\\src",
+      "prompt": "PS src> ",
+      "commands": [
+        "python -m custkit deploy",
+        "#pause 3",
+        "python -m custkit deploy",
+        "#pause 4"
+      ]
+    },
+    {
+      "name": "app-form",
+      "kind": "browser",
+      "url": "https://make.powerapps.com/",
+      "account": "labadmin",
+      "steps": [
+        "Select DEV, Apps, open the model-driven app with Project Request",
+        "Open PR-0004 after a hard refresh (Ctrl+F5) so the new script loads",
+        "In one frame: yellow notification 'Contoso Ltd already has N open requests', Request Code locked, Budget 75,000, Business Justification required with the rule's message",
+        "Optional: change Customer Account to one with no other requests (warning disappears); Budget 40,000 (asterisk goes); a new record has an editable Request Code"
+      ],
+      "mask": [
+        "tenant name in the top bar",
+        "environment name and org URL (address bar and header)",
+        "user e-mail and avatar in the account menu",
+        "any real account names (fictional Contoso only)"
+      ]
+    },
+    {
+      "name": "probe-rule",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\dynamics-365\\episodes\\03-dynamics-365-customization\\src",
+      "prompt": "PS src> ",
+      "commands": [
+        "python -m custkit probe-rule",
+        "\"exit=$LASTEXITCODE\"",
+        "#pause 4"
+      ]
+    }
+  ],
+  "teardown": [
+    "Push-Location src; python -m custkit remove; Pop-Location"
+  ],
+  "manual_teardown": [
+    "Deactivate and delete the business rule (so episode 1's import works again).",
+    "Remove Business Justification from the form and publish; keep the column if episode 4 is next."
+  ],
+  "needs": [
+    "tenant",
+    "node:formscript npm packages (npm ci, internet)"
+  ]
+}

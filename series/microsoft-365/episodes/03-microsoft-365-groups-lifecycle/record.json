@@ -1,0 +1,120 @@
+{
+  "note": "Live-session recording of the screen scenes (series/tools/rec). prepare/teardown run on the laptop, not recorded; commands are typed and run for real. Screens that mix a terminal and a portal carry the second half in also[] (when = before/after the main part). Scenes read MG_LAB_ADMIN_UPN / MG_LAB_DOMAIN (set by prepare, derived from the signed-in labadmin).",
+  "prepare": [
+    "if (-not (Get-Module -ListAvailable -Name Microsoft.Graph.Authentication)) { Install-Module Microsoft.Graph.Authentication -Scope CurrentUser -Force -AllowClobber }",
+    "Connect-MgGraph -Scopes Directory.Read.All, Directory.ReadWrite.All, Group.ReadWrite.All, GroupMember.ReadWrite.All, User.Read.All, TeamSettings.ReadWrite.All -NoWelcome  # owner signs in (browser)",
+    "function Set-LabVar($n, $v) { [Environment]::SetEnvironmentVariable($n, \"$v\", 'User'); Set-Item \"env:$n\" \"$v\" }",
+    "$upn = (Invoke-MgGraphRequest -Uri /v1.0/me).userPrincipalName; Set-LabVar MG_LAB_ADMIN_UPN $upn; Set-LabVar MG_LAB_DOMAIN $upn.Split('@')[1]",
+    "function Get-LabUserId($n) { (Invoke-MgGraphRequest -Uri \"/v1.0/users/$n@$env:MG_LAB_DOMAIN\").id }",
+    "$alex = Get-LabUserId 'alex.demo'",
+    "# 1. note the current expiration policy so teardown can put it back",
+    "(Invoke-MgGraphRequest -Uri /v1.0/groupLifecyclePolicies).value | ConvertTo-Json -Depth 6 | Set-Content (Join-Path $env:TEMP 'mglab-ep03-policy.json')",
+    "# 2. two extra Microsoft 365 groups owned by Alex; Temp Project Kickoff is deleted (restore target)",
+    "foreach ($d in 'Contoso Book Club', 'Temp Project Kickoff') { if (-not (Invoke-MgGraphRequest -Uri \"/v1.0/groups?`$filter=displayName eq '$d'\").value) { Invoke-MgGraphRequest -Method POST -Uri /v1.0/groups -Body @{ displayName = $d; mailNickname = ($d -replace '\\W', '').ToLower(); mailEnabled = $true; securityEnabled = $false; groupTypes = @('Unified'); 'owners@odata.bind' = @(\"https://graph.microsoft.com/v1.0/users/$alex\") } | Out-Null } }",
+    "Start-Sleep -Seconds 30",
+    "$k = (Invoke-MgGraphRequest -Uri \"/v1.0/groups?`$filter=displayName eq 'Temp Project Kickoff'\").value | Select-Object -First 1; if ($k) { Set-LabVar MG_KICKOFF_ID $k.id; Invoke-MgGraphRequest -Method DELETE -Uri \"/v1.0/groups/$($k.id)\" }",
+    "# 3. local copies of lifecycle.json (Selected and the All variant for the rollout preview)",
+    "$all = (Invoke-MgGraphRequest -Uri \"/v1.0/groups?`$filter=groupTypes/any(c:c eq 'Unified')&`$select=id,displayName&`$top=999\").value; $ids = @($all | Where-Object { $_.displayName -match '^(TEAM_.*_)?(Project Falcon|Old Offsite 2024|Sales Partner Portal|Budget 2027)$' } | ForEach-Object id)",
+    "$p = Get-Content ./src/lifecycle.json -Raw | ConvertFrom-Json; $p.expiration.selectedGroupIds = $ids; $p.expiration.alternateNotificationEmails = @($env:MG_LAB_ADMIN_UPN); $p | ConvertTo-Json -Depth 8 | Set-Content ./src/lifecycle.lab.json; $p.expiration.managedGroupTypes = 'All'; $p | ConvertTo-Json -Depth 8 | Set-Content ./src/lifecycle.all.lab.json"
+  ],
+  "screens": [
+    {
+      "name": "policy",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\microsoft-365\\episodes\\03-microsoft-365-groups-lifecycle\\src",
+      "prompt": "PS> ",
+      "commands": [
+        "./Invoke-GroupsLifecycle.ps1 -PolicyFile ./lifecycle.lab.json -ApplyExpirationPolicy -WhatIf",
+        "./Invoke-GroupsLifecycle.ps1 -PolicyFile ./lifecycle.lab.json -ApplyExpirationPolicy -Confirm:$false",
+        "#pause 5"
+      ],
+      "also": [
+        {
+          "kind": "browser",
+          "url": "https://entra.microsoft.com/",
+          "account": "labadmin",
+          "steps": [
+            "Entra admin center > Groups > Expiration",
+            "Show 180 days, 'Selected', the alternate e-mail and (Manage > the selected groups) the four groups"
+          ],
+          "mask": [
+            "group ids",
+            "policy id",
+            "the alternate e-mail address",
+            "tenant name"
+          ],
+          "when": "after"
+        }
+      ]
+    },
+    {
+      "name": "audit",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\microsoft-365\\episodes\\03-microsoft-365-groups-lifecycle\\src",
+      "prompt": "PS> ",
+      "commands": [
+        "./Invoke-GroupsLifecycle.ps1 -PolicyFile ./lifecycle.lab.json -Audit -OutFile ./lifecycle-audit.md -SaveInventory ./inventory.lab.json",
+        "#pause 6"
+      ]
+    },
+    {
+      "name": "rollout",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\microsoft-365\\episodes\\03-microsoft-365-groups-lifecycle\\src",
+      "prompt": "PS> ",
+      "commands": [
+        "# managedGroupTypes is temporarily 'All' in this copy of the file; only a preview, nothing is confirmed",
+        "./Invoke-GroupsLifecycle.ps1 -PolicyFile ./lifecycle.all.lab.json -ApplyExpirationPolicy -WhatIf",
+        "#pause 6"
+      ]
+    },
+    {
+      "name": "restore",
+      "kind": "browser",
+      "url": "https://entra.microsoft.com/",
+      "account": "labadmin",
+      "steps": [
+        "Entra admin center > Groups > Deleted groups: show 'Temp Project Kickoff' in the list",
+        "Run the restore in the terminal (see also[])",
+        "Refresh Groups > All groups: 'Temp Project Kickoff' is back"
+      ],
+      "mask": [
+        "group id",
+        "tenant name",
+        "labadmin e-mail"
+      ],
+      "also": [
+        {
+          "kind": "terminal",
+          "steps": [],
+          "mask": [],
+          "when": "between",
+          "target": "host",
+          "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\microsoft-365\\episodes\\03-microsoft-365-groups-lifecycle\\src",
+          "prompt": "PS> ",
+          "commands": [
+            "./Invoke-GroupsLifecycle.ps1 -PolicyFile ./lifecycle.lab.json -Restore $env:MG_KICKOFF_ID -Confirm:$false",
+            "#pause 4"
+          ]
+        }
+      ]
+    }
+  ],
+  "teardown": [
+    "Connect-MgGraph -Scopes Directory.ReadWrite.All, Group.ReadWrite.All -NoWelcome",
+    "$old = Get-Content (Join-Path $env:TEMP 'mglab-ep03-policy.json') -Raw | ConvertFrom-Json; foreach ($lp in (Invoke-MgGraphRequest -Uri /v1.0/groupLifecyclePolicies).value) { Invoke-MgGraphRequest -Method DELETE -Uri \"/v1.0/groupLifecyclePolicies/$($lp.id)\" }   # no policy was there before; if $old is not empty, recreate it by hand in Entra > Groups > Expiration",
+    "foreach ($n in 'Contoso Book Club', 'Temp Project Kickoff') { foreach ($x in (Invoke-MgGraphRequest -Uri \"/v1.0/groups?`$filter=displayName eq '$n'\").value) { Invoke-MgGraphRequest -Method DELETE -Uri \"/v1.0/groups/$($x.id)\" } }",
+    "Remove-Item ./src/lifecycle.lab.json, ./src/lifecycle.all.lab.json, ./src/inventory.lab.json, ./src/lifecycle-audit.md, (Join-Path $env:TEMP 'mglab-ep03-policy.json') -ErrorAction SilentlyContinue",
+    "Disconnect-MgGraph",
+    "foreach ($n in 'MG_KICKOFF_ID') { [Environment]::SetEnvironmentVariable($n, $null, 'User') }"
+  ],
+  "needs": [
+    "tenant",
+    "trial:Entra ID P1 (in E5)",
+    "role:Groups Administrator + Teams Administrator (labadmin)",
+    "episode-2 teams (Project Falcon, Old Offsite 2024, Sales Partner Portal, Budget 2027) still present"
+  ]
+}

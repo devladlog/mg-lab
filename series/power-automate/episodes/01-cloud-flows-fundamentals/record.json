@@ -1,0 +1,85 @@
+{
+  "note": "Live-session recording of the screen scenes (series/tools/rec). All five screens are portal screens in the lab tenant (environment DEV); run them in the order listed so the run history and the digest exist.",
+  "prepare": [
+    "# owner signs in: separate browser profiles for labadmin (make.powerautomate.com, SharePoint), alex.demo and taylor.demo (Outlook on the web). Nothing is typed or stored here.",
+    "# owner (tenant, demo.md Setup 1-4): SharePoint site IT Helpdesk with list IT Requests (Category, Priority, Status, DueDate); solution IT Requests (ITRequests) with the flows 'IT request intake' and 'IT requests daily digest', both turned on",
+    "# owner (demo.md Setup 5): as alex.demo add the three items: Laptop won't boot before a client demo (Hardware, High), New monitor for the Lisbon office (Hardware, Normal), [TEST] please ignore (Software, Normal); wait 5-10 minutes for the polling trigger",
+    "# owner (demo.md Setup 7): run 'IT requests daily digest' once with Test > Manually so there is a run and an email to film",
+    "python -m pip install -r requirements-test.txt --quiet",
+    "python -m pytest"
+  ],
+  "screens": [
+    {
+      "name": "list",
+      "kind": "browser",
+      "url": "https://<tenant>.sharepoint.com/sites/ITHelpdesk/Lists/IT%20Requests/AllItems.aspx",
+      "account": "labadmin",
+      "steps": [
+        "Open the IT Helpdesk site and select the list 'IT Requests'",
+        "Make sure the view shows Title, Category, Priority, Status, Due date and Created by",
+        "Point at the three rows by Alex Demo: the High priority laptop item, the Normal monitor item and '[TEST] please ignore'",
+        "Pause on the full list for three seconds"
+      ],
+      "mask": ["tenant name in the address bar", "tenant name in the SharePoint header and suite bar", "any user e-mail address that is not a lab user"]
+    },
+    {
+      "name": "designer",
+      "kind": "browser",
+      "url": "https://make.powerautomate.com/",
+      "account": "labadmin",
+      "steps": [
+        "Select environment DEV in the top bar",
+        "Open Solutions > IT Requests",
+        "Open the cloud flow 'IT request intake' (new designer)",
+        "Scroll slowly from the trigger 'When an IT request is created' down through Initialize SLA hours, Due date, the condition 'Is high priority' (Alert on-call engineer in the True branch), Mark as triaged and Acknowledge requester",
+        "Pause with all six steps visible"
+      ],
+      "mask": ["environment name and ID in the address bar", "tenant name in the top bar and account menu", "site URL inside the trigger card"]
+    },
+    {
+      "name": "run-high",
+      "kind": "browser",
+      "url": "https://make.powerautomate.com/",
+      "account": "labadmin",
+      "steps": [
+        "Open the flow 'IT request intake' and its 28-day run history",
+        "Open the successful run that belongs to 'Laptop won't boot before a client demo'",
+        "Show every action green",
+        "Expand 'Alert on-call engineer' and show the subject 'HIGH priority IT request #<id>: Laptop won't boot before a client demo' and Importance High",
+        "Second capture, same scene: open the SharePoint item and show Status Triaged and the Due date four hours after creation"
+      ],
+      "mask": ["environment ID in the address bar", "tenant name", "mailbox addresses that are not lab users", "site URL in the action inputs"]
+    },
+    {
+      "name": "all-runs-skipped",
+      "kind": "browser",
+      "url": "https://make.powerautomate.com/",
+      "account": "labadmin",
+      "steps": [
+        "Open the details page of 'IT request intake'",
+        "In the run history switch the filter to 'All runs' (trigger checks included)",
+        "Point at the skipped trigger check at the time the '[TEST] please ignore' item was created and show that no run exists for it",
+        "If no skipped entry is listed, show the history with only the two real runs and say so"
+      ],
+      "mask": ["environment ID in the address bar", "tenant name"]
+    },
+    {
+      "name": "digest",
+      "kind": "browser",
+      "url": "https://outlook.office.com/mail/",
+      "account": "taylor.demo",
+      "steps": [
+        "Open the inbox of Taylor Demo (service desk mailbox)",
+        "Open the mail 'IT requests: N open, M overdue'",
+        "Scroll to the HTML table with ID, Title, Priority and Due",
+        "Alternative if the mail is not there: open the run details of 'IT requests daily digest' and expand the Filter array output"
+      ],
+      "mask": ["real e-mail addresses and tenant domain in the header and the account menu", "tenant name in the suite bar"]
+    }
+  ],
+  "teardown": [
+    "# owner (tenant): turn off both flows (the scheduled one mails every weekday); delete the [TEST] item and the sample items if the list is not reused by episode 2",
+    "Get-ChildItem -Path . -Filter 'ITRequests_*.zip' -ErrorAction SilentlyContinue | Remove-Item -Force"
+  ],
+  "needs": ["tenant"]
+}

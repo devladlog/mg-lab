@@ -1,0 +1,89 @@
+{
+  "note": "Live-session recording of the screen scenes (series/tools/rec). prepare/teardown run on the laptop, not recorded; commands are typed and run for real. Prepare statements run in one PowerShell session with the episode folder as current directory; variables do not survive into the screens, so each screen re-derives what it needs.",
+  "prepare": [
+    "$ep = (Get-Location).Path",
+    "# owner, once: Docker Desktop (WSL 2 engine, integration for Ubuntu), WSL 2 with Ubuntu, VS Code with the WSL and Dev Containers extensions",
+    "$src = (wsl -d Ubuntu -- wslpath -a ($ep -replace '\\\\', '/')).Trim()",
+    "wsl -d Ubuntu -- bash -lc \"mkdir -p ~/src && rm -rf ~/src/orders-app && cp -r '$src/src/orders-app' ~/src/ && cd ~/src/orders-app && rm -rf src/*/bin src/*/obj tests/*/bin tests/*/obj && sed -i 's/\\r$//' scripts/*.sh .githooks/* .devcontainer/*.sh && git init -q -b main && git config user.name 'Alex Demo' && git config user.email alex.demo@contoso.com && git add . && git commit -q -m 'chore: import orders-app'\" ",
+    "# owner, off camera warm-up: in VS Code (WSL window on ~/src/orders-app) run Dev Containers: Reopen in Container, wait for 'Dev container ready', then Reopen Folder in WSL"
+  ],
+  "screens": [
+    {
+      "name": "reopen",
+      "kind": "app",
+      "app": "VS Code (WSL window) + Dev Containers",
+      "steps": [
+        "Open Ubuntu (WSL) and run: cd ~/src/orders-app; export PS1='$ '; code .",
+        "In the WSL window press F1 and run: Dev Containers: Reopen in Container",
+        "Wait for the build (second run, cached image); the postCreateCommand terminal prints 'Hooks: .githooks | fetch.prune=true pull.ff=only'",
+        "If the nuget volume is new, keep the line 'Taking ownership of /home/vscode/.nuget/packages' in frame",
+        "Capture when the last line reads 'Dev container ready: dotnet 10.0.4xx | Python 3.x | gh 2.x' and the remote indicator bottom left reads 'Dev Container: Contoso orders-app (.NET 10)'"
+      ],
+      "mask": [
+        "Windows / WSL user name in paths, the title bar and the terminal prompt",
+        "Accounts menu at the bottom of the activity bar"
+      ],
+      "note": "Optional checks from demo.md: a commit 'added stuff' is rejected by the episode 1 hook, 'build(devcontainer): add .NET 10 dev container' passes; python3 tools/devcontainer_check.py prints OK."
+    },
+    {
+      "name": "run",
+      "kind": "app",
+      "app": "VS Code (Dev Container) + browser",
+      "steps": [
+        "New terminal in the container: dotnet test   -> 'Passed!  - Failed: 0, Passed: 15'",
+        "Run: dotnet run --project src/Contoso.Orders.Api   (listens on http://localhost:8080)",
+        "Open the Ports panel: 8080 with the label 'Orders API'",
+        "In the Windows browser open http://localhost:8080/healthz: 'os' Ubuntu 24.04 and 'inContainer': true",
+        "Second tab: http://localhost:8080/orders?page=5 with pageNumber 5 and 37 items (collapse 'items' in the JSON viewer)"
+      ],
+      "mask": [
+        "Windows / WSL user name in paths and prompt",
+        "browser profile picture and bookmarks bar"
+      ]
+    },
+    {
+      "name": "extensions",
+      "kind": "app",
+      "app": "VS Code (Dev Container) + Docker Desktop",
+      "steps": [
+        "Open the Extensions view (Ctrl+Shift+X) inside the container",
+        "Show the section 'DEV CONTAINER: CONTOSO ORDERS-APP (.NET 10) - INSTALLED': C# Dev Kit, C#, EditorConfig, GitHub Actions, Python, Pylance, autopep8",
+        "Type eslint in the search box: ESLint shows 'Install in Dev Container' (it is not installed)",
+        "Optional second capture: Docker Desktop > Volumes showing orders-app-nuget"
+      ],
+      "mask": [
+        "Docker Desktop account avatar (top right)",
+        "VS Code Accounts menu"
+      ]
+    },
+    {
+      "name": "wsl",
+      "kind": "app",
+      "app": "Windows Terminal (Ubuntu) + Docker Desktop",
+      "steps": [
+        "Left: Windows Terminal, Ubuntu tab: pwd  -> /home/<user>/src/orders-app ; docker version --format '{{.Server.Os}}'  -> linux",
+        "Right: Docker Desktop > Settings > General with 'Use the WSL 2 based engine' ticked",
+        "Docker Desktop > Settings > Resources > WSL integration with Ubuntu on",
+        "Two captures side by side in the edit are fine"
+      ],
+      "mask": [
+        "WSL user name in the pwd output and prompt (export PS1='$ ')",
+        "Docker Desktop account avatar"
+      ]
+    }
+  ],
+  "teardown": [
+    "# owner: in VS Code run Dev Containers: Reopen Folder in WSL before this teardown",
+    "docker ps -a -q --filter label=devcontainer.local_folder | ForEach-Object { docker rm -f $_ }",
+    "docker images --format '{{.Repository}}' | Where-Object { $_ -like 'vsc-orders-app-*' } | ForEach-Object { docker image rm -f $_ }",
+    "docker volume rm orders-app-nuget 2>$null",
+    "wsl -d Ubuntu -- bash -lc \"rm -rf ~/src/orders-app\" "
+  ],
+  "needs": [
+    "docker",
+    "wsl",
+    "vscode",
+    "licence:docker-desktop"
+  ],
+  "blocked": "Docker Desktop is not installed on the recording laptop (and its licence terms for Momento Galatico must be confirmed); install Docker Desktop and WSL 2 with Ubuntu before recording."
+}

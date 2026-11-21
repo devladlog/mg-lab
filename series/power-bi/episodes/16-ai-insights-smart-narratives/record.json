@@ -1,0 +1,103 @@
+{
+  "note": "Live-session recording of the screen scenes (series/tools/rec). prepare/teardown run on the laptop, not recorded; commands are typed and run for real. Steps of browser/app screens are done by hand by the person recording.",
+  "prepare": [
+    "New-Item -ItemType Directory -Force C:\\MGLab\\power-bi | Out-Null",
+    "Remove-Item C:\\MGLab\\power-bi\\ep16 -Recurse -Force -ErrorAction SilentlyContinue",
+    "Copy-Item -Path (Get-Location).Path -Destination C:\\MGLab\\power-bi\\ep16 -Recurse -Force",
+    "Push-Location C:\\MGLab\\power-bi\\ep16\\src\\data",
+    "python generate_export.py --out raw\\sales_export.csv",
+    "python build_star.py --src raw\\sales_export.csv --out star",
+    "python build_order_profile.py --star star",
+    "Pop-Location",
+    "New-Item -ItemType Directory -Force C:\\MGLab\\power-bi\\star | Out-Null",
+    "Copy-Item C:\\MGLab\\power-bi\\ep16\\src\\data\\star\\*.csv C:\\MGLab\\power-bi\\star\\ -Force",
+    "Push-Location C:\\MGLab\\power-bi\\ep16",
+    "python src\\ai_readiness.py --star C:\\MGLab\\power-bi\\star --model src\\ContosoSalesAI.SemanticModel\\definition",
+    "Pop-Location"
+  ],
+  "screens": [
+    {
+      "name": "key-influencers",
+      "kind": "app",
+      "app": "Power BI Desktop",
+      "steps": [
+        "Open C:\\MGLab\\power-bi\\ep16\\src\\ContosoSalesAI.pbip, DataFolder = C:\\MGLab\\power-bi\\star\\, Refresh; page AI insights",
+        "Key influencers: Analyze = Order Profile[Survey Rating], What influences Survey Rating to be = Low; Explain by Channel, Store Country, Customer Country, Contains Bike, Lines, Delivery; Expand by empty",
+        "Key influencers tab: select bubble 1 (expect Delivery is Slow, about 3.4x, 20.4% vs 6.0%), then bubble 2 (Channel is Online, about 1.65x); then Top segments",
+        "Optional: add Ship Days to Explain by; record what Desktop really shows"
+      ],
+      "mask": [
+        "account name and picture at the top right of Power BI Desktop (sign out first)",
+        "Windows user name in any file path (record from C:\\MGLab)"
+      ]
+    },
+    {
+      "name": "decomposition-tree",
+      "kind": "app",
+      "app": "Power BI Desktop",
+      "steps": [
+        "Decomposition tree: Analyze = Sales[Sales Amount], Explain by Product Category, Subcategory, Store Channel, Store, Customer Country",
+        "Plus next to the root > High value: show the light bulb and hover its tooltip; then Low value",
+        "Format > Analysis type: Absolute versus Relative; show the result differs"
+      ],
+      "mask": [
+        "account name and picture at the top right of Power BI Desktop (sign out first)",
+        "Windows user name in any file path (record from C:\\MGLab)"
+      ]
+    },
+    {
+      "name": "anomaly-detection",
+      "kind": "app",
+      "app": "Power BI Desktop + Windows Terminal",
+      "steps": [
+        "Line chart: Axis Date[Date] (continuous), Values Sales Amount, no legend; Analytics pane > Anomalies on, default sensitivity",
+        "Click one marked point: Anomalies pane with explanations and strength; once with Explain by Store, Category",
+        "Terminal inset at C:\\MGLab\\power-bi\\ep16: python src\\reference_insights.py --star C:\\MGLab\\power-bi\\star (candidate days, 2024-06-05 first); note whether Desktop marks the same days"
+      ],
+      "mask": [
+        "account name and picture at the top right of Power BI Desktop (sign out first)",
+        "Windows user name in any file path (record from C:\\MGLab)"
+      ]
+    },
+    {
+      "name": "smart-narrative",
+      "kind": "app",
+      "app": "Power BI Desktop",
+      "steps": [
+        "Narrative visual in Custom mode: edit the text and insert the measures Narrative Sales, Narrative YoY, Narrative Top Category with the Value button",
+        "Slicer Date[Year] = 2025: Sales were 967,473 in the selected period. That is 8.1% above the same period last year. Bikes leads the mix.",
+        "Year 2024: There is no prior-year period to compare with; select a data point to show the automatic part changing",
+        "If a text measure does not work as a dynamic Value, put the three measures in cards and say so"
+      ],
+      "mask": [
+        "account name and picture at the top right of Power BI Desktop (sign out first)",
+        "Windows user name in any file path (record from C:\\MGLab)"
+      ]
+    },
+    {
+      "name": "copilot-trial",
+      "kind": "app",
+      "app": "Power BI Desktop (or browser) on the Fabric trial workspace",
+      "steps": [
+        "Sign in as labadmin; Narrative visual with Copilot mode in a report on workspace Contoso Sales (Lab) (trial capacity)",
+        "Show the exact message (Learn: Copilot isn't available because none of your workspaces have the necessary capacity assigned)",
+        "Switch to Custom; record the real wording. Do not buy or assign a paid capacity"
+      ],
+      "mask": [
+        "tenant domain",
+        "account picture and name",
+        "account name and picture at the top right of Power BI Desktop (sign out first)",
+        "Windows user name in any file path (record from C:\\MGLab)"
+      ]
+    }
+  ],
+  "teardown": [
+    "Remove-Item C:\\MGLab\\power-bi\\ep16 -Recurse -Force -ErrorAction SilentlyContinue",
+    "Remove-Item C:\\MGLab\\power-bi\\star -Recurse -Force -ErrorAction SilentlyContinue"
+  ],
+  "needs": [
+    "tenant",
+    "premium-trial"
+  ],
+  "owner_notes": "All screens but gotcha are local. Copilot mode needs paid F2+/P1+ capacity (owner decision, not bought): the episode shows the trial refusal. Desktop may refuse the empty report: create a new report on the same model."
+}

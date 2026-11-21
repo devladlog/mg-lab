@@ -1,0 +1,106 @@
+{
+  "note": "Live-session recording (series/tools/rec). prepare/teardown run on the laptop, not recorded. Passwords are never in this file: the owner types the connection string once when prepare asks (Server=10.50.0.30,1433;Database=master;UID=<login>;<the login's password entry>;Encrypt=yes;TrustServerCertificate=yes); prepare keeps it in the MG_SQL_BASE variable of this session and derives SQL_CONNECTION_STRING for each database; teardown removes both. T-SQL set-up runs on CON-SQL01 over PowerShell Direct as the lab Administrator with Windows authentication (SQL Server's own sysadmin group is Domain Admins). Episode login: lab_demo, made sysadmin for this episode only (prepare adds it, teardown removes it).",
+  "prepare": [
+    "$sql = { param($vm, $text) Invoke-Command -VMName $vm -Credential $cred -ArgumentList $text -ScriptBlock { param($t) $c = New-Object System.Data.SqlClient.SqlConnection 'Server=localhost;Integrated Security=SSPI;TrustServerCertificate=True'; $c.Open(); try { foreach ($b in ($t -split '(?im)^\\s*GO\\s*$')) { if ($b.Trim()) { $m = $c.CreateCommand(); $m.CommandText = $b; $m.CommandTimeout = 600; [void]$m.ExecuteNonQuery() } } } finally { $c.Close() } } }",
+    "& $sql 'CON-SQL01' \"IF SUSER_ID(N'lab_demo') IS NULL THROW 50000, N'Create the login lab_demo first (episode 3 demo.md, setup step 3; owner types its password off camera).', 1;\"",
+    "& $sql 'CON-SQL01' \"IF IS_SRVROLEMEMBER(N'sysadmin', N'lab_demo') = 0 ALTER SERVER ROLE sysadmin ADD MEMBER lab_demo;\"",
+    "if (-not $env:MG_SQL_BASE) { $env:MG_SQL_BASE = Read-Host 'Connection string for lab_demo on 10.50.0.30,1433 (typed off camera, never saved; format in the note of record.json)' -MaskInput }",
+    "$env:SQL_CONNECTION_STRING = $env:MG_SQL_BASE -replace 'Database=[^;]*', 'Database=master'",
+    "python -m pip install -q -r requirements.txt"
+  ],
+  "screens": [
+    {
+      "name": "b01-log-before-full",
+      "kind": "app",
+      "app": "SSMS 22",
+      "prepare": [
+        "python src/backup_lab.py --engine sqlserver --step b01-log-before-full --setup"
+      ],
+      "steps": [
+        "Open SSMS 22 and connect to 10.50.0.30,1433 with SQL Server Authentication as lab_demo (secret typed off camera, Remember off); in Options > Connection Properties set the database to master and tick Trust server certificate (lab only)",
+        "Open src/sql/b01-log-before-full.sql (the BACKUP LOG line visible) and run it",
+        "Messages tab: Msg 4214 ... BACKUP LOG cannot be performed because there is no current database backup. and BACKUP LOG is terminating abnormally."
+      ],
+      "mask": [
+        "server address and login name (Connect dialog, title bar, Object Explorer)",
+        "laptop machine name and Windows user name in title bars"
+      ],
+      "scene": "gotcha-screen"
+    },
+    {
+      "name": "b04-backup-history",
+      "kind": "app",
+      "app": "SSMS 22",
+      "prepare": [
+        "python src/backup_lab.py --engine sqlserver --setup --step b02-full-backup --step b03-differential-backup --step b04-log-backup"
+      ],
+      "steps": [
+        "Open SSMS 22 and connect to 10.50.0.30,1433 with SQL Server Authentication as lab_demo (secret typed off camera, Remember off); in Options > Connection Properties set the database to master and tick Trust server certificate (lab only)",
+        "Open src/sql/msdb-history.sql and run it",
+        "Show three rows ordered by start time: D (full), I (differential), L (log) with first_lsn and last_lsn, is_copy_only 0 and file names ending _Full.bak, _Diff.bak, _Log1.trn"
+      ],
+      "mask": [
+        "server address and login name (Connect dialog, title bar, Object Explorer)",
+        "full backup folder path in the file names if shown (lab VM path, blur if preferred)",
+        "laptop machine name and Windows user name in title bars"
+      ],
+      "note": "The runner plays b02, d01, b03, d02, b04 in prepare.",
+      "scene": "history-screen"
+    },
+    {
+      "name": "b06-restore-copy",
+      "kind": "app",
+      "app": "SSMS 22",
+      "prepare": [
+        "python src/backup_lab.py --engine sqlserver --setup --step b02-full-backup --step b03-differential-backup --step b04-log-backup --step b05-incident"
+      ],
+      "steps": [
+        "Open SSMS 22 and connect to 10.50.0.30,1433 with SQL Server Authentication as lab_demo (secret typed off camera, Remember off); in Options > Connection Properties set the database to master and tick Trust server certificate (lab only)",
+        "Open src/sql/b06-restore-copy.sql and run it (the incident b05 has already run)",
+        "Messages tab: the four RESTORE progress blocks (full, differential, two logs) and RESTORE DATABASE successfully processed",
+        "Grid: Recovered copy state / ONLINE; Products priced at 0 in the copy / 0; Orders in the copy / 11; Order 1012 in the copy / 0",
+        "Refresh Object Explorer: ContosoBikesRecovered next to ContosoBikesBackup"
+      ],
+      "mask": [
+        "server address and login name (Connect dialog, title bar, Object Explorer)",
+        "backup folder path in the RESTORE messages (lab VM path, blur if preferred)",
+        "laptop machine name and Windows user name in title bars"
+      ],
+      "scene": "restore-screen"
+    },
+    {
+      "name": "b07-verify-and-repair",
+      "kind": "app",
+      "app": "SSMS 22",
+      "prepare": [
+        "python src/backup_lab.py --engine sqlserver --setup --step b02-full-backup --step b03-differential-backup --step b04-log-backup --step b05-incident --step b06-restore-copy"
+      ],
+      "steps": [
+        "Open SSMS 22 and connect to 10.50.0.30,1433 with SQL Server Authentication as lab_demo (secret typed off camera, Remember off); in Options > Connection Properties set the database to master and tick Trust server certificate (lab only)",
+        "Open src/sql/b07-verify-and-repair.sql and run all batches",
+        "Messages: The backup set on file 1 is valid. and (5 rows affected)",
+        "Grid: Products priced at 0 in the live database / 0; Prices equal to the copy / 5; Orders in the live database / 12"
+      ],
+      "mask": [
+        "server address and login name (Connect dialog, title bar, Object Explorer)",
+        "backup folder path in the messages (lab VM path, blur if preferred)",
+        "laptop machine name and Windows user name in title bars"
+      ],
+      "scene": "repair-screen"
+    }
+  ],
+  "teardown": [
+    "$sql = { param($vm, $text) Invoke-Command -VMName $vm -Credential $cred -ArgumentList $text -ScriptBlock { param($t) $c = New-Object System.Data.SqlClient.SqlConnection 'Server=localhost;Integrated Security=SSPI;TrustServerCertificate=True'; $c.Open(); try { foreach ($b in ($t -split '(?im)^\\s*GO\\s*$')) { if ($b.Trim()) { $m = $c.CreateCommand(); $m.CommandText = $b; $m.CommandTimeout = 600; [void]$m.ExecuteNonQuery() } } } finally { $c.Close() } } }",
+    "if (-not $env:MG_SQL_BASE) { $env:MG_SQL_BASE = Read-Host 'Connection string for lab_demo on 10.50.0.30,1433 (typed off camera, never saved; format in the note of record.json)' -MaskInput }",
+    "$env:SQL_CONNECTION_STRING = $env:MG_SQL_BASE -replace 'Database=[^;]*', 'Database=master'",
+    "python src/backup_lab.py --engine sqlserver --reset-only",
+    "Invoke-Command -VMName CON-SQL01 -Credential $cred { $c = New-Object System.Data.SqlClient.SqlConnection 'Server=localhost;Integrated Security=SSPI;TrustServerCertificate=True'; $c.Open(); $m = $c.CreateCommand(); $m.CommandText = \"SELECT CONCAT(CONVERT(nvarchar(260), SERVERPROPERTY('InstanceDefaultBackupPath')), '|', CONVERT(nvarchar(260), SERVERPROPERTY('InstanceDefaultDataPath')), '|', CONVERT(nvarchar(260), SERVERPROPERTY('InstanceDefaultLogPath')))\"; $dirs = \"$($m.ExecuteScalar())\" -split '\\|'; $c.Close(); foreach ($d in $dirs) { if ($d) { foreach ($p in 'MGLab_ContosoBikes*.bak', 'MGLab_ContosoBikes*.trn', 'MGLab_ContosoBikesRecovered*') { Get-ChildItem -LiteralPath $d -Filter $p -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue } } } }",
+    "& $sql 'CON-SQL01' \"IF IS_SRVROLEMEMBER(N'sysadmin', N'lab_demo') = 1 ALTER SERVER ROLE sysadmin DROP MEMBER lab_demo;\"",
+    "Remove-Item Env:SQL_CONNECTION_STRING, Env:MG_SQL_BASE -ErrorAction SilentlyContinue"
+  ],
+  "needs": [
+    "lab-vms",
+    "tool:SSMS",
+    "login:lab_demo"
+  ]
+}

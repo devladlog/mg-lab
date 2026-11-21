@@ -1,0 +1,67 @@
+{
+  "note": "Live-session recording of the screen scenes (series/tools/rec). Four screens in Teams and the Power Automate portal, each in the browser profile of the user named in account. Request numbers (#NN) are the lab list's real IDs.",
+  "prepare": [
+    "# owner signs in: browser profiles (InPrivate is fine) for labadmin (make.powerautomate.com), sam.demo, riley.demo and alex.demo (Teams on the web). Nothing is typed or stored here.",
+    "# owner (tenant, demo.md Setup 1-4): Workflows app already allowed in the Teams admin center; team IT On-call (owner labadmin; members Sam Demo, Riley Demo, Taylor Demo) with the standard channel On-call; AssignedTo person column on IT Requests; solution IT On-call (ITOnCall) with the four environment variables (IDs never on screen)",
+    "# owner (demo.md Setup 5, 7): flow 'IT on-call dispatch' turned on, plus the PT5M lab copy (original off while recording the timeout path); as alex.demo create the High requests 'Laptop won't boot before a client demo', 'VPN drops every 10 minutes' and 'Shared printer offline before payroll'",
+    "python -m pip install -r requirements-test.txt --quiet",
+    "python -m pytest"
+  ],
+  "screens": [
+    {
+      "name": "card",
+      "kind": "browser",
+      "url": "https://teams.microsoft.com/",
+      "account": "sam.demo",
+      "steps": [
+        "Open the team 'IT On-call' and the channel 'On-call'",
+        "Show the Workflows (Flow bot) card 'High priority IT request #NN': facts Category Hardware, Raised by Alex Demo, Raised at, the note box",
+        "Show the buttons Take it, Need more info and Open the request; do not answer yet"
+      ],
+      "mask": ["tenant name in the title bar and the profile menu", "team ID and channel ID in links", "any account that is not a lab user"]
+    },
+    {
+      "name": "taken",
+      "kind": "browser",
+      "url": "https://teams.microsoft.com/",
+      "account": "sam.demo",
+      "steps": [
+        "Press Take it on the card as Sam Demo",
+        "Show the card replaced by 'Request #NN has been picked up. Who took it is posted in this channel.'",
+        "Show the message '@Sam Demo took high priority request #NN: Laptop won't boot before a client demo' with Sam highlighted as a mention",
+        "Insert: open the IT Requests item in SharePoint and show Assigned to = Sam Demo"
+      ],
+      "mask": ["tenant name in the title bar, profile menu and SharePoint URL", "team ID and channel ID in links"]
+    },
+    {
+      "name": "timeout",
+      "kind": "browser",
+      "url": "https://make.powerautomate.com/",
+      "account": "labadmin",
+      "steps": [
+        "Open the run history of the PT5M lab copy of 'IT on-call dispatch' and the run of 'Shared printer offline before payroll'",
+        "Show 'Ask on-call' timed out, 'Route response' skipped, 'Escalate to lead' green (Mention lead, Escalate in channel, Record escalation), 'Dispatch done' green and the run Succeeded",
+        "Insert: in Teams show the channel message '@Taylor Demo nobody has taken high priority request #NN in 30 minutes'"
+      ],
+      "mask": ["environment ID in the address bar", "team ID and channel ID in the run inputs", "user object IDs in the responder object", "tenant name"]
+    },
+    {
+      "name": "chat",
+      "kind": "browser",
+      "url": "https://teams.microsoft.com/",
+      "account": "alex.demo",
+      "steps": [
+        "Open the Workflows (Flow bot) 1:1 chat of Alex Demo",
+        "Show 'On-call needs more information about your IT request #NN VPN drops every 10 minutes:'",
+        "Show Riley Demo's note 'Office or home network?'",
+        "Show 'Please add it to the request or reply to Riley Demo.'"
+      ],
+      "mask": ["tenant name in the title bar and the profile menu", "any account that is not a lab user"]
+    }
+  ],
+  "teardown": [
+    "# owner (tenant): turn both flows off (original and the PT5M copy) and delete the copy; delete the test requests and the test channel messages; keep the team for later episodes or delete it",
+    "Get-ChildItem -Path . -Filter 'ITOnCall_*.zip' -ErrorAction SilentlyContinue | Remove-Item -Force"
+  ],
+  "needs": ["tenant"]
+}

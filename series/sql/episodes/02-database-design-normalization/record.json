@@ -1,0 +1,94 @@
+{
+  "note": "Live-session recording (series/tools/rec). prepare/teardown run on the laptop, not recorded. Passwords are never in this file: the owner types the connection string once when prepare asks (Server=10.50.0.30,1433;Database=master;UID=<login>;<the login's password entry>;Encrypt=yes;TrustServerCertificate=yes); prepare keeps it in the MG_SQL_BASE variable of this session and derives SQL_CONNECTION_STRING for each database; teardown removes both. T-SQL set-up runs on CON-SQL01 over PowerShell Direct as the lab Administrator with Windows authentication (SQL Server's own sysadmin group is Domain Admins). Episode login: sa.",
+  "prepare": [
+    "$sql = { param($vm, $text) Invoke-Command -VMName $vm -Credential $cred -ArgumentList $text -ScriptBlock { param($t) $c = New-Object System.Data.SqlClient.SqlConnection 'Server=localhost;Integrated Security=SSPI;TrustServerCertificate=True'; $c.Open(); try { foreach ($b in ($t -split '(?im)^\\s*GO\\s*$')) { if ($b.Trim()) { $m = $c.CreateCommand(); $m.CommandText = $b; $m.CommandTimeout = 600; [void]$m.ExecuteNonQuery() } } } finally { $c.Close() } } }",
+    "& $sql 'CON-SQL01' (Get-Content -Raw src\\sql\\00-create-database.sql)",
+    "if (-not $env:MG_SQL_BASE) { $env:MG_SQL_BASE = Read-Host 'Connection string for sa on 10.50.0.30,1433 (typed off camera, never saved; format in the note of record.json)' -MaskInput }",
+    "$env:SQL_CONNECTION_STRING = $env:MG_SQL_BASE -replace 'Database=[^;]*', 'Database=ContosoTraining'",
+    "python -m pip install -q -r requirements.txt -r requirements-test.txt",
+    "python src/tsql_runner.py --engine sqlserver --setup"
+  ],
+  "screens": [
+    {
+      "name": "object-explorer",
+      "kind": "app",
+      "app": "VS Code with the MSSQL extension (SSMS 22 works the same)",
+      "steps": [
+        "Connect profile 'MG Lab SQL' to 10.50.0.30,1433 (login sa typed off camera, Remember off, trust server certificate)",
+        "In Object Explorer expand ContosoTraining > Tables: Training.Booking, Training.BookingLine, Training.Company, Training.Course, Training.Customer",
+        "Expand Training.BookingLine > Columns and Keys: PK_BookingLine, FK_BookingLine_Booking, FK_BookingLine_Course",
+        "Expand Views: Training.vBookingLines"
+      ],
+      "mask": [
+        "server address, account/profile picture, laptop machine name and Windows user name in title bars"
+      ],
+      "scene": "tables-screen"
+    },
+    {
+      "name": "q01-rebuilt",
+      "kind": "app",
+      "app": "VS Code with the MSSQL extension (SSMS 22 works the same)",
+      "steps": [
+        "Open src/sql/q01-bookings-rebuilt.sql (database ContosoTraining) and run it",
+        "Show the 23-row grid, widen it for the 10 columns; point at B1008 with CompanyCity Porto and B1011 / PBI200 with CourseTitle Power BI Data Modeling"
+      ],
+      "mask": [
+        "server address, account/profile picture, laptop machine name and Windows user name in title bars"
+      ],
+      "scene": "rebuilt-screen"
+    },
+    {
+      "name": "q03-update-once",
+      "kind": "app",
+      "app": "VS Code with the MSSQL extension (SSMS 22 works the same)",
+      "steps": [
+        "Open src/sql/q03-update-once.sql and run it (UPDATE, SELECT, ROLLBACK)",
+        "Show the 4 rows, highlight Contoso Ltd / Matosinhos / 5 / 7; Messages tab may show 1 row affected",
+        "In a new query run: SELECT City FROM Training.Company WHERE CompanyName = N'Contoso Ltd'; it returns Porto (rolled back)"
+      ],
+      "mask": [
+        "server address, account/profile picture, laptop machine name and Windows user name in title bars"
+      ],
+      "scene": "update-screen"
+    },
+    {
+      "name": "should-fail",
+      "kind": "app",
+      "app": "VS Code with the MSSQL extension (SSMS 22 works the same)",
+      "steps": [
+        "Open src/sql/04-should-fail.sql",
+        "Select batch 1 (duplicate e-mail) and run it, then select batch 3 (unknown course) and run it",
+        "Show the Messages tab with both errors visible, naming UQ_Customer_Email and FK_BookingLine_Course (note the exact message text in the README if it differs from the narration)"
+      ],
+      "mask": [
+        "server address, account/profile picture, laptop machine name and Windows user name in title bars"
+      ],
+      "scene": "constraints-screen"
+    },
+    {
+      "name": "runner-sqlserver",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\sql\\episodes\\02-database-design-normalization",
+      "prompt": "PS> ",
+      "commands": [
+        "python -m pytest tests -q",
+        "#pause 3",
+        "python src/tsql_runner.py --engine sqlserver --setup",
+        "#pause 5"
+      ],
+      "maxMinutes": 10,
+      "scene": "runner-screen"
+    }
+  ],
+  "teardown": [
+    "$sql = { param($vm, $text) Invoke-Command -VMName $vm -Credential $cred -ArgumentList $text -ScriptBlock { param($t) $c = New-Object System.Data.SqlClient.SqlConnection 'Server=localhost;Integrated Security=SSPI;TrustServerCertificate=True'; $c.Open(); try { foreach ($b in ($t -split '(?im)^\\s*GO\\s*$')) { if ($b.Trim()) { $m = $c.CreateCommand(); $m.CommandText = $b; $m.CommandTimeout = 600; [void]$m.ExecuteNonQuery() } } } finally { $c.Close() } } }",
+    "& $sql 'CON-SQL01' \"IF DB_ID(N'ContosoTraining') IS NOT NULL BEGIN ALTER DATABASE ContosoTraining SET SINGLE_USER WITH ROLLBACK IMMEDIATE; DROP DATABASE ContosoTraining; END\"",
+    "Remove-Item Env:SQL_CONNECTION_STRING, Env:MG_SQL_BASE -ErrorAction SilentlyContinue"
+  ],
+  "needs": [
+    "lab-vms",
+    "tool:VS Code MSSQL extension or SSMS",
+    "login:sa (lab build)"
+  ]
+}

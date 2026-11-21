@@ -1,0 +1,101 @@
+{
+  "note": "Live-session recording of the screen scenes (series/tools/rec). prepare/teardown run on the laptop, not recorded; terminal commands are typed and run for real. $env:MG_DEV_URL (DEV org URL) and the other MG_* variables are set by the owner as user environment variables on the laptop and never appear on screen.",
+  "prepare": [
+    "# owner signs in once, off camera: az login",
+    "az group create -n rg-mglab-powerapps-14 -l swedencentral | Out-Null",
+    "$dep = az deployment group create -g rg-mglab-powerapps-14 -f src/infra/main.bicep -p principalId=$(az ad signed-in-user show --query id -o tsv) --query properties.outputs -o json | ConvertFrom-Json",
+    "$env:MG_AOAI_ENDPOINT = $dep.endpoint.value.TrimEnd('/'); $env:MG_KV_NAME = $dep.keyVault.value; $env:MG_AOAI_NAME = ([uri]$env:MG_AOAI_ENDPOINT).Host.Split('.')[0]",
+    "Start-Sleep -Seconds 90",
+    "$env:AZURE_TOKEN = az account get-access-token --resource https://cognitiveservices.azure.com --query accessToken -o tsv",
+    "# owner types the key off camera (prompt is masked); needs MG_CLAUDE_MODEL and the MG_PRICE_* variables read from each provider's price page that day",
+    "$k = Read-Host -MaskInput 'Anthropic API key (owner)'; az keyvault secret set --vault-name $env:MG_KV_NAME --name anthropic-api-key --value $k | Out-Null; $env:ANTHROPIC_API_KEY = $k; Remove-Variable k",
+    "python src/solution/build_extension.py --zip $env:TEMP\\cin-ai.zip",
+    "Read-Host 'Owner: import $env:TEMP\\cin-ai.zip in DEV (browser); Foundry connector (OAuth, app registration contoso-lab-foundry-connector, secret typed in the portal), Anthropic connector, secret variable cin_AnthropicApiKey, flow ClaudeTriage, canvas TriageScreen and the model-driven custom page are built per demo.md; AI Builder answers typed by hand into $env:TEMP\\aibuilder.jsonl; both demo users started the premium trial. Press Enter'"
+  ],
+  "screens": [
+    {
+      "name": "azure-foundry",
+      "kind": "browser",
+      "url": "https://portal.azure.com/",
+      "account": "labadmin",
+      "steps": [
+        "Resource groups > rg-mglab-powerapps-14: the resource list",
+        "Open the Azure OpenAI account > Model deployments: triage, Standard, capacity 10",
+        "Access control (IAM): the role assignments"
+      ],
+      "mask": [
+        "subscription id and name",
+        "tenant name and domain",
+        "avatar and account name",
+        "vault name and account endpoint"
+      ]
+    },
+    {
+      "name": "claude-secret-flow",
+      "kind": "browser",
+      "url": "https://make.powerapps.com/",
+      "account": "labadmin",
+      "steps": [
+        "Solutions > Contoso Inspections AI: environment variable cin_AnthropicApiKey (Secret, Azure Key Vault, no value visible)",
+        "Open the flow ClaudeTriage > Run history > one succeeded run: the key action outputs and the Triage inputs show as hidden"
+      ],
+      "mask": [
+        "environment name and org URL in the address bar and the environment picker",
+        "tenant name in the top bar",
+        "account name, e-mail and avatar in the account menu",
+        "vault name and subscription id",
+        "the API key must not be visible anywhere: if it is, stop, rotate it and re-record"
+      ]
+    },
+    {
+      "name": "eval-run",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\powerapps\\episodes\\14-ai-models-in-both-apps",
+      "prompt": "PS ep14> ",
+      "commands": [
+        "python src/eval/evaluate.py run --route foundry --endpoint $env:MG_AOAI_ENDPOINT --model triage --token-env AZURE_TOKEN --price-in $env:MG_PRICE_IN_FOUNDRY --price-out $env:MG_PRICE_OUT_FOUNDRY --save $env:TEMP/foundry.jsonl",
+        "#pause 4",
+        "python src/eval/evaluate.py run --route claude --model $env:MG_CLAUDE_MODEL --key-env ANTHROPIC_API_KEY --price-in $env:MG_PRICE_IN_CLAUDE --price-out $env:MG_PRICE_OUT_CLAUDE --save $env:TEMP/claude.jsonl",
+        "#pause 4",
+        "python src/eval/evaluate.py score --answers $env:TEMP/aibuilder.jsonl",
+        "#pause 5"
+      ]
+    },
+    {
+      "name": "canvas-triage",
+      "kind": "browser",
+      "url": "https://make.powerapps.com/",
+      "account": "alex.demo",
+      "steps": [
+        "Play the field app as alex.demo (InPrivate): open an inspection > item 'Fire door wedged open' > AI suggestion",
+        "Azure OpenAI > Suggest: banner and summary > Save suggestion; then the Claude route",
+        "Open the model-driven app as sam.demo: the same item with the five AI columns filled and Severity untouched; open the page via AI suggestion once",
+        "Do not run the AI Builder route (no credits)"
+      ],
+      "mask": [
+        "environment name and org URL in the address bar and the environment picker",
+        "tenant name in the top bar",
+        "account name, e-mail and avatar in the account menu",
+        "any real mail domain: only the fictional *.demo@contoso.com addresses may stay"
+      ]
+    }
+  ],
+  "teardown": [
+    "az group delete -n rg-mglab-powerapps-14 --yes",
+    "az keyvault purge --name $env:MG_KV_NAME --location swedencentral",
+    "az cognitiveservices account purge --name $env:MG_AOAI_NAME --resource-group rg-mglab-powerapps-14 --location swedencentral",
+    "Remove-Item Env:AZURE_TOKEN, Env:ANTHROPIC_API_KEY, Env:MG_AOAI_ENDPOINT, Env:MG_KV_NAME, Env:MG_AOAI_NAME -ErrorAction SilentlyContinue",
+    "Remove-Item $env:TEMP\\cin-ai.zip, $env:TEMP\\foundry.jsonl, $env:TEMP\\claude.jsonl, $env:TEMP\\aibuilder.jsonl -ErrorAction SilentlyContinue",
+    "Write-Host 'Reminder: revoke the Anthropic API key in its console; delete the client secret and app registration contoso-lab-foundry-connector; delete the solution Contoso Inspections AI, the prompt and the connections in DEV (warn first: the five AI columns go with it); delete the recorded test rows.'"
+  ],
+  "needs": [
+    "tenant",
+    "azure",
+    "premium-trial",
+    "power-automate-premium-trial",
+    "api-key:anthropic",
+    "paid:Anthropic prepaid balance and Azure OpenAI tokens (cents)"
+  ],
+  "blocked": "claude-secret-flow, the Claude part of eval-run and the Claude route of canvas-triage need the owner's Anthropic API account with a prepaid balance and a key, which the lab does not have yet; the AI Builder route cannot run in an app (no credits). azure-foundry and the Azure OpenAI route can be recorded."
+}

@@ -1,0 +1,112 @@
+{
+  "note": "Live-session recording of the screen scenes (series/tools/rec). prepare/teardown run on the laptop, not recorded; commands are typed and run for real. Steps of browser/app screens are done by hand by the person recording.",
+  "prepare": [
+    "New-Item -ItemType Directory -Force C:\\MGLab\\power-bi | Out-Null",
+    "Remove-Item C:\\MGLab\\power-bi\\ep06 -Recurse -Force -ErrorAction SilentlyContinue",
+    "Copy-Item -Path (Get-Location).Path -Destination C:\\MGLab\\power-bi\\ep06 -Recurse -Force",
+    "Import-Module MicrosoftPowerBIMgmt.Profile, MicrosoftPowerBIMgmt.Workspaces, MicrosoftPowerBIMgmt.Data, MicrosoftPowerBIMgmt.Reports",
+    "Connect-PowerBIServiceAccount   # owner signs in as labadmin (interactive)"
+  ],
+  "screens": [
+    {
+      "name": "pub-publish-desktop",
+      "kind": "app",
+      "app": "Power BI Desktop",
+      "steps": [
+        "Open the episode 5 project C:\\MGLab\\power-bi\\ep05\\src\\ContosoSales.pbip (UpnDomain set, refreshed), signed in as labadmin",
+        "Home > Publish > Contoso Sales (Lab) > Select",
+        "Replace this semantic model dialog with the impact summary: capture it, then Replace",
+        "Success! with the link Open ContosoSales.pbip in Power BI",
+        "Cut to the browser: workspace list shows report ContosoSales and semantic model ContosoSales"
+      ],
+      "mask": [
+        "tenant name and domain in the publish dialog and browser",
+        "account picture and name",
+        "browser URL (workspace id)"
+      ]
+    },
+    {
+      "name": "pub-dashboard",
+      "kind": "browser",
+      "url": "https://app.powerbi.com/",
+      "account": "labadmin",
+      "steps": [
+        "Open report ContosoSales > Edit, page Sales overview, Year slicer with no selection",
+        "Hover the Sales amount card > pin icon > New dashboard Contoso Bikes - Daily > Pin",
+        "Pin to the existing dashboard: Orders card, Sales amount and prior year by month, Sales amount by category, Sales amount by store; Save the report if asked",
+        "Go to dashboard; arrange two cards on top (Sales amount 1,862,401.98, Orders 2,440) and the charts below",
+        "Orders tile > ... > Manage alerts > Add alert rule: title Orders above 2,500, condition Above 2500, once a day > Save and close"
+      ],
+      "mask": [
+        "browser URL (workspace and dashboard ids)",
+        "account picture and name",
+        "tenant domain"
+      ]
+    },
+    {
+      "name": "pub-inventory",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "C:\\MGLab\\power-bi\\ep06",
+      "prompt": "PS C:\\MGLab\\power-bi\\ep06> ",
+      "commands": [
+        "./src/Invoke-PublishingCheck.ps1 -WorkspaceId $ws",
+        "#pause 5"
+      ],
+      "prepare": [
+        "Import-Module MicrosoftPowerBIMgmt.Profile, MicrosoftPowerBIMgmt.Workspaces, MicrosoftPowerBIMgmt.Data, MicrosoftPowerBIMgmt.Reports",
+        "Connect-PowerBIServiceAccount   # owner signs in as labadmin (interactive)",
+        "$ws = (Get-PowerBIWorkspace -Name 'Contoso Sales (Lab)').Id"
+      ],
+      "note": "First line 1 report(s), 1 semantic model(s), 1 dashboard(s), 5 tile(s); expect WS004; record what WS002, WS003 and WS006 report."
+    },
+    {
+      "name": "pub-copy-dashboard",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "C:\\MGLab\\power-bi\\ep06",
+      "prompt": "PS C:\\MGLab\\power-bi\\ep06> ",
+      "commands": [
+        "Import-Module ./src/PbiPublishing/PbiPublishing.psd1",
+        "Copy-PbiDashboard -WorkspaceId $ws -DashboardId $daily -NewName 'Contoso Bikes - Store managers' -WhatIf",
+        "Copy-PbiDashboard -WorkspaceId $ws -DashboardId $daily -NewName 'Contoso Bikes - Store managers'",
+        "#pause 4"
+      ],
+      "prepare": [
+        "Import-Module MicrosoftPowerBIMgmt.Profile, MicrosoftPowerBIMgmt.Workspaces, MicrosoftPowerBIMgmt.Data, MicrosoftPowerBIMgmt.Reports",
+        "Connect-PowerBIServiceAccount   # owner signs in as labadmin (interactive)",
+        "$ws = (Get-PowerBIWorkspace -Name 'Contoso Sales (Lab)').Id",
+        "$daily = (Get-PowerBIDashboard -WorkspaceId $ws -Name 'Contoso Bikes - Daily').Id"
+      ],
+      "note": "Expected: Dashboard Contoso Bikes - Store managers, Tiles 5, SameWorkspace True. Browser follow-up (separate take): refresh the workspace and open the new dashboard: same 5 tiles and values."
+    },
+    {
+      "name": "pub-app-rls",
+      "kind": "browser",
+      "url": "https://app.powerbi.com/",
+      "account": "labadmin",
+      "steps": [
+        "Workspace Contoso Sales (Lab) > Manage access: remove Alex, Sam, Riley, Taylor (Jordan may stay)",
+        "Create app: Setup name Contoso Bikes with a description; Content: report ContosoSales and dashboard Contoso Bikes - Store managers",
+        "Audience: rename to Store managers, add Alex Demo, Sam Demo, Riley Demo, Taylor Demo; Publish app; capture Successfully published (link blurred)",
+        "InPrivate window signed in as sam.demo: Apps > Contoso Bikes > report page Store security: Contoso Madrid only, Visible stores 1, Sales amount 366,058.87",
+        "Open the dashboard Sales amount tile and record what it shows (366,058.87 if tiles follow RLS)"
+      ],
+      "mask": [
+        "tenant domain in audience picker, Manage access and the InPrivate account menu",
+        "app link in Successfully published",
+        "browser URL ids",
+        "account picture and name"
+      ]
+    }
+  ],
+  "teardown": [
+    "Remove-Item C:\\MGLab\\power-bi\\ep06 -Recurse -Force -ErrorAction SilentlyContinue",
+    "# owner: delete the alert Orders above 2,500, unpublish the app Contoso Bikes, delete the dashboard Contoso Bikes - Store managers, restore Viewer access (see demo.md tear-down)"
+  ],
+  "needs": [
+    "tenant",
+    "premium-trial"
+  ],
+  "owner_notes": "Record right after episode 5; the workspace, model and role members must exist. Teardown of tenant items is manual (no REST cmdlet for alerts/apps in the module)."
+}

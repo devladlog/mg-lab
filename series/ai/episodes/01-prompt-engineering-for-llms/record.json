@@ -1,0 +1,88 @@
+{
+  "note": "Live-session recording (series/tools/rec). The bash lines of demo.md are run as PowerShell on the laptop; PYTHONPATH and the endpoint are set in prepare, never echoed.",
+  "prepare": [
+    "python -m venv .venv",
+    "$env:PATH = \"$PWD\\.venv\\Scripts;$env:PATH\"",
+    "python -m pip install -q -r requirements.txt",
+    "$env:PYTHONPATH = 'src'",
+    "# owner signs in as labadmin (device code), not on camera",
+    "az login --use-device-code --only-show-errors | Out-Null",
+    "$me = az ad signed-in-user show --query id -o tsv",
+    "az group create -n rg-mglab-ai-01 -l swedencentral -o none",
+    "$n = \"mglab-ai01-$(Get-Random -Minimum 10000 -Maximum 99999)\"; $env:AOAI_NAME = $n",
+    "az cognitiveservices account create -g rg-mglab-ai-01 -n $n -l swedencentral --kind OpenAI --sku S0 --custom-domain $n --yes -o none",
+    "$id = az cognitiveservices account show -g rg-mglab-ai-01 -n $n --query id -o tsv",
+    "az resource update --ids $id --set properties.disableLocalAuth=true -o none",
+    "az cognitiveservices account deployment create -g rg-mglab-ai-01 -n $n --deployment-name triage-mini --model-name gpt-5-mini --model-version 2025-08-07 --model-format OpenAI --sku-name DataZoneStandard --sku-capacity 10 -o none",
+    "az role assignment create --assignee-object-id $me --assignee-principal-type User --role 'Cognitive Services OpenAI User' --scope $id -o none",
+    "$env:AZURE_OPENAI_ENDPOINT = \"https://$n.openai.azure.com\"",
+    "Start-Sleep -Seconds 300   # role assignment propagation (up to 5 minutes)",
+    "python -m triage.evaluate --data data/tickets.jsonl --prompt v2 --dry-run | Select-Object -First 20 | Out-Null"
+  ],
+  "screens": [
+    {
+      "name": "deployment",
+      "kind": "browser",
+      "url": "https://ai.azure.com/",
+      "account": "labadmin",
+      "steps": [
+        "Sign-in is already done as labadmin; pick the lab resource in rg-mglab-ai-01",
+        "Open Models + endpoints",
+        "Select the deployment 'triage-mini'",
+        "Pause on model name gpt-5-mini, version 2025-08-07, deployment type and the rate limit (TPM)"
+      ],
+      "mask": [
+        "resource name and endpoint host (<resource>.openai.azure.com)",
+        "subscription name/ID",
+        "tenant name",
+        "signed-in user UPN/avatar in the portal header"
+      ]
+    },
+    {
+      "name": "scorecard",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\ai\\episodes\\01-prompt-engineering-for-llms",
+      "prompt": "PS ep01> ",
+      "commands": [
+        "python -m triage.evaluate --data data/tickets.jsonl --prompt v1 --prompt v2 --deployment triage-mini --model gpt-5-mini",
+        "#pause 6"
+      ]
+    },
+    {
+      "name": "attack",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\ai\\episodes\\01-prompt-engineering-for-llms",
+      "prompt": "PS ep01> ",
+      "commands": [
+        "python -m triage.evaluate --data data/tickets.jsonl --prompt v1 --prompt v2 --deployment triage-mini --model gpt-5-mini --show | Select-String A02",
+        "#pause 6"
+      ]
+    },
+    {
+      "name": "temperature",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\ai\\episodes\\01-prompt-engineering-for-llms",
+      "prompt": "PS ep01> ",
+      "commands": [
+        "@'\nimport os\nfrom triage.evaluate import make_client\nclient = make_client(os.environ[\"AZURE_OPENAI_ENDPOINT\"], max_retries=0)\ntry:\n    r = client.chat.completions.create(model=\"triage-mini\", temperature=0,\n                                       messages=[{\"role\": \"user\", \"content\": \"Say OK\"}])\n    print(\"accepted:\", r.choices[0].message.content)\nexcept Exception as e:\n    print(type(e).__name__, getattr(e, \"status_code\", \"\"), e)\n'@ | python -",
+        "#pause 6"
+      ],
+      "mask": [
+        "the error text may contain the resource endpoint host: blur it if it does"
+      ]
+    }
+  ],
+  "teardown": [
+    "az group delete -n rg-mglab-ai-1 --yes",
+    "az cognitiveservices account purge -g rg-mglab-ai-1 -n $env:AOAI_NAME -l swedencentral",
+    "Remove-Item .venv -Recurse -Force -ErrorAction SilentlyContinue"
+  ],
+  "needs": [
+    "azure",
+    "paid:azure-openai-tokens",
+    "quota:gpt-5-mini-DataZoneStandard-swedencentral"
+  ]
+}

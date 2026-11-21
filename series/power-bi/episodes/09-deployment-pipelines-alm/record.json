@@ -1,0 +1,83 @@
+{
+  "note": "Live-session recording of the screen scenes (series/tools/rec). prepare/teardown run on the laptop, not recorded; commands are typed and run for real. Steps of browser/app screens are done by hand by the person recording.",
+  "prepare": [
+    "New-Item -ItemType Directory -Force C:\\MGLab\\power-bi | Out-Null",
+    "Remove-Item C:\\MGLab\\power-bi\\ep09 -Recurse -Force -ErrorAction SilentlyContinue",
+    "Copy-Item -Path (Get-Location).Path -Destination C:\\MGLab\\power-bi\\ep09 -Recurse -Force",
+    "Import-Module MicrosoftPowerBIMgmt.Profile, MicrosoftPowerBIMgmt.Workspaces, MicrosoftPowerBIMgmt.Data, MicrosoftPowerBIMgmt.Reports",
+    "Connect-PowerBIServiceAccount   # owner signs in as alex.demo (pipeline admin)"
+  ],
+  "screens": [
+    {
+      "name": "pipeline-stages",
+      "kind": "browser",
+      "url": "https://app.powerbi.com/",
+      "account": "alex.demo",
+      "steps": [
+        "Deployment pipelines > Contoso Sales (Lab)",
+        "Three stage cards Development, Test, Production with workspace names Contoso Sales (Lab) - Dev / - Test / - Prod",
+        "Development lists the semantic model and the report; Test and Production are empty"
+      ],
+      "mask": [
+        "capacity name if it shows the tenant name",
+        "account picture and name",
+        "tenant domain"
+      ]
+    },
+    {
+      "name": "rules",
+      "kind": "browser",
+      "url": "https://app.powerbi.com/",
+      "account": "alex.demo",
+      "steps": [
+        "Test stage > Deployment rules > ContosoSales > Parameter rules: ExportsFolder = exports, StageName = TEST",
+        "Production stage: ExportsFolder = exports, StageName = PROD",
+        "Show that the Development stage has no deployment rules option"
+      ],
+      "mask": [
+        "account picture and name",
+        "tenant domain"
+      ]
+    },
+    {
+      "name": "deploy",
+      "kind": "browser",
+      "url": "https://app.powerbi.com/",
+      "account": "alex.demo",
+      "steps": [
+        "Development stage selected: compare view shows the model and the report as New",
+        "Deploy to test, add a note (Release 1), show the finished deployment",
+        "Open the Test report before refresh: record exactly what it shows (no data)"
+      ],
+      "mask": [
+        "account picture and name",
+        "browser URL ids"
+      ]
+    },
+    {
+      "name": "three-stages",
+      "kind": "browser",
+      "url": "https://app.powerbi.com/",
+      "account": "alex.demo",
+      "steps": [
+        "In Test and Prod sign in to the SharePoint source of each model, then refresh both",
+        "Open the report in Dev, Test and Prod in the same tab order: Stage card DEV, TEST, PROD",
+        "Expected Dev 283 orders, 478 lines, 220,652.08; Test and Prod 2,440 orders, 4,071 lines, 1,862,401.98; record what is really shown"
+      ],
+      "mask": [
+        "account picture and name",
+        "SharePoint site URL",
+        "tenant domain"
+      ]
+    }
+  ],
+  "teardown": [
+    "Remove-Item C:\\MGLab\\power-bi\\ep09 -Recurse -Force -ErrorAction SilentlyContinue",
+    "# owner: delete the pipeline Contoso Sales (Lab) and the three workspaces (Dev/Test/Prod) when no later episode needs them"
+  ],
+  "needs": [
+    "tenant",
+    "premium-trial"
+  ],
+  "owner_notes": "Owner setup off camera (demo.md Setup 1-3): three workspaces on the trial capacity, pipeline, SharePoint site Contoso Bikes Data with exports and exports-sample, Dev model published from src\\ContosoSales.pbip. Rehearsal: .\\src\\pipeline\\Invoke-PipelineRelease.ps1 -PipelineName 'Contoso Sales (Lab)' -From 0 -Note 'Release 1' -WhatIf. Learn limitation on PBIR reports may make the report deploy fail: keep the message."
+}

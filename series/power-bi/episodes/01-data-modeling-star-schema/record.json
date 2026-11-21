@@ -1,0 +1,76 @@
+{
+  "note": "Live-session recording of the screen scenes (series/tools/rec). prepare/teardown run on the laptop, not recorded; commands are typed and run for real. Steps of browser/app screens are done by hand by the person recording.",
+  "prepare": [
+    "New-Item -ItemType Directory -Force C:\\MGLab\\power-bi | Out-Null",
+    "Remove-Item C:\\MGLab\\power-bi\\ep01 -Recurse -Force -ErrorAction SilentlyContinue",
+    "Copy-Item -Path (Get-Location).Path -Destination C:\\MGLab\\power-bi\\ep01 -Recurse -Force",
+    "New-Item -ItemType Directory -Force C:\\MGLab\\power-bi\\star | Out-Null",
+    "Copy-Item .\\src\\data\\star\\*.csv C:\\MGLab\\power-bi\\star\\ -Force"
+  ],
+  "screens": [
+    {
+      "name": "model-view",
+      "kind": "app",
+      "app": "Power BI Desktop",
+      "steps": [
+        "Open C:\\MGLab\\power-bi\\ep01\\src\\ContosoSales.pbip (Auto date/time off: File > Options and settings > Options > Global > Data load). If it will not open: blank report > TMDL view > paste TMDLScripts\\create-model.tmdl > Apply, then turn on Discourage implicit measures in Model explorer",
+        "Home > Refresh; if asked for privacy levels or credentials choose Organizational / Windows",
+        "Go to Model view; arrange Sales in the centre, Date on top, Customer left, Product right, Store at the bottom",
+        "Show the four solid one-to-many lines with single arrowheads and the dashed line Sales[Ship Date] to Date[Date]",
+        "Hover the dashed line so both columns highlight; hold for a few seconds"
+      ],
+      "mask": [
+        "account name and picture at the top right of Power BI Desktop (sign out first)",
+        "Windows user name in any file path (record from C:\\MGLab)"
+      ]
+    },
+    {
+      "name": "data-pane",
+      "kind": "app",
+      "app": "Power BI Desktop",
+      "steps": [
+        "Switch to Report view and expand the Data pane fully",
+        "Expand Sales: only Order Number and the display folders Sales and Margin (no keys, no Unit Price)",
+        "Expand Product to show the Product Hierarchy (Category > Subcategory > Product)",
+        "Expand Date to show the Calendar hierarchy; hold"
+      ],
+      "mask": [
+        "account name and picture at the top right of Power BI Desktop (sign out first)",
+        "Windows user name in any file path (record from C:\\MGLab)"
+      ]
+    },
+    {
+      "name": "report",
+      "kind": "app",
+      "app": "Power BI Desktop",
+      "steps": [
+        "Report view, page Overview: matrix with Product[Category] rows, Date[Year] columns, values Sales Amount and Margin %",
+        "Check 2024 total 894,929.10, 2025 total 967,472.88, grand total 1,862,401.98, Bikes 2024 716,095.45, Margin % 43.7% both years",
+        "Add a Card with Orders (2,440); hold"
+      ],
+      "mask": [
+        "account name and picture at the top right of Power BI Desktop (sign out first)",
+        "Windows user name in any file path (record from C:\\MGLab)"
+      ]
+    },
+    {
+      "name": "unknown-customer",
+      "kind": "app",
+      "app": "Power BI Desktop",
+      "steps": [
+        "Report view: table visual with Customer[Country] and Sales Amount, sort by Sales Amount descending",
+        "Show the row Unknown = 61,345.69 and that there is no (Blank) row; highlight the Unknown row with the cursor"
+      ],
+      "mask": [
+        "account name and picture at the top right of Power BI Desktop (sign out first)",
+        "Windows user name in any file path (record from C:\\MGLab)"
+      ]
+    }
+  ],
+  "teardown": [
+    "Remove-Item C:\\MGLab\\power-bi\\ep01 -Recurse -Force -ErrorAction SilentlyContinue",
+    "Remove-Item C:\\MGLab\\power-bi\\star -Recurse -Force -ErrorAction SilentlyContinue"
+  ],
+  "needs": [],
+  "owner_notes": "Local only: no tenant, no sign-in. Close Power BI Desktop without saving into the repo."
+}

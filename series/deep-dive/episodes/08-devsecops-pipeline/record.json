@@ -1,0 +1,89 @@
+{
+  "note": "Deep-dive #8. GitHub Actions and Azure DevOps runs are real runs on the free hosted capacity. Order: green run on main, failing PR branch, attestation, Azure DevOps.",
+  "prepare": [
+    "# owner signs in (device code), not recorded",
+    "az login --use-device-code",
+    "Push-Location app; dotnet restore PurchaseStatus.slnx --locked-mode; dotnet test PurchaseStatus.slnx; python -m pytest security -q; Pop-Location",
+    "az group create -n rg-mglab-deep-dive-08 -l westeurope -o none",
+    "$gh = Read-Host 'Throwaway GitHub account or org name (owner types)'",
+    "az deployment group create -g rg-mglab-deep-dive-08 -f app/infra/main.bicep -p githubOwner=$gh --query properties.outputs -o json > $env:TEMP\\devsecops-outputs.json",
+    "Get-Content $env:TEMP\\devsecops-outputs.json | ConvertFrom-Json | Select-Object -ExpandProperty acrName   # note: put the ids into the GitHub environment (not on screen)",
+    "# manual: create a PUBLIC throwaway GitHub repo; push app/ as the repo root (git init, git add, git commit, git remote add origin, git push)",
+    "# manual: GitHub environment prod-lab (labadmin as required reviewer), environment secrets AZURE_CLIENT_ID / AZURE_TENANT_ID / AZURE_SUBSCRIPTION_ID, variables ACR_NAME / APP_NAME / RESOURCE_GROUP; enable code scanning",
+    "# manual: Azure DevOps (organization devladlog): private throwaway project, service connection sc-mgl08-wif (workload identity federation), environment prod-lab with approval, variables acrName / appName / resourceGroup, pipeline from azure-pipelines.yml",
+    "# manual: dry run: open a PR, green, merge, approve prod-lab, confirm the app shows the image digest"
+  ],
+  "screens": [
+    {
+      "name": "actions-run",
+      "kind": "browser",
+      "url": "https://github.com/<throwaway-account>/<repo>/actions",
+      "account": "labadmin (GitHub account of the throwaway repo)",
+      "steps": [
+        "Merge the green PR to main (or push to main) and open Actions > the secure-pipeline run on main",
+        "Show all jobs green and the prod-lab deployment waiting for the reviewer",
+        "Open the waiting job briefly to show 'Review deployments'"
+      ],
+      "mask": [
+        "GitHub account and repo name",
+        "tenant name and id, subscription id, registry host, client ids"
+      ]
+    },
+    {
+      "name": "gate-fail",
+      "kind": "browser",
+      "url": "https://github.com/<throwaway-account>/<repo>/pulls",
+      "account": "labadmin (GitHub account of the throwaway repo)",
+      "steps": [
+        "Create a PR branch with a deliberately old base image digest (or a waiver past its date) so vuln_gate.py fails",
+        "Open the failed run > the job summary: the table with finding, package and fixed version",
+        "Do not enable step debug logging"
+      ],
+      "mask": [
+        "GitHub account and repo name",
+        "registry host",
+        "any id in the summary"
+      ]
+    },
+    {
+      "name": "attestation",
+      "kind": "browser",
+      "url": "https://github.com/<throwaway-account>/<repo>/attestations",
+      "account": "labadmin (GitHub account of the throwaway repo)",
+      "steps": [
+        "Open the repository's Attestations page and the entry for the pushed image digest",
+        "Switch to the Security tab > Code scanning: CodeQL results"
+      ],
+      "mask": [
+        "GitHub account and repo name",
+        "registry host and digest owner details"
+      ]
+    },
+    {
+      "name": "ado-run",
+      "kind": "browser",
+      "url": "https://dev.azure.com/<organization>/<throwaway-project>/_build",
+      "account": "labadmin",
+      "steps": [
+        "Open the pipeline run of azure-pipelines.yml: Build and Deploy stages",
+        "Show the environment approval prod-lab waiting, then approve it",
+        "Project settings > Service connections > sc-mgl08-wif: 'Workload identity federation' visible"
+      ],
+      "mask": [
+        "Azure DevOps organization name",
+        "tenant name and id, subscription id, client ids"
+      ]
+    }
+  ],
+  "teardown": [
+    "az group delete -n rg-mglab-deep-dive-08 --yes --no-wait",
+    "Remove-Item $env:TEMP\\devsecops-outputs.json -ErrorAction SilentlyContinue",
+    "# manual: delete the throwaway GitHub repository and the Azure DevOps project (removes the service connection); federated credentials go with the identities"
+  ],
+  "needs": [
+    "azure",
+    "tenant",
+    "github-account (throwaway public repo)",
+    "azure-devops (org devladlog, free hosted grant)"
+  ]
+}

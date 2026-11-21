@@ -1,0 +1,123 @@
+{
+  "note": "Live-session recording of the SharePoint episode screens (series/tools/rec). prepare/teardown run on the laptop, not recorded. Set MG_TENANT, MG_UPN_DOMAIN and MG_PNP_CLIENT_ID in the environment before queueing (never in a file). Sign-ins are device-code, done by the owner. Episodes 1-9 chain: set MG_KEEP_CHAIN=1 while recording them in order so teardown keeps what the next episode uses; unset it for a full clean-up. The Confidential sensitivity label must be created and synced at least a day before (Purview + Entra EnableMIPLabels); put its GUID in MG_LABEL_ID. Adding 'Everyone except external users' as site visitors is a manual browser step (see the eeeu screen).",
+  "prepare": [
+    "if (-not $env:MG_TENANT -or -not $env:MG_UPN_DOMAIN -or -not $env:MG_PNP_CLIENT_ID) { throw 'Set MG_TENANT (lab tenant short name), MG_UPN_DOMAIN (sign-in domain of the lab users) and MG_PNP_CLIENT_ID (the MG Lab PnP app) in the environment first' }",
+    "if (-not (Get-Module -ListAvailable PnP.PowerShell)) { Install-Module PnP.PowerShell -Scope CurrentUser -Force }",
+    "$env:MG_TENANT_URL = \"https://${env:MG_TENANT}.sharepoint.com\"; $env:MG_ADMIN_URL = \"https://${env:MG_TENANT}-admin.sharepoint.com\"; $env:MG_EP = (Get-Location).Path",
+    "$env:MG_LABADMIN_UPN = \"labadmin@$env:MG_UPN_DOMAIN\"; $env:MG_ALEX_UPN = \"alex.demo@$env:MG_UPN_DOMAIN\"; $env:MG_SAM_UPN = \"sam.demo@$env:MG_UPN_DOMAIN\"; $env:MG_JORDAN_UPN = \"jordan.demo@$env:MG_UPN_DOMAIN\"; $env:MG_RILEY_UPN = \"riley.demo@$env:MG_UPN_DOMAIN\"",
+    "$env:MG_SITE = \"$env:MG_TENANT_URL/sites/Purchasing\"",
+    "if (-not $env:MG_LABEL_ID) { throw 'Set MG_LABEL_ID to the Confidential label GUID (Get-Label, never shown on screen)' }",
+    "Connect-PnPOnline -Url $env:MG_SITE -ClientId $env:MG_PNP_CLIENT_ID -DeviceLogin   # owner signs in",
+    "Add-PnPGroupMember -Group 'Contoso Purchasing Members' -LoginName $env:MG_SAM_UPN -ErrorAction SilentlyContinue",
+    "./src/New-PermissionDrift.ps1 -SiteUrl $env:MG_SITE -ClientId $env:MG_PNP_CLIENT_ID -DirectUser $env:MG_ALEX_UPN -ShareWithUser $env:MG_SAM_UPN -ContractManager $env:MG_JORDAN_UPN",
+    "New-Item -ItemType Directory -Force ./src/snapshots | Out-Null"
+  ],
+  "screens": [
+    {
+      "name": "eeeu",
+      "kind": "browser",
+      "url": "https://<tenant>.sharepoint.com/sites/Purchasing",
+      "account": "labadmin",
+      "steps": [
+        "Set-up (not shown): Settings > Site permissions > Share site, add 'Everyone except external users' with Read (it lands in Site visitors)",
+        "Open Settings > Site permissions",
+        "Expand 'Site visitors': 'Everyone except external users' (Read)",
+        "Select 'Advanced permissions settings' and show Alex Demo with Full Control"
+      ],
+      "mask": [
+        "tenant host in the address bar (pipeline/mask.js)",
+        "account avatar and display name in the top bar",
+        "avatars of users",
+        "any real names in the people lists"
+      ],
+      "note": "If the people picker hides the claim, skip it and note that GV007 will not appear."
+    },
+    {
+      "name": "audit-live",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\sharepoint\\episodes\\05-permissions-governance",
+      "prompt": "PS sharepoint-05> ",
+      "prepare": [
+        "if (-not $env:MG_TENANT -or -not $env:MG_UPN_DOMAIN -or -not $env:MG_PNP_CLIENT_ID) { throw 'Set MG_TENANT (lab tenant short name), MG_UPN_DOMAIN (sign-in domain of the lab users) and MG_PNP_CLIENT_ID (the MG Lab PnP app) in the environment first' }",
+        "if (-not (Get-Module -ListAvailable PnP.PowerShell)) { Install-Module PnP.PowerShell -Scope CurrentUser -Force }",
+        "$env:MG_TENANT_URL = \"https://${env:MG_TENANT}.sharepoint.com\"; $env:MG_ADMIN_URL = \"https://${env:MG_TENANT}-admin.sharepoint.com\"; $env:MG_EP = (Get-Location).Path",
+        "$env:MG_LABADMIN_UPN = \"labadmin@$env:MG_UPN_DOMAIN\"; $env:MG_ALEX_UPN = \"alex.demo@$env:MG_UPN_DOMAIN\"; $env:MG_SAM_UPN = \"sam.demo@$env:MG_UPN_DOMAIN\"; $env:MG_JORDAN_UPN = \"jordan.demo@$env:MG_UPN_DOMAIN\"; $env:MG_RILEY_UPN = \"riley.demo@$env:MG_UPN_DOMAIN\"",
+        "$env:MG_SITE = \"$env:MG_TENANT_URL/sites/Purchasing\"",
+        "if (-not $env:MG_LABEL_ID) { throw 'Set MG_LABEL_ID to the Confidential label GUID (Get-Label, never shown on screen)' }"
+      ],
+      "commands": [
+        "$site = $env:MG_SITE; $app = $env:MG_PNP_CLIENT_ID",
+        "#clear",
+        "./src/Invoke-Governance.ps1 -PolicyPath ./src/governance/purchasing.policy.json -SiteUrl $site -ClientId $app -SensitivityLabelId $env:MG_LABEL_ID -ExportSnapshot ./src/snapshots/before.json",
+        "#pause 8"
+      ],
+      "note": "Expected: policy 'No findings', then GV001, GV004, GV007, GV009 errors and the warnings, '4 error(s), 8 warning(s); 11 can be fixed automatically'. Record what it really says."
+    },
+    {
+      "name": "remediate",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\sharepoint\\episodes\\05-permissions-governance",
+      "prompt": "PS sharepoint-05> ",
+      "prepare": [
+        "if (-not $env:MG_TENANT -or -not $env:MG_UPN_DOMAIN -or -not $env:MG_PNP_CLIENT_ID) { throw 'Set MG_TENANT (lab tenant short name), MG_UPN_DOMAIN (sign-in domain of the lab users) and MG_PNP_CLIENT_ID (the MG Lab PnP app) in the environment first' }",
+        "if (-not (Get-Module -ListAvailable PnP.PowerShell)) { Install-Module PnP.PowerShell -Scope CurrentUser -Force }",
+        "$env:MG_TENANT_URL = \"https://${env:MG_TENANT}.sharepoint.com\"; $env:MG_ADMIN_URL = \"https://${env:MG_TENANT}-admin.sharepoint.com\"; $env:MG_EP = (Get-Location).Path",
+        "$env:MG_LABADMIN_UPN = \"labadmin@$env:MG_UPN_DOMAIN\"; $env:MG_ALEX_UPN = \"alex.demo@$env:MG_UPN_DOMAIN\"; $env:MG_SAM_UPN = \"sam.demo@$env:MG_UPN_DOMAIN\"; $env:MG_JORDAN_UPN = \"jordan.demo@$env:MG_UPN_DOMAIN\"; $env:MG_RILEY_UPN = \"riley.demo@$env:MG_UPN_DOMAIN\"",
+        "$env:MG_SITE = \"$env:MG_TENANT_URL/sites/Purchasing\"",
+        "if (-not $env:MG_LABEL_ID) { throw 'Set MG_LABEL_ID to the Confidential label GUID (Get-Label, never shown on screen)' }"
+      ],
+      "commands": [
+        "$site = $env:MG_SITE; $app = $env:MG_PNP_CLIENT_ID",
+        "#clear",
+        "./src/Invoke-Governance.ps1 -PolicyPath ./src/governance/purchasing.policy.json -SiteUrl $site -ClientId $app -SensitivityLabelId $env:MG_LABEL_ID -Fix -WhatIf",
+        "#pause 3",
+        "#clear",
+        "./src/Invoke-Governance.ps1 -PolicyPath ./src/governance/purchasing.policy.json -SiteUrl $site -ClientId $app -SensitivityLabelId $env:MG_LABEL_ID -Fix",
+        "#pause 8"
+      ],
+      "note": "Capture the real -Fix run: done rows, then 'Audit after remediation:' with only GV005 left."
+    },
+    {
+      "name": "admin-center",
+      "kind": "browser",
+      "url": "https://<tenant>-admin.sharepoint.com/_layouts/15/online/AdminHome.aspx#/siteManagement/view/ALL%20SITES",
+      "account": "labadmin",
+      "steps": [
+        "Open SharePoint admin center > Sites > Active sites",
+        "Add the columns 'Sensitivity' and 'External sharing' if they are not shown",
+        "Hold on the Contoso Purchasing row: Confidential, Only people in your organization",
+        "Optional: select the row, open the details pane > Policies tab"
+      ],
+      "mask": [
+        "tenant name and admin host in the address bar",
+        "admin account in the top bar",
+        "all other site names and URLs"
+      ]
+    }
+  ],
+  "teardown": [
+    "if (-not $env:MG_TENANT -or -not $env:MG_UPN_DOMAIN -or -not $env:MG_PNP_CLIENT_ID) { throw 'Set MG_TENANT (lab tenant short name), MG_UPN_DOMAIN (sign-in domain of the lab users) and MG_PNP_CLIENT_ID (the MG Lab PnP app) in the environment first' }",
+    "if (-not (Get-Module -ListAvailable PnP.PowerShell)) { Install-Module PnP.PowerShell -Scope CurrentUser -Force }",
+    "$env:MG_TENANT_URL = \"https://${env:MG_TENANT}.sharepoint.com\"; $env:MG_ADMIN_URL = \"https://${env:MG_TENANT}-admin.sharepoint.com\"; $env:MG_EP = (Get-Location).Path",
+    "$env:MG_LABADMIN_UPN = \"labadmin@$env:MG_UPN_DOMAIN\"; $env:MG_ALEX_UPN = \"alex.demo@$env:MG_UPN_DOMAIN\"; $env:MG_SAM_UPN = \"sam.demo@$env:MG_UPN_DOMAIN\"; $env:MG_JORDAN_UPN = \"jordan.demo@$env:MG_UPN_DOMAIN\"; $env:MG_RILEY_UPN = \"riley.demo@$env:MG_UPN_DOMAIN\"",
+    "$env:MG_SITE = \"$env:MG_TENANT_URL/sites/Purchasing\"",
+    "if (-not $env:MG_LABEL_ID) { throw 'Set MG_LABEL_ID to the Confidential label GUID (Get-Label, never shown on screen)' }",
+    "Connect-PnPOnline -Url $env:MG_SITE -ClientId $env:MG_PNP_CLIENT_ID -DeviceLogin   # owner signs in",
+    "Remove-PnPGroup -Identity 'Contract Managers' -Force -ErrorAction SilentlyContinue",
+    "Remove-PnPGroupMember -Group 'Contoso Purchasing Members' -LoginName $env:MG_SAM_UPN -ErrorAction SilentlyContinue",
+    "Set-PnPList -Identity 'Supplier Documents' -ResetRoleInheritance -ErrorAction SilentlyContinue",
+    "Remove-Item ./src/snapshots -Recurse -Force -ErrorAction SilentlyContinue"
+  ],
+  "needs": [
+    "tenant",
+    "episode:03",
+    "episode:04",
+    "role:sharepoint-admin",
+    "role:site-collection-admin",
+    "label:Confidential (created a day before)",
+    "app:MG Lab PnP (+ delegated Graph permissions for sharing links)",
+    "exchange-online-management (Get-Label, one-time)"
+  ]
+}

@@ -1,0 +1,83 @@
+{
+  "note": "Live-session recording of the screen scenes (series/tools/rec). prepare/teardown run on the laptop, not recorded; commands are typed and run for real. Prepare statements run in one PowerShell session with the episode folder as current directory; variables do not survive into the screens, so each screen re-derives what it needs.",
+  "prepare": [
+    "$ep = (Get-Location).Path",
+    "New-Item -ItemType Directory -Force C:\\work\\bin | Out-Null",
+    "[IO.File]::WriteAllText('C:\\work\\bin\\python3', \"#!/bin/sh`nexec python `\"`$@`\"`n\")",
+    "if ($env:PATH -notlike '*C:\\work\\bin*') { $env:PATH = 'C:\\work\\bin;C:\\Program Files\\Git\\bin;' + $env:PATH + ';C:\\Program Files\\Git\\usr\\bin' }",
+    "$env:PYTHON = 'python'",
+    "New-Item -ItemType Directory -Force C:\\demo | Out-Null",
+    "Remove-Item C:\\demo\\mg-commit, C:\\demo\\team-setup, C:\\demo\\orders-app -Recurse -Force -ErrorAction SilentlyContinue",
+    "Copy-Item -Recurse \"$ep\\src\\mg-commit\" C:\\demo\\mg-commit; Copy-Item -Recurse \"$ep\\src\\team-setup\" C:\\demo\\team-setup",
+    "Push-Location C:\\demo\\mg-commit; npm ci --no-audit --no-fund; npm run compile; Pop-Location",
+    "Copy-Item -Recurse \"$ep\\..\\01-git-github-best-practices\\src\\kit\" C:\\demo\\orders-app",
+    "Copy-Item -Recurse -Force \"$ep\\src\\team-setup\\.vscode\" C:\\demo\\orders-app\\\\",
+    "Get-ChildItem 'C:\\demo\\orders-app' -Recurse -File -Force -Include *.cs,*.csproj,*.props,*.slnx,*.slnf,*.json,*.md,*.yml,*.yaml,*.py,*.sh,*.toml,*.config,*.http,*.runsettings,*.playlist,*.ts,Dockerfile,compose.yaml,CODEOWNERS,.gitignore,.gitattributes,.editorconfig,pre-commit,commit-msg -ErrorAction SilentlyContinue | Where-Object { $_.FullName -notmatch '\\\\(node_modules|bin|obj|\\.git)\\\\' } | ForEach-Object { [IO.File]::WriteAllText($_.FullName, ([IO.File]::ReadAllText($_.FullName) -replace \"`r`n\", \"`n\")) }",
+    "Set-Location C:\\demo\\orders-app; git init -q -b main",
+    "bash scripts/setup-dev.sh",
+    "git config user.name 'Alex Demo'; git config user.email 'alex.demo@contoso.com'",
+    "git add .; git commit -q -m 'chore: add repo guardrails'",
+    "git switch -c feature/orders-paging",
+    "New-Item -ItemType Directory -Force src | Out-Null; 'PAGE_SIZE = 50' | Set-Content src/orders.py; git add src/orders.py",
+    "# the profile 'DevTools Demo' is created empty by the first `code --profile` call in the first screen"
+  ],
+  "screens": [
+    {
+      "name": "recommended",
+      "kind": "app",
+      "app": "VS Code (profile 'DevTools Demo')",
+      "steps": [
+        "In Windows Terminal run: code --profile \"DevTools Demo\" C:\\demo\\team-setup   (the profile does not exist yet, VS Code creates it empty)",
+        "Wait for the notification bottom right: 'Do you want to install the recommended extensions for this repository?' and keep it in frame",
+        "Open the Extensions view (Ctrl+Shift+X), type @recommended in the search box",
+        "Show the WORKSPACE RECOMMENDATIONS group with the seven extensions from .vscode/extensions.json; do not click Install if it would take long"
+      ],
+      "mask": [
+        "Windows user name in the title bar and paths (the folder is under C:\\demo)",
+        "Accounts icon / Settings Sync badge at the bottom of the activity bar"
+      ]
+    },
+    {
+      "name": "validate",
+      "kind": "app",
+      "app": "VS Code (Extension Development Host)",
+      "steps": [
+        "Open C:\\demo\\mg-commit in VS Code and press F5 (Run Extension)",
+        "In the Extension Development Host open the folder C:\\demo\\orders-app",
+        "Source Control view: click the pencil icon in the title bar (or Command Palette > MG: Compose Conventional Commit)",
+        "Pick type feat, scope orders, breaking change No",
+        "In the subject box type: Added paging.   and capture the red message 'Start with a lower-case verb: add, fix, remove...'",
+        "Clear it and type a long subject (more than about 65 characters) and capture 'Header is 7x/72 characters: shorten the subject'"
+      ],
+      "mask": [
+        "Windows user name in the title bar and paths",
+        "Accounts icon"
+      ]
+    },
+    {
+      "name": "commitbox",
+      "kind": "app",
+      "app": "VS Code (Extension Development Host)",
+      "steps": [
+        "In the Source Control commit box type: line 1 'wip', line 2 empty, line 3 'Uses cursor paging.'",
+        "Run MG: Compose Conventional Commit with feat, orders, No, subject: add paging",
+        "Capture the commit box: 'feat(orders): add paging', blank line, 'Uses cursor paging.'",
+        "Press Ctrl+Enter to commit; the episode 1 commit-msg hook accepts it",
+        "Open the integrated terminal and run: git log --oneline -1   and capture the commit"
+      ],
+      "mask": [
+        "Windows user name in the terminal prompt and title bar (use a short prompt)",
+        "Accounts icon"
+      ],
+      "note": "Optional check from demo.md: in a multi-root workspace with two repos the pencil in each repository's title bar fills that repo's commit box."
+    }
+  ],
+  "teardown": [
+    "# owner: VS Code > Profiles editor > delete 'DevTools Demo' (profiles cannot be removed from the command line)",
+    "code --uninstall-extension contoso.mg-commit 2>$null",
+    "Remove-Item C:\\demo\\mg-commit, C:\\demo\\team-setup, C:\\demo\\orders-app -Recurse -Force -ErrorAction SilentlyContinue"
+  ],
+  "needs": [
+    "vscode"
+  ]
+}

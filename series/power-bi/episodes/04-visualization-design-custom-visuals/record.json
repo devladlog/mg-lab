@@ -1,0 +1,69 @@
+{
+  "note": "Live-session recording of the screen scenes (series/tools/rec). prepare/teardown run on the laptop, not recorded; commands are typed and run for real. Steps of browser/app screens are done by hand by the person recording.",
+  "prepare": [
+    "New-Item -ItemType Directory -Force C:\\MGLab\\power-bi | Out-Null",
+    "Remove-Item C:\\MGLab\\power-bi\\ep04 -Recurse -Force -ErrorAction SilentlyContinue",
+    "Copy-Item -Path (Get-Location).Path -Destination C:\\MGLab\\power-bi\\ep04 -Recurse -Force",
+    "New-Item -ItemType Directory -Force C:\\MGLab\\power-bi\\star | Out-Null",
+    "Copy-Item ..\\02-advanced-dax\\src\\data\\star\\*.csv C:\\MGLab\\power-bi\\star\\ -Force",
+    "Push-Location C:\\MGLab\\power-bi\\ep04\\src\\target-bullet",
+    "npm ci --no-audit --no-fund",
+    "npx pbiviz package",
+    "Copy-Item .\\dist\\*.pbiviz C:\\MGLab\\power-bi\\ -Force",
+    "Pop-Location"
+  ],
+  "screens": [
+    {
+      "name": "viz-report-overview",
+      "kind": "app",
+      "app": "Power BI Desktop",
+      "steps": [
+        "Open C:\\MGLab\\power-bi\\ep04\\src\\ContosoSales.pbip and Refresh; Design > Import theme > src\\themes\\ContosoBikes.json if the blue first series (#0B5CAD) is missing",
+        "Page Sales overview, Year slicer = 2025",
+        "Check cards: Sales amount 967,472.88, Sales growth vs prior year 8.1%, Orders 1,268; line chart, bar chart (Bikes > Accessories > Clothing), products table, empty cell bottom right",
+        "Optional second take: View > Selection > Tab order visible (3 cards, slicer, line, bar, table)"
+      ],
+      "mask": [
+        "account name and picture at the top right of Power BI Desktop (sign out first)",
+        "Windows user name in any file path (record from C:\\MGLab)"
+      ]
+    },
+    {
+      "name": "viz-target-bullet",
+      "kind": "app",
+      "app": "Power BI Desktop",
+      "steps": [
+        "File > Options and settings > Options > Current file > Report settings: Develop a visual on (this session)",
+        "Visualizations pane ... > Import a visual from a file > C:\\MGLab\\power-bi\\*.pbiviz > Import",
+        "Add Target Bullet in the free cell (x 648, y 432, 608 x 264); Category = Product[Category], Actual = Sales Amount, Target = Sales PY; title Sales vs prior year by category",
+        "Year = 2025: Accessories up +8.4%, Bikes up +9.0%, Clothing circle -3.0%",
+        "Format pane > Bands: On-target tolerance (%) = 5, then set 2: Clothing turns down marker -3.0%"
+      ],
+      "mask": [
+        "account name and picture at the top right of Power BI Desktop (sign out first)",
+        "Windows user name in any file path (record from C:\\MGLab)"
+      ]
+    },
+    {
+      "name": "viz-high-contrast",
+      "kind": "app",
+      "app": "Power BI Desktop + Windows Settings",
+      "steps": [
+        "Settings > Accessibility > Contrast themes > Night sky > Apply (Desktop picks it up automatically)",
+        "Show the page: Target Bullet bars outlined in the foreground colour, markers and percentages visible, core visuals also in high contrast",
+        "Switch the contrast theme back to None"
+      ],
+      "mask": [
+        "account name and picture at the top right of Power BI Desktop (sign out first)",
+        "Windows user name in any file path (record from C:\\MGLab)"
+      ]
+    }
+  ],
+  "teardown": [
+    "Remove-Item C:\\MGLab\\power-bi\\ep04 -Recurse -Force -ErrorAction SilentlyContinue",
+    "Remove-Item C:\\MGLab\\power-bi\\*.pbiviz -Force -ErrorAction SilentlyContinue",
+    "Remove-Item C:\\MGLab\\power-bi\\star -Recurse -Force -ErrorAction SilentlyContinue"
+  ],
+  "needs": [],
+  "owner_notes": "Local only. Windows contrast theme must be set back to None after hcscreen. Node 24 builds the visual (needs 20.19+)."
+}

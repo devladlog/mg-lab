@@ -1,0 +1,122 @@
+{
+  "note": "Live-session recording of the screen scenes (series/tools/rec). prepare/teardown run on the laptop, not recorded; commands are typed and run for real. Screens that mix a terminal and a portal carry the second half in also[] (when = before/after the main part). Scenes read MG_LAB_ADMIN_UPN / MG_LAB_DOMAIN (set by prepare, derived from the signed-in labadmin).",
+  "prepare": [
+    "if (-not (Get-Module -ListAvailable -Name Microsoft.Graph.Authentication)) { Install-Module Microsoft.Graph.Authentication -Scope CurrentUser -Force -AllowClobber }",
+    "Connect-MgGraph -Scopes Group.ReadWrite.All, DeviceManagementConfiguration.ReadWrite.All, DeviceManagementManagedDevices.Read.All, DeviceManagementManagedDevices.PrivilegedOperations.All -NoWelcome  # owner signs in (browser)",
+    "function Set-LabVar($n, $v) { [Environment]::SetEnvironmentVariable($n, \"$v\", 'User'); Set-Item \"env:$n\" \"$v\" }",
+    "$upn = (Invoke-MgGraphRequest -Uri /v1.0/me).userPrincipalName; Set-LabVar MG_LAB_ADMIN_UPN $upn; Set-LabVar MG_LAB_DOMAIN $upn.Split('@')[1]",
+    "function Get-LabUserId($n) { (Invoke-MgGraphRequest -Uri \"/v1.0/users/$n@$env:MG_LAB_DOMAIN\").id }",
+    "# group MG Lab - Intune Users (alex.demo, sam.demo)",
+    "$grp = (Invoke-MgGraphRequest -Uri \"/v1.0/groups?`$filter=displayName eq 'MG Lab - Intune Users'\").value | Select-Object -First 1; if (-not $grp) { $grp = Invoke-MgGraphRequest -Method POST -Uri /v1.0/groups -Body @{ displayName = 'MG Lab - Intune Users'; mailNickname = 'mglab-intune-users'; mailEnabled = $false; securityEnabled = $true; 'members@odata.bind' = @(\"https://graph.microsoft.com/v1.0/users/$(Get-LabUserId 'alex.demo')\", \"https://graph.microsoft.com/v1.0/users/$(Get-LabUserId 'sam.demo')\") } }",
+    "$p = Get-Content ./src/intune.json -Raw | ConvertFrom-Json; $p.policy.assignTo.groupId = $grp.id; $p | ConvertTo-Json -Depth 8 | Set-Content ./src/intune.lab.json",
+    "# the Windows 11 VM: the lab builder creates CON-W11-01 and stops at Windows setup (needs E:\\MGLab\\iso\\Win11Ent-Eval.iso)",
+    "if (-not (Get-VM -Name CON-W11-01 -ErrorAction SilentlyContinue)) { & 'D:\\momento_galatico_kit\\mg-lab-series\\lab\\hyperv\\Start-MGLab.ps1' }",
+    "if ((Get-VM -Name CON-W11-01).State -ne 'Running') { Start-VM -Name CON-W11-01 }",
+    "./src/Invoke-IntuneDevices.ps1 -PolicyFile ./src/intune.lab.json -Audit   # off-camera dry run: confirms the VM is listed and consent is in place"
+  ],
+  "screens": [
+    {
+      "name": "enroll",
+      "kind": "app",
+      "app": "Hyper-V Virtual Machine Connection (VMConnect) to CON-W11-01, then the Intune admin center in a browser",
+      "steps": [
+        "(Before the screen, once: in the VM's Windows setup choose 'Set up for work or school' and sign in as alex.demo; the owner types the password)",
+        "VMConnect, CON-W11-01: Settings > Accounts > Access work or school: the organization connection is listed",
+        "Browser, https://intune.microsoft.com/ as labadmin: Devices > Windows",
+        "Open CON-W11-01: primary user Alex Demo, ownership Corporate; read the Compliance value as it really is (Not evaluated or Compliant)",
+        "Allow a few minutes after the join for the device to appear; do not assume the value"
+      ],
+      "mask": [
+        "tenant name",
+        "UPN domain",
+        "serial number",
+        "Entra device id"
+      ],
+      "account": "labadmin (portal), alex.demo (VM)"
+    },
+    {
+      "name": "apply",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\microsoft-365\\episodes\\07-intune-device-management\\src",
+      "prompt": "PS> ",
+      "commands": [
+        "Connect-MgGraph -Scopes DeviceManagementConfiguration.ReadWrite.All -NoWelcome",
+        "./Invoke-IntuneDevices.ps1 -PolicyFile ./intune.lab.json -ApplyPolicy -WhatIf",
+        "./Invoke-IntuneDevices.ps1 -PolicyFile ./intune.lab.json -ApplyPolicy -Confirm:$false",
+        "./Invoke-IntuneDevices.ps1 -PolicyFile ./intune.lab.json -ApplyPolicy -Confirm:$false",
+        "#pause 5"
+      ],
+      "also": [
+        {
+          "kind": "browser",
+          "url": "https://intune.microsoft.com/",
+          "account": "labadmin",
+          "steps": [
+            "Intune admin center > Devices > Compliance > 'MG Lab - Windows 11 baseline' > Properties",
+            "Show the settings as in the file, Actions for noncompliance (Mark device noncompliant after 1 day) and Assignments (MG Lab - Intune Users)"
+          ],
+          "mask": [
+            "tenant name",
+            "group object id",
+            "e-mail addresses"
+          ],
+          "when": "after"
+        }
+      ]
+    },
+    {
+      "name": "device",
+      "kind": "app",
+      "app": "VMConnect to CON-W11-01 (elevated Windows PowerShell as alex.demo) and the Intune admin center",
+      "steps": [
+        "In the VM, elevated PowerShell, type: Get-BitLockerVolume -MountPoint C:   (show what is real: usually not protected)",
+        "Sync: VM Settings > Accounts > Access work or school > the organization > Info > Sync, or on the host: ./Invoke-IntuneDevices.ps1 -PolicyFile ./intune.lab.json -SyncDeviceName CON-W11-01",
+        "Intune admin center > Devices > Windows > CON-W11-01 > Device compliance: the real policy state and the failing setting (allow several minutes and a second sync)",
+        "In the VM type: Add-BitLockerKeyProtector -MountPoint C: -RecoveryPasswordProtector   (never leave the recovery password on screen)",
+        "In the VM type: Enable-BitLocker -MountPoint C: -EncryptionMethod XtsAes256 -UsedSpaceOnly -TpmProtector",
+        "In the VM type: Restart-Computer; after the restart and the encryption pass sync again and capture the new compliance state",
+        "If a setting stays red for a reason outside the episode, say so on camera instead of editing the policy"
+      ],
+      "mask": [
+        "tenant name",
+        "UPN domain",
+        "device serial and Entra device id",
+        "BitLocker recovery password and key id"
+      ],
+      "account": "alex.demo (VM), labadmin (portal)"
+    },
+    {
+      "name": "audit",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\microsoft-365\\episodes\\07-intune-device-management\\src",
+      "prompt": "PS> ",
+      "commands": [
+        "Connect-MgGraph -Scopes DeviceManagementManagedDevices.Read.All -NoWelcome",
+        "./Invoke-IntuneDevices.ps1 -PolicyFile ./intune.lab.json -Audit -OutFile ./audit.lab.md",
+        "#pause 6"
+      ]
+    }
+  ],
+  "teardown": [
+    "Connect-MgGraph -Scopes DeviceManagementConfiguration.ReadWrite.All, DeviceManagementManagedDevices.ReadWrite.All, Group.ReadWrite.All, Device.ReadWrite.All -NoWelcome",
+    "foreach ($x in (Invoke-MgGraphRequest -Uri \"/beta/deviceManagement/deviceCompliancePolicies?`$filter=displayName eq 'MG Lab - Windows 11 baseline'\").value) { Invoke-MgGraphRequest -Method DELETE -Uri \"/beta/deviceManagement/deviceCompliancePolicies/$($x.id)\" }",
+    "foreach ($d in (Invoke-MgGraphRequest -Uri \"/v1.0/deviceManagement/managedDevices?`$filter=deviceName eq 'CON-W11-01'\").value) { Invoke-MgGraphRequest -Method DELETE -Uri \"/v1.0/deviceManagement/managedDevices/$($d.id)\"; foreach ($e in (Invoke-MgGraphRequest -Uri \"/v1.0/devices?`$filter=displayName eq 'CON-W11-01'\").value) { Invoke-MgGraphRequest -Method DELETE -Uri \"/v1.0/devices/$($e.id)\" } }",
+    "foreach ($g in (Invoke-MgGraphRequest -Uri \"/v1.0/groups?`$filter=displayName eq 'MG Lab - Intune Users'\").value) { Invoke-MgGraphRequest -Method DELETE -Uri \"/v1.0/groups/$($g.id)\" }   # skip if episode 13 is recorded next",
+    "Stop-VM -Name CON-W11-01 -TurnOff -Force; Remove-VM -Name CON-W11-01 -Force; Remove-Item E:\\MGLab\\CON-W11-01 -Recurse -Force -ErrorAction SilentlyContinue   # skip if episodes 12 and 13 are recorded next",
+    "Remove-Item ./src/intune.lab.json, ./src/audit.lab.md -ErrorAction SilentlyContinue",
+    "Disconnect-MgGraph",
+    "# by hand: Entra admin center > Mobility (MDM and MAM) > Microsoft Intune: MDM user scope back to None",
+    "foreach ($n in 'MG_LAB_ADMIN_UPN', 'MG_LAB_DOMAIN') { [Environment]::SetEnvironmentVariable($n, $null, 'User') }"
+  ],
+  "needs": [
+    "tenant",
+    "vm:CON-W11-01",
+    "iso:E:\\MGLab\\iso\\Win11Ent-Eval.iso (Windows 11 Enterprise evaluation)",
+    "trial:Intune (in E5; confirm Total Intune licenses > 0)",
+    "role:Intune Administrator (labadmin)",
+    "manual:MDM user scope = Some > MG Lab - Intune Users (Entra > Mobility (MDM and MAM) > Microsoft Intune)",
+    "manual:join CON-W11-01 to Entra ID as alex.demo (on camera in the enroll screen)"
+  ]
+}

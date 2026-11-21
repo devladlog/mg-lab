@@ -1,0 +1,101 @@
+{
+  "note": "Deep-dive #4. Stage deadline is 5 minutes so the escalation happens on camera: record escalated after the deadline. Use new invoice numbers for every take.",
+  "prepare": [
+    "# owner signs in (device code), not recorded",
+    "az login --use-device-code",
+    "$env:MG_TENANT = Read-Host 'Lab tenant short name (owner types)'; $env:PNP_CLIENT_ID = Read-Host 'PnP app client id (owner types)'",
+    "dotnet test tests/InvoiceApproval.Tests -m:1",
+    "./provision/Add-ApprovalColumns.ps1 -SiteUrl \"https://$($env:MG_TENANT).sharepoint.com/sites/finance-lab\" -ClientId $env:PNP_CLIENT_ID -WhatIf",
+    "./provision/Add-ApprovalColumns.ps1 -SiteUrl \"https://$($env:MG_TENANT).sharepoint.com/sites/finance-lab\" -ClientId $env:PNP_CLIENT_ID",
+    "# manual: Invoices Inbox from episode 1 must exist (../01-enterprise-document-intelligence-ai-document-int/provision/New-InvoiceInbox.ps1); edit All Documents view: Name, Review status, Vendor, Total, Approval status, Approval step, Decided by, Approval summary",
+    "$m = az ad user list --filter \"startswith(userPrincipalName,'sam.demo@')\" --query '[0].userPrincipalName' -o tsv; $f = az ad user list --filter \"startswith(userPrincipalName,'jordan.demo@')\" --query '[0].userPrincipalName' -o tsv; $e = az ad user list --filter \"startswith(userPrincipalName,'riley.demo@')\" --query '[0].userPrincipalName' -o tsv",
+    "az group create -n rg-mglab-approvals -l westeurope -o none",
+    "az deployment group create -g rg-mglab-approvals -f infra/main.bicep -p infra/main.bicepparam -p managerEmail=$m financeEmail=$f escalationEmail=$e stageTimeoutMinutes=5 --query properties.outputs -o json > $env:TEMP\\approvals-outputs.json",
+    "$o = Get-Content $env:TEMP\\approvals-outputs.json | ConvertFrom-Json; $env:MG_KV04 = $o.keyVaultName.value",
+    "az role assignment create --role 'Key Vault Secrets Officer' --assignee (az ad signed-in-user show --query id -o tsv) --scope (az keyvault show -n $env:MG_KV04 --query id -o tsv) -o none; Start-Sleep -Seconds 90",
+    "az keyvault secret set --vault-name $env:MG_KV04 -n callback-signing-key --value ([Convert]::ToBase64String((1..48 | ForEach-Object { Get-Random -Maximum 256 }) -as [byte[]])) -o none",
+    "Push-Location src/InvoiceApproval; func azure functionapp publish $o.functionAppName.value; Pop-Location",
+    "# manual: flow 'Invoice approval relay' (create first), copy its trigger URL into Key Vault secret approval-flow-url (Set-Item/Read-Host, never on screen), then: az functionapp restart -g rg-mglab-approvals -n <functionAppName>",
+    "# manual: flow 'Invoice ready to approval queue' with Service Bus send via the flow-send rule connection string (off camera)",
+    "# manual: upload two PDFs as Alex and set Vendor/Invoice number/Total by hand (INV1001 1476 EUR, INV1002 7380 EUR; use INV1003/INV1004 for repeat takes); leave Approval status Not started",
+    "dotnet test tests/InvoiceApproval.Tests --filter ContractTests"
+  ],
+  "screens": [
+    {
+      "name": "library-waiting",
+      "kind": "browser",
+      "url": "https://<tenant>.sharepoint.com/sites/finance-lab",
+      "account": "labadmin",
+      "steps": [
+        "Open Invoices Inbox, All Documents with Name, Review status, Vendor, Total, Approval status, Approval step, Decided by, Approval summary",
+        "Set Review status = Ready on INV1001 and INV1002",
+        "Wait about a minute, refresh",
+        "Show Approval status 'Waiting for approval' and Approval step 'Manager approval: sam.demo@...' on both rows"
+      ],
+      "mask": [
+        "tenant host",
+        "domain part of e-mail addresses (keep sam.demo readable)",
+        "user avatars"
+      ]
+    },
+    {
+      "name": "teams-approval",
+      "kind": "browser",
+      "url": "https://teams.microsoft.com/",
+      "account": "sam.demo",
+      "steps": [
+        "Sign in as Sam Demo, open the Approvals app > Received",
+        "Approve INV1001 first so it appears as Approved by Sam",
+        "Open 'Invoice INV1002 from Fabrikam Ltd: 7380 EUR': details with the deadline, 'Open the invoice' link, Approve / Reject buttons",
+        "Fallback if Teams does not show it: Outlook on the web, the same actionable message in Sam's inbox"
+      ],
+      "mask": [
+        "tenant name",
+        "domain part of e-mail addresses",
+        "avatars"
+      ]
+    },
+    {
+      "name": "escalated",
+      "kind": "browser",
+      "url": "https://<tenant>.sharepoint.com/sites/finance-lab",
+      "account": "labadmin",
+      "steps": [
+        "Leave INV1002 unanswered for more than 5 minutes (the Durable timer fires)",
+        "Refresh Invoices Inbox: INV1002 'Waiting for approval', step 'Manager approval escalated to riley.demo@...'; INV1001 Approved, Decided by sam.demo@...",
+        "Second capture: as Sam Demo approve the OLD request in Approvals, then open Outlook on the web (https://outlook.office.com): e-mail 'Invoice INV1002: your answer was not used'"
+      ],
+      "mask": [
+        "tenant host",
+        "e-mail domains (keep riley.demo and sam.demo readable)"
+      ]
+    },
+    {
+      "name": "outcome",
+      "kind": "browser",
+      "url": "https://<tenant>.sharepoint.com/sites/finance-lab",
+      "account": "labadmin",
+      "steps": [
+        "As Riley Demo approve the escalated manager stage, then as Jordan Demo approve the finance stage (7380 EUR is above the 5000 EUR threshold)",
+        "As labadmin refresh Invoices Inbox: INV1002 Approved, Decided by jordan.demo@..., Approval step empty",
+        "Show Approval summary: Manager: Approved by riley.demo@... (escalated); Finance: Approved by jordan.demo@...",
+        "Optional inset: Alex Demo's result e-mail in Outlook on the web"
+      ],
+      "mask": [
+        "tenant host",
+        "e-mail domains (keep the user part readable)"
+      ]
+    }
+  ],
+  "teardown": [
+    "az group delete -n rg-mglab-approvals --yes --no-wait",
+    "az keyvault purge -n $env:MG_KV04 --location westeurope   # run once the group delete has finished",
+    "Remove-Item $env:TEMP\\approvals-outputs.json -ErrorAction SilentlyContinue; Remove-Item Env:MG_KV04 -ErrorAction SilentlyContinue",
+    "# manual: delete the 'Invoice approvals' solution (both flows) in DEV; keep the five library columns only if episode 5 needs them"
+  ],
+  "needs": [
+    "tenant",
+    "azure",
+    "premium-trial"
+  ]
+}

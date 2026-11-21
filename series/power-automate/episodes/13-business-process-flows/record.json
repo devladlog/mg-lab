@@ -1,0 +1,83 @@
+{
+  "note": "Live-session recording of the screen scenes (series/tools/rec). Three portal/app screens and one terminal screen (script, run on the laptop). The Dataverse token and the org URL live only in environment variables of the recording session and are never printed.",
+  "prepare": [
+    "python -m pip install -r requirements-test.txt --quiet",
+    "python -m pytest",
+    "Push-Location .\\src; python -m bpfkit validate process/purchase-request-process.json; Pop-Location",
+    "# owner signs in: az login (token for the Dataverse Web API), pac auth below, and the browser profiles for labadmin (make.powerapps.com, make.powerautomate.com), alex.demo (Purchasing app) and jordan.demo (Outlook on the web). Nothing is typed or stored here.",
+    "if (-not $env:DEV_URL) { $env:DEV_URL = Read-Host 'DEV environment URL' }",
+    "if (-not $env:DV_ORG) { $env:DV_ORG = $env:DEV_URL }",
+    "pac auth create --name dev --environment $env:DEV_URL   # owner signs in, off camera",
+    "$env:DATAVERSE_TOKEN = az account get-access-token --resource $env:DV_ORG --query accessToken -o tsv   # owner signs in (az login), never echoed",
+    "# owner (tenant, demo.md Setup 1-4): solution Purchase BPF (PurchaseBpf, publisher contoso, prefix cts), table Purchase request with business process flow fields, model-driven app Purchasing, security role Purchasing user for alex.demo, the BPF 'Purchase request process' built from src\\process (Amount added to Manager review only after the branch-rule failure is filmed)",
+    "New-Item -ItemType Directory -Force -Path .\\out | Out-Null",
+    "pac solution pack --zipfile .\\out\\PurchaseBpf.zip --folder .\\src\\solution --packagetype Unmanaged",
+    "pac solution import --path .\\out\\PurchaseBpf.zip",
+    "# owner (demo.md Setup 6-7): create the connection references (Dataverse, Approvals), point the finance address to the finance-approvers group, turn both flows on, add the Flow step 'Finance review step' to the Finance review stage and re-activate the BPF; as alex.demo create 'Ergonomic chairs' 1,800 and 'Laptops for two new developers' 12,500 with justifications; Jordan Demo answers the finance approval in Outlook"
+  ],
+  "screens": [
+    {
+      "name": "designer",
+      "kind": "browser",
+      "url": "https://make.powerapps.com/",
+      "account": "labadmin",
+      "steps": [
+        "Select environment DEV, open Solutions > Purchase BPF and open the business process flow 'Purchase request process' in the designer",
+        "Show the stages Submit and Manager review, then the Condition tile with both rules (Amount greater than or equal to 5000 AND Manager decision equals Approved)",
+        "Show Finance review on the Yes branch with the flow step 'Request finance approval', then Order and Close"
+      ],
+      "mask": ["org URL (*.crm4.dynamics.com) in the address bar", "environment ID", "tenant name in the top bar"]
+    },
+    {
+      "name": "gate",
+      "kind": "app",
+      "app": "Purchasing (model-driven app, in the browser as alex.demo)",
+      "steps": [
+        "Open a Purchase request form for Alex Demo with the process bar on the Submit stage and Justification empty (required marker)",
+        "Select Next Stage and show the required-field error",
+        "Second take, same shot: fill Justification and select Next Stage again; the bar moves to Manager review",
+        "Optional: try a required Two Options column on a throwaway step to confirm that No does not pass"
+      ],
+      "mask": ["org URL in the address bar", "user names except Alex Demo", "environment ID"]
+    },
+    {
+      "name": "flowrun",
+      "kind": "browser",
+      "url": "https://make.powerautomate.com/",
+      "account": "labadmin",
+      "steps": [
+        "Open the run history of 'Finance review step' for the 12,500 EUR request",
+        "Show Parse step payload, Get purchase request, Finance approval, Finance decision (Approve branch) and Complete flow step, all green",
+        "Next to it open the form and show the Finance review stage with the step Completed",
+        "Optional cut-in: Jordan Demo's approval mail in Outlook on the web"
+      ],
+      "mask": ["org URL in the address bar and the run inputs", "environment ID", "approval IDs", "tenant name"]
+    },
+    {
+      "name": "script",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\power-automate\\episodes\\13-business-process-flows",
+      "prompt": "PS ep13> ",
+      "prepare": [
+        "if (-not $env:BPF_INSTANCE) { $env:BPF_INSTANCE = Read-Host 'BPF instance id (from -Operation ListInstances)' }"
+      ],
+      "commands": [
+        "./src/scripts/Set-BpfStage.ps1 -OrgUrl $env:DV_ORG -BpfTable cts_purchaserequestprocesses -Operation Next -InstanceId $env:BPF_INSTANCE -WhatIf",
+        "#pause 3",
+        "./src/scripts/Set-BpfStage.ps1 -OrgUrl $env:DV_ORG -BpfTable cts_purchaserequestprocesses -Operation Next -InstanceId $env:BPF_INSTANCE",
+        "#pause 2",
+        "./src/scripts/Set-BpfStage.ps1 -OrgUrl $env:DV_ORG -BpfTable cts_purchaserequestprocesses -Operation ListInstances",
+        "#pause 4"
+      ],
+      "mask": ["org URL in the printed PATCH", "GUIDs in the output", "the form's process bar next to it shows the new active stage; mask the org URL there too"]
+    }
+  ],
+  "teardown": [
+    "# owner (tenant): turn both flows off; delete the solution Purchase BPF including its components (BPF, table cts_purchaserequest, connection references); delete the role Purchasing user; keep finance-approvers if episode 15 reuses it",
+    "Remove-Item Env:DATAVERSE_TOKEN, Env:BPF_INSTANCE, Env:DV_ORG, Env:DEV_URL -ErrorAction SilentlyContinue",
+    "Remove-Item .\\out -Recurse -Force -ErrorAction SilentlyContinue",
+    "pac auth clear"
+  ],
+  "needs": ["tenant"]
+}

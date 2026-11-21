@@ -1,0 +1,90 @@
+{
+  "note": "Live-session recording of the screen scenes (series/tools/rec). prepare/teardown run on the laptop, not recorded; commands are typed and run for real. Steps of browser/app screens are done by hand by the person recording.",
+  "prepare": [
+    "New-Item -ItemType Directory -Force C:\\MGLab\\power-bi | Out-Null",
+    "Remove-Item C:\\MGLab\\power-bi\\ep13 -Recurse -Force -ErrorAction SilentlyContinue",
+    "Copy-Item -Path (Get-Location).Path -Destination C:\\MGLab\\power-bi\\ep13 -Recurse -Force",
+    "Push-Location C:\\MGLab\\power-bi\\ep13\\src",
+    "npm ci --no-audit --no-fund",
+    "npm test",
+    "npm run build",
+    "Pop-Location"
+  ],
+  "screens": [
+    {
+      "name": "sp-setup",
+      "kind": "browser",
+      "url": "https://entra.microsoft.com/",
+      "account": "labadmin",
+      "steps": [
+        "Terminal at C:\\MGLab\\power-bi\\ep13: $sp = ./src/setup/New-EmbedServicePrincipal.ps1 -WorkspaceName 'Contoso Sales (Lab)' -WhatIf, then the same for real (Graph and Power BI sign-ins as labadmin, cut those); keep the secret off screen",
+        "Entra admin center > App registrations > Contoso Embed (Lab): Overview (application id blurred); Certificates and secrets: one secret; API permissions: none",
+        "Power BI admin portal > Tenant settings > Developer settings: Embed content in apps and Allow service principals to use Power BI APIs, both enabled for the security group Contoso Embed SPs (Lab) (leave both OFF before this take)",
+        "Workspace Contoso Sales (Lab) > Manage access: the app as Member"
+      ],
+      "mask": [
+        "application (client) id and tenant id",
+        "secret value (never shown)",
+        "tenant name and domain",
+        "account picture and name"
+      ]
+    },
+    {
+      "name": "app-alex",
+      "kind": "browser",
+      "url": "http://localhost:5173/",
+      "account": "none (the app embeds with a service principal; alex.demo never signs in)",
+      "steps": [
+        "Terminal at C:\\MGLab\\power-bi\\ep13\\src: set the PBI_* variables off camera, then run: npm start",
+        "Browser to http://localhost:5173/ with user Alex Demo selected",
+        "Header Signed in to this app as Alex Demo; status line loaded as alex.demo (roles: Store Managers)",
+        "Page Store security: Visible stores 1, Visible customers 247, Sales amount 389,707.34, table Contoso Lisboa; Who Am I card blurred",
+        "Note the Free trial banner if shown, and what Who Am I returns for Alex"
+      ],
+      "mask": [
+        "Who Am I card (UPN with the tenant domain)",
+        "browser tabs and bookmarks other than the app",
+        "tenant ids in the status line if any"
+      ]
+    },
+    {
+      "name": "app-switch",
+      "kind": "browser",
+      "url": "http://localhost:5173/",
+      "account": "none (service principal embed)",
+      "steps": [
+        "Dropdown: Riley Demo (Visible stores 3, 300 customers, Sales amount 1,111,159.04: Lisboa, Online, Porto)",
+        "Jordan Demo (Head Office: 5 stores, 301 customers, 1,862,401.98)",
+        "Nobody Demo (Store Managers but not in the mapping: Visible stores 0, empty table)"
+      ],
+      "mask": [
+        "Who Am I card (UPN with the tenant domain)"
+      ]
+    },
+    {
+      "name": "probe",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "C:\\MGLab\\power-bi\\ep13\\src",
+      "prompt": "PS C:\\MGLab\\power-bi\\ep13\\src> ",
+      "commands": [
+        "node dist/server/probe.js",
+        "#pause 5"
+      ],
+      "prepare": [
+        "# owner sets PBI_TENANT_ID, PBI_CLIENT_ID, PBI_CLIENT_SECRET, PBI_WORKSPACE_ID, PBI_REPORT_ID, PBI_UPN_DOMAIN in this session off camera (values from New-EmbedServicePrincipal.ps1; never printed)"
+      ],
+      "note": "Learn expects a refusal when a service principal requests a token without username and role; record the real HTTP status and error code. If it prints token issued WITHOUT an identity the narration must change. Then show the app console running normally (npm start in a second window)."
+    }
+  ],
+  "teardown": [
+    "# owner signs in to Graph (interactive)",
+    "& C:\\MGLab\\power-bi\\ep13\\src\\setup\\Remove-EmbedServicePrincipal.ps1 -Confirm:$false",
+    "Remove-Item C:\\MGLab\\power-bi\\ep13 -Recurse -Force -ErrorAction SilentlyContinue"
+  ],
+  "needs": [
+    "tenant",
+    "premium-trial"
+  ],
+  "owner_notes": "Episode 5 must be done (model with roles, UpnDomain set, report published)."
+}

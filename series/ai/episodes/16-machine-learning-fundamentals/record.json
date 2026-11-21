@@ -1,0 +1,80 @@
+{
+  "note": "Fully local: scikit-learn on the synthetic ticket table; no Azure, tenant or cost. If 'train' ends with do not ship, keep it on screen.",
+  "prepare": [
+    "python -m venv .venv",
+    "$env:PATH = \"$PWD\\.venv\\Scripts;$env:PATH\"",
+    "python -m pip install -q -r requirements.txt",
+    "$env:PYTHONPATH = 'src'",
+    "@'\n{\"priority\": \"P1\", \"category\": \"network\", \"department\": \"finance\", \"language\": \"pt\", \"hour_opened\": 22,\n \"weekday\": 6, \"queue_backlog\": 18, \"attachments\": 0, \"text_length\": 240, \"is_vip\": 0}\n'@ | Set-Content ticket.json -Encoding utf8",
+    "python -m mlbasics train --out build | Out-Null   # warms the disk cache only",
+    "Remove-Item build -Recurse -Force"
+  ],
+  "screens": [
+    {
+      "name": "audit",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\ai\\episodes\\16-machine-learning-fundamentals",
+      "prompt": "PS ep16> ",
+      "commands": [
+        "python -m mlbasics audit ; \"exit=$LASTEXITCODE\"",
+        "#pause 6",
+        "python -m mlbasics audit --drop first_response_minutes ; \"exit=$LASTEXITCODE\"",
+        "#pause 5"
+      ]
+    },
+    {
+      "name": "baseline",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\ai\\episodes\\16-machine-learning-fundamentals",
+      "prompt": "PS ep16> ",
+      "commands": [
+        "python -m mlbasics baseline",
+        "#pause 6"
+      ]
+    },
+    {
+      "name": "compare",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\ai\\episodes\\16-machine-learning-fundamentals",
+      "prompt": "PS ep16> ",
+      "commands": [
+        "python -m mlbasics compare",
+        "#pause 8"
+      ]
+    },
+    {
+      "name": "depth",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\ai\\episodes\\16-machine-learning-fundamentals",
+      "prompt": "PS ep16> ",
+      "commands": [
+        "python -m mlbasics depth",
+        "#pause 8"
+      ]
+    },
+    {
+      "name": "train",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\ai\\episodes\\16-machine-learning-fundamentals",
+      "prompt": "PS ep16> ",
+      "commands": [
+        "python -m mlbasics train --out build ; \"exit=$LASTEXITCODE\"",
+        "#pause 10",
+        "python -m mlbasics score ticket.json",
+        "#pause 5",
+        "Get-Content build/model_card.json",
+        "#pause 6"
+      ],
+      "maxMinutes": 15
+    }
+  ],
+  "teardown": [
+    "Remove-Item build, ticket.json, .venv -Recurse -Force -ErrorAction SilentlyContinue"
+  ],
+  "needs": []
+}

@@ -1,0 +1,90 @@
+{
+  "note": "Live-session recording of the screen scenes (series/tools/rec). prepare/teardown run on the laptop, not recorded; commands are typed and run for real. Extra keys (note, followup, manual_prepare, manual_teardown) are for the recorder person; the kit ignores them. DATAVERSE_URL must point at the Sales trial environment (trial ends about 21 Dec 2026). Every python command opens its own MSAL interactive sign-in (the token cache is in memory): the owner signs in as labadmin when the browser asks, or exports the app-registration variables in the shell before recording (never in a file). The chart screen needs the chart not to exist yet (teardown/manual_teardown deletes it).",
+  "prepare": [
+    "python -m pip install --user -q -r requirements.txt",
+    "if (-not $env:DATAVERSE_URL) { throw 'Set $env:DATAVERSE_URL to the lab environment URL in this shell first (the owner does this; it is never written in a file).' }"
+  ],
+  "manual_prepare": [
+    "Sales Hub as labadmin: check the Opportunities list has sample data; optionally add fictional opportunities with estimated close dates.",
+    "Power BI Desktop: Get data, Dataverse, server <org>.crm4.dynamics.com (no https://, no trailing slash), table opportunity (Import); card with sum of estimated value and column chart by forecast category, filter Status = Open; total must equal reportkit pipeline.",
+    "TDS endpoint on and TCP 1433 (or 5558) reachable from the laptop."
+  ],
+  "screens": [
+    {
+      "name": "reportkit-reconcile",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\dynamics-365\\episodes\\10-reporting-analytics\\src",
+      "prompt": "PS src> ",
+      "commands": [
+        "python -m reportkit pipeline",
+        "#pause 4",
+        "python -m reportkit reconcile",
+        "\"exit=$LASTEXITCODE\"",
+        "#pause 4",
+        "python -m reportkit monthly",
+        "#pause 4"
+      ],
+      "note": "If a line says MISMATCH keep it and explain it. If msdyn_forecastcategory is missing use --by statuscode everywhere and say so."
+    },
+    {
+      "name": "reportkit-chart",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\dynamics-365\\episodes\\10-reporting-analytics\\src",
+      "prompt": "PS src> ",
+      "commands": [
+        "python -m reportkit chart pipeline",
+        "#pause 3",
+        "python -m reportkit chart pipeline --apply",
+        "#pause 3",
+        "python -m reportkit chart pipeline --apply",
+        "#pause 4"
+      ]
+    },
+    {
+      "name": "saleshub-chart",
+      "kind": "browser",
+      "url": "https://make.powerapps.com/",
+      "account": "labadmin",
+      "steps": [
+        "Select the Sales trial environment, Apps, open Sales Hub (play)",
+        "Sales, Opportunities, view 'Open Opportunities'",
+        "Show the chart pane and pick '[MGL demo] Open pipeline by forecast category' in the chart selector",
+        "Show columns per forecast category with value labels"
+      ],
+      "mask": [
+        "tenant name in the top bar",
+        "environment name and org URL (address bar and header)",
+        "user e-mail and avatar in the account menu"
+      ]
+    },
+    {
+      "name": "powerbi-pipeline",
+      "kind": "app",
+      "app": "Power BI Desktop",
+      "steps": [
+        "Open the prepared (unsaved) report: Home, Get data, Dataverse (show the dialog, URL masked)",
+        "Show the opportunity table loaded",
+        "Card: sum of estimated value filtered to Status = Open; next to it the column chart by forecast category",
+        "Confirm the card total equals the total printed by reportkit pipeline"
+      ],
+      "mask": [
+        "environment URL in Data source settings and the Transform data pane",
+        "account name in the top right",
+        "tenant name"
+      ]
+    }
+  ],
+  "teardown": [],
+  "manual_teardown": [
+    "Delete the [MGL demo] charts (Sales Hub chart pane, manage) and any opportunities added for the demo.",
+    "Close Power BI Desktop without saving the .pbix (it holds the environment URL); delete exports."
+  ],
+  "needs": [
+    "tenant",
+    "trial:Dynamics 365 Sales trial environment (ends about 21 Dec 2026)",
+    "tool:Power BI Desktop (free, no publish)",
+    "network:TCP 1433 or 5558 to the Dataverse TDS endpoint"
+  ]
+}

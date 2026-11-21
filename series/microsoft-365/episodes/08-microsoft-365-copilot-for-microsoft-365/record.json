@@ -1,0 +1,137 @@
+{
+  "note": "Live-session recording of the screen scenes (series/tools/rec). prepare/teardown run on the laptop, not recorded; commands are typed and run for real. Screens that mix a terminal and a portal carry the second half in also[] (when = before/after the main part). Scenes read MG_LAB_ADMIN_UPN / MG_LAB_DOMAIN (set by prepare, derived from the signed-in labadmin).",
+  "prepare": [
+    "if (-not (Get-Module -ListAvailable -Name Microsoft.Graph.Authentication)) { Install-Module Microsoft.Graph.Authentication -Scope CurrentUser -Force -AllowClobber }",
+    "Connect-MgGraph -Scopes LicenseAssignment.Read.All, User.Read.All, SensitivityLabel.Read, Sites.Read.All, Files.Read.All, Files.ReadWrite.All, Group.ReadWrite.All, Sites.ReadWrite.All -NoWelcome  # owner signs in (browser)",
+    "function Set-LabVar($n, $v) { [Environment]::SetEnvironmentVariable($n, \"$v\", 'User'); Set-Item \"env:$n\" \"$v\" }",
+    "$upn = (Invoke-MgGraphRequest -Uri /v1.0/me).userPrincipalName; Set-LabVar MG_LAB_ADMIN_UPN $upn; Set-LabVar MG_LAB_DOMAIN $upn.Split('@')[1]",
+    "Copy-Item ./src/copilot.json ./src/copilot.lab.json -Force",
+    "Add-Type -AssemblyName System.IO.Compression.FileSystem; $dir = Join-Path $env:TEMP 'mglab-ep08'; New-Item -ItemType Directory -Force $dir | Out-Null; $f = Join-Path $dir 'Contoso travel policy.docx'; Remove-Item $f -ErrorAction SilentlyContinue; $z = [IO.Compression.ZipFile]::Open($f, 'Create'); $add = { param($n, $t) $e = $z.CreateEntry($n); $w = New-Object IO.StreamWriter($e.Open()); $w.Write($t); $w.Dispose() }; & $add '[Content_Types].xml' '<?xml version=\"1.0\"?><Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\"><Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/><Default Extension=\"xml\" ContentType=\"application/xml\"/><Override PartName=\"/word/document.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml\"/></Types>'; & $add '_rels/.rels' '<?xml version=\"1.0\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument\" Target=\"word/document.xml\"/></Relationships>'; & $add 'word/document.xml' '<?xml version=\"1.0\"?><w:document xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\"><w:body><w:p><w:r><w:t>Contoso travel policy (fictional lab file). Book economy for trips under six hours. Hotel up to 150 per night. Submit expenses within 30 days. Trips over 5000 need director approval.</w:t></w:r></w:p></w:body></w:document>'; $z.Dispose()",
+    "# lab site MG Lab - Marketing (group-connected team site, labadmin owner) with fictional files and one organization link",
+    "$g = (Invoke-MgGraphRequest -Uri \"/v1.0/groups?`$filter=displayName eq 'MG Lab - Marketing'\").value | Select-Object -First 1; if (-not $g) { $g = Invoke-MgGraphRequest -Method POST -Uri /v1.0/groups -Body @{ displayName = 'MG Lab - Marketing'; mailNickname = 'mglab-marketing'; mailEnabled = $true; securityEnabled = $false; groupTypes = @('Unified'); 'owners@odata.bind' = @(\"https://graph.microsoft.com/v1.0/users/$((Invoke-MgGraphRequest -Uri /v1.0/me).id)\") } }; for ($i = 0; $i -lt 30 -and -not $drive; $i++) { Start-Sleep -Seconds 10; try { $drive = Invoke-MgGraphRequest -Uri \"/v1.0/groups/$($g.id)/sites/root/drive\" } catch {} }",
+    "foreach ($path in 'Campaigns/Launch plan.docx', 'HR/Payroll 2026.xlsx', 'HR/salary-bands.xlsx', 'Board/minutes.docx') { Invoke-MgGraphRequest -Method PUT -Uri \"/v1.0/drives/$($drive.id)/root:/$($path):/content\" -ContentType 'text/plain' -Body 'Contoso lab file' | Out-Null }; $lp = Invoke-MgGraphRequest -Uri \"/v1.0/drives/$($drive.id)/root:/Campaigns/Launch plan.docx\"; Invoke-MgGraphRequest -Method POST -Uri \"/v1.0/drives/$($drive.id)/items/$($lp.id)/createLink\" -Body @{ type = 'view'; scope = 'organization' } | Out-Null",
+    "# the 'Everyone except external users' grant on HR and an Anyone link are NOT scripted (people picker not verified; do not change the tenant sharing policy). Check the dry run for the EveryoneExceptExternalUsers row.",
+    "./src/Invoke-CopilotReadiness.ps1 -ConfigFile ./src/copilot.lab.json -SaveSnapshot ./src/snapshot.lab.json -OutFile ./src/readiness.lab.md   # off-camera dry run"
+  ],
+  "screens": [
+    {
+      "name": "licences",
+      "kind": "browser",
+      "url": "https://admin.microsoft.com/#/licenses",
+      "account": "labadmin",
+      "steps": [
+        "Billing > Licenses: the E5 trial and the Copilot Studio trial are listed, no Microsoft 365 Copilot",
+        "Then run the readiness check in the terminal (see also[]): 'Copilot licence in tenant: NO' and the user table with the real statuses"
+      ],
+      "mask": [
+        "tenant name",
+        "UPN domain",
+        "sku ids"
+      ],
+      "also": [
+        {
+          "kind": "terminal",
+          "steps": [],
+          "mask": [],
+          "when": "after",
+          "target": "host",
+          "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\microsoft-365\\episodes\\08-microsoft-365-copilot-for-microsoft-365\\src",
+          "prompt": "PS> ",
+          "commands": [
+            "./Invoke-CopilotReadiness.ps1 -ConfigFile ./copilot.lab.json -Check Licences",
+            "#pause 6"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "chat",
+      "kind": "browser",
+      "url": "https://copilot.cloud.microsoft/",
+      "account": "alex.demo (own browser profile)",
+      "steps": [
+        "Show the Work label under the profile and the green data protection shield",
+        "Attach 'Contoso travel policy.docx' (created in %TEMP%\\mglab-ep08 by prepare)",
+        "Ask: 'Summarise this document in three bullet points'",
+        "Capture the real answer. Do not ask about 'my emails' or company files: without the add-on Chat is not grounded in Microsoft Graph, show only what really happens",
+        "Optional: Microsoft 365 admin center > Copilot > Settings, capture only"
+      ],
+      "mask": [
+        "tenant name",
+        "Alex e-mail beyond the lab alias"
+      ]
+    },
+    {
+      "name": "sharing",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\microsoft-365\\episodes\\08-microsoft-365-copilot-for-microsoft-365\\src",
+      "prompt": "PS> ",
+      "commands": [
+        "Connect-MgGraph -Scopes Sites.Read.All, Files.Read.All -NoWelcome",
+        "./Invoke-CopilotReadiness.ps1 -ConfigFile ./copilot.lab.json -Check Sharing -OutFile ./readiness.lab.md",
+        "#pause 6"
+      ],
+      "also": [
+        {
+          "kind": "browser",
+          "url": "https://www.office.com/launch/sharepoint",
+          "account": "labadmin",
+          "steps": [
+            "SharePoint: open the 'MG Lab - Marketing' site > Documents > Campaigns",
+            "'Launch plan.docx' > Manage access: the organization link shown by the script"
+          ],
+          "mask": [
+            "site URL (contains the tenant name)",
+            "UPNs",
+            "link URLs"
+          ],
+          "when": "after"
+        }
+      ]
+    },
+    {
+      "name": "labels",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\microsoft-365\\episodes\\08-microsoft-365-copilot-for-microsoft-365\\src",
+      "prompt": "PS> ",
+      "commands": [
+        "./Invoke-CopilotReadiness.ps1 -ConfigFile ./copilot.lab.json -Check Labels",
+        "#pause 5"
+      ],
+      "also": [
+        {
+          "kind": "browser",
+          "url": "https://purview.microsoft.com/",
+          "account": "labadmin",
+          "steps": [
+            "Purview portal > Information protection > Sensitivity labels: the labels from episode 5 (Public, General, Confidential)",
+            "If the label call was refused (403), show the error and fix the consent: do not fall back to a snapshot"
+          ],
+          "mask": [
+            "tenant name",
+            "labadmin e-mail"
+          ],
+          "when": "after"
+        }
+      ]
+    }
+  ],
+  "teardown": [
+    "Connect-MgGraph -Scopes Group.ReadWrite.All -NoWelcome",
+    "foreach ($g in (Invoke-MgGraphRequest -Uri \"/v1.0/groups?`$filter=displayName eq 'MG Lab - Marketing'\").value) { Invoke-MgGraphRequest -Method DELETE -Uri \"/v1.0/groups/$($g.id)\" }   # the team site goes with its group",
+    "Remove-Item ./src/copilot.lab.json, ./src/snapshot.lab.json, ./src/readiness.lab.md, (Join-Path $env:TEMP 'mglab-ep08') -Recurse -ErrorAction SilentlyContinue",
+    "Disconnect-MgGraph",
+    "# by hand: delete the uploaded 'Contoso travel policy.docx' conversation in Copilot Chat if it holds more than the demo",
+    "foreach ($n in 'MG_LAB_ADMIN_UPN', 'MG_LAB_DOMAIN') { [Environment]::SetEnvironmentVariable($n, $null, 'User') }"
+  ],
+  "needs": [
+    "tenant",
+    "trial:Microsoft 365 E5 (Copilot Chat for Entra accounts)",
+    "role:Global Administrator (labadmin)",
+    "browser-profile:alex.demo",
+    "episode-5 sensitivity labels (or record the NoLabels finding honestly)"
+  ],
+  "blocked": "Nothing blocks the four screens. The optional \"NEEDS COPILOT LICENCE\" insert (Copilot in Word, usage report, SharePoint Advanced Management) is not defined: no Microsoft 365 Copilot licence is bought (about 216 to 360 USD a year for one seat; owner decides)."
+}

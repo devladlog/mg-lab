@@ -1,0 +1,87 @@
+{
+  "note": "Live-session recording of the screen scenes (series/tools/rec). prepare/teardown run on the laptop, not recorded; terminal commands are typed and run for real. $env:MG_DEV_URL (DEV org URL) and the other MG_* variables are set by the owner as user environment variables on the laptop and never appear on screen.",
+  "prepare": [
+    "Read-Host 'Owner: DEV region supports prompts; episodes 1-9 are in DEV; for the app/credits screens a pay-as-you-go plan (resource group rg-mglab-powerapps-10) is linked to a production or sandbox environment (NOT today). Press Enter to record the prompt and solution screens only'",
+    "Read-Host 'Owner: Return check screen and returnLoan flow exist in Equipment Desk (phone) per demo.md step 4. Press Enter'"
+  ],
+  "screens": [
+    {
+      "name": "prompt-builder",
+      "kind": "browser",
+      "url": "https://make.powerapps.com/",
+      "account": "labadmin",
+      "steps": [
+        "AI hub > Prompts > New custom prompt, name ReturnNoteTriage (or open the saved one)",
+        "Paste src/prompt/return-note-triage.prompt.txt, replace the {{Return note}} marker with a Text input named Return note",
+        "Output: Text. Test the golden notes: the cracked-screen note, the missing-charger note and the injection note, each answered with JSON",
+        "Save"
+      ],
+      "mask": [
+        "environment name and org URL in the address bar and the environment picker",
+        "tenant name in the top bar",
+        "account name, e-mail and avatar in the account menu"
+      ]
+    },
+    {
+      "name": "return-check",
+      "kind": "browser",
+      "url": "https://make.powerapps.com/",
+      "account": "labadmin",
+      "steps": [
+        "Play Equipment Desk (phone) (browser play mode or Power Apps mobile) > Open loans > CT-0043 > Returned",
+        "Type 'Crack across the top right corner of the screen, still turns on and works.' and tap Check with AI",
+        "Show the suggestion line (Damaged) and the picker on In repair, then Mark returned",
+        "Unhappy paths: note 'ok' keeps the button off; a vague note gives the Information notification"
+      ],
+      "mask": [
+        "environment name and org URL in the address bar and the environment picker",
+        "tenant name in the top bar",
+        "account name, e-mail and avatar in the account menu",
+        "any real mail domain: only the fictional *.demo@contoso.com addresses may stay"
+      ]
+    },
+    {
+      "name": "solution-prompt",
+      "kind": "browser",
+      "url": "https://make.powerapps.com/",
+      "account": "labadmin",
+      "steps": [
+        "Solutions > Equipment Desk > Add existing > AI models > ReturnNoteTriage",
+        "Show the AI model in the component list",
+        "Open Managed properties: Allow customizations off"
+      ],
+      "mask": [
+        "environment name and org URL in the address bar and the environment picker",
+        "tenant name in the top bar",
+        "account name, e-mail and avatar in the account menu"
+      ]
+    },
+    {
+      "name": "credits-admin",
+      "kind": "browser",
+      "url": "https://admin.powerplatform.microsoft.com/",
+      "account": "labadmin",
+      "steps": [
+        "Licensing > Copilot Studio > Environments > DEV",
+        "Show the pay-as-you-go plan and the credits used by the session (it can lag a day; or Azure Cost Management)",
+        "Alternative: the app's 'isn't available right now' notification when there is no capacity"
+      ],
+      "mask": [
+        "environment name and org URL in the address bar and the environment picker",
+        "tenant name in the top bar",
+        "account name, e-mail and avatar in the account menu",
+        "billing plan name, subscription and resource group names"
+      ]
+    }
+  ],
+  "teardown": [
+    "Write-Host 'Reminder: remove DEV from the billing plan and delete the plan; delete resource group rg-mglab-powerapps-10 in the Azure portal (az group delete -n rg-mglab-powerapps-10); delete the prompt ReturnNoteTriage; reset CT-0043 (open loan, Notes Charger missing, device On loan).'"
+  ],
+  "needs": [
+    "tenant",
+    "premium-trial",
+    "azure",
+    "paid:Copilot Credits (pay-as-you-go plan, a few euros)"
+  ],
+  "blocked": "return-check and credits-admin cannot be recorded: running a prompt in an app needs Copilot Credits (pay-as-you-go plan or capacity) on a production or sandbox environment, which the lab does not have (DEV has no plan; AI Builder trials and seeded credits ended 1 Nov 2026). prompt-builder and solution-prompt can be recorded (testing in the prompt builder is free)."
+}

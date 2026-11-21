@@ -1,0 +1,102 @@
+{
+  "note": "Live-session recording of the screen scenes (series/tools/rec). prepare/teardown run on the laptop, not recorded; commands are typed and run for real. Steps of browser/app screens are done by hand by the person recording.",
+  "prepare": [
+    "New-Item -ItemType Directory -Force C:\\MGLab\\power-bi | Out-Null",
+    "Remove-Item C:\\MGLab\\power-bi\\ep17 -Recurse -Force -ErrorAction SilentlyContinue",
+    "Copy-Item -Path (Get-Location).Path -Destination C:\\MGLab\\power-bi\\ep17 -Recurse -Force",
+    "python -m pip install --quiet azure-eventhub"
+  ],
+  "screens": [
+    {
+      "name": "eventstream-live",
+      "kind": "browser",
+      "url": "https://app.fabric.microsoft.com/",
+      "account": "labadmin",
+      "steps": [
+        "Workspace Contoso Sales (Lab) > eventstream es-till-events in Live view: custom endpoint source, Eventhouse destination (direct ingestion, table TillEventsRaw)",
+        "Terminal inset at C:\\MGLab\\power-bi\\ep17\\src, about 40 seconds before a whole minute: $env:TILLSTREAM_CONNECTION_STRING = Read-Host 'Event Hub connection string' -MaskInput (typed off camera), then python -m tillstream send --run-id demo17",
+        "Data preview of the eventstream: JSON rows arriving",
+        "After ten minutes show the sender summary: messages, unique EventId, duplicates, late events, amount"
+      ],
+      "mask": [
+        "tenant name in the URL",
+        "endpoint namespace and connection string (never show keys)",
+        "account picture and name"
+      ]
+    },
+    {
+      "name": "kql-totals",
+      "kind": "browser",
+      "url": "https://app.fabric.microsoft.com/",
+      "account": "labadmin",
+      "steps": [
+        "KQL queryset qs-till on database ContosoLive: run totals-check.kql (Events, Units, Amount for RunId demo17) and compare with the sender summary",
+        "Run duplicates.kql (ExtraRows equals the sender's duplicates) and late-arrivals.kql (P50, P95, LateOverTwoMinutes)",
+        "Keep the sender summary visible beside it; record the real numbers and latency"
+      ],
+      "mask": [
+        "tenant name in the URL",
+        "account picture and name"
+      ]
+    },
+    {
+      "name": "desktop-page-refresh",
+      "kind": "app",
+      "app": "Power BI Desktop",
+      "steps": [
+        "Open C:\\MGLab\\power-bi\\ep17\\src\\ContosoLive.pbip; Edit parameters KqlClusterUri and KqlDatabase (values masked); sign in as labadmin; storage mode DirectQuery on Till Events",
+        "Page Live tills: cards Sales Amount, Orders, Last Event Time; line chart Orders by minute (Axis EventTime, Legend Channel); column chart Sales Amount by Store",
+        "Format > Page refresh: On, Change detection, measure Last Event Time, every 5 seconds; show details",
+        "With the sender running, show the cards and the line moving without a click; one short cut with an Import-mode scratch pbix where the Page refresh card is missing"
+      ],
+      "mask": [
+        "KqlClusterUri and KqlDatabase values",
+        "account picture and name",
+        "account name and picture at the top right of Power BI Desktop (sign out first)",
+        "Windows user name in any file path (record from C:\\MGLab)"
+      ]
+    },
+    {
+      "name": "realtime-dashboard",
+      "kind": "browser",
+      "url": "https://app.fabric.microsoft.com/",
+      "account": "labadmin",
+      "steps": [
+        "Real-Time Dashboard Live tills on the KQL database: tiles from live-kpis.kql, sales-per-minute.kql, orders-per-minute-anomaly.kql",
+        "Manage > Refresh settings > Live refresh on; record the refresh rate limit chosen",
+        "With the sender running show the tiles updating without a reload; the anomaly tile lists the flash-sale minutes"
+      ],
+      "mask": [
+        "tenant name in the URL",
+        "KQL cluster URI",
+        "account picture and name"
+      ]
+    },
+    {
+      "name": "apr-minimum",
+      "kind": "browser",
+      "url": "https://app.powerbi.com/",
+      "account": "labadmin",
+      "steps": [
+        "Publish the report from Desktop to Contoso Sales (Lab); semantic model settings: set the Azure Data Explorer credentials",
+        "Open the report > Edit > Format > Page refresh: set 1 second and show the allowed minimum and its message",
+        "As capacity admin: Admin portal > Capacity settings > Power BI workloads: show the automatic page refresh settings if the trial exposes them, or record that they are not available"
+      ],
+      "mask": [
+        "tenant name and domain",
+        "KQL cluster URI",
+        "account picture and name"
+      ]
+    }
+  ],
+  "teardown": [
+    "Remove-Item C:\\MGLab\\power-bi\\ep17 -Recurse -Force -ErrorAction SilentlyContinue",
+    "Remove-Item Env:TILLSTREAM_CONNECTION_STRING -ErrorAction SilentlyContinue",
+    "# owner: delete the Fabric items Eventhouse ContosoLive, queryset qs-till, eventstream es-till-events, dashboard Live tills, report and model Contoso Live from the workspace"
+  ],
+  "needs": [
+    "tenant",
+    "premium-trial"
+  ],
+  "owner_notes": "Owner setup off camera (demo.md Setup 1-10): eventhouse, schema, eventstream with custom endpoint and Eventhouse destination, dashboard, Desktop report. Sender run: python -m tillstream send --run-id demo17 (rehearse with --run-id rehearsal --speed 10; expect 368 rows). The connection string never appears in a file."
+}

@@ -1,0 +1,243 @@
+{
+  "note": "Live-session recording of the screen scenes (series/tools/rec). prepare/teardown run on the laptop, not recorded; terminal commands are typed and run for real. $env:MG_DEV_URL (DEV org URL) and the other MG_* variables are set by the owner as user environment variables on the laptop and never appear on screen.",
+  "prepare": [
+    "# owner signs in once, off camera: az login --allow-no-subscriptions",
+    "$env:DATAVERSE_ACCESS_TOKEN = az account get-access-token --resource $env:MG_DEV_URL --query accessToken -o tsv",
+    "pwsh -NoProfile -File src/scripts/Provision-ContosoInspections.ps1 -EnvironmentUrl $env:MG_DEV_URL -SeedData -AlexEmail $env:MG_ALEX_UPN -SamEmail $env:MG_SAM_UPN",
+    "Read-Host 'Owner: Inspection Field Inspector role assigned to alex.demo and sam.demo (admin center); both started the Power Apps self-service trial; the app Contoso Inspections is built per demo.md section C and published (Alex has 2-3 inspections); the phone is signed in as alex.demo. Press Enter'"
+  ],
+  "screens": [
+    {
+      "name": "tables",
+      "kind": "browser",
+      "url": "https://make.powerapps.com/",
+      "account": "labadmin",
+      "steps": [
+        "Solutions > ContosoInspections > Tables: Inspector, Site, Inspection, Inspection item with the cin_ prefix",
+        "Open Inspection > Columns: the Status choice",
+        "Open Inspection item > Columns: the Photo image column"
+      ],
+      "mask": [
+        "environment name and org URL in the address bar and the environment picker",
+        "tenant name in the top bar",
+        "account name, e-mail and avatar in the account menu"
+      ]
+    },
+    {
+      "name": "new-app",
+      "kind": "browser",
+      "url": "https://make.powerapps.com/",
+      "account": "labadmin",
+      "steps": [
+        "Solutions > ContosoInspections > New > App > Canvas app > Phone, name Contoso Inspections",
+        "Data pane: Inspections, Inspection items, Sites, Inspectors",
+        "Settings > Display: Scale to fit, Lock aspect ratio and Lock orientation off",
+        "App > Formulas"
+      ],
+      "mask": [
+        "environment name and org URL in the address bar and the environment picker",
+        "tenant name in the top bar",
+        "account name, e-mail and avatar in the account menu"
+      ]
+    },
+    {
+      "name": "delegation",
+      "kind": "browser",
+      "url": "https://make.powerapps.com/",
+      "account": "labadmin",
+      "steps": [
+        "Select galInspections > Items: no blue underline, no delegation warning",
+        "Temporarily replace StartsWith with Search: blue underline and delegation warning",
+        "Undo with Ctrl+Z"
+      ],
+      "mask": [
+        "environment name and org URL in the address bar and the environment picker",
+        "tenant name in the top bar",
+        "account name, e-mail and avatar in the account menu"
+      ]
+    },
+    {
+      "name": "list",
+      "kind": "browser",
+      "url": "https://make.powerapps.com/",
+      "account": "labadmin",
+      "steps": [
+        "Play InspectionsScreen in the phone preview as Alex Demo",
+        "Show the summary line, search INS-0000, chip In progress, rows newest first"
+      ],
+      "mask": [
+        "environment name and org URL in the address bar and the environment picker",
+        "tenant name in the top bar",
+        "account name, e-mail and avatar in the account menu",
+        "any real mail domain: only the fictional *.demo@contoso.com addresses may stay"
+      ]
+    },
+    {
+      "name": "new-inspection",
+      "kind": "browser",
+      "url": "https://make.powerapps.com/",
+      "account": "labadmin",
+      "steps": [
+        "Tap New inspection (the screen says Alex Demo is inspecting)",
+        "Pick Harbor Warehouse > Start",
+        "Show the Draft status (number INS-000xx assigned by Dataverse)",
+        "Open the new inspection: Submit is disabled while it is a Draft"
+      ],
+      "mask": [
+        "environment name and org URL in the address bar and the environment picker",
+        "tenant name in the top bar",
+        "account name, e-mail and avatar in the account menu",
+        "any real mail domain: only the fictional *.demo@contoso.com addresses may stay"
+      ]
+    },
+    {
+      "name": "item",
+      "kind": "app",
+      "app": "Power Apps mobile (Android or iOS) on a real phone, recorded with the phone's own screen recorder",
+      "account": "alex.demo",
+      "steps": [
+        "Open the draft inspection > Add item, name 'Fire door', severity Major, Passed off, empty notes: show the message",
+        "Add notes: the message changes",
+        "Tap the camera and save: Draft becomes In progress, suggested score line appears",
+        "Try Critical with Passed on: 'A critical item cannot be marked as passed.'"
+      ],
+      "mask": [
+        "account name and avatar in Power Apps mobile",
+        "tenant name on the app list",
+        "notification bar (turn on Do Not Disturb)",
+        "device name"
+      ]
+    },
+    {
+      "name": "responsive",
+      "kind": "app",
+      "app": "Power Apps mobile (Android or iOS) on a real phone, recorded with the phone's own screen recorder",
+      "account": "alex.demo",
+      "steps": [
+        "Open the in-progress inspection upright: one column",
+        "Rotate the phone: two panes"
+      ],
+      "mask": [
+        "account name and avatar in Power Apps mobile",
+        "tenant name on the app list",
+        "notification bar (turn on Do Not Disturb)",
+        "device name"
+      ]
+    },
+    {
+      "name": "accessibility",
+      "kind": "browser",
+      "url": "https://make.powerapps.com/",
+      "account": "labadmin",
+      "steps": [
+        "In Studio select the App checker icon > Accessibility tab",
+        "Show the issues and fix or note one",
+        "Cutaway: on the phone turn on TalkBack or VoiceOver and swipe through the list (no other notifications on screen)"
+      ],
+      "mask": [
+        "environment name and org URL in the address bar and the environment picker",
+        "tenant name in the top bar",
+        "account name, e-mail and avatar in the account menu"
+      ]
+    },
+    {
+      "name": "offline",
+      "kind": "browser",
+      "url": "https://make.powerapps.com/",
+      "account": "labadmin",
+      "steps": [
+        "Studio > Settings > General > Can be used offline on",
+        "New profile with current app data: Inspection, Inspection item, Site, Inspector; save and publish the profile, then the app",
+        "Cutaway on the phone: first sync, airplane mode on, add an item: globe with changes pending and the banner; airplane mode off"
+      ],
+      "mask": [
+        "environment name and org URL in the address bar and the environment picker",
+        "tenant name in the top bar",
+        "account name, e-mail and avatar in the account menu",
+        "account name and avatar in Power Apps mobile",
+        "tenant name on the app list",
+        "notification bar (turn on Do Not Disturb)",
+        "device name"
+      ]
+    },
+    {
+      "name": "monitor",
+      "kind": "browser",
+      "url": "https://make.powerapps.com/",
+      "account": "labadmin",
+      "steps": [
+        "Studio > Advanced tools > Open monitor; play the app and save an item",
+        "Show the events, the Dataverse request and its duration",
+        "Optional: Apps > Contoso Inspections > Details > Live monitor > Play published app; turn Debug published app off afterwards"
+      ],
+      "mask": [
+        "environment name and org URL in the address bar and the environment picker",
+        "tenant name in the top bar",
+        "account name, e-mail and avatar in the account menu",
+        "the monitor session id"
+      ]
+    },
+    {
+      "name": "solution",
+      "kind": "browser",
+      "url": "https://make.powerapps.com/",
+      "account": "labadmin",
+      "steps": [
+        "Solutions > ContosoInspections: four tables, the role Inspection Field Inspector, the app",
+        "Select the app > Advanced > Add required objects (adds the offline profile)",
+        "Export solution > Unmanaged",
+        "Cutaway in a terminal: pac solution unpack --zipfile <zip> --folder unpacked (offline)"
+      ],
+      "mask": [
+        "environment name and org URL in the address bar and the environment picker",
+        "tenant name in the top bar",
+        "account name, e-mail and avatar in the account menu"
+      ]
+    },
+    {
+      "name": "share",
+      "kind": "browser",
+      "url": "https://make.powerapps.com/",
+      "account": "labadmin",
+      "steps": [
+        "Apps > Contoso Inspections > Share",
+        "Add Alex Demo and Sam Demo",
+        "Data permissions: assign Inspection Field Inspector"
+      ],
+      "mask": [
+        "environment name and org URL in the address bar and the environment picker",
+        "tenant name in the top bar",
+        "account name, e-mail and avatar in the account menu",
+        "real UPNs in the share panel"
+      ]
+    },
+    {
+      "name": "phone",
+      "kind": "app",
+      "app": "Power Apps mobile (Android or iOS) on a real phone, recorded with the phone's own screen recorder",
+      "account": "alex.demo",
+      "steps": [
+        "Open Contoso Inspections from the app list: only Alex's list",
+        "New inspection > Add item with a photo > score, summary, follow-up on > Submit: row is Submitted, 'Waiting for the back office to review it.'",
+        "Then Sam Demo's phone or window: Alex's inspection is not listed",
+        "Optional: after Approved in the back office, pull to refresh: '✓ Approved' and the read-only banner"
+      ],
+      "mask": [
+        "account name and avatar in Power Apps mobile",
+        "tenant name on the app list",
+        "notification bar (turn on Do Not Disturb)",
+        "device name"
+      ]
+    }
+  ],
+  "teardown": [
+    "Remove-Item Env:DATAVERSE_ACCESS_TOKEN -ErrorAction SilentlyContinue",
+    "Write-Host 'Reminder: delete the test inspections and items; remove Alex/Sam shares and the role if the app is not kept; delete the offline profile and the exported zip; az logout.'"
+  ],
+  "needs": [
+    "tenant",
+    "premium-trial",
+    "device:phone",
+    "env:MG_ALEX_UPN, MG_SAM_UPN"
+  ]
+}

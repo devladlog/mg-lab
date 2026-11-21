@@ -1,0 +1,63 @@
+{
+  "note": "Live-session recording of the screen scenes (series/tools/rec). prepare/teardown run on the laptop, not recorded; commands are typed and run for real. Steps of browser/app screens are done by hand by the person recording.",
+  "prepare": [
+    "New-Item -ItemType Directory -Force C:\\MGLab\\power-bi | Out-Null",
+    "Remove-Item C:\\MGLab\\power-bi\\ep03 -Recurse -Force -ErrorAction SilentlyContinue",
+    "Copy-Item -Path (Get-Location).Path -Destination C:\\MGLab\\power-bi\\ep03 -Recurse -Force",
+    "New-Item -ItemType Directory -Force C:\\MGLab\\power-bi\\exports | Out-Null",
+    "Copy-Item .\\src\\data\\exports\\* C:\\MGLab\\power-bi\\exports\\ -Force"
+  ],
+  "screens": [
+    {
+      "name": "pq-editor-queries",
+      "kind": "app",
+      "app": "Power BI Desktop",
+      "steps": [
+        "Open C:\\MGLab\\power-bi\\ep03\\src\\ContosoSales.pbip; if the Formula.Firewall or privacy-level prompt appears set the folder source to Organizational (File > Options and settings > Data source settings), then Refresh",
+        "Home > Transform data to open the Power Query editor",
+        "Queries pane: ExportFolder (parameter), fnReadExport, fnDimension (functions), SalesExport, Product, Customer, Store, Date, Sales",
+        "Right-click SalesExport so the menu shows Enable load unchecked; keep the menu open",
+        "With SalesExport selected show the Applied steps: Files, CsvOnly, Read, Combined, Newest, Buffered, Deduped, Result; click Buffered and show the formula bar"
+      ],
+      "mask": [
+        "account name and picture at the top right of Power BI Desktop (sign out first)",
+        "Windows user name in any file path (record from C:\\MGLab)",
+        "ExportFolder value if it contains a user name"
+      ]
+    },
+    {
+      "name": "pq-data-view-rowcounts",
+      "kind": "app",
+      "app": "Power BI Desktop",
+      "steps": [
+        "Close the editor (Close & apply) and Refresh; switch to Table view and select Sales",
+        "Status bar must read Table: Sales (4,071 rows); the Data pane lists Customer, Date, Product, Sales, Store",
+        "Optional: select Customer (301 rows, first row key -1 Unknown customer); highlight the row count"
+      ],
+      "mask": [
+        "account name and picture at the top right of Power BI Desktop (sign out first)",
+        "Windows user name in any file path (record from C:\\MGLab)"
+      ]
+    },
+    {
+      "name": "pq-report-totals",
+      "kind": "app",
+      "app": "Power BI Desktop",
+      "steps": [
+        "Report view, scratch page (do not save into the repo): three Card visuals Sales Amount 1,862,401.98, Orders 2,440, Units 7,462",
+        "Add a table with Date[Year] and Sales Amount: 2024 894,929.10, 2025 967,472.88; highlight Sales Amount",
+        "If Sales Amount shows 2,019,894.31 or 1,902,513.76 stop and report: the de-duplication failed"
+      ],
+      "mask": [
+        "account name and picture at the top right of Power BI Desktop (sign out first)",
+        "Windows user name in any file path (record from C:\\MGLab)"
+      ]
+    }
+  ],
+  "teardown": [
+    "Remove-Item C:\\MGLab\\power-bi\\ep03 -Recurse -Force -ErrorAction SilentlyContinue",
+    "Remove-Item C:\\MGLab\\power-bi\\exports -Recurse -Force -ErrorAction SilentlyContinue"
+  ],
+  "needs": [],
+  "owner_notes": "Local only. The M has never been evaluated: note the exact error if refresh fails."
+}

@@ -1,0 +1,109 @@
+{
+  "note": "Live-session recording of the screen scenes (series/tools/rec). prepare/teardown run on the laptop, not recorded; commands are typed and run for real. Prepare statements run in one PowerShell session with the episode folder as current directory; variables do not survive into the screens, so each screen re-derives what it needs.",
+  "prepare": [
+    "$ep = (Get-Location).Path",
+    "# owner, once: Docker Desktop (WSL 2 engine) is installed and running; this episode uses the Windows docker CLI on C:\\work (same commands as in WSL)",
+    "New-Item -ItemType Directory -Force C:\\work\\ep04, C:\\work\\secrets | Out-Null",
+    "Remove-Item C:\\work\\ep04\\orders-app -Recurse -Force -ErrorAction SilentlyContinue",
+    "Copy-Item -Recurse \"$ep\\src\\orders-app\" C:\\work\\ep04\\orders-app",
+    "Get-ChildItem C:\\work\\ep04\\orders-app -Recurse -Directory -Include bin, obj | Remove-Item -Recurse -Force",
+    "docker pull mcr.microsoft.com/mssql/server:2025-latest",
+    "Set-Location C:\\work\\ep04\\orders-app",
+    "docker build -t contoso/orders-api:dev .",
+    "python tools/container_lint.py",
+    "# the SA password is generated here and lives only in C:\\work\\secrets\\demo.env (never printed, never in the repo)",
+    "if (-not (Test-Path C:\\work\\secrets\\demo.env)) { $k = 'MSSQL_SA_PASSWORD'; $pw = 'Aa1!' + (-join ((48..57 + 65..90 + 97..122) | Get-Random -Count 16 | ForEach-Object { [char]$_ })); Set-Content C:\\work\\secrets\\demo.env \"${k}=$pw\" }",
+    "Remove-Item C:\\work\\ep04\\orders-app\\.env -ErrorAction SilentlyContinue"
+  ],
+  "screens": [
+    {
+      "name": "buildrun",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "C:\\work\\ep04\\orders-app",
+      "prompt": "$ ",
+      "prepare": [
+        "docker rm -f orders 2>$null",
+        "docker volume rm orders-data 2>$null",
+        "Set-Location C:\\work\\ep04\\orders-app; git checkout -- . 2>$null"
+      ],
+      "commands": [
+        "# change one line of Program.cs, nothing else",
+        "Add-Content src\\Contoso.Orders.Api\\Program.cs \"// rebuilt for the demo\"",
+        "docker build -t contoso/orders-api:dev .",
+        "#pause 3",
+        "docker images contoso/orders-api",
+        "#pause 3",
+        "docker run -d --name orders -p 127.0.0.1:8080:8080 -v orders-data:/data contoso/orders-api:dev",
+        "#pause 5",
+        "curl.exe -s localhost:8080/healthz",
+        "#pause 4"
+      ],
+      "note": "Expect the restore step CACHED and the publish step re-run. Windows docker CLI, curl.exe because curl is an alias in Windows PowerShell 5."
+    },
+    {
+      "name": "stack",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "C:\\work\\ep04\\orders-app",
+      "prompt": "$ ",
+      "prepare": [
+        "Set-Location C:\\work\\ep04\\orders-app",
+        "docker compose down 2>$null",
+        "Remove-Item .env -ErrorAction SilentlyContinue"
+      ],
+      "commands": [
+        "docker rm -f orders",
+        "docker compose up -d",
+        "#pause 5",
+        "# the SA password goes into .env (copied from a file outside the repo, never shown)",
+        "Copy-Item C:\\work\\secrets\\demo.env .env",
+        "docker compose up --build -d",
+        "docker compose ps",
+        "#pause 35",
+        "docker compose ps",
+        "#pause 3",
+        "curl.exe -s localhost:8080/healthz",
+        "#pause 4"
+      ],
+      "note": "First `docker compose up -d` must fail naming MSSQL_SA_PASSWORD (no .env yet). Never run docker compose config or open .env on camera. Extra capture for the edit: Docker Desktop > Containers with the contoso-orders group expanded (api, db)."
+    },
+    {
+      "name": "watch",
+      "kind": "app",
+      "app": "VS Code + Windows Terminal (docker compose watch)",
+      "prepare": [
+        "Set-Location C:\\work\\ep04\\orders-app",
+        "if (-not (Test-Path .env)) { Copy-Item C:\\work\\secrets\\demo.env .env }",
+        "git checkout -- . 2>$null"
+      ],
+      "steps": [
+        "Open C:\\work\\ep04\\orders-app in VS Code: Program.cs (src/Contoso.Orders.Api) on the left, integrated terminal on the right",
+        "In the terminal run: docker compose watch",
+        "Add a field to the /healthz object, e.g. version = \"watch-demo\", and save",
+        "Capture the terminal while Compose rebuilds the api service and recreates its container",
+        "In a second terminal run: curl.exe -s localhost:8080/healthz   and show the new field",
+        "Run: docker compose exec api sh   and capture the real error text (the chiseled image has no shell)",
+        "Revert the Program.cs edit (git checkout -- src/Contoso.Orders.Api/Program.cs) and stop docker compose watch with Ctrl+C"
+      ],
+      "mask": [
+        "WSL / Windows user name in paths and prompts",
+        "Docker Desktop and VS Code account avatars",
+        "never show .env or docker compose config"
+      ]
+    }
+  ],
+  "teardown": [
+    "Set-Location C:\\work\\ep04\\orders-app; docker compose down -v",
+    "docker rm -f orders 2>$null; docker volume rm orders-data 2>$null",
+    "docker image rm contoso/orders-api:dev",
+    "Set-Location C:\\work; Remove-Item C:\\work\\ep04 -Recurse -Force -ErrorAction SilentlyContinue",
+    "Remove-Item C:\\work\\secrets\\demo.env -ErrorAction SilentlyContinue"
+  ],
+  "needs": [
+    "docker",
+    "wsl",
+    "licence:docker-desktop"
+  ],
+  "blocked": "Docker Desktop is not installed on the recording laptop (and its licence terms for Momento Galatico must be confirmed); the whole episode needs a Docker daemon."
+}

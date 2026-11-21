@@ -1,0 +1,110 @@
+{
+  "note": "Screens are ordered in recording order: 'forbidden' must be recorded BEFORE the Cognitive Services User role exists, so prepare deploys without developerPrincipalId and the 'probe' screen's own prepare adds the role and waits. A 403, a failed probe or a WARN is part of the episode.",
+  "prepare": [
+    "python -m venv .venv",
+    "$env:PATH = \"$PWD\\.venv\\Scripts;$env:PATH\"",
+    "python -m pip install -q -r requirements.txt",
+    "$env:PYTHONPATH = 'src'",
+    "# owner signs in as labadmin (device code), not on camera",
+    "az login --use-device-code --only-show-errors | Out-Null",
+    "az group create -n rg-mglab-ai-17 -l westeurope -o none",
+    "$o = az deployment group create -g rg-mglab-ai-17 -f infra/main.bicep -p infra/main.bicepparam --query properties.outputs -o json | ConvertFrom-Json",
+    "$env:AIPLATFORM_ENDPOINT = $o.endpoint.value; $env:AIPLATFORM_RESOURCE_ID = $o.resourceId.value; $env:AI_ACCOUNT = $o.accountName.value"
+  ],
+  "screens": [
+    {
+      "name": "resource",
+      "kind": "browser",
+      "url": "https://portal.azure.com/",
+      "account": "labadmin",
+      "steps": [
+        "Open the Foundry resource in rg-mglab-ai-17 > Overview (kind AI Services, region West Europe, endpoint masked)",
+        "Open Keys and Endpoint and show local authentication disabled",
+        "Open Diagnostic settings and show 'to-log-analytics' (Audit, RequestResponse, AllMetrics) pointing to the workspace"
+      ],
+      "mask": [
+        "subscription name and ID",
+        "tenant name / directory in the top bar",
+        "signed-in user name, UPN and avatar in the account menu",
+        "resource name suffix",
+        "endpoint (contains the suffix) wherever it appears"
+      ]
+    },
+    {
+      "name": "forbidden",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\ai\\episodes\\17-azure-ai-services-platform",
+      "prompt": "PS ep17> ",
+      "commands": [
+        "python -m aiplatform probe ; \"exit=$LASTEXITCODE\"",
+        "#pause 8"
+      ],
+      "mask": [
+        "endpoint suffix if it appears in any output line"
+      ]
+    },
+    {
+      "name": "probe",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\ai\\episodes\\17-azure-ai-services-platform",
+      "prompt": "PS ep17> ",
+      "prepare": [
+        "$me = az ad signed-in-user show --query id -o tsv",
+        "$o = az deployment group create -g rg-mglab-ai-17 -f infra/main.bicep -p infra/main.bicepparam -p developerPrincipalId=$me --query properties.outputs -o json | ConvertFrom-Json",
+        "Start-Sleep -Seconds 300   # Cognitive Services User role propagation"
+      ],
+      "commands": [
+        "python -m aiplatform probe ; \"exit=$LASTEXITCODE\"",
+        "#pause 8"
+      ],
+      "mask": [
+        "endpoint suffix if it appears in any output line"
+      ]
+    },
+    {
+      "name": "operate",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\ai\\episodes\\17-azure-ai-services-platform",
+      "prompt": "PS ep17> ",
+      "prepare": [
+        "1..3 | ForEach-Object { python -m aiplatform probe | Out-Null }",
+        "Start-Sleep -Seconds 240   # metrics arrive with a delay"
+      ],
+      "commands": [
+        "python -m aiplatform audit ; \"exit=$LASTEXITCODE\"",
+        "#pause 6",
+        "python -m aiplatform usage --minutes 30",
+        "#pause 8"
+      ],
+      "mask": [
+        "resource name suffix in the audit lines"
+      ]
+    },
+    {
+      "name": "lifecycle",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\ai\\episodes\\17-azure-ai-services-platform",
+      "prompt": "PS ep17> ",
+      "commands": [
+        "python -m aiplatform lifecycle ../ --no-lines ; \"exit=$LASTEXITCODE\"",
+        "#pause 6",
+        "python -m aiplatform lifecycle ../ ; \"exit=$LASTEXITCODE\"",
+        "#pause 8"
+      ]
+    }
+  ],
+  "teardown": [
+    "az group delete -n rg-mglab-ai-17 --yes",
+    "az cognitiveservices account purge -g rg-mglab-ai-17 -n $env:AI_ACCOUNT -l westeurope",
+    "Remove-Item build, .venv -Recurse -Force -ErrorAction SilentlyContinue"
+  ],
+  "needs": [
+    "azure",
+    "paid:foundry-tools-per-transaction-and-log-analytics",
+    "content-safety-available-in-westeurope"
+  ]
+}

@@ -1,0 +1,86 @@
+{
+  "note": "Live-session recording of the screen scenes (series/tools/rec). prepare/teardown run on the laptop, not recorded; terminal commands are typed and run for real. $env:MG_DEV_URL (DEV org URL) and the other MG_* variables are set by the owner as user environment variables on the laptop and never appear on screen.",
+  "prepare": [
+    "Read-Host 'Owner: episode 1 is in DEV; canvas app Equipment Desk (phone) is built per demo.md (named formulas, BrowseScreen, LendScreen, delegation checked), saved and published; Data row limit is 1 for the first shot; CT-0042 is Available with no open loan; riley.demo role only if the warning cutaway is wanted. Press Enter'"
+  ],
+  "screens": [
+    {
+      "name": "data-row-limit",
+      "kind": "browser",
+      "url": "https://make.powerapps.com/",
+      "account": "labadmin",
+      "steps": [
+        "Solutions > Equipment Desk > 'Equipment Desk (phone)' > Edit (Power Apps Studio)",
+        "Settings > General: show 'Data row limit' = 1",
+        "Close settings, Preview the app on BrowseScreen",
+        "Type CT-01 in the search box: CT-0107 and CT-0108 are both listed",
+        "Show that the gallery has no yellow delegation triangle"
+      ],
+      "mask": [
+        "environment name and org URL in the address bar and the environment picker",
+        "tenant name in the top bar",
+        "account name, e-mail and avatar in the account menu"
+      ]
+    },
+    {
+      "name": "lend-validation",
+      "kind": "browser",
+      "url": "https://make.powerapps.com/",
+      "account": "labadmin",
+      "steps": [
+        "In Studio preview (phone layout) tap CT-0042 Laptop 14 on BrowseScreen",
+        "On LendScreen enter alex.demo@contoso.com",
+        "Set the due date one day before the loan date",
+        "Show the red label 'The due date can't be before the loan date.' and the greyed Lend button"
+      ],
+      "mask": [
+        "environment name and org URL in the address bar and the environment picker",
+        "tenant name in the top bar",
+        "account name, e-mail and avatar in the account menu",
+        "any real mail domain: only the fictional *.demo@contoso.com addresses may stay"
+      ]
+    },
+    {
+      "name": "saved",
+      "kind": "browser",
+      "url": "https://make.powerapps.com/",
+      "account": "labadmin",
+      "steps": [
+        "Fix the due date and tap Lend",
+        "Show the green 'Loan saved: CT-0042' notification and the return to BrowseScreen",
+        "Switch 'Available only' on: CT-0042 is gone from the list",
+        "Optional cutaway (signed in as riley.demo with the limited role): yellow 'Loan saved, but the device status wasn't updated: ...'"
+      ],
+      "mask": [
+        "environment name and org URL in the address bar and the environment picker",
+        "tenant name in the top bar",
+        "account name, e-mail and avatar in the account menu",
+        "any real mail domain: only the fictional *.demo@contoso.com addresses may stay"
+      ]
+    },
+    {
+      "name": "model-driven-loan",
+      "kind": "browser",
+      "url": "https://make.powerapps.com/",
+      "account": "labadmin",
+      "steps": [
+        "Apps > 'Equipment Desk' (model-driven) > Play",
+        "Open Loans: the new loan for CT-0042 is in the view",
+        "Open Equipment: CT-0042 shows Status 'On loan'"
+      ],
+      "mask": [
+        "environment name and org URL in the address bar and the environment picker",
+        "tenant name in the top bar",
+        "account name, e-mail and avatar in the account menu",
+        "any real mail domain: only the fictional *.demo@contoso.com addresses may stay"
+      ]
+    }
+  ],
+  "teardown": [
+    "Write-Host 'Reminder: Data row limit back to 500, delete the test loan for CT-0042 and set it back to Available, remove riley.demo role assignment and the limited role.'"
+  ],
+  "needs": [
+    "tenant",
+    "premium-trial"
+  ]
+}

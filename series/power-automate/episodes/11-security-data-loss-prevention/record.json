@@ -1,0 +1,82 @@
+{
+  "note": "Live-session recording of the screen scenes (series/tools/rec). Record everything in ONE session and delete the data policy the same day: a policy scoped to DEV is evaluated against every flow in DEV (flows that mix SharePoint with HTTP from episodes 4 and 8 get suspended); afterwards check that the other episodes' flows are On. The 'apply' screen is a Windows PowerShell 5.1 script, but the kit plays terminal scenes in PowerShell 7: each command starts powershell.exe, and the admin module's sign-in does not survive between processes, so the owner needs a 5.1 session host or a cached sign-in for that screen (see report).",
+  "prepare": [
+    "python -m pip install -r requirements-test.txt --quiet",
+    "python -m pytest",
+    "# owner signs in: Windows PowerShell 5.1 Add-PowerAppsAccount as labadmin (off camera), pac auth below, and the browser profiles for labadmin (Power Platform admin center) and alex.demo (make.powerautomate.com). Nothing is typed or stored here.",
+    "powershell.exe -NoProfile -Command \"if (-not (Get-Module -ListAvailable Microsoft.PowerApps.Administration.PowerShell)) { Install-Module Microsoft.PowerApps.Administration.PowerShell -Scope CurrentUser -Force }\"",
+    "if (-not $env:DEV_URL) { $env:DEV_URL = Read-Host 'DEV environment URL' }",
+    "pac auth create --name dev --environment $env:DEV_URL   # owner signs in, off camera",
+    "# owner (tenant, demo.md Setup 2-4): data policy MG Lab IT DEV (six connectors in Business, MSN Weather and HTTP in Non-business, scope DEV only); alex.demo gets Environment Maker in DEV and membership of the IT Helpdesk site; solution IT Guardrails (publisher contoso, prefix cts) with the compliant flow 'Acknowledge IT request' turned On. The flow 'IT request with weather note' is built on camera as alex.demo AFTER the policy exists.",
+    "New-Item -ItemType Directory -Force -Path .\\out | Out-Null",
+    "pac solution export --name ITGuardrails --path .\\out\\ITGuardrails.zip --overwrite",
+    "pac solution unpack --zipfile .\\out\\ITGuardrails.zip --folder .\\out\\ITGuardrails --allowWrite true --allowDelete true",
+    "# owner (demo.md Setup 6): export the real policy once with Windows PowerShell 5.1: .\\Export-DlpPolicy.ps1 -OutFile ..\\policy\\exported.json -DisplayName 'MG Lab IT DEV' -ScopeMode only -ScopeEnvironments dev (never print Get-DlpPolicy unfiltered: it has policy and environment IDs)"
+  ],
+  "screens": [
+    {
+      "name": "policy",
+      "kind": "browser",
+      "url": "https://admin.powerplatform.microsoft.com/",
+      "account": "labadmin",
+      "steps": [
+        "Open Security > Data and privacy > Data policy and open the policy 'MG Lab IT DEV' (search for 'Data policy' if the menu moved)",
+        "On the Assign connectors step show Business: SharePoint, Microsoft 365 Outlook, Microsoft 365 Users, Microsoft Teams, Approvals and Dataverse; Non-business is the default group with MSN Weather and HTTP",
+        "Go to the scope step and show 'Add multiple environments' with DEV only"
+      ],
+      "mask": ["tenant name in the top bar and the address bar", "environment IDs in the scope step and the address bar", "policy GUID in the address bar"]
+    },
+    {
+      "name": "suspended",
+      "kind": "browser",
+      "url": "https://make.powerautomate.com/",
+      "account": "alex.demo",
+      "steps": [
+        "Capture 1: in environment DEV build a new cloud flow in the solution IT Guardrails: trigger SharePoint 'When an item is created' on IT Requests, then the MSN Weather action 'Get current weather' (Lisbon, Metric)",
+        "Capture 2: select Save and show the flow checker panel with the data policy violation (record the exact text)",
+        "Capture 3: open My flows (or the solution view) and show the flow 'IT request with weather note' as Suspended"
+      ],
+      "mask": ["environment name and ID in the address bar", "tenant name in the top bar and the account menu"]
+    },
+    {
+      "name": "apply",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\power-automate\\episodes\\11-security-data-loss-prevention\\src\\scripts",
+      "prompt": "PS ep11\\scripts> ",
+      "prepare": [
+        "# owner (off camera, before the take): in the admin center move two connectors (for example Teams and Approvals) to Non-business so there is something to fix; Add-PowerAppsAccount as labadmin in Windows PowerShell 5.1"
+      ],
+      "commands": [
+        "powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\\Apply-DlpPolicy.ps1 -PolicyFile ..\\policy\\it-dev.json -WhatIf",
+        "#pause 3",
+        "powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\\Apply-DlpPolicy.ps1 -PolicyFile ..\\policy\\it-dev.json",
+        "#pause 3",
+        "powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\\Apply-DlpPolicy.ps1 -PolicyFile ..\\policy\\it-dev.json",
+        "#pause 3"
+      ],
+      "mask": ["tenant name if it shows in any output"]
+    },
+    {
+      "name": "fixed",
+      "kind": "browser",
+      "url": "https://make.powerautomate.com/",
+      "account": "alex.demo",
+      "steps": [
+        "Capture 1: reopen the flow 'IT request with weather note' in DEV after the policy change (MSN Weather deleted from the flow, or as labadmin moved to Confidential with Apply-DlpPolicy.ps1), select Save and show the flow checker clean, then turn the flow On",
+        "Capture 2, terminal pane next to the browser, run from src before the fix: python -m dlpkit check ..\\out\\ITGuardrails\\Workflows --policy ..\\policy\\exported.json --environment dev",
+        "Show the weather flow SUSPENDED and the acknowledgement flow OK: the same verdict the service gave"
+      ],
+      "mask": ["environment names and URLs in the address bar", "tenant name in the top bar", "policy GUID and environment IDs in any terminal output"]
+    }
+  ],
+  "teardown": [
+    "# owner (admin center): DELETE the policy MG Lab IT DEV the same day, then check that the flows of the other episodes in DEV are On (re-save any that stay suspended)",
+    "# owner (tenant): delete the solution IT Guardrails and its MSN Weather connection; remove alex.demo's Environment Maker role in DEV if no other episode needs it",
+    "Remove-Item .\\src\\policy\\exported.json -ErrorAction SilentlyContinue",
+    "Remove-Item .\\out -Recurse -Force -ErrorAction SilentlyContinue",
+    "Remove-Item Env:DEV_URL -ErrorAction SilentlyContinue",
+    "pac auth clear"
+  ],
+  "needs": ["tenant"]
+}

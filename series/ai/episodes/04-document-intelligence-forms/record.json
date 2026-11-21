@@ -1,0 +1,78 @@
+{
+  "note": "Order matters: 'run' creates results/ which 'field-json' and 'overlay' read. 'overlay' is recorded in an image viewer after the command runs.",
+  "prepare": [
+    "python -m venv .venv",
+    "$env:PATH = \"$PWD\\.venv\\Scripts;$env:PATH\"",
+    "python -m pip install -q -r requirements.txt",
+    "$env:PYTHONPATH = 'src'",
+    "# owner signs in as labadmin (device code), not on camera",
+    "az login --use-device-code --only-show-errors | Out-Null",
+    "$me = az ad signed-in-user show --query id -o tsv",
+    "az group create -n rg-mglab-ai-4 -l westeurope -o none",
+    "$o = az deployment group create -g rg-mglab-ai-4 -f infra/main.bicep -p infra/main.bicepparam -p developerPrincipalId=$me --query properties.outputs -o json | ConvertFrom-Json",
+    "$env:DOCINTEL = $o.endpoint.value; $env:AI_ACCOUNT = $o.name.value",
+    "python -m invoice_intake.samples --out samples",
+    "Start-Sleep -Seconds 300   # role assignment propagation (up to 5 minutes)",
+    "python -m invoice_intake.process samples/01-fabrikam-clean.png --endpoint $env:DOCINTEL | Out-Null   # warm-up",
+    "Remove-Item results -Recurse -Force -ErrorAction SilentlyContinue"
+  ],
+  "screens": [
+    {
+      "name": "run",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\ai\\episodes\\04-document-intelligence-forms",
+      "prompt": "PS ep04> ",
+      "commands": [
+        "python -m invoice_intake.process (Resolve-Path -Relative samples/0*.png) --endpoint $env:DOCINTEL --save-json results/",
+        "#pause 8"
+      ]
+    },
+    {
+      "name": "field-json",
+      "kind": "app",
+      "app": "VS Code",
+      "steps": [
+        "Open results/01-fabrikam-clean.json in the episode folder",
+        "Fold the JSON so documents[0].fields.InvoiceTotal is visible",
+        "Pause on type: currency, valueCurrency (amount, currencyCode EUR), content, confidence and boundingRegions with the polygon"
+      ],
+      "mask": [
+        "none expected (fictional invoice); keep the resource endpoint out of view"
+      ]
+    },
+    {
+      "name": "overlay",
+      "kind": "app",
+      "app": "Windows image viewer (Photos), full screen",
+      "steps": [
+        "In a terminal in the episode folder run: python -m invoice_intake.overlay samples/04-adventure-works-faded.png results/04-adventure-works-faded.json (use 02-northwind-bad-total if 04 was not sent to review)",
+        "Open the PNG that the command prints in the image viewer, full screen",
+        "Pause on the green boxes (above threshold) and amber boxes (below), with field names and confidences"
+      ],
+      "mask": [
+        "none expected (fictional invoice)"
+      ]
+    },
+    {
+      "name": "layout",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\ai\\episodes\\04-document-intelligence-forms",
+      "prompt": "PS ep04> ",
+      "commands": [
+        "python -m invoice_intake.layout samples/contoso-expenses-policy.png --endpoint $env:DOCINTEL",
+        "#pause 8"
+      ]
+    }
+  ],
+  "teardown": [
+    "az group delete -n rg-mglab-ai-4 --yes",
+    "az cognitiveservices account purge -g rg-mglab-ai-4 -n $env:AI_ACCOUNT -l westeurope",
+    "Remove-Item samples, results, .venv -Recurse -Force -ErrorAction SilentlyContinue"
+  ],
+  "needs": [
+    "azure",
+    "docintel-f0-or-s0-per-page"
+  ]
+}

@@ -1,0 +1,140 @@
+{
+  "note": "Deep-dive #11. Needs the second Entra tenant 'Northwind Lab' (riley.demo) created by the owner beforehand. Tokens used by isolation and limits are fetched in prepare (device code, owner signs in) and live in environment variables only; they expire after about an hour, so record the screens in one go. Order: tokens, isolation, rls, limits.",
+  "prepare": [
+    "dotnet test tests/TenantApi.Tests -m:1",
+    "Invoke-Pester ./tests",
+    "# owner signs in (device code), not recorded",
+    "az login --use-device-code",
+    "$env:MG_LAB_TENANT = az account show --query tenantId -o tsv",
+    "$env:MG_NW_TENANT = Read-Host 'Northwind Lab tenant ID (owner types, never recorded)'",
+    "./scripts/New-SaasApps.ps1 -WhatIf",
+    "$ids = ./scripts/New-SaasApps.ps1",
+    "$env:MG_API_CLIENT = $ids.ApiClientId; $env:MG_CLI_CLIENT = $ids.CliClientId",
+    "az ad sp create --id $ids.ApiClientId; az ad sp create --id $ids.CliClientId",
+    "# manual: Enterprise applications > contoso-saas-api > Users and groups: assign labadmin to Platform administrator; contoso-saas-cli > Permissions: Grant admin consent for the lab tenant",
+    "Import-Module ./scripts/SaasLab.psm1 -Force",
+    "Get-AdminConsentUrl -CustomerTenantId $env:MG_NW_TENANT -CliClientId $ids.CliClientId -ApiClientId $ids.ApiClientId   # open in a private window as the Northwind admin and accept (owner)",
+    "az group create -n rg-mglab-deep-dive-11 -l westeurope -o none",
+    "$o = az deployment group create -g rg-mglab-deep-dive-11 -f infra/main.bicep -p infra/main.bicepparam -p apiClientId=$ids.ApiClientId homeTenantId=$env:MG_LAB_TENANT sqlAdminLogin=(az ad signed-in-user show --query userPrincipalName -o tsv) sqlAdminObjectId=(az ad signed-in-user show --query id -o tsv) --query properties.outputs -o json | ConvertFrom-Json",
+    "$env:MG_WEB11_URL = \"https://$($o.webAppHostName.value)\"; $env:MG_SQL11 = $o.sqlServerFqdn.value; $env:MG_WEBAPP11 = $o.webAppName.value",
+    "$ip = Invoke-RestMethod https://api.ipify.org; az sql server firewall-rule create -g rg-mglab-deep-dive-11 -s $env:MG_SQL11.Split('.')[0] -n laptop --start-ip-address $ip --end-ip-address $ip -o none",
+    "# manual: SSMS (Entra MFA, labadmin) database tenants: run 001-schema.sql, 002-rls.sql, then 003-grant-app.sql in SQLCMD mode with :setvar AppIdentity <web app name>; verify-rls.sql must give 2 / 1 / 0 and error 33504",
+    "dotnet publish src/TenantApi -c Release -o publish; Compress-Archive -Path publish/* -DestinationPath app.zip -Force",
+    "az webapp deploy -g rg-mglab-deep-dive-11 -n $env:MG_WEBAPP11 --src-path app.zip --type zip",
+    "(Invoke-WebRequest \"$($env:MG_WEB11_URL)/healthz\").Content",
+    "$env:MG_TOK_ADMIN = Get-DeviceCodeToken -TenantId $env:MG_LAB_TENANT -ClientId $env:MG_CLI_CLIENT -Scope \"api://$($env:MG_API_CLIENT)/Requests.ReadWrite\" -Label 'labadmin'   # owner signs in as labadmin",
+    "Invoke-SaasApi -BaseUrl $env:MG_WEB11_URL -Path \"/admin/tenants/$env:MG_LAB_TENANT\" -Method PUT -Token $env:MG_TOK_ADMIN -Body @{ name = 'Adventure Works'; plan = 'starter' } | Select-Object Status   # expect 201",
+    "$env:MG_TOK_ALEX = Get-DeviceCodeToken -TenantId $env:MG_LAB_TENANT -ClientId $env:MG_CLI_CLIENT -Scope \"api://$($env:MG_API_CLIENT)/Requests.ReadWrite\" -Label 'alex.demo'   # owner signs in as alex.demo",
+    "$env:MG_TOK_SAM = Get-DeviceCodeToken -TenantId $env:MG_LAB_TENANT -ClientId $env:MG_CLI_CLIENT -Scope \"api://$($env:MG_API_CLIENT)/Requests.ReadWrite\" -Label 'sam.demo'   # owner signs in as sam.demo",
+    "$env:MG_TOK_NW = Get-DeviceCodeToken -TenantId $env:MG_NW_TENANT -ClientId $env:MG_CLI_CLIENT -Scope \"api://$($env:MG_API_CLIENT)/Requests.ReadWrite\" -Label 'riley.demo'   # owner signs in as riley.demo in Northwind Lab"
+  ],
+  "screens": [
+    {
+      "name": "tokens",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\deep-dive\\episodes\\11-multi-tenant-saas-on-azure",
+      "prompt": "PS ...\\11-saas> ",
+      "commands": [
+        "Import-Module ./scripts/SaasLab.psm1 -Force",
+        "$aw = Get-DeviceCodeToken -TenantId $env:MG_LAB_TENANT -ClientId $env:MG_CLI_CLIENT -Scope \"api://$($env:MG_API_CLIENT)/Requests.ReadWrite\" -Label 'alex.demo'",
+        "$nw = Get-DeviceCodeToken -TenantId $env:MG_NW_TENANT -ClientId $env:MG_CLI_CLIENT -Scope \"api://$($env:MG_API_CLIENT)/Requests.ReadWrite\" -Label 'riley.demo'",
+        "Get-TokenClaims $aw | Select-Object tid, iss, scp, ver",
+        "Get-TokenClaims $nw | Select-Object tid, iss, scp, ver",
+        "#pause 5"
+      ],
+      "also": [
+        "The owner completes both device-code sign-ins on camera (alex.demo in the lab tenant, riley.demo in Northwind Lab); the code and URL may be shown, the tokens never are."
+      ]
+    },
+    {
+      "name": "isolation",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\deep-dive\\episodes\\11-multi-tenant-saas-on-azure",
+      "prompt": "PS ...\\11-saas> ",
+      "prepare": [
+        "sqlcmd -S $env:MG_SQL11 -d tenants -G -b -Q \"EXEC sys.sp_set_session_context N'TenantId', N'$env:MG_NW_TENANT'; DELETE dbo.PurchaseRequests; DELETE dbo.Tenants WHERE TenantId = '$env:MG_NW_TENANT';\"   # owner signs in (Entra); makes the first /me a 401 again",
+        "sqlcmd -S $env:MG_SQL11 -d tenants -G -b -Q \"EXEC sys.sp_set_session_context N'TenantId', N'$env:MG_LAB_TENANT'; DELETE dbo.PurchaseRequests;\"",
+        "az webapp restart -g rg-mglab-deep-dive-11 -n $env:MG_WEBAPP11; Start-Sleep -Seconds 45   # the app caches catalog lookups for 30 s"
+      ],
+      "commands": [
+        "Import-Module ./scripts/SaasLab.psm1 -Force",
+        "$u = $env:MG_WEB11_URL; $aw = $env:MG_TOK_ALEX; $nw = $env:MG_TOK_NW; $admin = $env:MG_TOK_ADMIN",
+        "Invoke-SaasApi -BaseUrl $u -Path /me -Token $nw | Select-Object Status",
+        "Invoke-SaasApi -BaseUrl $u -Path \"/admin/tenants/$env:MG_NW_TENANT\" -Method PUT -Token $admin -Body @{ name = 'Northwind Traders'; plan = 'business' } | Select-Object Status",
+        "Invoke-SaasApi -BaseUrl $u -Path /me -Token $nw | Select-Object Status",
+        "$n1 = Invoke-SaasApi -BaseUrl $u -Path /requests -Method POST -Token $nw -Body @{ title = 'Northwind pallets'; amount = 1200 }; $n1.Status",
+        "Invoke-SaasApi -BaseUrl $u -Path /requests -Method POST -Token $nw -Body @{ title = 'Northwind scanners'; amount = 800 } | Select-Object Status",
+        "Invoke-SaasApi -BaseUrl $u -Path /requests -Method POST -Token $aw -Body @{ title = 'Adventure Works laptops'; amount = 2400 } | Select-Object Status",
+        "Invoke-SaasApi -BaseUrl $u -Path /requests -Token $nw | Select-Object Status, @{ n = 'Rows'; e = { @($_.Body).Count } }",
+        "Invoke-SaasApi -BaseUrl $u -Path /requests -Token $aw | Select-Object Status, @{ n = 'Rows'; e = { @($_.Body).Count } }",
+        "Invoke-SaasApi -BaseUrl $u -Path \"/requests/$($n1.Body.id)\" -Token $aw | Select-Object Status",
+        "Invoke-SaasApi -BaseUrl $u -Path /requests -Token $aw -Headers @{ 'X-Tenant-Id' = $env:MG_NW_TENANT } | Select-Object Status, @{ n = 'Rows'; e = { @($_.Body).Count } }",
+        "#pause 3",
+        "Invoke-SaasApi -BaseUrl $u -Path \"/admin/tenants/$env:MG_NW_TENANT\" -Method PUT -Token $admin -Body @{ name = 'Northwind Traders'; plan = 'business'; status = 'suspended' } | Select-Object Status",
+        "Start-Sleep -Seconds 35",
+        "Invoke-SaasApi -BaseUrl $u -Path /requests -Token $nw | Select-Object Status",
+        "Invoke-SaasApi -BaseUrl $u -Path \"/admin/tenants/$env:MG_NW_TENANT\" -Method PUT -Token $admin -Body @{ name = 'Northwind Traders'; plan = 'business'; status = 'active' } | Select-Object Status",
+        "#pause 4"
+      ],
+      "also": [
+        "Expected statuses in order: 401, 201, 200, 201, 201, 201, rows 2 and 1, 404, rows 1, 403 after suspending (the status change is cached for 30 s, hence the sleep), 201 on re-activation. The web app host is held in $env:MG_WEB11_URL and never printed."
+      ]
+    },
+    {
+      "name": "rls",
+      "kind": "app",
+      "app": "SSMS 22",
+      "account": "labadmin",
+      "steps": [
+        "Connect to the SQL server (Microsoft Entra MFA as labadmin), database tenants",
+        "Run: SELECT COUNT(*) FROM dbo.PurchaseRequests  (expect 0)",
+        "Run: EXEC sys.sp_set_session_context N'TenantId', '<Northwind tenant id>'; SELECT Title, TenantId FROM dbo.PurchaseRequests;  (2 rows)",
+        "Same with the Adventure Works tenant id (1 row)",
+        "Open sql/verify-rls.sql and run it: result sets A 2, B 1, none 0, and the cross-tenant insert failing with error 33504"
+      ],
+      "mask": [
+        "server name in the title bar, Object Explorer and connection dialog",
+        "both tenant ids (middle part)",
+        "sign-in prompt"
+      ]
+    },
+    {
+      "name": "limits",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\deep-dive\\episodes\\11-multi-tenant-saas-on-azure",
+      "prompt": "PS ...\\11-saas> ",
+      "prepare": [
+        "sqlcmd -S $env:MG_SQL11 -d tenants -G -b -Q \"EXEC sys.sp_set_session_context N'TenantId', N'$env:MG_LAB_TENANT'; DELETE dbo.PurchaseRequests;\"   # start the starter-plan count from zero",
+        "Start-Sleep -Seconds 65   # quiet minute for the fixed rate window"
+      ],
+      "commands": [
+        "Import-Module ./scripts/SaasLab.psm1 -Force",
+        "$u = $env:MG_WEB11_URL; $alex = $env:MG_TOK_ALEX; $sam = $env:MG_TOK_SAM; $nw = $env:MG_TOK_NW",
+        "1..26 | ForEach-Object { Invoke-SaasApi -BaseUrl $u -Path /requests -Method POST -Token $alex -Body @{ title = \"Request $_\"; amount = 100 } } | Select-Object Status, @{ n = 'Detail'; e = { $_.Body.title } }",
+        "#pause 62",
+        "1..35 | ForEach-Object { $t = if ($_ % 2) { $alex } else { $sam }; Invoke-SaasApi -BaseUrl $u -Path /me -Token $t } | Select-Object Status",
+        "Invoke-SaasApi -BaseUrl $u -Path /me -Token $nw | Select-Object Status",
+        "#pause 4"
+      ],
+      "also": [
+        "Expected: 201 x25 then 409 'Plan limit reached' on the 26th; after the pause, 200s until the tenant's 30 calls per minute are used, then 429; the business-plan tenant still gets 200."
+      ]
+    }
+  ],
+  "teardown": [
+    "az group delete -n rg-mglab-deep-dive-11 --yes --no-wait",
+    "az ad app delete --id $env:MG_API_CLIENT; az ad app delete --id $env:MG_CLI_CLIENT",
+    "Remove-Item Env:MG_TOK_ADMIN, Env:MG_TOK_ALEX, Env:MG_TOK_SAM, Env:MG_TOK_NW, Env:MG_WEB11_URL, Env:MG_SQL11, Env:MG_WEBAPP11, Env:MG_LAB_TENANT, Env:MG_NW_TENANT, Env:MG_API_CLIENT, Env:MG_CLI_CLIENT -ErrorAction SilentlyContinue",
+    "Remove-Item app.zip, publish -Recurse -Force -ErrorAction SilentlyContinue",
+    "# manual: permanently delete the two app registrations (Deleted applications), remove labadmin's role assignment; in the Northwind Lab tenant delete riley.demo and the enterprise apps (or the whole tenant); clear saved SSMS connections"
+  ],
+  "needs": [
+    "tenant",
+    "azure",
+    "second-entra-tenant:Northwind Lab (user riley.demo)"
+  ],
+  "blocked": "tokens, isolation and limits need the second free Entra tenant 'Northwind Lab' with user riley.demo, created once by the owner before recording."
+}

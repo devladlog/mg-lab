@@ -1,0 +1,77 @@
+{
+  "note": "Live-session recording of the screen scenes (series/tools/rec). prepare/teardown run on the laptop, not recorded; commands are typed and run for real. Steps of browser/app screens are done by hand by the person recording.",
+  "prepare": [
+    "New-Item -ItemType Directory -Force C:\\MGLab\\power-bi | Out-Null",
+    "Remove-Item C:\\MGLab\\power-bi\\ep12 -Recurse -Force -ErrorAction SilentlyContinue",
+    "Copy-Item -Path (Get-Location).Path -Destination C:\\MGLab\\power-bi\\ep12 -Recurse -Force",
+    "python -m pip install --quiet pdfplumber",
+    "Import-Module MicrosoftPowerBIMgmt.Profile, MicrosoftPowerBIMgmt.Workspaces, MicrosoftPowerBIMgmt.Data, MicrosoftPowerBIMgmt.Reports",
+    "Connect-PowerBIServiceAccount   # owner signs in as alex.demo",
+    "$ws = (Get-PowerBIWorkspace -Name 'Contoso Sales (Lab)').Id",
+    "Import-Module C:\\MGLab\\power-bi\\ep12\\src\\ps\\PbiPaginated\\PbiPaginated.psd1 -Force",
+    "Import-PbiRdl -WorkspaceId $ws -Path C:\\MGLab\\power-bi\\ep12\\src\\report\\ContosoStoreStatement.rdl"
+  ],
+  "screens": [
+    {
+      "name": "report-builder",
+      "kind": "app",
+      "app": "Power BI Report Builder",
+      "steps": [
+        "Open C:\\MGLab\\power-bi\\ep12\\src\\report\\ContosoStoreStatement.rdl; sign in as alex.demo when it asks for the data source",
+        "Report Data pane: data source ContosoSales, dataset StoreSales, parameter Year",
+        "Run with Year 2025: page 1 is Contoso Lisboa with repeated headers and Page 1 of 5 in the footer",
+        "Write down every message and every change Report Builder makes when it saves the file"
+      ],
+      "mask": [
+        "account name and e-mail in Report Builder sign-in",
+        "tenant domain",
+        "Windows user name in paths"
+      ]
+    },
+    {
+      "name": "service-preview",
+      "kind": "browser",
+      "url": "https://app.powerbi.com/",
+      "account": "alex.demo",
+      "steps": [
+        "Workspace Contoso Sales (Lab): the uploaded ContosoStoreStatement with the paginated report icon",
+        "Open it, pick Year 2025 and View report; scroll the store pages with the footer Page n of 5",
+        "Switch to 2024 and View report"
+      ],
+      "mask": [
+        "browser URL (workspace and report ids)",
+        "account picture and name",
+        "tenant domain"
+      ]
+    },
+    {
+      "name": "pdf-verify",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "C:\\MGLab\\power-bi\\ep12",
+      "prompt": "PS C:\\MGLab\\power-bi\\ep12> ",
+      "commands": [
+        "./src/ps/Invoke-StatementRun.ps1 -WorkspaceId $ws -ReportId $rpt -Year 2025 -Username $upn -OutDir ./out",
+        "Invoke-Item ./out/statement-2025.pdf",
+        "#pause 6"
+      ],
+      "prepare": [
+        "Import-Module MicrosoftPowerBIMgmt.Profile, MicrosoftPowerBIMgmt.Workspaces, MicrosoftPowerBIMgmt.Data, MicrosoftPowerBIMgmt.Reports",
+        "Connect-PowerBIServiceAccount   # owner signs in as alex.demo",
+        "$ws = (Get-PowerBIWorkspace -Name 'Contoso Sales (Lab)').Id",
+        "$rpt = (Get-PowerBIReport -WorkspaceId $ws -Name 'ContosoStoreStatement').Id",
+        "$upn = \"alex.demo@$env:MGLAB_UPN_DOMAIN\""
+      ],
+      "note": "Expected: export, then the verify_pdf.py verdict; PDF with five pages, one store each. If mismatches appear keep them and explain (rounding of Margin % first suspect). Optional blank-page gotcha: body width 7.2in in Report Builder, export, then back to 6.5in."
+    }
+  ],
+  "teardown": [
+    "Remove-Item C:\\MGLab\\power-bi\\ep12 -Recurse -Force -ErrorAction SilentlyContinue",
+    "# owner: delete the paginated report ContosoStoreStatement from the workspace"
+  ],
+  "needs": [
+    "tenant",
+    "premium-trial"
+  ],
+  "owner_notes": "Workspace must be on the Fabric trial capacity with the ContosoSales model published and refreshed (episode 1 or 5). Export with a PPU licence is limited to one request per five minutes; the trial capacity avoids it."
+}

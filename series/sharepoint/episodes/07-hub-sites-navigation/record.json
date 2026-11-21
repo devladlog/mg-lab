@@ -1,0 +1,119 @@
+{
+  "note": "Live-session recording of the SharePoint episode screens (series/tools/rec). prepare/teardown run on the laptop, not recorded. Set MG_TENANT, MG_UPN_DOMAIN and MG_PNP_CLIENT_ID in the environment before queueing (never in a file). Sign-ins are device-code, done by the owner. Episodes 1-9 chain: set MG_KEEP_CHAIN=1 while recording them in order so teardown keeps what the next episode uses; unset it for a full clean-up. The Entra groups should be created the day before so membership reaches SharePoint; the audience screen then needs two browser profiles (alex.demo and sam.demo).",
+  "prepare": [
+    "if (-not $env:MG_TENANT -or -not $env:MG_UPN_DOMAIN -or -not $env:MG_PNP_CLIENT_ID) { throw 'Set MG_TENANT (lab tenant short name), MG_UPN_DOMAIN (sign-in domain of the lab users) and MG_PNP_CLIENT_ID (the MG Lab PnP app) in the environment first' }",
+    "if (-not (Get-Module -ListAvailable PnP.PowerShell)) { Install-Module PnP.PowerShell -Scope CurrentUser -Force }",
+    "$env:MG_TENANT_URL = \"https://${env:MG_TENANT}.sharepoint.com\"; $env:MG_ADMIN_URL = \"https://${env:MG_TENANT}-admin.sharepoint.com\"; $env:MG_EP = (Get-Location).Path",
+    "$env:MG_LABADMIN_UPN = \"labadmin@$env:MG_UPN_DOMAIN\"; $env:MG_ALEX_UPN = \"alex.demo@$env:MG_UPN_DOMAIN\"; $env:MG_SAM_UPN = \"sam.demo@$env:MG_UPN_DOMAIN\"; $env:MG_JORDAN_UPN = \"jordan.demo@$env:MG_UPN_DOMAIN\"; $env:MG_RILEY_UPN = \"riley.demo@$env:MG_UPN_DOMAIN\"",
+    "if (-not (Get-Module -ListAvailable Microsoft.Graph.Groups)) { Install-Module Microsoft.Graph.Groups, Microsoft.Graph.Users -Scope CurrentUser -Force }",
+    "Connect-MgGraph -Scopes Group.ReadWrite.All, User.Read.All -NoWelcome   # owner signs in",
+    "function Ensure-Grp($n, $members) { $g = Get-MgGroup -Filter \"displayName eq '$n'\" | Select-Object -First 1; if (-not $g) { $g = New-MgGroup -DisplayName $n -MailEnabled:$false -MailNickname ($n -replace ' ','') -SecurityEnabled }; foreach ($m in $members) { $u = Get-MgUser -UserId \"$m@$env:MG_UPN_DOMAIN\"; try { New-MgGroupMember -GroupId $g.Id -DirectoryObjectId $u.Id } catch {} } }",
+    "Ensure-Grp 'Operations Site Owners' @('labadmin','jordan.demo'); Ensure-Grp 'Purchasing Team' @('alex.demo','labadmin'); Ensure-Grp 'Facilities Team' @('sam.demo')",
+    "Connect-PnPOnline -Url $env:MG_ADMIN_URL -ClientId $env:MG_PNP_CLIENT_ID -DeviceLogin   # owner signs in",
+    "foreach ($n in 'Operations','Facilities') { if (-not (Get-PnPTenantSite -Url \"$env:MG_TENANT_URL/sites/$n\" -ErrorAction SilentlyContinue)) { New-PnPSite -Type CommunicationSite -Title \"Contoso $n\" -Url \"$env:MG_TENANT_URL/sites/$n\" -Wait } }",
+    "Connect-PnPOnline -Url \"$env:MG_TENANT_URL/sites/Operations\" -ClientId $env:MG_PNP_CLIENT_ID -DeviceLogin   # owner signs in",
+    "Add-PnPFile -Path ./src/hub/operations-logo.png -Folder SiteAssets | Out-Null",
+    "Connect-PnPOnline -Url \"$env:MG_TENANT_URL/sites/Facilities\" -ClientId $env:MG_PNP_CLIENT_ID -DeviceLogin   # owner signs in",
+    "if (-not (Get-PnPPage -Identity 'office-moves' -ErrorAction SilentlyContinue)) { Add-PnPPage -Name 'office-moves' -Title 'Office moves' -LayoutType Article -Publish | Out-Null }"
+  ],
+  "screens": [
+    {
+      "name": "provision",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\sharepoint\\episodes\\07-hub-sites-navigation",
+      "prompt": "PS sharepoint-07> ",
+      "prepare": [
+        "if (-not $env:MG_TENANT -or -not $env:MG_UPN_DOMAIN -or -not $env:MG_PNP_CLIENT_ID) { throw 'Set MG_TENANT (lab tenant short name), MG_UPN_DOMAIN (sign-in domain of the lab users) and MG_PNP_CLIENT_ID (the MG Lab PnP app) in the environment first' }",
+        "if (-not (Get-Module -ListAvailable PnP.PowerShell)) { Install-Module PnP.PowerShell -Scope CurrentUser -Force }",
+        "$env:MG_TENANT_URL = \"https://${env:MG_TENANT}.sharepoint.com\"; $env:MG_ADMIN_URL = \"https://${env:MG_TENANT}-admin.sharepoint.com\"; $env:MG_EP = (Get-Location).Path",
+        "$env:MG_LABADMIN_UPN = \"labadmin@$env:MG_UPN_DOMAIN\"; $env:MG_ALEX_UPN = \"alex.demo@$env:MG_UPN_DOMAIN\"; $env:MG_SAM_UPN = \"sam.demo@$env:MG_UPN_DOMAIN\"; $env:MG_JORDAN_UPN = \"jordan.demo@$env:MG_UPN_DOMAIN\"; $env:MG_RILEY_UPN = \"riley.demo@$env:MG_UPN_DOMAIN\""
+      ],
+      "commands": [
+        "$t = @{ TenantUrl = $env:MG_TENANT_URL; AdminUrl = $env:MG_ADMIN_URL; ClientId = $env:MG_PNP_CLIENT_ID }",
+        "#clear",
+        "./src/Invoke-HubNavigation.ps1 -PlanPath ./src/hub/operations.hub.json @t -Provision",
+        "#pause 8"
+      ],
+      "note": "Device-code sign-ins (admin, hub site, Graph) happen off camera. Record what really happens (label nodes, default nodes removed, -External links)."
+    },
+    {
+      "name": "hub-nav",
+      "kind": "browser",
+      "url": "https://<tenant>.sharepoint.com/sites/Purchasing",
+      "account": "alex.demo",
+      "steps": [
+        "Open the Contoso Purchasing home as Alex Demo",
+        "Hold on the hub bar 'Contoso Operations' with its logo above the site header",
+        "Open the Purchasing mega menu: 'Buy something' (Purchasing home, How to buy, Purchasing FAQ) and 'Purchasing team' (Supplier documents, Approval limits)",
+        "Point at the site's own navigation from episode 3 below it (How to buy, FAQ)",
+        "Optional second capture on /sites/Facilities with the same hub bar"
+      ],
+      "mask": [
+        "tenant host in the address bar (pipeline/mask.js)",
+        "account avatar and display name in the top bar"
+      ],
+      "note": "The hub theme can take a while to show on associated sites."
+    },
+    {
+      "name": "audience",
+      "kind": "browser",
+      "url": "https://<tenant>.sharepoint.com/sites/Purchasing",
+      "account": "alex.demo and sam.demo (two browser profiles side by side)",
+      "steps": [
+        "Left profile (Alex Demo, in Purchasing Team): open Contoso Purchasing, open the Purchasing mega menu: 'Buy something' and 'Purchasing team'",
+        "Right profile (Sam Demo, in Facilities Team only): same page, Purchasing menu shows only 'Buy something'",
+        "In the right profile open the Facilities menu: 'Facilities team' appears",
+        "Wait for targeting to apply (new group membership can take a while) before recording"
+      ],
+      "mask": [
+        "tenant host in the address bar (pipeline/mask.js)",
+        "account avatar and display name in the top bar",
+        "both windows: initials/avatars readable as the demo names only"
+      ],
+      "note": "If targeted hub links do not filter on the associated site, record that and adjust the narration."
+    },
+    {
+      "name": "check",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\sharepoint\\episodes\\07-hub-sites-navigation",
+      "prompt": "PS sharepoint-07> ",
+      "prepare": [
+        "if (-not $env:MG_TENANT -or -not $env:MG_UPN_DOMAIN -or -not $env:MG_PNP_CLIENT_ID) { throw 'Set MG_TENANT (lab tenant short name), MG_UPN_DOMAIN (sign-in domain of the lab users) and MG_PNP_CLIENT_ID (the MG Lab PnP app) in the environment first' }",
+        "if (-not (Get-Module -ListAvailable PnP.PowerShell)) { Install-Module PnP.PowerShell -Scope CurrentUser -Force }",
+        "$env:MG_TENANT_URL = \"https://${env:MG_TENANT}.sharepoint.com\"; $env:MG_ADMIN_URL = \"https://${env:MG_TENANT}-admin.sharepoint.com\"; $env:MG_EP = (Get-Location).Path",
+        "$env:MG_LABADMIN_UPN = \"labadmin@$env:MG_UPN_DOMAIN\"; $env:MG_ALEX_UPN = \"alex.demo@$env:MG_UPN_DOMAIN\"; $env:MG_SAM_UPN = \"sam.demo@$env:MG_UPN_DOMAIN\"; $env:MG_JORDAN_UPN = \"jordan.demo@$env:MG_UPN_DOMAIN\"; $env:MG_RILEY_UPN = \"riley.demo@$env:MG_UPN_DOMAIN\""
+      ],
+      "commands": [
+        "$t = @{ TenantUrl = $env:MG_TENANT_URL; AdminUrl = $env:MG_ADMIN_URL; ClientId = $env:MG_PNP_CLIENT_ID }",
+        "#clear",
+        "./src/Invoke-HubNavigation.ps1 -PlanPath ./src/hub/operations.hub.json @t -Check",
+        "#pause 4",
+        "# somebody renames the 'Facilities' tab in the hub navigation",
+        "$n = Get-PnPNavigationNode -Location TopNavigationBar | Where-Object Title -eq 'Facilities'; Set-PnPNavigationNode -Identity $n.Id -Title 'Facility'",
+        "./src/Invoke-HubNavigation.ps1 -PlanPath ./src/hub/operations.hub.json @t -Check",
+        "#pause 6"
+      ],
+      "note": "The rename uses the session's current PnP connection left by the script; if that is not the hub site, do the rename in the browser (hub navigation > Edit) and re-run -Check. Expect HL004 and '1 error(s)'."
+    }
+  ],
+  "teardown": [
+    "if (-not $env:MG_TENANT -or -not $env:MG_UPN_DOMAIN -or -not $env:MG_PNP_CLIENT_ID) { throw 'Set MG_TENANT (lab tenant short name), MG_UPN_DOMAIN (sign-in domain of the lab users) and MG_PNP_CLIENT_ID (the MG Lab PnP app) in the environment first' }",
+    "if (-not (Get-Module -ListAvailable PnP.PowerShell)) { Install-Module PnP.PowerShell -Scope CurrentUser -Force }",
+    "$env:MG_TENANT_URL = \"https://${env:MG_TENANT}.sharepoint.com\"; $env:MG_ADMIN_URL = \"https://${env:MG_TENANT}-admin.sharepoint.com\"; $env:MG_EP = (Get-Location).Path",
+    "$env:MG_LABADMIN_UPN = \"labadmin@$env:MG_UPN_DOMAIN\"; $env:MG_ALEX_UPN = \"alex.demo@$env:MG_UPN_DOMAIN\"; $env:MG_SAM_UPN = \"sam.demo@$env:MG_UPN_DOMAIN\"; $env:MG_JORDAN_UPN = \"jordan.demo@$env:MG_UPN_DOMAIN\"; $env:MG_RILEY_UPN = \"riley.demo@$env:MG_UPN_DOMAIN\"",
+    "$t = @{ TenantUrl = $env:MG_TENANT_URL; AdminUrl = $env:MG_ADMIN_URL; ClientId = $env:MG_PNP_CLIENT_ID }",
+    "./src/Invoke-HubNavigation.ps1 -PlanPath ./src/hub/operations.hub.json @t -Provision",
+    "if ($env:MG_KEEP_CHAIN -ne '1') { Connect-PnPOnline -Url $env:MG_ADMIN_URL -ClientId $env:MG_PNP_CLIENT_ID -DeviceLogin; Remove-PnPHubSiteAssociation -Site \"$env:MG_TENANT_URL/sites/Purchasing\" -ErrorAction SilentlyContinue; Remove-PnPHubSiteAssociation -Site \"$env:MG_TENANT_URL/sites/Facilities\" -ErrorAction SilentlyContinue; Unregister-PnPHubSite -Site \"$env:MG_TENANT_URL/sites/Operations\" -ErrorAction SilentlyContinue; foreach ($n in 'Facilities','Operations') { Remove-PnPTenantSite -Url \"$env:MG_TENANT_URL/sites/$n\" -Force -ErrorAction SilentlyContinue }; Connect-MgGraph -Scopes Group.ReadWrite.All -NoWelcome; foreach ($g in 'Operations Site Owners','Purchasing Team','Facilities Team') { Get-MgGroup -Filter \"displayName eq '$g'\" | ForEach-Object { Remove-MgGroup -GroupId $_.Id } } }"
+  ],
+  "needs": [
+    "tenant",
+    "episode:03",
+    "episode:04",
+    "role:sharepoint-admin",
+    "entra:3 security groups",
+    "app:MG Lab PnP (+ Graph Group.Read.All delegated)",
+    "two browser profiles"
+  ]
+}

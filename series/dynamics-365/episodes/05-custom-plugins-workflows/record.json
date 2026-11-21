@@ -1,0 +1,124 @@
+{
+  "note": "Live-session recording of the screen scenes (series/tools/rec). prepare/teardown run on the laptop, not recorded; commands are typed and run for real. Extra keys (note, followup, manual_prepare, manual_teardown) are for the recorder person; the kit ignores them. Every python command opens its own MSAL interactive sign-in (the token cache is in memory): the owner signs in as labadmin when the browser asks, or exports the app-registration variables in the shell before recording (never in a file). The prepare turns asyncautodelete off in plugins.json for the recording only; teardown restores the file with git.",
+  "prepare": [
+    "python -m pip install --user -q -r requirements.txt",
+    "if (-not $env:DATAVERSE_URL) { throw 'Set $env:DATAVERSE_URL to the lab environment URL in this shell first (the owner does this; it is never written in a file).' }",
+    "if (-not (Test-Path ./src/MGLab.D365.Plugins/MGLab.D365.Plugins.snk)) { throw 'Create the strong-name key first with sn -k in a Visual Studio developer prompt (never committed).' }",
+    "dotnet build src/MGLab.D365.Plugins -c Release -m:1",
+    "(Get-Content plugins.json -Raw) -replace '\"asyncautodelete\":\\s*true', '\"asyncautodelete\": false' | Set-Content plugins.json -NoNewline"
+  ],
+  "manual_prepare": [
+    "In DEV app: Settings, Administration, System Settings, Customization: Enable logging to plug-in trace log = All.",
+    "Create the classic background workflow 'Recalculate risk (classic)' on Project Request (trigger Budget change, one Stop Workflow step), save, do not activate.",
+    "After the first deploy: add Risk Score (mgl_riskscore) read-only to the main form next to Budget and publish.",
+    "PR-0004: Budget 42,000, due date about 10 days ahead, empty Business Justification. Run apikit backfill --apply (done by the form screen prepare)."
+  ],
+  "screens": [
+    {
+      "name": "apikit-deploy",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\dynamics-365\\episodes\\05-custom-plugins-workflows\\src",
+      "prompt": "PS src> ",
+      "commands": [
+        "python -m apikit deploy",
+        "#pause 3",
+        "python -m apikit deploy",
+        "#pause 4"
+      ]
+    },
+    {
+      "name": "apikit-call",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\dynamics-365\\episodes\\05-custom-plugins-workflows\\src",
+      "prompt": "PS src> ",
+      "commands": [
+        "python -m apikit call --code PR-0004",
+        "#pause 4"
+      ]
+    },
+    {
+      "name": "form-riskscore",
+      "kind": "browser",
+      "url": "https://make.powerapps.com/",
+      "account": "alex.demo",
+      "steps": [
+        "Open a private browser window and sign in as alex.demo",
+        "Select DEV, Apps, open the Project Requests model-driven app",
+        "Open PR-0004: Risk Score shows the low value",
+        "Change Budget from 42,000 to 75,000 (Business Justification stays empty) and save",
+        "Wait 10 to 30 seconds, refresh: Risk Score updates (real value, expected about 75)"
+      ],
+      "mask": [
+        "tenant name in the top bar",
+        "environment name and org URL (address bar and header)",
+        "user e-mail and avatar in the account menu",
+        "any real account names"
+      ],
+      "prepare": [
+        "Push-Location src; python -m apikit backfill --apply; Pop-Location"
+      ]
+    },
+    {
+      "name": "apikit-jobs-trace",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\dynamics-365\\episodes\\05-custom-plugins-workflows\\src",
+      "prompt": "PS src> ",
+      "commands": [
+        "python -m apikit jobs",
+        "#pause 3",
+        "python -m apikit trace --top 4",
+        "#pause 5"
+      ],
+      "followup": {
+        "kind": "browser",
+        "url": "https://make.powerapps.com/",
+        "account": "labadmin",
+        "steps": [
+          "Optional B-roll: DEV app, Settings, System Jobs: the same Succeeded Update job"
+        ],
+        "mask": [
+          "tenant name in the top bar",
+          "environment name and org URL (address bar and header)",
+          "user e-mail and avatar in the account menu"
+        ]
+      }
+    },
+    {
+      "name": "apikit-workflows",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\dynamics-365\\episodes\\05-custom-plugins-workflows\\src",
+      "prompt": "PS src> ",
+      "commands": [
+        "python -m apikit workflows",
+        "#pause 3",
+        "python -m apikit --env-url $env:MGL_SALES_URL workflows --all --table account",
+        "#pause 5"
+      ],
+      "prepare": [
+        "if (-not $env:MGL_SALES_URL) { throw 'Set $env:MGL_SALES_URL (URL of the Sales trial environment) in this shell first (owner; never written in a file).' }"
+      ],
+      "note": "Second command targets the Sales trial (expires about 21 Dec 2026); the URL stays in the environment variable, not on screen. If the trial has expired drop that command."
+    }
+  ],
+  "teardown": [
+    "git checkout -- plugins.json",
+    "Push-Location src; python -m apikit deploy; Pop-Location"
+  ],
+  "manual_teardown": [
+    "Plug-in trace logging back to Off or Exception.",
+    "Delete the classic workflow 'Recalculate risk (classic)'.",
+    "If episode 6 is not next: python -m apikit remove, and delete the mgl_riskscore column.",
+    "Restore PR-0004 budget 42,000."
+  ],
+  "needs": [
+    "tenant",
+    "premium-trial:none",
+    "dotnet-sdk-10",
+    "tool:sn.exe (Visual Studio developer prompt) for the strong-name key",
+    "trial:Sales trial environment (second half of apikit-workflows)"
+  ]
+}

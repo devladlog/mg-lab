@@ -1,0 +1,149 @@
+{
+  "note": "Live-session recording of the screen scenes (series/tools/rec). prepare/teardown run on the laptop, not recorded; commands are typed and run for real. Screens that mix a terminal and a portal carry the second half in also[] (when = before/after the main part). Scenes read MG_LAB_ADMIN_UPN / MG_LAB_DOMAIN (set by prepare, derived from the signed-in labadmin).",
+  "prepare": [
+    "if (-not (Get-Module -ListAvailable -Name ExchangeOnlineManagement)) { Install-Module ExchangeOnlineManagement -Scope CurrentUser -Force -AllowClobber }",
+    "if (-not (Get-Module -ListAvailable -Name Microsoft.Graph.Authentication)) { Install-Module Microsoft.Graph.Authentication -Scope CurrentUser -Force -AllowClobber }",
+    "Connect-MgGraph -Scopes User.Read -NoWelcome  # owner signs in (browser); only to read the labadmin address",
+    "function Set-LabVar($n, $v) { [Environment]::SetEnvironmentVariable($n, \"$v\", 'User'); Set-Item \"env:$n\" \"$v\" }",
+    "$upn = (Invoke-MgGraphRequest -Uri /v1.0/me).userPrincipalName; Set-LabVar MG_LAB_ADMIN_UPN $upn; Set-LabVar MG_LAB_DOMAIN $upn.Split('@')[1]",
+    "(Get-Content ./src/compliance.json -Raw) -replace '@contoso\\.onmicrosoft\\.com', \"@$env:MG_LAB_DOMAIN\" | Set-Content ./src/compliance.lab.json",
+    "Connect-IPPSSession -UserPrincipalName $env:MG_LAB_ADMIN_UPN -ShowBanner:$false  # owner signs in (browser)",
+    "./src/Invoke-PurviewCompliance.ps1 -PolicyFile ./src/compliance.lab.json -Audit -SaveInventory ./src/inventory.lab.json   # what already exists (default labels or a default Teams DLP policy)? rename ours in the lab copy if names clash",
+    "Remove-Item ./src/contoso-dlp-test.txt -ErrorAction SilentlyContinue"
+  ],
+  "screens": [
+    {
+      "name": "plan",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\microsoft-365\\episodes\\05-microsoft-purview-compliance\\src",
+      "prompt": "PS> ",
+      "commands": [
+        "Connect-IPPSSession -UserPrincipalName $env:MG_LAB_ADMIN_UPN -ShowBanner:$false",
+        "./Invoke-PurviewCompliance.ps1 -PolicyFile ./compliance.lab.json -Plan",
+        "./Invoke-PurviewCompliance.ps1 -PolicyFile ./compliance.lab.json -Deploy -WhatIf",
+        "./Invoke-PurviewCompliance.ps1 -PolicyFile ./compliance.lab.json -Deploy -Confirm:$false",
+        "#pause 4"
+      ],
+      "also": [
+        {
+          "kind": "browser",
+          "url": "https://purview.microsoft.com/",
+          "account": "labadmin",
+          "steps": [
+            "Purview portal > Information Protection > Sensitivity labels: Contoso-Public, Contoso-General, Contoso-Confidential",
+            "Information Protection > Label policies: 'Contoso labels - pilot'",
+            "Data loss prevention > Policies: both policies, status 'In simulation with notifications'",
+            "Data lifecycle management > Retention labels: 'Contoso Contract - 7 years'"
+          ],
+          "mask": [
+            "tenant name",
+            "labadmin e-mail"
+          ],
+          "when": "after"
+        }
+      ]
+    },
+    {
+      "name": "label",
+      "kind": "browser",
+      "url": "https://www.office.com/launch/word",
+      "account": "alex.demo (second browser profile)",
+      "steps": [
+        "(At least 24 h after the 'plan' screen, so the label policy has reached Alex)",
+        "OneDrive > New > Word document, name it 'Q4 supplier contract'",
+        "Home > Sensitivity: show Public, General, Confidential and their tooltips",
+        "Choose Confidential: the red centered header 'CONFIDENTIAL - Contoso internal' appears",
+        "If the Sensitivity button is missing, say why (labels for SharePoint/OneDrive not turned on, or the policy has not arrived); do not fake it"
+      ],
+      "mask": [
+        "OneDrive URL",
+        "Alex e-mail beyond the lab alias",
+        "tenant name"
+      ]
+    },
+    {
+      "name": "dlp-tip",
+      "kind": "browser",
+      "url": "https://outlook.office.com/mail/",
+      "account": "alex.demo (second browser profile)",
+      "steps": [
+        "New mail > To: partner@example.com (reserved domain, nothing is ever sent), subject 'Customer list'",
+        "Paste the 12 generated lines (from the terminal part) into the body",
+        "Wait for the policy tip bar with 'Blocked: 10 or more card numbers can't leave Contoso...'",
+        "Discard the draft, NEVER press Send"
+      ],
+      "mask": [
+        "mailbox address",
+        "tenant name"
+      ],
+      "also": [
+        {
+          "kind": "terminal",
+          "steps": [],
+          "mask": [],
+          "when": "before",
+          "target": "host",
+          "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\microsoft-365\\episodes\\05-microsoft-purview-compliance\\src",
+          "prompt": "PS> ",
+          "commands": [
+            "./Invoke-PurviewCompliance.ps1 -NewTestFile -TestFilePath ./contoso-dlp-test.txt -Count 12",
+            "Get-Content ./contoso-dlp-test.txt | Set-Clipboard",
+            "#pause 3"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "simulation",
+      "kind": "browser",
+      "url": "https://purview.microsoft.com/",
+      "account": "alex.demo for the document, labadmin for the portal",
+      "steps": [
+        "(Off camera, a day earlier, as alex.demo: OneDrive > New > Word document 'Customer list', paste the same 12 lines, close it, do NOT share it)",
+        "Purview portal > Data loss prevention > Policies > 'Contoso - Card numbers' > View simulation",
+        "Simulation overview shows the matched item; Items for review lists 'Customer list.docx'",
+        "Promote the policy in the terminal (see also[]); then refresh the policy page"
+      ],
+      "mask": [
+        "tenant name",
+        "names other than the fictional lab users"
+      ],
+      "also": [
+        {
+          "kind": "terminal",
+          "steps": [],
+          "mask": [],
+          "when": "after",
+          "target": "host",
+          "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\microsoft-365\\episodes\\05-microsoft-purview-compliance\\src",
+          "prompt": "PS> ",
+          "commands": [
+            "Connect-IPPSSession -UserPrincipalName $env:MG_LAB_ADMIN_UPN -ShowBanner:$false",
+            "./Invoke-PurviewCompliance.ps1 -Promote -PolicyName 'Contoso - Card numbers' -Mode Enable -Confirm:$false",
+            "#pause 4"
+          ]
+        }
+      ]
+    }
+  ],
+  "teardown": [
+    "Connect-IPPSSession -UserPrincipalName $env:MG_LAB_ADMIN_UPN -ShowBanner:$false  # owner signs in (browser)",
+    "foreach ($p in 'Contoso - Card numbers', 'Contoso - Confidential label') { Get-DlpComplianceRule -Policy $p | Remove-DlpComplianceRule -Confirm:$false; Remove-DlpCompliancePolicy -Identity $p -Confirm:$false }",
+    "Get-RetentionComplianceRule -Policy 'Contoso retention labels' | Remove-RetentionComplianceRule -Confirm:$false; Remove-RetentionCompliancePolicy -Identity 'Contoso retention labels' -Confirm:$false; Remove-ComplianceTag -Identity 'Contoso Contract - 7 years' -Confirm:$false",
+    "Remove-LabelPolicy -Identity 'Contoso labels - pilot' -Confirm:$false; foreach ($l in 'Contoso-Public', 'Contoso-General', 'Contoso-Confidential') { Remove-Label -Identity $l -Confirm:$false }",
+    "Remove-Item ./src/contoso-dlp-test.txt, ./src/compliance.lab.json, ./src/inventory.lab.json -ErrorAction SilentlyContinue",
+    "Disconnect-ExchangeOnline -Confirm:$false; Disconnect-MgGraph",
+    "# by hand: delete 'Q4 supplier contract' and 'Customer list' from Alex's OneDrive and its recycle bin; discard any Outlook draft",
+    "foreach ($n in 'MG_LAB_ADMIN_UPN', 'MG_LAB_DOMAIN') { [Environment]::SetEnvironmentVariable($n, $null, 'User') }"
+  ],
+  "needs": [
+    "tenant",
+    "trial:Microsoft 365 E5 (Purview)",
+    "role:Compliance Administrator (labadmin); Global Administrator once to turn labels on for SharePoint/OneDrive",
+    "browser-profile:alex.demo",
+    "wait:24h between screen plan and screens label/dlp-tip/simulation (labels and policies need time to reach apps)",
+    "manual:turn on sensitivity labels for Office files in SharePoint and OneDrive (Purview banner, Turn on now)",
+    "manual:as alex.demo create Customer list.docx the day before the simulation screen"
+  ]
+}

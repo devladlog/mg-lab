@@ -1,0 +1,83 @@
+{
+  "note": "Live-session recording of the screen scenes (series/tools/rec). Four portal screens in DEV. The tenant is on the Low performance profile (trial licences, 10,000 actions per 24 hours): only the 1,000 item runs are recorded on the day (about 4,100 actions); never run the draft at 4,000 items for real and run no other flow of labadmin that day. Durations are whatever SharePoint throttling gives; nothing is edited.",
+  "prepare": [
+    "python -m pip install -r requirements-test.txt --quiet",
+    "python -m pytest",
+    "$env:PSModulePath = (Join-Path (Resolve-Path ..\\..\\..\\..).Path '.tools\\Modules') + ';' + $env:PSModulePath",
+    "if (-not (Get-Module -ListAvailable PnP.PowerShell)) { Install-Module PnP.PowerShell -Scope CurrentUser -Force }",
+    "# owner signs in: pac and Connect-PnPOnline below, and the browser profile for labadmin (make.powerautomate.com, SharePoint). Nothing is typed or stored here.",
+    "if (-not $env:DEV_URL) { $env:DEV_URL = Read-Host 'DEV environment URL' }",
+    "if (-not $env:HELPDESK_SITE_URL) { $env:HELPDESK_SITE_URL = Read-Host 'IT Helpdesk site URL' }",
+    "pac auth create --name dev --environment $env:DEV_URL   # owner signs in, off camera",
+    "# owner (tenant, demo.md Setup 1): IT Requests gets the Archived choice value and the DoneOn column; index Status and DoneOn",
+    "New-Item -ItemType Directory -Force -Path .\\out | Out-Null",
+    "pac solution pack --zipfile .\\out\\ITHousekeeping.zip --folder .\\src\\solution --packagetype Unmanaged",
+    "pac solution import --path .\\out\\ITHousekeeping.zip",
+    "# owner (demo.md Setup 2-3): fill the environment variables (site URL, list IT Requests, cts_ArchiveAfterDays 30, mailbox), sign in the two connection references; build the draft flow 'Archive done IT requests (draft)' by hand from src\\drafts; keep both flows off until the test",
+    "Connect-PnPOnline -Url $env:HELPDESK_SITE_URL -Interactive   # owner signs in (PnP app id from the owner's own registration)",
+    "Push-Location .\\src; .\\scripts\\Seed-ITRequests.ps1 -Count 1000 -WhatIf; .\\scripts\\Seed-ITRequests.ps1 -Count 1000; Pop-Location",
+    "# owner: between the three tuned runs (concurrency 1, 20, 50) re-seed with: .\\scripts\\Seed-ITRequests.ps1 -Cleanup; .\\scripts\\Seed-ITRequests.ps1 -Count 1000"
+  ],
+  "screens": [
+    {
+      "name": "slowrun",
+      "kind": "browser",
+      "url": "https://make.powerautomate.com/",
+      "account": "labadmin",
+      "steps": [
+        "Select environment DEV and open the flow 'Archive done IT requests (draft)'",
+        "Run it once manually on the 1,000 item list and open the 28-day run history",
+        "Show Start time and Duration of the run (read the duration off the screen, do not edit it)",
+        "Open the run and expand 'Apply to each': 'Get item again' and the condition repeated for every item"
+      ],
+      "mask": ["environment URL and ID in the address bar", "tenant name and account in the top bar"]
+    },
+    {
+      "name": "fastrun",
+      "kind": "browser",
+      "url": "https://make.powerautomate.com/",
+      "account": "labadmin",
+      "steps": [
+        "Open the tuned flow 'Archive done IT requests' and its run history",
+        "On the re-seeded list of the same size run it with Apply to each concurrency 1 (Settings on the loop), re-seed, then 20, re-seed, then 50",
+        "Show the three Duration values side by side in the run history",
+        "Open a run: 'Get done requests' returns only the done, old requests and 'Archive item' is the only action in the loop"
+      ],
+      "mask": ["environment URL and ID in the address bar", "tenant name and account in the top bar"]
+    },
+    {
+      "name": "analytics",
+      "kind": "browser",
+      "url": "https://make.powerautomate.com/",
+      "account": "labadmin",
+      "steps": [
+        "Open the flow details page of the draft flow > Analytics > Actions tab",
+        "Do the same for the tuned flow, on the day of the test (Analytics can lag: wait and retake if it is empty)",
+        "Put a terminal with the dry-run numbers next to it: python -m perfkit compare drafts/slow-archive-done-requests.json solution/Workflows/*.json (run from src)",
+        "Show the real counts next to the dry-run counts; if they differ, the real ones stay"
+      ],
+      "mask": ["environment URL and ID in the address bar", "tenant name and account in the top bar"]
+    },
+    {
+      "name": "listindex",
+      "kind": "browser",
+      "url": "https://<tenant>.sharepoint.com/sites/ITHelpdesk/Lists/IT%20Requests/AllItems.aspx",
+      "account": "labadmin",
+      "steps": [
+        "Open the list IT Requests > List settings > Indexed columns",
+        "Show Status and DoneOn indexed",
+        "Show the item count of the list above five thousand if the seed was raised that far"
+      ],
+      "mask": ["tenant name in the address bar and the SharePoint header"]
+    }
+  ],
+  "teardown": [
+    "Push-Location .\\src; .\\scripts\\Seed-ITRequests.ps1 -Cleanup; Pop-Location",
+    "# owner (SharePoint): empty the site's Recycle Bin (both stages); remove the Archived value, DoneOn and the two indexes if episode 1's list must go back to how it was",
+    "# owner (tenant): delete the draft flow and the IT Housekeeping solution from DEV; check that labadmin's Analytics shows no leftover runs; both flows stay off",
+    "Remove-Item Env:DEV_URL, Env:HELPDESK_SITE_URL -ErrorAction SilentlyContinue",
+    "Remove-Item .\\out -Recurse -Force -ErrorAction SilentlyContinue",
+    "pac auth clear"
+  ],
+  "needs": ["tenant"]
+}

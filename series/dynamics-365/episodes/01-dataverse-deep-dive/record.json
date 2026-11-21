@@ -1,0 +1,89 @@
+{
+  "note": "Live-session recording of the screen scenes (series/tools/rec). prepare/teardown run on the laptop, not recorded; commands are typed and run for real. Extra keys (note, followup, manual_prepare, manual_teardown) are for the recorder person; the kit ignores them. Every python command opens its own MSAL interactive sign-in (the token cache is in memory): the owner signs in as labadmin when the browser asks, or exports the app-registration variables in the shell before recording (never in a file). The table must not exist yet for the provision screen (see manual_prepare).",
+  "prepare": [
+    "python -m pip install --user -q -r requirements.txt",
+    "if (-not $env:DATAVERSE_URL) { throw 'Set $env:DATAVERSE_URL to the lab environment URL in this shell first (the owner does this; it is never written in a file).' }"
+  ],
+  "manual_prepare": [
+    "Power Apps: create solution MGLabDataverse (publisher prefix mgl, option value prefix 72700) if missing.",
+    "Make sure table Project Request (mgl_projectrequest) does not exist (delete it from the solution after a rehearsal)."
+  ],
+  "screens": [
+    {
+      "name": "provision",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\dynamics-365\\episodes\\01-dataverse-deep-dive\\src",
+      "prompt": "PS src> ",
+      "commands": [
+        "python -m dvlab provision --solution MGLabDataverse",
+        "#pause 4"
+      ]
+    },
+    {
+      "name": "maker-keys",
+      "kind": "browser",
+      "url": "https://make.powerapps.com/",
+      "account": "labadmin",
+      "steps": [
+        "Select the environment DEV (top right)",
+        "Open Solutions, then MGLabDataverse",
+        "Open Tables, then Project Request",
+        "Open Keys: show 'Request Code' on mgl_requestcode with status Active",
+        "Open Columns: Budget, Due Date, Priority, Request Code, Customer Account (B-roll)",
+        "Open Due Date, Advanced options: Format and Behavior are 'Date only'"
+      ],
+      "mask": [
+        "tenant name in the top bar",
+        "environment name and org URL (address bar and header)",
+        "user e-mail and avatar in the account menu"
+      ]
+    },
+    {
+      "name": "import",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\dynamics-365\\episodes\\01-dataverse-deep-dive\\src",
+      "prompt": "PS src> ",
+      "commands": [
+        "python -m dvlab import",
+        "#pause 3",
+        "python -m dvlab import",
+        "#pause 4"
+      ],
+      "followup": {
+        "kind": "browser",
+        "url": "https://make.powerapps.com/",
+        "account": "labadmin",
+        "steps": [
+          "Select DEV, Apps, open the model-driven app with Project Request (or Tables, Project Request, Data)",
+          "Show the Project Requests view: 18 rows, no duplicates"
+        ],
+        "mask": [
+          "tenant name in the top bar",
+          "environment name and org URL (address bar and header)",
+          "user e-mail and avatar in the account menu"
+        ]
+      }
+    },
+    {
+      "name": "report",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\dynamics-365\\episodes\\01-dataverse-deep-dive\\src",
+      "prompt": "PS src> ",
+      "commands": [
+        "python -m dvlab report --page-size 5",
+        "#pause 4"
+      ]
+    }
+  ],
+  "teardown": [],
+  "manual_teardown": [
+    "Solution: delete the Project Request table (removes columns, lookup and key), optionally the MGLabDataverse solution (unless episodes 2-4 are next).",
+    "Remove any app registration / application user created only for the recording."
+  ],
+  "needs": [
+    "tenant"
+  ]
+}

@@ -1,0 +1,106 @@
+{
+  "note": "Deep-dive #3. App roles and canvas app are driven by people; SSMS screen runs on the laptop. Alex, Sam and Jordan need Power Apps Premium (trial) for the custom connector.",
+  "prepare": [
+    "# owner signs in (device code), not recorded",
+    "az login --use-device-code",
+    "dotnet test tests/PurchaseRequests.Tests -m:1",
+    "# manual: app registrations 'Contoso Purchase Requests API' (scope PurchaseRequests.ReadWrite, roles Requester/Approver/Finance.Approver, token version 2, assignment required) and 'Contoso Purchase Requests Connector' (secret, delegated permission, admin consent); assign Alex=Requester, Sam=Approver+Requester, Jordan=Approver+Finance approver",
+    "$env:MG_API_CLIENT = Read-Host 'Purchase Requests API client id (owner types)'",
+    "az ad group create --display-name 'SQL Admins - Purchase Requests' --mail-nickname sqladmins-purchreq -o none",
+    "az ad group member add --group 'SQL Admins - Purchase Requests' --member-id (az ad signed-in-user show --query id -o tsv)",
+    "az group create -n rg-mglab-deep-dive-03 -l westeurope -o none",
+    "az deployment group create -g rg-mglab-deep-dive-03 -f infra/main.bicep -p infra/main.bicepparam -p apiClientId=$env:MG_API_CLIENT sqlAdminLogin='SQL Admins - Purchase Requests' sqlAdminObjectId=$(az ad group show -g 'SQL Admins - Purchase Requests' --query id -o tsv) --query properties.outputs -o json > $env:TEMP\\purchreq-outputs.json",
+    "$o = Get-Content $env:TEMP\\purchreq-outputs.json | ConvertFrom-Json; $env:MG_SQL03 = $o.sqlServerFqdn.value; $env:MG_WEB03 = $o.webAppName.value",
+    "dotnet publish src/PurchaseRequests.Api -c Release -o publish; Compress-Archive -Path publish/* -DestinationPath app.zip -Force",
+    "az webapp deploy -g rg-mglab-deep-dive-03 -n $o.webAppName.value --src-path app.zip --type zip",
+    "(Invoke-WebRequest \"https://$($o.webAppHostName.value)/healthz\").Content   # Healthy; slow on the first call (F1)",
+    "az sql server firewall-rule create -g rg-mglab-deep-dive-03 -s ($o.sqlServerFqdn.value.Split('.')[0]) -n laptop --start-ip-address (Invoke-RestMethod https://api.ipify.org) --end-ip-address (Invoke-RestMethod https://api.ipify.org) -o none",
+    "sqlcmd -S $env:MG_SQL03 -d purchase-requests -G -b -i sql/001-schema.sql   # owner signs in (Entra MFA)",
+    "# manual: Power Apps (DEV): custom connector 'Contoso Purchase Requests' from connector/apiDefinition.swagger.json, OAuth 2.0 with the connector app, test ListMyRequests as Alex (200 []); canvas app 'Contoso Purchase Requests' with the formulas from demo.md; share with Alex, Sam, Jordan",
+    "# manual: dry run (Alex submits 7,500, Sam refused, Jordan approves) then DELETE FROM dbo.PurchaseRequests; as SQL admin for a clean take",
+    "# 002-grant-app.sql is run on camera in the SSMS screen with @app set to the web app name"
+  ],
+  "screens": [
+    {
+      "name": "entra-app-roles",
+      "kind": "browser",
+      "url": "https://entra.microsoft.com/",
+      "account": "labadmin",
+      "steps": [
+        "Entra admin center > Entra ID > Enterprise apps",
+        "Open Contoso Purchase Requests API > Users and groups",
+        "Show Alex Demo = Requester; Sam Demo = Approver and Requester (two rows); Jordan Demo = Approver and Finance approver (two rows)"
+      ],
+      "mask": [
+        "tenant name and domain",
+        "user principal names (display names only)",
+        "object ids and the app id"
+      ]
+    },
+    {
+      "name": "sql-grants",
+      "kind": "app",
+      "app": "SSMS 22",
+      "account": "labadmin",
+      "steps": [
+        "Connect to the SQL server (Microsoft Entra MFA as the Entra admin), database purchase-requests",
+        "File > Open > sql/002-grant-app.sql, set @app to the web app name, Execute",
+        "Show the first grid: app identity (EXTERNAL_USER) with db_datareader and db_datawriter",
+        "Show the second grid: DENY UPDATE and DENY DELETE on AuditEntries"
+      ],
+      "mask": [
+        "server name in the title bar, Object Explorer and connection dialog (collapse it or crop)",
+        "tenant name and sign-in prompt",
+        "web app name if it appears in the script (blur it)"
+      ]
+    },
+    {
+      "name": "app-submit",
+      "kind": "browser",
+      "url": "https://apps.powerapps.com/",
+      "account": "alex.demo",
+      "steps": [
+        "Sign in as Alex Demo (own browser profile), play Contoso Purchase Requests",
+        "New request: title 'Two lab servers', justification, amount 7500, currency EUR",
+        "Select Submit: green 'Submitted' banner",
+        "Open My requests: the 7,500 request shows as Pending"
+      ],
+      "mask": [
+        "tenant name and domain",
+        "user principal name",
+        "environment id in the URL",
+        "GUIDs in the app URL"
+      ]
+    },
+    {
+      "name": "app-decide",
+      "kind": "browser",
+      "url": "https://apps.powerapps.com/",
+      "account": "sam.demo",
+      "steps": [
+        "Sign in as Sam Demo, play the app, open To decide, select the 7,500 request",
+        "Approve: red banner 'Requests above 5,000 EUR need a finance approver.'",
+        "Second capture: sign out, sign in as Jordan Demo (jordan.demo), Approve: status Approved",
+        "Open the audit panel: Submitted (Alex), DecisionDenied (Sam), Approved (Jordan)"
+      ],
+      "mask": [
+        "tenant name and domain",
+        "user principal names",
+        "actorOid values in the audit panel",
+        "GUIDs in the URL"
+      ]
+    }
+  ],
+  "teardown": [
+    "az group delete -n rg-mglab-deep-dive-03 --yes --no-wait",
+    "Remove-Item app.zip, publish, $env:TEMP\\purchreq-outputs.json -Recurse -Force -ErrorAction SilentlyContinue",
+    "Remove-Item Env:MG_SQL03, Env:MG_WEB03, Env:MG_API_CLIENT -ErrorAction SilentlyContinue",
+    "az ad group delete --group 'SQL Admins - Purchase Requests'",
+    "# manual: delete the custom connector and the canvas app in DEV, the two app registrations (and enterprise apps); remove Power Apps Premium trial assignments added only for this"
+  ],
+  "needs": [
+    "tenant",
+    "azure",
+    "premium-trial"
+  ]
+}

@@ -1,0 +1,83 @@
+{
+  "note": "Live-session recording of the screen scenes (series/tools/rec). prepare/teardown run on the laptop, not recorded; terminal commands are typed and run for real. $env:MG_DEV_URL (DEV org URL) and the other MG_* variables are set by the owner as user environment variables on the laptop and never appear on screen.",
+  "prepare": [
+    "Read-Host 'Owner: episodes 1-2 are in DEV; the five test loans from demo.md exist (relative to today); App.Formulas has the UDF block, LoansScreen exists and BrowseScreen has the Open loans button; saved and published; an Outlook on the web draft window or a text editor is open for the paste. Press Enter'"
+  ],
+  "screens": [
+    {
+      "name": "app-formulas",
+      "kind": "browser",
+      "url": "https://make.powerapps.com/",
+      "account": "labadmin",
+      "steps": [
+        "Solutions > Equipment Desk > 'Equipment Desk (phone)' > Edit",
+        "Tree view: select App, property dropdown on Formulas, expand the formula editor: IsWorkingDay, WorkingDaysBetween and LoanState visible, no errors",
+        "Add a temporary label and type WorkingDaysBetween(Date(2026,11,27), Date(2026,12,9)): IntelliSense shows (start: Date, finish: Date) and the label shows 6",
+        "Delete the temporary label afterwards"
+      ],
+      "mask": [
+        "environment name and org URL in the address bar and the environment picker",
+        "tenant name in the top bar",
+        "account name, e-mail and avatar in the account menu"
+      ]
+    },
+    {
+      "name": "row-limit-overdue",
+      "kind": "browser",
+      "url": "https://make.powerapps.com/",
+      "account": "labadmin",
+      "steps": [
+        "In Studio: Settings > General, Data row limit = 1",
+        "Preview LoansScreen with 'Overdue only' on: both CT-0043 and CT-0107 are listed",
+        "Show that galLoans has no delegation warning",
+        "Optional: paste the With version into galLoans.Items, show one row and still no warning, then undo"
+      ],
+      "mask": [
+        "environment name and org URL in the address bar and the environment picker",
+        "tenant name in the top bar",
+        "account name, e-mail and avatar in the account menu"
+      ]
+    },
+    {
+      "name": "open-loans",
+      "kind": "browser",
+      "url": "https://make.powerapps.com/",
+      "account": "labadmin",
+      "steps": [
+        "Preview LoansScreen (phone layout) with the toggle off",
+        "Show the red 'N loans are overdue', four rows in due-date order with red/amber/grey colours, 'Charger missing' and 'No notes'"
+      ],
+      "mask": [
+        "environment name and org URL in the address bar and the environment picker",
+        "tenant name in the top bar",
+        "account name, e-mail and avatar in the account menu",
+        "any real mail domain: only the fictional *.demo@contoso.com addresses may stay"
+      ]
+    },
+    {
+      "name": "reminder-copied",
+      "kind": "browser",
+      "url": "https://make.powerapps.com/",
+      "account": "labadmin",
+      "steps": [
+        "Tap 'Copy reminder' on the CT-0043 row: green 'Reminder for alex.demo@contoso.com copied'",
+        "Cut to the text editor or unsent Outlook draft window and paste the reminder (do not send)",
+        "Optional: the same app as a Teams tab shows the red 'Couldn't copy the reminder' message"
+      ],
+      "mask": [
+        "environment name and org URL in the address bar and the environment picker",
+        "tenant name in the top bar",
+        "account name, e-mail and avatar in the account menu",
+        "any real mail domain: only the fictional *.demo@contoso.com addresses may stay",
+        "the Outlook account if a draft window is shown"
+      ]
+    }
+  ],
+  "teardown": [
+    "Write-Host 'Reminder: Data row limit back to 500, delete the temporary label and the With experiment, close the Outlook draft without sending, delete or keep the five test loans (episode 4 reuses the tables).'"
+  ],
+  "needs": [
+    "tenant",
+    "premium-trial"
+  ]
+}

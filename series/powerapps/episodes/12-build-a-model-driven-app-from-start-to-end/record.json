@@ -1,0 +1,227 @@
+{
+  "note": "Live-session recording of the screen scenes (series/tools/rec). prepare/teardown run on the laptop, not recorded; terminal commands are typed and run for real. $env:MG_DEV_URL (DEV org URL) and the other MG_* variables are set by the owner as user environment variables on the laptop and never appear on screen.",
+  "prepare": [
+    "python src/schema/build_solution.py --profile data --out $env:TEMP\\cin-data-only",
+    "pac solution pack -z $env:TEMP\\cin-data.zip -f $env:TEMP\\cin-data-only",
+    "Read-Host 'Owner: import $env:TEMP\\cin-data.zip in the browser (Solutions > Import solution), then import src/data/*.csv in the order inspectors, sites, inspections, items (autonumber seed 1000), give sam.demo Basic User and the Power Apps self-service trial. Press Enter'"
+  ],
+  "screens": [
+    {
+      "name": "tables",
+      "kind": "browser",
+      "url": "https://make.powerapps.com/",
+      "account": "labadmin",
+      "steps": [
+        "Solutions > Contoso Inspections > Objects: the four tables",
+        "Open Inspections > Data: eight rows INS-01000 to INS-01007"
+      ],
+      "mask": [
+        "environment name and org URL in the address bar and the environment picker",
+        "tenant name in the top bar",
+        "account name, e-mail and avatar in the account menu"
+      ]
+    },
+    {
+      "name": "app-designer",
+      "kind": "browser",
+      "url": "https://make.powerapps.com/",
+      "account": "labadmin",
+      "steps": [
+        "New > App > Model-driven app, name Inspection Back Office",
+        "Add pages Dashboard, Inspections, Findings, Sites, Inspectors",
+        "Navigation: one area, groups Overview, Review (Inspections, Findings), Reference (Sites, Inspectors)",
+        "Save, publish, play"
+      ],
+      "mask": [
+        "environment name and org URL in the address bar and the environment picker",
+        "tenant name in the top bar",
+        "account name, e-mail and avatar in the account menu"
+      ]
+    },
+    {
+      "name": "quick-create",
+      "kind": "browser",
+      "url": "https://make.powerapps.com/",
+      "account": "labadmin",
+      "steps": [
+        "In the running app click + New > Inspection",
+        "Quick create panel: Site, Inspector, Inspection date",
+        "Create one for Harbor Warehouse and Alex Demo: the next number INS-01008"
+      ],
+      "mask": [
+        "environment name and org URL in the address bar and the environment picker",
+        "tenant name in the top bar",
+        "account name, e-mail and avatar in the account menu",
+        "any real mail domain: only the fictional *.demo@contoso.com addresses may stay"
+      ]
+    },
+    {
+      "name": "forms",
+      "kind": "browser",
+      "url": "https://make.powerapps.com/",
+      "account": "labadmin",
+      "steps": [
+        "Inspection table > Forms > main form in the designer",
+        "Header: Status, Score, Inspection date, Owner",
+        "Tabs General, Findings (sub grid) and Review (Reviewer notes)"
+      ],
+      "mask": [
+        "environment name and org URL in the address bar and the environment picker",
+        "tenant name in the top bar",
+        "account name, e-mail and avatar in the account menu"
+      ]
+    },
+    {
+      "name": "views",
+      "kind": "browser",
+      "url": "https://make.powerapps.com/",
+      "account": "labadmin",
+      "steps": [
+        "Running app > Inspections: open the view picker",
+        "Active Inspections, then Inspections to review (three rows), Needs follow-up",
+        "Inspection items: Open critical findings"
+      ],
+      "mask": [
+        "environment name and org URL in the address bar and the environment picker",
+        "tenant name in the top bar",
+        "account name, e-mail and avatar in the account menu",
+        "any real mail domain: only the fictional *.demo@contoso.com addresses may stay"
+      ]
+    },
+    {
+      "name": "business-rule",
+      "kind": "browser",
+      "url": "https://make.powerapps.com/",
+      "account": "labadmin",
+      "steps": [
+        "Inspection table > Business rules > 'A submitted inspection needs a score' in the designer (scope Table)",
+        "In the app set INS-01006 to Submitted with an empty score and save: error on Score, no save",
+        "Critical item with Passed ticked: error on save"
+      ],
+      "mask": [
+        "environment name and org URL in the address bar and the environment picker",
+        "tenant name in the top bar",
+        "account name, e-mail and avatar in the account menu",
+        "any real mail domain: only the fictional *.demo@contoso.com addresses may stay"
+      ]
+    },
+    {
+      "name": "bpf",
+      "kind": "browser",
+      "url": "https://make.powerapps.com/",
+      "account": "labadmin",
+      "steps": [
+        "Solutions > Inspection review: the business process flow designer, four stages and their required steps",
+        "Open INS-01003 in the app: the process bar and the stage flyout"
+      ],
+      "mask": [
+        "environment name and org URL in the address bar and the environment picker",
+        "tenant name in the top bar",
+        "account name, e-mail and avatar in the account menu"
+      ]
+    },
+    {
+      "name": "dashboard",
+      "kind": "browser",
+      "url": "https://make.powerapps.com/",
+      "account": "labadmin",
+      "steps": [
+        "Open the app's Overview dashboard",
+        "Show both charts (Inspections by status, Open findings by severity) and both lists"
+      ],
+      "mask": [
+        "environment name and org URL in the address bar and the environment picker",
+        "tenant name in the top bar",
+        "account name, e-mail and avatar in the account menu"
+      ]
+    },
+    {
+      "name": "command-bar",
+      "kind": "browser",
+      "url": "https://make.powerapps.com/",
+      "account": "labadmin",
+      "steps": [
+        "App designer > Inspections page > ... > Edit command bar > Main form (choose Power Fx)",
+        "Select Approve: label, icon, Visible and Action formulas",
+        "In the app on INS-01004 click Approve: confirm dialog and notification"
+      ],
+      "mask": [
+        "environment name and org URL in the address bar and the environment picker",
+        "tenant name in the top bar",
+        "account name, e-mail and avatar in the account menu"
+      ]
+    },
+    {
+      "name": "review-board",
+      "kind": "browser",
+      "url": "https://make.powerapps.com/",
+      "account": "labadmin",
+      "steps": [
+        "Open INS-01002 and click Review board",
+        "Show the red score badge (64), '1 open critical', pass rate 33%, decision 'Reject: open critical findings', two findings",
+        "Click Open inspection: back on the form"
+      ],
+      "mask": [
+        "environment name and org URL in the address bar and the environment picker",
+        "tenant name in the top bar",
+        "account name, e-mail and avatar in the account menu"
+      ]
+    },
+    {
+      "name": "security",
+      "kind": "browser",
+      "url": "https://admin.powerplatform.microsoft.com/",
+      "account": "labadmin",
+      "steps": [
+        "Admin center (https://admin.powerplatform.microsoft.com/) > DEV > Settings > Users + permissions > Security roles > Inspection Back Office: privileges grid",
+        "Field security profiles > Inspection reviewer notes: Reviewer notes with Read, Create, Update and Sam Demo"
+      ],
+      "mask": [
+        "environment name and org URL in the address bar and the environment picker",
+        "tenant name in the top bar",
+        "account name, e-mail and avatar in the account menu"
+      ]
+    },
+    {
+      "name": "sam-demo",
+      "kind": "browser",
+      "url": "https://make.powerapps.com/",
+      "account": "sam.demo",
+      "steps": [
+        "Open an InPrivate window and sign in as sam.demo",
+        "The app is in the list; Overview loads; INS-01004 opens; the Review tab shows Reviewer notes and Sam can type",
+        "Admin center: remove sam.demo from the field security profile, reload: lock icon and no value; add Sam back"
+      ],
+      "mask": [
+        "environment name and org URL in the address bar and the environment picker",
+        "tenant name in the top bar",
+        "account name, e-mail and avatar in the account menu",
+        "any real mail domain: only the fictional *.demo@contoso.com addresses may stay"
+      ]
+    },
+    {
+      "name": "export",
+      "kind": "browser",
+      "url": "https://make.powerapps.com/",
+      "account": "labadmin",
+      "steps": [
+        "Solutions > Contoso Inspections: show tables, app, dashboard, charts, roles",
+        "Export > Managed (and Unmanaged for the repo)",
+        "Cutaway terminal (offline): pac solution unpack -z <downloaded>.zip -f $env:TEMP\\exported, then Get-ChildItem $env:TEMP\\exported"
+      ],
+      "mask": [
+        "environment name and org URL in the address bar and the environment picker",
+        "tenant name in the top bar",
+        "account name, e-mail and avatar in the account menu"
+      ]
+    }
+  ],
+  "teardown": [
+    "Remove-Item $env:TEMP\\cin-data-only, $env:TEMP\\cin-data.zip, $env:TEMP\\exported -Recurse -Force -ErrorAction SilentlyContinue",
+    "Write-Host 'Reminder: reset INS-01003/01004 status and follow-up flags; remove the roles and field security profile from sam.demo unless episode 11 needs them; keep the solution Contoso Inspections for episode 11; close the InPrivate window.'"
+  ],
+  "needs": [
+    "tenant",
+    "premium-trial"
+  ]
+}

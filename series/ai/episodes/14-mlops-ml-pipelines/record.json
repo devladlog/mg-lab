@@ -1,0 +1,150 @@
+{
+  "note": "The repo scripts are bash: Git Bash is put first on PATH and a python3 copy is created inside the venv (the Windows python3 is a Store stub). Endpoint VMs (blue + green) bill while they exist: do the endpoint screen in one short sitting and tear down at once. A rejected model or a failed job is the episode. The studio views are in each screen's 'also'. ci/mlops.yml is shown, never run.",
+  "prepare": [
+    "python -m venv .venv",
+    "$env:PATH = \"$PWD\\.venv\\Scripts;$env:PATH\"",
+    "python -m pip install -q -r requirements.txt",
+    "$env:PYTHONPATH = 'src'",
+    "Copy-Item .venv\\Scripts\\python.exe .venv\\Scripts\\python3.exe -Force",
+    "$env:PATH = \"C:\\Program Files\\Git\\bin;$env:PATH\"   # bash = Git Bash, not the WSL launcher",
+    "# owner signs in as labadmin (device code), not on camera",
+    "az login --use-device-code --only-show-errors | Out-Null",
+    "az extension add --name ml --yes -o none",
+    "az group create -n rg-mglab-ai-14 -l westeurope -o none",
+    "$o = az deployment group create -g rg-mglab-ai-14 -f infra/main.bicep -p infra/main.bicepparam --query properties.outputs -o json | ConvertFrom-Json",
+    "$env:RG = 'rg-mglab-ai-14'; $env:WS = $o.workspaceName.value",
+    "$env:ENDPOINT_NAME = \"slabreach-$(Get-Date -Format MMdd)-$(Get-Random -Maximum 99999)\"",
+    "python -m slabreach generate --out build/raw   # dry run: also builds and caches the environment image",
+    "$env:MODEL_NAME = 'sla-breach-dryrun'; bash scripts/train-and-register.sh; Remove-Item Env:MODEL_NAME"
+  ],
+  "screens": [
+    {
+      "name": "pipeline",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\ai\\episodes\\14-mlops-ml-pipelines",
+      "prompt": "PS ep14> ",
+      "commands": [
+        "python -m slabreach generate --out build/raw --seed 1",
+        "bash scripts/train-and-register.sh",
+        "#pause 5"
+      ],
+      "maxMinutes": 40,
+      "also": {
+        "kind": "browser",
+        "url": "https://ml.azure.com/",
+        "account": "labadmin",
+        "steps": [
+          "Open the workspace > Jobs > the pipeline job: graph prepare > train > evaluate, all completed",
+          "Open the evaluate step > Outputs + logs and show the PROMOTE line"
+        ],
+        "mask": [
+          "subscription name and ID",
+          "tenant name / directory in the top bar",
+          "signed-in user name, UPN and avatar in the account menu",
+          "resource name suffix",
+          "workspace name suffix (mglab-mlops-mlw-...)",
+          "endpoint name suffix and scoring URI"
+        ]
+      }
+    },
+    {
+      "name": "gate",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\ai\\episodes\\14-mlops-ml-pipelines",
+      "prompt": "PS ep14> ",
+      "commands": [
+        "python -m slabreach generate --out build/raw --scenario noisy --seed 4",
+        "bash scripts/train-and-register.sh",
+        "#pause 5"
+      ],
+      "maxMinutes": 40,
+      "also": {
+        "kind": "browser",
+        "url": "https://ml.azure.com/",
+        "account": "labadmin",
+        "steps": [
+          "Open Jobs > the failed job > evaluate step > Outputs + logs and show the REJECT line with its reasons",
+          "Open Models and show that sla-breach still has only version 1"
+        ],
+        "mask": [
+          "subscription name and ID",
+          "tenant name / directory in the top bar",
+          "signed-in user name, UPN and avatar in the account menu",
+          "resource name suffix",
+          "workspace name suffix (mglab-mlops-mlw-...)",
+          "endpoint name suffix and scoring URI"
+        ]
+      }
+    },
+    {
+      "name": "registry",
+      "kind": "browser",
+      "url": "https://ml.azure.com/",
+      "account": "labadmin",
+      "prepare": [
+        "python -m slabreach generate --out build/raw --seed 2",
+        "bash scripts/train-and-register.sh   # good second run -> version 2"
+      ],
+      "steps": [
+        "Open Models > sla-breach and show the version list (v1, then v2)",
+        "Open a version: type MLflow, tags test_auc and pipeline_job, then follow the link to the job"
+      ],
+      "mask": [
+        "subscription name and ID",
+        "tenant name / directory in the top bar",
+        "signed-in user name, UPN and avatar in the account menu",
+        "resource name suffix",
+        "workspace name suffix (mglab-mlops-mlw-...)",
+        "endpoint name suffix and scoring URI"
+      ]
+    },
+    {
+      "name": "endpoint",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\ai\\episodes\\14-mlops-ml-pipelines",
+      "prompt": "PS ep14> ",
+      "commands": [
+        "bash scripts/deploy-canary.sh 1",
+        "bash scripts/deploy-canary.sh 2",
+        "az ml online-endpoint invoke --name $env:ENDPOINT_NAME --request-file aml/sample-request.json -g $env:RG -w $env:WS",
+        "#pause 6"
+      ],
+      "maxMinutes": 45,
+      "mask": [
+        "endpoint name suffix and scoring URI in the output"
+      ],
+      "also": {
+        "kind": "browser",
+        "url": "https://ml.azure.com/",
+        "account": "labadmin",
+        "steps": [
+          "Open Endpoints > the endpoint > Details: blue 90 / green 10, authentication Microsoft Entra token"
+        ],
+        "mask": [
+          "subscription name and ID",
+          "tenant name / directory in the top bar",
+          "signed-in user name, UPN and avatar in the account menu",
+          "resource name suffix",
+          "workspace name suffix (mglab-mlops-mlw-...)",
+          "endpoint name suffix and scoring URI"
+        ]
+      }
+    }
+  ],
+  "teardown": [
+    "az ml online-endpoint delete --name $env:ENDPOINT_NAME --yes -g $env:RG -w $env:WS",
+    "az ml workspace delete --name $env:WS -g $env:RG --all-resources --permanently-delete --yes",
+    "az group delete -n rg-mglab-ai-14 --yes",
+    "Remove-Item build, mlruns, .venv -Recurse -Force -ErrorAction SilentlyContinue"
+  ],
+  "needs": [
+    "azure",
+    "paid:azure-ml-cluster-and-two-endpoint-vms",
+    "quota:Standard_DS3_v2-12-vcpu-westeurope",
+    "providers:MachineLearningServices-ContainerRegistry-Insights",
+    "git-bash"
+  ]
+}

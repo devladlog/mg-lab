@@ -1,0 +1,102 @@
+{
+  "note": "Deep-dive #5. Start date = today and record after 09:00 Lisbon time so the TAP is valid. Casey Demo is created by the demo and deleted in teardown (frees one E5 trial licence).",
+  "prepare": [
+    "# owner signs in (device code), not recorded",
+    "az login --use-device-code",
+    "Connect-MgGraph -Scopes User.ReadWrite.All,Group.ReadWrite.All,Policy.ReadWrite.AuthenticationMethod -NoWelcome   # owner signs in",
+    "$env:MG_TENANT = Read-Host 'Lab tenant short name (owner types)'; $env:PNP_CLIENT_ID = Read-Host 'PnP app client id (owner types)'; $env:MG_DOMAIN = Read-Host 'Lab verified domain (owner types)'",
+    "Invoke-Pester ./tests",
+    "# manual: write down Sam Demo's previous Employee ID/Department, then set Employee ID E1002 and Department Sales; create security group 'Sales lab team' (assigned, no members)",
+    "# manual: create the team site /sites/hr-lab, then run the list provisioning below twice",
+    "./provision/New-OnboardingLists.ps1 -SiteUrl \"https://$($env:MG_TENANT).sharepoint.com/sites/hr-lab\" -ClientId $env:PNP_CLIENT_ID -WhatIf",
+    "./provision/New-OnboardingLists.ps1 -SiteUrl \"https://$($env:MG_TENANT).sharepoint.com/sites/hr-lab\" -ClientId $env:PNP_CLIENT_ID",
+    "# manual: Entra enterprise app 'Contoso HR onboarding (API)' (API-driven provisioning), automatic mode, notification e-mail, custom attributes HireDate/UsageLocation and mappings as in demo.md, Start provisioning; note spId/jobId (never on screen)",
+    "az group create -n rg-mglab-deep-dive-05 -l westeurope -o none",
+    "az deployment group create -g rg-mglab-deep-dive-05 -f infra/main.bicep -p infra/main.bicepparam -p upnDomain=$env:MG_DOMAIN --query properties.outputs -o json > $env:TEMP\\onb-outputs.json",
+    "$id = (Get-Content $env:TEMP\\onb-outputs.json | ConvertFrom-Json).identityClientId.value",
+    "./provision/Grant-OnboardingAccess.ps1 -IdentityClientId $id -HostName \"$($env:MG_TENANT).sharepoint.com\" -WhatIf",
+    "./provision/Grant-OnboardingAccess.ps1 -IdentityClientId $id -HostName \"$($env:MG_TENANT).sharepoint.com\"",
+    "# manual: second deployment with siteId, requestsListId, tasksListId, provisioningServicePrincipalId, provisioningJobId (az deployment group create ... as in demo.md step 7), then func azure functionapp publish from src/OnboardingSync",
+    "# manual: flow 'Onboarding request approval' and canvas app 'Onboarding Portal' in solution 'Employee onboarding' (DEV); share the app with Taylor",
+    "# manual: enable Temporary Access Pass (note previous state); Lifecycle workflows 'Contoso pre-hire' and 'Contoso new hire' with the schedule disabled",
+    "# manual: dry run with a throwaway name, delete that user and its list items so the take starts clean"
+  ],
+  "screens": [
+    {
+      "name": "app-new-request",
+      "kind": "browser",
+      "url": "https://apps.powerapps.com/",
+      "account": "taylor.demo",
+      "steps": [
+        "Sign in as Taylor Demo (HR), play Onboarding Portal",
+        "New request: Casey, Demo, Sales, Sales representative, hiring manager Sam Demo from the people search, start date today",
+        "Select Submit",
+        "Open My requests: Casey Demo with status Submitted"
+      ],
+      "mask": [
+        "tenant name and domain",
+        "user principal names (keep casey.demo, sam.demo, taylor.demo readable)",
+        "environment id in the URL"
+      ]
+    },
+    {
+      "name": "provisioning-logs",
+      "kind": "browser",
+      "url": "https://entra.microsoft.com/",
+      "account": "labadmin",
+      "steps": [
+        "Entra ID > Enterprise apps > Contoso HR onboarding (API) > Provisioning logs",
+        "Open the Create row for source ID NH0000x, status Success",
+        "Show the modified properties: userPrincipalName, accountEnabled False, employeeId, department Sales, employeeHireDate, manager"
+      ],
+      "mask": [
+        "tenant name and domain",
+        "provisioning API endpoint, service principal, job and object ids",
+        "domain part of the sign-in name"
+      ]
+    },
+    {
+      "name": "list-account-created",
+      "kind": "browser",
+      "url": "https://<tenant>.sharepoint.com/sites/hr-lab",
+      "account": "labadmin",
+      "steps": [
+        "Open Onboarding Requests, All Items: Casey Demo with Status 'Account created', Employee ID, Sign-in name, Provisioning note '... 7 onboarding tasks added'",
+        "Second capture: open Onboarding Tasks filtered to that request id: seven tasks with owners and due dates"
+      ],
+      "mask": [
+        "tenant name in the address bar",
+        "domain part of the sign-in name"
+      ]
+    },
+    {
+      "name": "lcw-tap-email",
+      "kind": "browser",
+      "url": "https://entra.microsoft.com/",
+      "account": "labadmin",
+      "steps": [
+        "ID Governance > Lifecycle workflows > Contoso pre-hire > Run on demand for Casey Demo",
+        "Workflow history: task 'Generate TAP and send email' Completed",
+        "Switch to Sam Demo's Outlook on the web (https://outlook.office.com): the TAP e-mail for Casey Demo, pass value hidden",
+        "After the take (not recorded): run 'Contoso new hire' on demand and note the result in the README"
+      ],
+      "mask": [
+        "Temporary Access Pass value: ALWAYS fully hidden",
+        "tenant name and domain",
+        "object ids"
+      ]
+    }
+  ],
+  "teardown": [
+    "az group delete -n rg-mglab-deep-dive-05 --yes --no-wait",
+    "Remove-Item $env:TEMP\\onb-outputs.json -ErrorAction SilentlyContinue",
+    "# manual: Entra: delete Casey Demo and permanently from Deleted users, delete both Lifecycle workflows, the 'Contoso HR onboarding (API)' enterprise app and group 'Sales lab team'; restore the Temporary Access Pass policy and Sam's Employee ID and Department",
+    "# manual: delete the 'Employee onboarding' solution in DEV; delete the HR lab site and then remove it from the deleted sites list",
+    "Disconnect-MgGraph"
+  ],
+  "needs": [
+    "tenant",
+    "azure",
+    "licence:Entra ID Governance trial (Lifecycle Workflows)"
+  ]
+}

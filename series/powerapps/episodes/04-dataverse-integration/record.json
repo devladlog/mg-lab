@@ -1,0 +1,85 @@
+{
+  "note": "Live-session recording of the screen scenes (series/tools/rec). prepare/teardown run on the laptop, not recorded; terminal commands are typed and run for real. $env:MG_DEV_URL (DEV org URL) and the other MG_* variables are set by the owner as user environment variables on the laptop and never appear on screen.",
+  "prepare": [
+    "Push-Location src\\EquipmentSync; dotnet build -nologo -v q; Pop-Location",
+    "# owner signs in: interactive OAuth prompt of the maker account (MG_OAUTH_APPID is the public client id the owner set)",
+    "$env:DATAVERSE_CONNECTION_STRING = \"AuthType=OAuth;Url=$($env:MG_DEV_URL);AppId=$($env:MG_OAUTH_APPID);RedirectUri=http://localhost;LoginPrompt=Auto\"",
+    "Push-Location src\\EquipmentSync; dotnet run --no-build -- setup --enable-change-tracking; Pop-Location",
+    "Read-Host 'Owner: the Entra app registration for the nightly job, its client secret (short expiry), the application user in DEV with the custom role Equipment Sync (Create/Write on Equipment, organization-level Read) exist; MG_SYNC_APPID and MG_SYNC_APPSECRET are set. Press Enter'"
+  ],
+  "screens": [
+    {
+      "name": "alternate-key",
+      "kind": "browser",
+      "url": "https://make.powerapps.com/",
+      "account": "labadmin",
+      "steps": [
+        "Tables > Equipment",
+        "Open Keys",
+        "Show 'Asset tag key' on the column Asset tag with status Active"
+      ],
+      "mask": [
+        "environment name and org URL in the address bar and the environment picker",
+        "tenant name in the top bar",
+        "account name, e-mail and avatar in the account menu",
+        "application (client) id and any key logical name tied to the tenant"
+      ]
+    },
+    {
+      "name": "import-run",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\powerapps\\episodes\\04-dataverse-integration\\src\\EquipmentSync",
+      "prompt": "PS EquipmentSync> ",
+      "prepare": [
+        "$env:DATAVERSE_CONNECTION_STRING = \"AuthType=ClientSecret;Url=$($env:MG_DEV_URL);ClientId=$($env:MG_SYNC_APPID);ClientSecret=$($env:MG_SYNC_APPSECRET)\"",
+        "Read-Host 'Owner: in the Equipment Desk phone app (episode 2) lend CT-0043 so its status is On loan. Press Enter'"
+      ],
+      "commands": [
+        "dotnet run --no-build -- import ../../samples/asset-register.csv",
+        "#pause 4",
+        "dotnet run --no-build -- import ../../samples/asset-register.csv",
+        "#pause 4"
+      ],
+      "url": "https://make.powerapps.com/",
+      "account": "labadmin",
+      "steps": [
+        "After the terminal part: open the model-driven app Equipment Desk > Equipment",
+        "Show CT-0512 'Laptop 16, docked', CT-0513, CT-0514 Available, CT-0311 In repair, CT-0400 Retired and CT-0043 still On loan"
+      ],
+      "mask": [
+        "environment name and org URL in the address bar and the environment picker",
+        "tenant name in the top bar",
+        "account name, e-mail and avatar in the account menu",
+        "the connection string and any app id (never in the terminal output)"
+      ]
+    },
+    {
+      "name": "export-changes",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\powerapps\\episodes\\04-dataverse-integration\\src\\EquipmentSync",
+      "prompt": "PS EquipmentSync> ",
+      "prepare": [
+        "$env:DATAVERSE_CONNECTION_STRING = \"AuthType=ClientSecret;Url=$($env:MG_DEV_URL);ClientId=$($env:MG_SYNC_APPID);ClientSecret=$($env:MG_SYNC_APPSECRET)\"",
+        "Push-Location src\\EquipmentSync; dotnet run --no-build -- export ./state.json ./changes.csv; Pop-Location",
+        "Read-Host 'Owner: in the model-driven app set CT-0043 back to Available, then lend CT-0107 in the phone app. Press Enter'"
+      ],
+      "commands": [
+        "dotnet run --no-build -- export ./state.json ./changes.csv",
+        "Get-Content ./changes.csv",
+        "#pause 4"
+      ]
+    }
+  ],
+  "teardown": [
+    "Remove-Item src\\EquipmentSync\\state.json, src\\EquipmentSync\\changes.csv -ErrorAction SilentlyContinue",
+    "Remove-Item Env:DATAVERSE_CONNECTION_STRING -ErrorAction SilentlyContinue",
+    "Write-Host 'Reminder: delete the client secret / app registration and the application user in DEV; delete CT-0512..CT-0514 or keep them; set CT-0043 and CT-0107 back to Available. The alternate key stays; change tracking cannot be turned off.'"
+  ],
+  "needs": [
+    "tenant",
+    "premium-trial",
+    "entra-app-registration"
+  ]
+}

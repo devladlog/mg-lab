@@ -1,0 +1,80 @@
+{
+  "note": "Live-session recording of the screen scenes (series/tools/rec). Four portal screens. Costs real money (8 Copilot Credits per page at 0.01 USD, about 10 pages, under 1 USD) and needs a pay-as-you-go billing plan on DEV; everything is removed the same day in teardown.",
+  "prepare": [
+    "python -m pip install -r requirements-test.txt --quiet",
+    "python -m pytest",
+    "# owner signs in: az login (lab subscription, Owner), pac auth below, browser profiles for labadmin (Azure portal, Power Platform admin center, Automation Center) and alex.demo (make.powerautomate.com, SharePoint). Nothing is typed or stored here.",
+    "az group create --name rg-mglab-pa-12 --location westeurope --output none",
+    "# owner (Azure portal, off camera): Cost Management > Budgets on rg-mglab-pa-12: 30 EUR per month, alert at 80 percent to the lab admin. Resources: the resource group (free) and, after the billing plan, one hidden Power Platform account resource (pay as you go 0.01 USD per Copilot Credit)",
+    "# owner (PPAC, demo.md Setup 2): check that DEV is a Production or Sandbox environment; Licensing > Pay-as-you-go plans > New billing plan 'mglab-pa-12' on the lab subscription and rg-mglab-pa-12, select DEV, Save",
+    "# owner: start the self-service Power Automate Premium trial for alex.demo (AI Builder action is premium); say so on camera or cut it",
+    "# owner (tenant, demo.md Setup 3): site Finance with library Invoice Inbox and the lists Invoice Extractions and Invoices (internal names exactly as in demo.md); sam.demo is the reviewer",
+    "if (-not $env:DEV_URL) { $env:DEV_URL = Read-Host 'DEV environment URL' }",
+    "pac auth create --name dev --environment $env:DEV_URL   # owner signs in, off camera",
+    "New-Item -ItemType Directory -Force -Path .\\out | Out-Null",
+    "pac solution pack --zipfile .\\out\\ITInvoiceIntake.zip --folder .\\src\\solution --packagetype Unmanaged",
+    "pac solution import --path .\\out\\ITInvoiceIntake.zip",
+    "# owner (demo.md Setup 4-5): set the connection references and the environment variables (Finance site URL, Reviewer mailbox = sam.demo, thresholds 0.8, 5000, 365); build the extraction flow 'Extract invoice to staging list' in the designer as alex.demo and turn it on",
+    "# owner (screen 'extractions'): drop src\\samples\\invoice-clean.pdf, invoice-scan.png and invoice-mismatch.pdf one by one into Invoice Inbox, then invoice-clean.pdf a second time; run invoice-two-in-one.pdf with Pages = 2-3"
+  ],
+  "screens": [
+    {
+      "name": "extract",
+      "kind": "browser",
+      "url": "https://make.powerautomate.com/",
+      "account": "alex.demo",
+      "steps": [
+        "Select environment DEV and open the flow 'Extract invoice to staging list' in the designer",
+        "Open the four actions enough to read: trigger 'When a file is created (properties only)' on Invoice Inbox, 'Get file content', AI Builder 'Extract information from invoices' (Invoice file, Pages) and 'Create item' in Invoice Extractions with the mapped fields",
+        "Show the number and date outputs mapped (not the text ones) and the confidence outputs"
+      ],
+      "mask": ["tenant name in the top bar", "site address in the trigger and Create item cards", "environment ID in the address bar"]
+    },
+    {
+      "name": "extractions",
+      "kind": "browser",
+      "url": "https://<tenant>.sharepoint.com/sites/Finance/Lists/Invoice%20Extractions/AllItems.aspx",
+      "account": "alex.demo",
+      "steps": [
+        "Show the Invoice Inbox library with the dropped files, then open the list 'Invoice Extractions'",
+        "Show one row per file with InvoiceId, VendorName, InvoiceTotal, dates and the confidence columns side by side",
+        "Point at the clean PDF with high scores next to the low-quality scan with lower ones; record whatever the model returns, do not edit values"
+      ],
+      "mask": ["tenant name in the address bar and the SharePoint header"]
+    },
+    {
+      "name": "decision",
+      "kind": "browser",
+      "url": "https://<tenant>.sharepoint.com/sites/Finance/Lists/Invoice%20Extractions/AllItems.aspx",
+      "account": "alex.demo",
+      "steps": [
+        "Capture 1: the Invoice Extractions list with the Decision column filled by the triage flow: auto-post for the clean invoice, review for the mismatch and the scan, reject for the second upload of the same invoice",
+        "Capture 2: the Invoices list with the one posted row",
+        "Capture 3: as sam.demo, the Outlook message from the flow's 'Ask reviewer' action for a review row",
+        "Optional: set the environment variable 'Amount limit' to 500 for one run to show OVERLIMIT (clean invoice total is 747.60) and set it back"
+      ],
+      "mask": ["tenant name in the address bar and headers", "mailbox domain"]
+    },
+    {
+      "name": "cost",
+      "kind": "browser",
+      "url": "https://make.powerautomate.com/",
+      "account": "labadmin",
+      "steps": [
+        "Open Automation Center > Monitor > AI Builder activity and show the predicts of this session with the Consumption value of each, in Copilot Credits",
+        "Open the Power Platform admin center > Licensing > Pay-as-you-go plans and show the plan linked to DEV"
+      ],
+      "mask": ["tenant name", "subscription name and subscription ID", "resource group ID", "environment ID in the address bar"]
+    }
+  ],
+  "teardown": [
+    "# owner (PPAC): remove DEV from the billing plan 'mglab-pa-12', then delete the plan",
+    "az group delete --name rg-mglab-pa-12 --yes --no-wait",
+    "# owner (Cost Management): note the day's charge in the README; delete the flows and solutions in DEV, the lists, the library and the site Finance; let the Power Automate Premium trial expire",
+    "Remove-Item .\\out -Recurse -Force -ErrorAction SilentlyContinue",
+    "Remove-Item Env:DEV_URL -ErrorAction SilentlyContinue",
+    "pac auth clear"
+  ],
+  "needs": ["tenant", "azure", "premium-trial", "paid:copilot-credits-payg"],
+  "blocked": "The cost screen and every AI Builder run need a pay-as-you-go billing plan (Copilot Credits) linked to DEV, which is not set up (series/LAB.md: owner's decision, about 1 USD for the session), and DEV must be a Production or Sandbox environment, not Trial or Developer."
+}

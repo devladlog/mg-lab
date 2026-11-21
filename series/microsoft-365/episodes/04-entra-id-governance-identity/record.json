@@ -1,0 +1,153 @@
+{
+  "note": "Live-session recording of the screen scenes (series/tools/rec). prepare/teardown run on the laptop, not recorded; commands are typed and run for real. Screens that mix a terminal and a portal carry the second half in also[] (when = before/after the main part). Scenes read MG_LAB_ADMIN_UPN / MG_LAB_DOMAIN (set by prepare, derived from the signed-in labadmin).",
+  "prepare": [
+    "if (-not (Get-Module -ListAvailable -Name Microsoft.Graph.Authentication)) { Install-Module Microsoft.Graph.Authentication -Scope CurrentUser -Force -AllowClobber }",
+    "Connect-MgGraph -Scopes RoleAssignmentSchedule.ReadWrite.Directory, RoleEligibilitySchedule.ReadWrite.Directory, RoleManagement.ReadWrite.Directory, AccessReview.ReadWrite.All, LifecycleWorkflows-Workflow.ReadWrite.All, LifecycleWorkflows-Workflow.Activate, User.ReadWrite.All, GroupMember.ReadWrite.All, Group.ReadWrite.All, Organization.Read.All, Directory.Read.All -NoWelcome  # owner signs in (browser)",
+    "function Set-LabVar($n, $v) { [Environment]::SetEnvironmentVariable($n, \"$v\", 'User'); Set-Item \"env:$n\" \"$v\" }",
+    "$upn = (Invoke-MgGraphRequest -Uri /v1.0/me).userPrincipalName; Set-LabVar MG_LAB_ADMIN_UPN $upn; Set-LabVar MG_LAB_DOMAIN $upn.Split('@')[1]",
+    "function Get-LabUserId($n) { (Invoke-MgGraphRequest -Uri \"/v1.0/users/$n@$env:MG_LAB_DOMAIN\").id }",
+    "$alex = Get-LabUserId 'alex.demo'; Set-LabVar MG_ALEX_ID $alex",
+    "# throwaway leaver Sam Leaver (Sales) with E5 + Entra ID Governance licences; never a shared lab user",
+    "$sam = (Invoke-MgGraphRequest -Uri \"/v1.0/users?`$filter=userPrincipalName eq 'sam.leaver@$env:MG_LAB_DOMAIN'\").value | Select-Object -First 1",
+    "if (-not $sam) { $sec = [guid]::NewGuid().ToString('N') + 'aA1!'; $sam = Invoke-MgGraphRequest -Method POST -Uri /v1.0/users -Body (\"{`\"accountEnabled`\":true,`\"displayName`\":`\"Sam Leaver`\",`\"mailNickname`\":`\"sam.leaver`\",`\"userPrincipalName`\":`\"sam.leaver@$env:MG_LAB_DOMAIN`\",`\"department`\":`\"Sales`\",`\"usageLocation`\":`\"PT`\",`\"passwordProfile`\":{`\"forceChangePasswordNextSignIn`\":false,`\"password`\":`\"$sec`\"}}\"); $sec = $null }; Set-LabVar MG_SAM_ID $sam.id",
+    "$skus = (Invoke-MgGraphRequest -Uri /v1.0/subscribedSkus).value; $add = @($skus | Where-Object skuPartNumber -in 'SPE_E5', 'Microsoft_Entra_ID_Governance' | ForEach-Object { @{ skuId = $_.skuId; disabledPlans = @() } }); Invoke-MgGraphRequest -Method POST -Uri \"/v1.0/users/$($sam.id)/assignLicense\" -Body @{ addLicenses = $add; removeLicenses = @() } | Out-Null",
+    "# group Sales Pipeline Review, Sam sole owner",
+    "$pg = (Invoke-MgGraphRequest -Uri \"/v1.0/groups?`$filter=displayName eq 'Sales Pipeline Review'\").value | Select-Object -First 1; if (-not $pg) { $pg = Invoke-MgGraphRequest -Method POST -Uri /v1.0/groups -Body @{ displayName = 'Sales Pipeline Review'; mailNickname = 'salespipelinereview'; mailEnabled = $true; securityEnabled = $false; groupTypes = @('Unified'); 'owners@odata.bind' = @(\"https://graph.microsoft.com/v1.0/users/$($sam.id)\") } }; Set-LabVar MG_PIPELINE_GROUP $pg.id",
+    "# time-bound ACTIVE Groups Administrator for Sam (7 days) through PIM",
+    "$ga = (Invoke-MgGraphRequest -Uri \"/v1.0/roleManagement/directory/roleDefinitions?`$filter=displayName eq 'Groups Administrator'\").value[0].id; Set-LabVar MG_GRPADM_ROLE $ga; Invoke-MgGraphRequest -Method POST -Uri /v1.0/roleManagement/directory/roleAssignmentScheduleRequests -Body @{ action = 'adminAssign'; principalId = $sam.id; roleDefinitionId = $ga; directoryScopeId = '/'; justification = 'Episode 4 leaver demo'; scheduleInfo = @{ startDateTime = (Get-Date).ToUniversalTime().ToString('o'); expiration = @{ type = 'afterDuration'; duration = 'P7D' } } } | Out-Null",
+    "# local policy copy: Alex eligible + fallback reviewer, no emergency access accounts in the lab",
+    "$pol = Get-Content ./src/governance.json -Raw | ConvertFrom-Json; $pol.emergencyAccessAccountIds = @(); $pol.eligibleAssignments[0].principalId = $alex; $pol.guestReview.fallbackReviewerId = $alex; $pol | ConvertTo-Json -Depth 8 | Set-Content ./src/governance.lab.json",
+    "./src/Invoke-IdentityGovernance.ps1 -Preview   # offline: 'Guest governance add-on needed: no' (never link an Azure subscription on the ID Governance dashboard)"
+  ],
+  "screens": [
+    {
+      "name": "pim",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\microsoft-365\\episodes\\04-entra-id-governance-identity\\src",
+      "prompt": "PS> ",
+      "commands": [
+        "./Invoke-IdentityGovernance.ps1 -PolicyFile ./governance.lab.json -AssignEligible -WhatIf",
+        "./Invoke-IdentityGovernance.ps1 -PolicyFile ./governance.lab.json -AssignEligible -Confirm:$false",
+        "#pause 4"
+      ],
+      "also": [
+        {
+          "kind": "browser",
+          "url": "https://entra.microsoft.com/",
+          "account": "labadmin, then alex.demo in a second profile",
+          "steps": [
+            "Entra admin center > ID Governance > Privileged Identity Management > Microsoft Entra roles > Assignments > Eligible assignments: Alex Demo, Groups Administrator, end about 180 days out",
+            "Second browser profile as alex.demo: PIM > My roles > Eligible assignments > Activate Groups Administrator, type a justification, Activate",
+            "Active assignments: show the active assignment and its end time"
+          ],
+          "mask": [
+            "object ids",
+            "tenant name",
+            "e-mail addresses beyond the lab aliases"
+          ],
+          "when": "after"
+        }
+      ]
+    },
+    {
+      "name": "review",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\microsoft-365\\episodes\\04-entra-id-governance-identity\\src",
+      "prompt": "PS> ",
+      "commands": [
+        "./Invoke-IdentityGovernance.ps1 -PolicyFile ./governance.lab.json -CreateGuestReview -StartDate (Get-Date).Date -Confirm:$false",
+        "#pause 4"
+      ],
+      "also": [
+        {
+          "kind": "browser",
+          "url": "https://entra.microsoft.com/",
+          "account": "labadmin, then alex.demo (myaccess.microsoft.com)",
+          "steps": [
+            "Entra admin center > ID Governance > Access reviews: open 'Quarterly review - guests in Microsoft 365 groups', one instance per group with guests (TEAM_Sales_Partner Portal or Sales Partner Portal)",
+            "Second profile as alex.demo: myaccess.microsoft.com > Access reviews > open the review: the guest with Approve / Deny (do NOT submit a decision)",
+            "If the instance list is empty, wait and refresh; do not fake it"
+          ],
+          "mask": [
+            "the guest's e-mail address",
+            "tenant name",
+            "ids in the address bar"
+          ],
+          "when": "after"
+        }
+      ]
+    },
+    {
+      "name": "leaver",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\microsoft-365\\episodes\\04-entra-id-governance-identity\\src",
+      "prompt": "PS> ",
+      "prepare": [
+        "Connect-MgGraph -Scopes LifecycleWorkflows-Workflow.ReadWrite.All -NoWelcome",
+        "./src/Invoke-IdentityGovernance.ps1 -PolicyFile ./src/governance.lab.json -CreateLeaverWorkflow -Confirm:$false",
+        "$wf = (Invoke-MgGraphRequest -Uri \"/v1.0/identityGovernance/lifecycleWorkflows/workflows?`$filter=displayName eq 'Leaver - Sales members on their last day'\").value | Select-Object -First 1; [Environment]::SetEnvironmentVariable('MG_LEAVER_WF', $wf.id, 'User'); $env:MG_LEAVER_WF = $wf.id"
+      ],
+      "commands": [
+        "./Invoke-IdentityGovernance.ps1 -PolicyFile ./governance.lab.json -RunLeaver -WorkflowId $env:MG_LEAVER_WF -UserId $env:MG_SAM_ID",
+        "#pause 4",
+        "# Blocked: Sam holds an Entra role and is the sole owner. Remove the role assignment and add Alex as second owner:",
+        "Connect-MgGraph -Scopes RoleAssignmentSchedule.ReadWrite.Directory, RoleManagement.ReadWrite.Directory, Group.ReadWrite.All -NoWelcome",
+        "Invoke-MgGraphRequest -Method POST -Uri /v1.0/roleManagement/directory/roleAssignmentScheduleRequests -Body @{ action = 'adminRemove'; principalId = $env:MG_SAM_ID; roleDefinitionId = $env:MG_GRPADM_ROLE; directoryScopeId = '/'; justification = 'Leaver' } | Out-Null",
+        "Invoke-MgGraphRequest -Method POST -Uri \"/v1.0/groups/$env:MG_PIPELINE_GROUP/owners/`$ref\" -Body @{ '@odata.id' = \"https://graph.microsoft.com/v1.0/users/$env:MG_ALEX_ID\" }",
+        "Start-Sleep -Seconds 45",
+        "./Invoke-IdentityGovernance.ps1 -PolicyFile ./governance.lab.json -RunLeaver -WorkflowId $env:MG_LEAVER_WF -UserId $env:MG_SAM_ID -Confirm:$false",
+        "#pause 5"
+      ],
+      "also": [
+        {
+          "kind": "browser",
+          "url": "https://entra.microsoft.com/",
+          "account": "labadmin",
+          "steps": [
+            "Entra admin center > ID Governance > Lifecycle workflows > the leaver workflow > Workflow history",
+            "Show Sam Leaver with the 4 tasks completed"
+          ],
+          "mask": [
+            "object ids",
+            "tenant name"
+          ],
+          "when": "after"
+        }
+      ]
+    },
+    {
+      "name": "audit",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\microsoft-365\\episodes\\04-entra-id-governance-identity\\src",
+      "prompt": "PS> ",
+      "commands": [
+        "./Invoke-IdentityGovernance.ps1 -PolicyFile ./governance.lab.json -Audit -OutFile ./governance-audit.md -SaveInventory ./inventory.lab.json",
+        "#pause 6"
+      ]
+    }
+  ],
+  "teardown": [
+    "Connect-MgGraph -Scopes RoleEligibilitySchedule.ReadWrite.Directory, AccessReview.ReadWrite.All, LifecycleWorkflows-Workflow.ReadWrite.All, User.ReadWrite.All, Group.ReadWrite.All, RoleManagement.ReadWrite.Directory -NoWelcome",
+    "# Alex's eligible assignment (do this before the Entra ID Governance trial ends on 20 Dec 2026)",
+    "foreach ($r in (Invoke-MgGraphRequest -Uri \"/v1.0/roleManagement/directory/roleEligibilitySchedules?`$filter=principalId eq '$env:MG_ALEX_ID'\").value) { Invoke-MgGraphRequest -Method POST -Uri /v1.0/roleManagement/directory/roleEligibilityScheduleRequests -Body @{ action = 'adminRemove'; principalId = $r.principalId; roleDefinitionId = $r.roleDefinitionId; directoryScopeId = $r.directoryScopeId; justification = 'Episode 4 tear-down' } | Out-Null }",
+    "foreach ($d in (Invoke-MgGraphRequest -Uri \"/v1.0/identityGovernance/accessReviews/definitions?`$filter=startswith(displayName,'Quarterly review - guests')\").value) { Invoke-MgGraphRequest -Method DELETE -Uri \"/v1.0/identityGovernance/accessReviews/definitions/$($d.id)\" }",
+    "foreach ($w in (Invoke-MgGraphRequest -Uri \"/v1.0/identityGovernance/lifecycleWorkflows/workflows?`$filter=startswith(displayName,'Leaver - Sales')\").value) { Invoke-MgGraphRequest -Method DELETE -Uri \"/v1.0/identityGovernance/lifecycleWorkflows/workflows/$($w.id)\" }",
+    "Invoke-MgGraphRequest -Method DELETE -Uri \"/v1.0/groups/$env:MG_PIPELINE_GROUP\"; Invoke-MgGraphRequest -Method DELETE -Uri \"/v1.0/users/$env:MG_SAM_ID\"; Start-Sleep -Seconds 20; Invoke-MgGraphRequest -Method DELETE -Uri \"/v1.0/directory/deletedItems/$env:MG_SAM_ID\"",
+    "Remove-Item ./src/governance.lab.json, ./src/inventory.lab.json, ./src/governance-audit.md -ErrorAction SilentlyContinue",
+    "Disconnect-MgGraph",
+    "foreach ($n in 'MG_ALEX_ID', 'MG_SAM_ID', 'MG_PIPELINE_GROUP', 'MG_GRPADM_ROLE', 'MG_LEAVER_WF') { [Environment]::SetEnvironmentVariable($n, $null, 'User') }"
+  ],
+  "needs": [
+    "tenant",
+    "trial:Entra ID P2 (E5)",
+    "trial:Entra ID Governance (ends 20 Dec 2026; record before about 15 Dec)",
+    "role:Privileged Role Administrator + Identity Governance Administrator + Lifecycle Workflows Administrator (labadmin)",
+    "browser-profile:alex.demo",
+    "spare-licence:E5 + Entra ID Governance seat for sam.leaver while it exists",
+    "episode-2 guest in the Sales Partner Portal team"
+  ]
+}

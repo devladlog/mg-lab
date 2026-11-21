@@ -1,0 +1,122 @@
+{
+  "note": "Live-session recording of the SharePoint episode screens (series/tools/rec). prepare/teardown run on the laptop, not recorded. Set MG_TENANT, MG_UPN_DOMAIN and MG_PNP_CLIENT_ID in the environment before queueing (never in a file). Sign-ins are device-code, done by the owner. Episodes 1-9 chain: set MG_KEEP_CHAIN=1 while recording them in order so teardown keeps what the next episode uses; unset it for a full clean-up. Billed: SharePoint Premium (Syntex) pay-as-you-go through an empty resource group, about 0.10 USD for the recording. The model itself cannot be created by script: teach it in the content center the day before (6 training contracts as positives, 3 invoices as negatives, extractors Contract number and Expiry date labelled in at least 5 contracts, then apply it to Purchasing > SupplierDocuments), and link billing in the Microsoft 365 admin center first.",
+  "prepare": [
+    "if (-not $env:MG_TENANT -or -not $env:MG_UPN_DOMAIN -or -not $env:MG_PNP_CLIENT_ID) { throw 'Set MG_TENANT (lab tenant short name), MG_UPN_DOMAIN (sign-in domain of the lab users) and MG_PNP_CLIENT_ID (the MG Lab PnP app) in the environment first' }",
+    "if (-not (Get-Module -ListAvailable PnP.PowerShell)) { Install-Module PnP.PowerShell -Scope CurrentUser -Force }",
+    "$env:MG_TENANT_URL = \"https://${env:MG_TENANT}.sharepoint.com\"; $env:MG_ADMIN_URL = \"https://${env:MG_TENANT}-admin.sharepoint.com\"; $env:MG_EP = (Get-Location).Path",
+    "$env:MG_LABADMIN_UPN = \"labadmin@$env:MG_UPN_DOMAIN\"; $env:MG_ALEX_UPN = \"alex.demo@$env:MG_UPN_DOMAIN\"; $env:MG_SAM_UPN = \"sam.demo@$env:MG_UPN_DOMAIN\"; $env:MG_JORDAN_UPN = \"jordan.demo@$env:MG_UPN_DOMAIN\"; $env:MG_RILEY_UPN = \"riley.demo@$env:MG_UPN_DOMAIN\"",
+    "$env:MG_SITE = \"$env:MG_TENANT_URL/sites/Purchasing\"",
+    "./src/New-SampleDocuments.ps1 -Path ./src/sample-files",
+    "az group create --name rg-mglab-sharepoint-10 --location westeurope --output none   # owner runs az login first",
+    "# manual, day before: pay-as-you-go billing link, content center /sites/ContentCenter, model 'Supplier Contract' taught and applied to SupplierDocuments"
+  ],
+  "screens": [
+    {
+      "name": "billing",
+      "kind": "browser",
+      "url": "https://admin.microsoft.com/#/Settings/PayAsYouGoServices",
+      "account": "labadmin",
+      "steps": [
+        "Open Microsoft 365 admin center > Settings > Org settings > Pay-as-you-go services",
+        "Hold on the linked Azure subscription and the resource group rg-mglab-sharepoint-10",
+        "Open the content center (/sites/ContentCenter) home",
+        "Open the model 'Supplier Contract'",
+        "Hold on the extractors 'Contract number' and 'Expiry date' and the counts of example files"
+      ],
+      "mask": [
+        "Azure subscription id",
+        "tenant name and billing account",
+        "admin host in the address bar",
+        "account avatar and display name"
+      ]
+    },
+    {
+      "name": "upload",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\sharepoint\\episodes\\10-sharepoint-syntex",
+      "prompt": "PS sharepoint-10> ",
+      "prepare": [
+        "if (-not $env:MG_TENANT -or -not $env:MG_UPN_DOMAIN -or -not $env:MG_PNP_CLIENT_ID) { throw 'Set MG_TENANT (lab tenant short name), MG_UPN_DOMAIN (sign-in domain of the lab users) and MG_PNP_CLIENT_ID (the MG Lab PnP app) in the environment first' }",
+        "if (-not (Get-Module -ListAvailable PnP.PowerShell)) { Install-Module PnP.PowerShell -Scope CurrentUser -Force }",
+        "$env:MG_TENANT_URL = \"https://${env:MG_TENANT}.sharepoint.com\"; $env:MG_ADMIN_URL = \"https://${env:MG_TENANT}-admin.sharepoint.com\"; $env:MG_EP = (Get-Location).Path",
+        "$env:MG_LABADMIN_UPN = \"labadmin@$env:MG_UPN_DOMAIN\"; $env:MG_ALEX_UPN = \"alex.demo@$env:MG_UPN_DOMAIN\"; $env:MG_SAM_UPN = \"sam.demo@$env:MG_UPN_DOMAIN\"; $env:MG_JORDAN_UPN = \"jordan.demo@$env:MG_UPN_DOMAIN\"; $env:MG_RILEY_UPN = \"riley.demo@$env:MG_UPN_DOMAIN\"",
+        "$env:MG_SITE = \"$env:MG_TENANT_URL/sites/Purchasing\""
+      ],
+      "commands": [
+        "$t = @{ TenantUrl = $env:MG_TENANT_URL; ClientId = $env:MG_PNP_CLIENT_ID }",
+        "#clear",
+        "./src/Invoke-DocProcessing.ps1 -PlanPath ./src/docproc/contoso-docproc.json @t -Upload ./src/sample-files/inbox -WhatIf",
+        "#pause 3",
+        "./src/Invoke-DocProcessing.ps1 -PlanPath ./src/docproc/contoso-docproc.json @t -Upload ./src/sample-files/inbox",
+        "#pause 3",
+        "./src/Invoke-DocProcessing.ps1 -PlanPath ./src/docproc/contoso-docproc.json @t -Upload ./src/sample-files/inbox",
+        "#pause 4"
+      ],
+      "note": "Device-code sign-in off camera. The third command should print no Upload lines (files already there)."
+    },
+    {
+      "name": "library",
+      "kind": "browser",
+      "url": "https://<tenant>.sharepoint.com/sites/Purchasing/SupplierDocuments/Forms/AllItems.aspx",
+      "account": "alex.demo",
+      "steps": [
+        "Open the SupplierDocuments library",
+        "Show the columns Content type, Contract number, Expiry date and Classification Date (add them to the view if needed)",
+        "Hold on scan_0001.pdf: Supplier Contract with both values; scan_0002.pdf and meeting-notes.pdf are not classified",
+        "Record what really happens (classification can take up to 24 hours; capture the next day if empty)"
+      ],
+      "mask": [
+        "tenant host in the address bar (pipeline/mask.js)",
+        "account avatar and display name in the top bar"
+      ]
+    },
+    {
+      "name": "report",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\sharepoint\\episodes\\10-sharepoint-syntex",
+      "prompt": "PS sharepoint-10> ",
+      "prepare": [
+        "if (-not $env:MG_TENANT -or -not $env:MG_UPN_DOMAIN -or -not $env:MG_PNP_CLIENT_ID) { throw 'Set MG_TENANT (lab tenant short name), MG_UPN_DOMAIN (sign-in domain of the lab users) and MG_PNP_CLIENT_ID (the MG Lab PnP app) in the environment first' }",
+        "if (-not (Get-Module -ListAvailable PnP.PowerShell)) { Install-Module PnP.PowerShell -Scope CurrentUser -Force }",
+        "$env:MG_TENANT_URL = \"https://${env:MG_TENANT}.sharepoint.com\"; $env:MG_ADMIN_URL = \"https://${env:MG_TENANT}-admin.sharepoint.com\"; $env:MG_EP = (Get-Location).Path",
+        "$env:MG_LABADMIN_UPN = \"labadmin@$env:MG_UPN_DOMAIN\"; $env:MG_ALEX_UPN = \"alex.demo@$env:MG_UPN_DOMAIN\"; $env:MG_SAM_UPN = \"sam.demo@$env:MG_UPN_DOMAIN\"; $env:MG_JORDAN_UPN = \"jordan.demo@$env:MG_UPN_DOMAIN\"; $env:MG_RILEY_UPN = \"riley.demo@$env:MG_UPN_DOMAIN\"",
+        "$env:MG_SITE = \"$env:MG_TENANT_URL/sites/Purchasing\""
+      ],
+      "commands": [
+        "$t = @{ TenantUrl = $env:MG_TENANT_URL; ClientId = $env:MG_PNP_CLIENT_ID }",
+        "#clear",
+        "./src/Invoke-DocProcessing.ps1 -PlanPath ./src/docproc/contoso-docproc.json @t -Report",
+        "#pause 8"
+      ],
+      "note": "Record what it really says (DL005/DL006 or 'No findings.') and compare with the library screen."
+    }
+  ],
+  "teardown": [
+    "if (-not $env:MG_TENANT -or -not $env:MG_UPN_DOMAIN -or -not $env:MG_PNP_CLIENT_ID) { throw 'Set MG_TENANT (lab tenant short name), MG_UPN_DOMAIN (sign-in domain of the lab users) and MG_PNP_CLIENT_ID (the MG Lab PnP app) in the environment first' }",
+    "if (-not (Get-Module -ListAvailable PnP.PowerShell)) { Install-Module PnP.PowerShell -Scope CurrentUser -Force }",
+    "$env:MG_TENANT_URL = \"https://${env:MG_TENANT}.sharepoint.com\"; $env:MG_ADMIN_URL = \"https://${env:MG_TENANT}-admin.sharepoint.com\"; $env:MG_EP = (Get-Location).Path",
+    "$env:MG_LABADMIN_UPN = \"labadmin@$env:MG_UPN_DOMAIN\"; $env:MG_ALEX_UPN = \"alex.demo@$env:MG_UPN_DOMAIN\"; $env:MG_SAM_UPN = \"sam.demo@$env:MG_UPN_DOMAIN\"; $env:MG_JORDAN_UPN = \"jordan.demo@$env:MG_UPN_DOMAIN\"; $env:MG_RILEY_UPN = \"riley.demo@$env:MG_UPN_DOMAIN\"",
+    "$env:MG_SITE = \"$env:MG_TENANT_URL/sites/Purchasing\"",
+    "Connect-PnPOnline -Url $env:MG_SITE -ClientId $env:MG_PNP_CLIENT_ID -DeviceLogin   # owner signs in",
+    "foreach ($f in 'scan_0001.pdf','scan_0002.pdf','meeting-notes.pdf') { Remove-PnPFile -ServerRelativeUrl \"/sites/Purchasing/SupplierDocuments/$f\" -Force -ErrorAction SilentlyContinue }",
+    "# manual: remove the model from SupplierDocuments (content center > Models > Supplier Contract > Applied libraries), delete the content type and extractor columns, delete the model",
+    "Connect-PnPOnline -Url $env:MG_ADMIN_URL -ClientId $env:MG_PNP_CLIENT_ID -DeviceLogin   # owner signs in",
+    "Remove-PnPTenantSite -Url \"$env:MG_TENANT_URL/sites/ContentCenter\" -Force -ErrorAction SilentlyContinue",
+    "# manual: Microsoft 365 admin center > Org settings > Pay-as-you-go services > disconnect the subscription (stops billing)",
+    "az group delete --name rg-mglab-sharepoint-10 --yes --no-wait",
+    "Remove-Item ./src/sample-files -Recurse -Force -ErrorAction SilentlyContinue",
+    "if ($env:MG_FINAL_CLEANUP -eq '1') { foreach ($s in 'Purchasing','Facilities','Operations','Intranet','ListsDemo') { Remove-PnPTenantSite -Url \"$env:MG_TENANT_URL/sites/$s\" -Force -ErrorAction SilentlyContinue } }"
+  ],
+  "needs": [
+    "tenant",
+    "azure",
+    "paid:SharePoint Premium/Syntex pay-as-you-go (about 0.10 USD)",
+    "episode:04",
+    "role:sharepoint-admin",
+    "role:azure-subscription-owner-or-contributor",
+    "app:MG Lab PnP",
+    "manual:teach the model in the content center"
+  ]
+}

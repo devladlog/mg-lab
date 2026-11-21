@@ -1,0 +1,123 @@
+{
+  "note": "Live-session recording of the SharePoint episode screens (series/tools/rec). prepare/teardown run on the laptop, not recorded. Set MG_TENANT, MG_UPN_DOMAIN and MG_PNP_CLIENT_ID in the environment before queueing (never in a file). Sign-ins are device-code, done by the owner. Episodes 1-9 chain: set MG_KEEP_CHAIN=1 while recording them in order so teardown keeps what the next episode uses; unset it for a full clean-up. Needs the SharePoint Administrator role for labadmin.",
+  "prepare": [
+    "if (-not $env:MG_TENANT -or -not $env:MG_UPN_DOMAIN -or -not $env:MG_PNP_CLIENT_ID) { throw 'Set MG_TENANT (lab tenant short name), MG_UPN_DOMAIN (sign-in domain of the lab users) and MG_PNP_CLIENT_ID (the MG Lab PnP app) in the environment first' }",
+    "if (-not (Get-Module -ListAvailable PnP.PowerShell)) { Install-Module PnP.PowerShell -Scope CurrentUser -Force }",
+    "$env:MG_TENANT_URL = \"https://${env:MG_TENANT}.sharepoint.com\"; $env:MG_ADMIN_URL = \"https://${env:MG_TENANT}-admin.sharepoint.com\"; $env:MG_EP = (Get-Location).Path",
+    "$env:MG_LABADMIN_UPN = \"labadmin@$env:MG_UPN_DOMAIN\"; $env:MG_ALEX_UPN = \"alex.demo@$env:MG_UPN_DOMAIN\"; $env:MG_SAM_UPN = \"sam.demo@$env:MG_UPN_DOMAIN\"; $env:MG_JORDAN_UPN = \"jordan.demo@$env:MG_UPN_DOMAIN\"; $env:MG_RILEY_UPN = \"riley.demo@$env:MG_UPN_DOMAIN\"",
+    "$env:MG_SITE = \"$env:MG_TENANT_URL/sites/Purchasing\"",
+    "$env:MG_EXPORT_SITE = \"$env:MG_TENANT_URL/sites/ListsDemo\"",
+    "Connect-PnPOnline -Url $env:MG_ADMIN_URL -ClientId $env:MG_PNP_CLIENT_ID -DeviceLogin   # owner signs in",
+    "if ((@(Get-PnPSiteScript).Count -ge 95) -or (@(Get-PnPSiteDesign).Count -ge 95)) { throw 'Too many site scripts or site templates in the tenant (limit 100)' }",
+    "if (Get-PnPTenantSite -Url $env:MG_SITE -ErrorAction SilentlyContinue) { Remove-PnPTenantSite -Url $env:MG_SITE -Force -SkipRecycleBin }",
+    "Get-PnPSiteDesign | Where-Object Title -eq 'Contoso Purchasing' | ForEach-Object { Remove-PnPSiteDesign -Identity $_.Id -Force }",
+    "Get-PnPSiteScript | Where-Object Title -like 'Contoso Purchasing - *' | ForEach-Object { Remove-PnPSiteScript -Identity $_.Id -Force }"
+  ],
+  "screens": [
+    {
+      "name": "apply-run",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\sharepoint\\episodes\\03-modern-sites-pages",
+      "prompt": "PS sharepoint-03> ",
+      "prepare": [
+        "if (-not $env:MG_TENANT -or -not $env:MG_UPN_DOMAIN -or -not $env:MG_PNP_CLIENT_ID) { throw 'Set MG_TENANT (lab tenant short name), MG_UPN_DOMAIN (sign-in domain of the lab users) and MG_PNP_CLIENT_ID (the MG Lab PnP app) in the environment first' }",
+        "if (-not (Get-Module -ListAvailable PnP.PowerShell)) { Install-Module PnP.PowerShell -Scope CurrentUser -Force }",
+        "$env:MG_TENANT_URL = \"https://${env:MG_TENANT}.sharepoint.com\"; $env:MG_ADMIN_URL = \"https://${env:MG_TENANT}-admin.sharepoint.com\"; $env:MG_EP = (Get-Location).Path",
+        "$env:MG_LABADMIN_UPN = \"labadmin@$env:MG_UPN_DOMAIN\"; $env:MG_ALEX_UPN = \"alex.demo@$env:MG_UPN_DOMAIN\"; $env:MG_SAM_UPN = \"sam.demo@$env:MG_UPN_DOMAIN\"; $env:MG_JORDAN_UPN = \"jordan.demo@$env:MG_UPN_DOMAIN\"; $env:MG_RILEY_UPN = \"riley.demo@$env:MG_UPN_DOMAIN\"",
+        "$env:MG_SITE = \"$env:MG_TENANT_URL/sites/Purchasing\"",
+        "$env:MG_EXPORT_SITE = \"$env:MG_TENANT_URL/sites/ListsDemo\""
+      ],
+      "commands": [
+        "$admin = $env:MG_ADMIN_URL; $site = $env:MG_SITE; $app = $env:MG_PNP_CLIENT_ID",
+        "#clear",
+        "./src/Invoke-ModernSite.ps1 -TemplatePath ./src/purchasing/template.json -AdminUrl $admin -SiteUrl $site -ClientId $app -CreateSite",
+        "#pause 6"
+      ],
+      "note": "Device-code sign-ins (admin, then site) happen off camera. If the Template run block is empty, run -RunReport instead and capture that. Any Failure is recorded as is."
+    },
+    {
+      "name": "site-settings",
+      "kind": "browser",
+      "url": "https://<tenant>.sharepoint.com/sites/Purchasing",
+      "account": "labadmin",
+      "steps": [
+        "Open the Contoso Purchasing site home",
+        "Hold on the compact header and open the mega menu: 'How to buy' and 'FAQ'",
+        "Scroll to the footer: link 'Purchasing policy'",
+        "Optional second capture: Settings > Site information > View all site settings > Regional settings (locale Portuguese (Portugal), time zone GMT, 24-hour)"
+      ],
+      "mask": [
+        "tenant host in the address bar (pipeline/mask.js)",
+        "account avatar and display name in the top bar"
+      ]
+    },
+    {
+      "name": "home-page",
+      "kind": "browser",
+      "url": "https://<tenant>.sharepoint.com/sites/Purchasing/SitePages/purchasing-home.aspx",
+      "account": "labadmin",
+      "steps": [
+        "Open the site home (purchasing-home.aspx)",
+        "Show the two text columns, the News web part with 'New approval limits from January' and the 'Purchasing FAQ' list web part with the FAQ items",
+        "If the FAQ list web part renders empty, open it, select the list, and record what happens"
+      ],
+      "mask": [
+        "tenant host in the address bar (pipeline/mask.js)",
+        "account avatar and display name in the top bar"
+      ],
+      "prepare": [
+        "if (-not $env:MG_TENANT -or -not $env:MG_UPN_DOMAIN -or -not $env:MG_PNP_CLIENT_ID) { throw 'Set MG_TENANT (lab tenant short name), MG_UPN_DOMAIN (sign-in domain of the lab users) and MG_PNP_CLIENT_ID (the MG Lab PnP app) in the environment first' }",
+        "if (-not (Get-Module -ListAvailable PnP.PowerShell)) { Install-Module PnP.PowerShell -Scope CurrentUser -Force }",
+        "$env:MG_TENANT_URL = \"https://${env:MG_TENANT}.sharepoint.com\"; $env:MG_ADMIN_URL = \"https://${env:MG_TENANT}-admin.sharepoint.com\"; $env:MG_EP = (Get-Location).Path",
+        "$env:MG_LABADMIN_UPN = \"labadmin@$env:MG_UPN_DOMAIN\"; $env:MG_ALEX_UPN = \"alex.demo@$env:MG_UPN_DOMAIN\"; $env:MG_SAM_UPN = \"sam.demo@$env:MG_UPN_DOMAIN\"; $env:MG_JORDAN_UPN = \"jordan.demo@$env:MG_UPN_DOMAIN\"; $env:MG_RILEY_UPN = \"riley.demo@$env:MG_UPN_DOMAIN\"",
+        "$env:MG_SITE = \"$env:MG_TENANT_URL/sites/Purchasing\"",
+        "$env:MG_EXPORT_SITE = \"$env:MG_TENANT_URL/sites/ListsDemo\"",
+        "Connect-PnPOnline -Url $env:MG_SITE -ClientId $env:MG_PNP_CLIENT_ID -DeviceLogin   # owner signs in",
+        "foreach ($q in 'Who approves a request above 1,000 EUR?','How do I order from a new supplier?','Where do I find the approved supplier list?') { Add-PnPListItem -List 'Purchasing FAQ' -Values @{ Title = $q } | Out-Null }"
+      ]
+    },
+    {
+      "name": "export-lint",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\sharepoint\\episodes\\03-modern-sites-pages",
+      "prompt": "PS sharepoint-03> ",
+      "prepare": [
+        "if (-not $env:MG_TENANT -or -not $env:MG_UPN_DOMAIN -or -not $env:MG_PNP_CLIENT_ID) { throw 'Set MG_TENANT (lab tenant short name), MG_UPN_DOMAIN (sign-in domain of the lab users) and MG_PNP_CLIENT_ID (the MG Lab PnP app) in the environment first' }",
+        "if (-not (Get-Module -ListAvailable PnP.PowerShell)) { Install-Module PnP.PowerShell -Scope CurrentUser -Force }",
+        "$env:MG_TENANT_URL = \"https://${env:MG_TENANT}.sharepoint.com\"; $env:MG_ADMIN_URL = \"https://${env:MG_TENANT}-admin.sharepoint.com\"; $env:MG_EP = (Get-Location).Path",
+        "$env:MG_LABADMIN_UPN = \"labadmin@$env:MG_UPN_DOMAIN\"; $env:MG_ALEX_UPN = \"alex.demo@$env:MG_UPN_DOMAIN\"; $env:MG_SAM_UPN = \"sam.demo@$env:MG_UPN_DOMAIN\"; $env:MG_JORDAN_UPN = \"jordan.demo@$env:MG_UPN_DOMAIN\"; $env:MG_RILEY_UPN = \"riley.demo@$env:MG_UPN_DOMAIN\"",
+        "$env:MG_SITE = \"$env:MG_TENANT_URL/sites/Purchasing\"",
+        "$env:MG_EXPORT_SITE = \"$env:MG_TENANT_URL/sites/ListsDemo\""
+      ],
+      "commands": [
+        "Set-Location $env:TEMP",
+        "$app = $env:MG_PNP_CLIENT_ID",
+        "#clear",
+        "& \"$env:MG_EP/src/Invoke-ModernSite.ps1\" -ExportFrom $env:MG_EXPORT_SITE -ClientId $app",
+        "#pause 6"
+      ],
+      "note": "The export is written to the temp folder; review it before showing (real list names and URLs). Do not commit it."
+    }
+  ],
+  "teardown": [
+    "if (-not $env:MG_TENANT -or -not $env:MG_UPN_DOMAIN -or -not $env:MG_PNP_CLIENT_ID) { throw 'Set MG_TENANT (lab tenant short name), MG_UPN_DOMAIN (sign-in domain of the lab users) and MG_PNP_CLIENT_ID (the MG Lab PnP app) in the environment first' }",
+    "if (-not (Get-Module -ListAvailable PnP.PowerShell)) { Install-Module PnP.PowerShell -Scope CurrentUser -Force }",
+    "$env:MG_TENANT_URL = \"https://${env:MG_TENANT}.sharepoint.com\"; $env:MG_ADMIN_URL = \"https://${env:MG_TENANT}-admin.sharepoint.com\"; $env:MG_EP = (Get-Location).Path",
+    "$env:MG_LABADMIN_UPN = \"labadmin@$env:MG_UPN_DOMAIN\"; $env:MG_ALEX_UPN = \"alex.demo@$env:MG_UPN_DOMAIN\"; $env:MG_SAM_UPN = \"sam.demo@$env:MG_UPN_DOMAIN\"; $env:MG_JORDAN_UPN = \"jordan.demo@$env:MG_UPN_DOMAIN\"; $env:MG_RILEY_UPN = \"riley.demo@$env:MG_UPN_DOMAIN\"",
+    "$env:MG_SITE = \"$env:MG_TENANT_URL/sites/Purchasing\"",
+    "$env:MG_EXPORT_SITE = \"$env:MG_TENANT_URL/sites/ListsDemo\"",
+    "Connect-PnPOnline -Url $env:MG_ADMIN_URL -ClientId $env:MG_PNP_CLIENT_ID -DeviceLogin   # owner signs in",
+    "Get-PnPSiteDesign | Where-Object Title -eq 'Contoso Purchasing' | ForEach-Object { Remove-PnPSiteDesign -Identity $_.Id -Force }",
+    "Get-PnPSiteScript | Where-Object Title -like 'Contoso Purchasing - *' | ForEach-Object { Remove-PnPSiteScript -Identity $_.Id -Force }",
+    "if ($env:MG_KEEP_CHAIN -ne '1') { Remove-PnPTenantSite -Url $env:MG_SITE -Force }",
+    "Remove-Item (Join-Path $env:TEMP 'exported.site-script.json') -ErrorAction SilentlyContinue"
+  ],
+  "needs": [
+    "tenant",
+    "role:sharepoint-admin",
+    "app:MG Lab PnP",
+    "episode:01 (export source ListsDemo)"
+  ]
+}

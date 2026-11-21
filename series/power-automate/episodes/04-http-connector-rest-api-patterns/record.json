@@ -1,0 +1,75 @@
+{
+  "note": "Live-session recording of the screen scenes (series/tools/rec). Four portal screens; the Azure resource group holds one Key Vault (Standard SKU, pay per operation, a few cents for the recording window) and is deleted in teardown.",
+  "prepare": [
+    "# owner signs in: az login (lab tenant, subscription Owner) and the browser profiles for labadmin (Entra admin center, Power Apps, make.powerautomate.com) and taylor.demo (Outlook on the web). Nothing is typed or stored here.",
+    "az group create --name rg-mglab-power-automate-04 --location westeurope --output none",
+    "az keyvault create --name kv-mglab-pa04 --resource-group rg-mglab-power-automate-04 --location westeurope --enable-rbac-authorization true --query name --output tsv",
+    "# owner (portal, never on screen): Entra app registration 'Directory checks (lab)', Graph User.Read.All (Application) with admin consent, one client secret with 30-day expiry stored in the vault as graph-directory-checks; give the Power Platform environment read access to the vault",
+    "# owner (tenant, demo.md Setup 3-5): solution Directory Checks (DirectoryChecks) with the six environment variables (page size 2) and the scheduled flow 'Users without a manager'; run it once with Test > Manually",
+    "# owner (Entra, undone in teardown): managers set for alex.demo and jordan.demo (Sam Demo); riley.demo and taylor.demo without a manager; throwaway disabled user former.demo; Microsoft 365 group automation-admins (member labadmin); purchasing-team from episode 2",
+    "python -m pip install -r requirements-test.txt --quiet",
+    "python -m pytest"
+  ],
+  "screens": [
+    {
+      "name": "app-registration",
+      "kind": "browser",
+      "url": "https://entra.microsoft.com/#view/Microsoft_AAD_RegisteredApps/ApplicationsListBlade",
+      "account": "labadmin",
+      "steps": [
+        "Open App registrations > All applications and select 'Directory checks (lab)'",
+        "Open API permissions and show Microsoft Graph User.Read.All, type Application, status 'Granted for <tenant>'",
+        "Open Certificates & secrets and show the one client secret: description and expiry only, never the value",
+        "Pause on each page for two seconds"
+      ],
+      "mask": ["tenant name in 'Granted for ...' and in the top bar", "Application (client) ID", "Directory (tenant) ID", "object IDs", "secret ID and value"]
+    },
+    {
+      "name": "env-vars",
+      "kind": "browser",
+      "url": "https://make.powerapps.com/",
+      "account": "labadmin",
+      "steps": [
+        "Select environment DEV and open Solutions > Directory Checks",
+        "Filter the objects to Environment variables",
+        "Show the six variables: Entra authority, Entra tenant ID, Graph base URL, Graph client ID, Graph page size (current value 2) and Graph client secret",
+        "Open the secret variable and show type Secret and the Azure Key Vault source, without the vault path"
+      ],
+      "mask": ["environment name and ID in the address bar", "tenant ID and client ID values", "Key Vault name and secret path", "tenant name in the top bar"]
+    },
+    {
+      "name": "run-paging",
+      "kind": "browser",
+      "url": "https://make.powerautomate.com/",
+      "account": "labadmin",
+      "steps": [
+        "Open the flow 'Users without a manager' and the manual test run",
+        "Expand 'Get all pages' (Do until) and show 4 iterations with the iteration selector at 4 of 4",
+        "Expand 'Get users page': lock icon, inputs hidden, outputs visible (keep the output panel collapsed or masked, it carries real user IDs)",
+        "Expand 'Get client secret': outputs hidden"
+      ],
+      "mask": ["environment ID in the address bar", "tenant ID and client ID anywhere they appear", "user object IDs in Graph outputs", "non-lab accounts in outputs", "tenant name"]
+    },
+    {
+      "name": "report-email",
+      "kind": "browser",
+      "url": "https://outlook.office.com/mail/",
+      "account": "taylor.demo",
+      "steps": [
+        "Open the purchasing-team mailbox (Taylor Demo is a member)",
+        "Open the mail '<N> enabled users have no manager in Entra'",
+        "Show the first line about purchase requests going to purchasing and 'Checked 4 page(s) of users'",
+        "Scroll to the Name / Mail / Department table"
+      ],
+      "mask": ["rows for accounts that are not lab users (labadmin, the owner's own account)", "real tenant domain in e-mail addresses", "tenant name in the suite bar"]
+    }
+  ],
+  "teardown": [
+    "# owner (tenant): turn the flow off; set Graph page size back to its default; delete the client secret or the whole app registration; delete former.demo and the automation-admins group; clear the managers set for Alex Demo and Jordan Demo; delete purchasing-team after this episode",
+    "az keyvault delete --name kv-mglab-pa04 --resource-group rg-mglab-power-automate-04 --output none",
+    "az keyvault purge --name kv-mglab-pa04 --location westeurope --output none",
+    "az group delete --name rg-mglab-power-automate-04 --yes --no-wait",
+    "Get-ChildItem -Path . -Filter 'DirectoryChecks_*.zip' -ErrorAction SilentlyContinue | Remove-Item -Force"
+  ],
+  "needs": ["tenant", "azure", "premium-trial"]
+}

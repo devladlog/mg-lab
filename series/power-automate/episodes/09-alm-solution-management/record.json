@@ -1,0 +1,102 @@
+{
+  "note": "Live-session recording of the screen scenes (series/tools/rec). Four portal screens and one terminal screen (deploy, run from src on the laptop). Needs a second environment TEST (Production or Sandbox with Dataverse, or a Trial environment) and a private Azure DevOps project in the existing organization devladlog. URLs, connection IDs and variable values are only ever in environment variables, never printed.",
+  "prepare": [
+    "python -m pip install -r requirements-test.txt --quiet",
+    "$env:PSModulePath = (Join-Path (Resolve-Path ..\\..\\..\\..).Path '.tools\\Modules') + ';' + $env:PSModulePath",
+    "pac --version",
+    "python -m pytest",
+    "# owner signs in: pac auth below, Azure DevOps and the browser profiles for labadmin (make.powerapps.com, TEST) and alex.demo (SharePoint, Outlook on the web). Nothing is typed or stored here.",
+    "if (-not $env:DEV_URL) { $env:DEV_URL = Read-Host 'DEV environment URL' }",
+    "if (-not $env:TEST_URL) { $env:TEST_URL = Read-Host 'TEST environment URL' }",
+    "# owner (off camera): IT_SITE_URL (IT Helpdesk Test site), SERVICEDESK_MAILBOX (taylor.demo), CONN_SHAREPOINT and CONN_OFFICE365 (TEST connection IDs, copied from the connection URLs) are set as environment variables in this session",
+    "if (-not $env:IT_SITE_URL) { $env:IT_SITE_URL = Read-Host 'IT Helpdesk Test site URL' }; if (-not $env:SERVICEDESK_MAILBOX) { $env:SERVICEDESK_MAILBOX = Read-Host 'Service desk mailbox' }",
+    "if (-not $env:CONN_SHAREPOINT) { $env:CONN_SHAREPOINT = Read-Host 'TEST SharePoint connection ID' }; if (-not $env:CONN_OFFICE365) { $env:CONN_OFFICE365 = Read-Host 'TEST Outlook connection ID' }",
+    "pac auth create --name dev --environment $env:DEV_URL   # owner signs in, off camera",
+    "pac auth create --name test --environment $env:TEST_URL   # owner signs in, off camera",
+    "# owner (tenant, demo.md Setup 1-6): publisher contoso, solution IT Request Notices (ITRequestNotices) with release 1.0.0.0 imported into DEV and flows on; second site IT Helpdesk Test with a copy of IT Requests (alex.demo member); connections for SharePoint and Outlook in DEV and TEST",
+    "New-Item -ItemType Directory -Force -Path .\\out | Out-Null",
+    "Push-Location .\\src; pac solution export --name ITRequestNotices --path ..\\out\\ITRequestNotices.zip --overwrite; pac solution export --name ITRequestNotices --path ..\\out\\ITRequestNotices_managed.zip --managed --overwrite; pac solution unpack --zipfile ..\\out\\ITRequestNotices.zip --folder ..\\out\\unpacked --packagetype Both; Pop-Location",
+    "# owner (Azure DevOps, demo.md Setup 7): private project mglab-alm with this src as repo root, Power Platform Build Tools extension, service connections, variable groups alm-test and alm-prod, environments test and prod (Approvals check on prod), pipelines export-from-dev.yml and release.yml; run release.yml until Prod waits for approval",
+    "# owner (TEST, demo.md Steps for TEST 1): first install of release 1.0.0.0 into TEST (Update mode); then the deploy screen imports 1.1.0.0; the later 1.1.1.0 Upgrade for the 'upgrade' screen is built with: pac solution version --strategy Solution --solutionPath src\\solution"
+  ],
+  "screens": [
+    {
+      "name": "solution",
+      "kind": "browser",
+      "url": "https://make.powerapps.com/",
+      "account": "labadmin",
+      "steps": [
+        "Select environment DEV and open Solutions",
+        "Open 'IT Request Notices' (unique name ITRequestNotices, version 1.1.0.0) on the 'All' view",
+        "Show the one cloud flow 'Acknowledge IT request', the four environment variables (IT site URL, IT Requests list, Service desk mailbox, Environment label) and the two connection references (SharePoint, Office 365 Outlook)"
+      ],
+      "mask": ["environment URL and ID in the address bar", "account name and tenant name in the top bar"]
+    },
+    {
+      "name": "pipeline",
+      "kind": "browser",
+      "url": "https://dev.azure.com/",
+      "account": "labadmin",
+      "steps": [
+        "Open the private project mglab-alm > Pipelines and the run of release.yml",
+        "Show the stages Build and Test green and the stage Prod waiting for approval",
+        "Open the Test stage log on the step 'Render the deployment settings' (tokens already replaced, values masked)",
+        "Open the step 'Import Upgrade'"
+      ],
+      "mask": ["Azure DevOps organization name in the address bar and breadcrumbs", "environment URLs", "every connection ID", "service connection names if they show IDs"]
+    },
+    {
+      "name": "deploy",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\power-automate\\episodes\\09-alm-solution-management\\src",
+      "prompt": "PS ep09> ",
+      "prepare": [
+        "New-Item -ItemType Directory -Force -Path ..\\out | Out-Null"
+      ],
+      "commands": [
+        "python -m almkit check solution --previous releases/1.0.0.0",
+        "#pause 2",
+        "python -m almkit render-settings deploy/settings.test.json --solution solution --out ../out/settings.test.json",
+        "#pause 2",
+        "./scripts/Deploy-Solution.ps1 -SolutionFolder solution -SettingsFile ../out/settings.test.json -EnvironmentUrl $env:TEST_URL -Mode Update",
+        "#pause 4"
+      ],
+      "mask": ["the environment URL if the pac output prints it", "never cat the rendered settings file (connection IDs)"]
+    },
+    {
+      "name": "test",
+      "kind": "browser",
+      "url": "https://make.powerapps.com/",
+      "account": "labadmin",
+      "steps": [
+        "Select environment TEST and open Solutions > 'IT Request Notices' (managed)",
+        "Show the flow 'Acknowledge IT request' with status On and the connection references bound to connections",
+        "Open the environment variable 'Environment label' and show the current value TEST",
+        "Second capture: as alex.demo add the item 'Second monitor' to IT Requests on the test site, then in Outlook on the web show the mail 'IT request #<n> received [TEST]'"
+      ],
+      "mask": ["environment URL and ID in the address bar", "mailbox domain", "tenant name"]
+    },
+    {
+      "name": "upgrade",
+      "kind": "browser",
+      "url": "https://make.powerapps.com/",
+      "account": "labadmin",
+      "steps": [
+        "Environment TEST, Solutions > 'IT Request Notices', Cloud flows view. Capture 1: after release 1.0.0.0 was installed and 1.1.0.0 imported as Update, both flows are listed, 'Weekly stale summary' still present",
+        "Import the later build 1.1.1.0 as Upgrade from the terminal (Deploy-Solution.ps1 -Mode Upgrade), refresh the Cloud flows view. Capture 2: only 'Acknowledge IT request' remains",
+        "Capture 3: open Environment variables and show that 'Stale after days' is gone",
+        "If the flow is still there after the upgrade keep that on screen: the narration and README are fixed to match"
+      ],
+      "mask": ["environment URL and ID in the address bar", "tenant name"]
+    }
+  ],
+  "teardown": [
+    "# owner (tenant): delete the solution ITRequestNotices in TEST and DEV; delete the TEST environment (or let the trial expire); delete the site IT Helpdesk Test and the TEST connections",
+    "# owner (Azure DevOps and Entra): delete the project mglab-alm and its service connections; delete the app registration created by pac admin create-service-principal",
+    "Remove-Item Env:IT_SITE_URL, Env:SERVICEDESK_MAILBOX, Env:CONN_SHAREPOINT, Env:CONN_OFFICE365, Env:TEST_URL, Env:DEV_URL -ErrorAction SilentlyContinue",
+    "Remove-Item .\\out -Recurse -Force -ErrorAction SilentlyContinue",
+    "pac auth clear"
+  ],
+  "needs": ["tenant", "devops", "environment:TEST"]
+}

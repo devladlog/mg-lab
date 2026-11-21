@@ -1,0 +1,95 @@
+{
+  "note": "Before the evidence-run take, update the rai_gate date and verdict in governance/register.yaml to the recorded episode 6 gate (TODO in that file; not edited here). If the deny-model command unexpectedly succeeds, keep the take: the evidence pack then shows MOD-01 FAIL; teardown removes the deployment with the group.",
+  "prepare": [
+    "python -m venv .venv",
+    "$env:PATH = \"$PWD\\.venv\\Scripts;$env:PATH\"",
+    "python -m pip install -q -r requirements.txt",
+    "$env:PYTHONPATH = 'src'",
+    "# owner signs in as labadmin (device code), not on camera",
+    "az login --use-device-code --only-show-errors | Out-Null",
+    "az group create -n rg-mglab-ai-7 -l swedencentral -o none",
+    "$o = az deployment group create -g rg-mglab-ai-7 -f infra/main.bicep -p infra/main.bicepparam --query properties.outputs -o json | ConvertFrom-Json",
+    "$env:AOAI_NAME = $o.aoaiName.value; $env:SHADOW_NAME = $o.shadowName.value",
+    "$env:SUB = az account show --query id -o tsv",
+    "Start-Sleep -Seconds 900   # Azure Policy assignments need at least 15 minutes before the deny scenes",
+    "az policy state trigger-scan --resource-group rg-mglab-ai-07 --no-wait",
+    "Remove-Item reports -Recurse -Force -ErrorAction SilentlyContinue"
+  ],
+  "screens": [
+    {
+      "name": "deny-keys",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\ai\\episodes\\07-ai-governance-compliance",
+      "prompt": "PS ep07> ",
+      "commands": [
+        "az cognitiveservices account create -g rg-mglab-ai-07 -n contoso-keys-test -l swedencentral --kind OpenAI --sku S0 --custom-domain contoso-keys-test --yes",
+        "#pause 6"
+      ],
+      "mask": [
+        "the CLI error prints the full resource ID with the subscription GUID: blur it in this capture"
+      ]
+    },
+    {
+      "name": "deny-model",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\ai\\episodes\\07-ai-governance-compliance",
+      "prompt": "PS ep07> ",
+      "commands": [
+        "az cognitiveservices account deployment create -g rg-mglab-ai-07 -n $env:AOAI_NAME --deployment-name nano --model-name gpt-4.1-nano --model-version 2025-04-14 --model-format OpenAI --sku-name GlobalStandard --sku-capacity 1",
+        "#pause 6"
+      ],
+      "mask": [
+        "the CLI error prints the full resource ID with the subscription GUID: blur it in this capture"
+      ]
+    },
+    {
+      "name": "evidence-run",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\ai\\episodes\\07-ai-governance-compliance",
+      "prompt": "PS ep07> ",
+      "commands": [
+        "python -m aigov.evidence --register governance/register.yaml --subscription $env:SUB --resource-group rg-mglab-ai-07 --save-snapshot reports/snapshot.json ; \"exit=$LASTEXITCODE\"",
+        "#pause 10"
+      ],
+      "mask": [
+        "shadow account name suffix (mglab-gov-shadow-...)",
+        "reports/snapshot.json must not be opened on camera"
+      ]
+    },
+    {
+      "name": "compliance-manager",
+      "kind": "browser",
+      "url": "https://purview.microsoft.com/",
+      "account": "labadmin",
+      "steps": [
+        "Open Compliance Manager > Regulations",
+        "Check the licence counter first; show 'Premium AI templates' with 'EU Artificial Intelligence Act'",
+        "Create the assessment 'HR assistant: EU AI Act' (new group 'AI systems')",
+        "Open one improvement action > Evidence tab > Add evidence > Document",
+        "Upload reports/evidence-hr-bot.txt (written by the evidence-run); it appears in the evidence list"
+      ],
+      "mask": [
+        "tenant name",
+        "user UPN",
+        "organisation compliance score",
+        "subscription ID if shown"
+      ]
+    }
+  ],
+  "teardown": [
+    "# owner: in Purview delete the assessment 'HR assistant: EU AI Act' (Compliance Manager > Assessments > ... > Delete); an activated premium regulation keeps counting toward the free three",
+    "az group delete -n rg-mglab-ai-7 --yes",
+    "az cognitiveservices account purge -g rg-mglab-ai-7 -n $env:AOAI_NAME -l swedencentral",
+    "az cognitiveservices account purge -g rg-mglab-ai-7 -n $env:SHADOW_NAME -l swedencentral",
+    "Remove-Item reports, .venv -Recurse -Force -ErrorAction SilentlyContinue"
+  ],
+  "needs": [
+    "azure",
+    "tenant",
+    "purview-compliance-manager-premium-ai-regulation (E5 trial; check licence counter)",
+    "quota:gpt-5-mini-DataZoneStandard-swedencentral"
+  ]
+}

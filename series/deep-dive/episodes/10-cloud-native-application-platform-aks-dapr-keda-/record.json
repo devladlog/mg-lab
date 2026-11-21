@@ -1,0 +1,107 @@
+{
+  "note": "Deep-dive #10. Multi-pane captures in demo.md run in sequence in one terminal (kubectl watches end with --request-timeout). The portal counts are in the 'also' notes of each screen. Record the real replica count and say it in the narration if it is not ten.",
+  "prepare": [
+    "# owner signs in (device code), not recorded",
+    "az login --use-device-code",
+    "dotnet test tests/FinanceReview.Tests -m:1",
+    "python -m pip install -q pytest PyYAML; python -m pytest tests/contracts -q",
+    "az extension add -n k8s-extension --only-show-errors",
+    "az provider register --namespace Microsoft.KubernetesConfiguration; az provider register --namespace Microsoft.ContainerService",
+    "az vm list-skus -l westeurope --size Standard_D2s_v5 -o table",
+    "az group create -n rg-mglab-deep-dive-10 -l westeurope -o none",
+    "az deployment group create -g rg-mglab-deep-dive-10 -n main -f infra/main.bicep --query properties.outputs -o json > outputs.json",
+    "$o = Get-Content outputs.json | ConvertFrom-Json",
+    "az aks get-credentials -g rg-mglab-deep-dive-10 -n $o.aksName.value --overwrite-existing",
+    "kubectl get nodes",
+    "az acr build -r $o.acrName.value -t finance-worker:1 src/FinanceReview.Worker",
+    "kubectl annotate serviceaccount keda-operator azure.workload.identity/client-id=$($o.kedaClientId.value) -n kube-system --overwrite; kubectl rollout restart deploy keda-operator -n kube-system",
+    "az role assignment create --role 'Azure Service Bus Data Sender' --assignee-object-id (az ad signed-in-user show --query id -o tsv) --assignee-principal-type User --scope (az servicebus topic show -g rg-mglab-deep-dive-10 --namespace-name $o.serviceBusNamespace.value -n purchase-events --query id -o tsv) -o none",
+    "Start-Sleep -Seconds 240   # role assignments can take a few minutes",
+    "python scripts/render_manifests.py --outputs outputs.json --image \"$($o.acrLoginServer.value)/finance-worker:1\" --out build",
+    "kubectl apply -f build/",
+    "kubectl rollout status deploy -n contoso-finance --timeout=300s",
+    "python scripts/send_burst.py --namespace $o.serviceBusNamespace.value --count 3   # dry run: a manual burst of 3 is processed",
+    "Start-Sleep -Seconds 200   # let KEDA scale the worker back to zero (cooldown 120 s)"
+  ],
+  "screens": [
+    {
+      "name": "platform",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\deep-dive\\episodes\\10-cloud-native-application-platform-aks-dapr-keda-",
+      "prompt": "PS ...\\10-aks> ",
+      "commands": [
+        "$o = Get-Content outputs.json | ConvertFrom-Json",
+        "az aks show -g rg-mglab-deep-dive-10 -n $o.aksName.value --query \"[workloadAutoScalerProfile, securityProfile, oidcIssuerProfile]\" -o json | ForEach-Object { $_ -replace '\"issuerURL\": \".*\"', '\"issuerURL\": \"<masked>\"' }",
+        "#pause 3",
+        "kubectl get pods -n dapr-system",
+        "kubectl get pods -n kube-system -l app=keda-operator",
+        "kubectl get component,scaledobject,deploy -n contoso-finance",
+        "#pause 4"
+      ],
+      "also": [
+        "Issuer URL is replaced on screen by <masked>; subscription id and tenant id are not printed by these commands; blur the registry name if it shows"
+      ]
+    },
+    {
+      "name": "idle",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\deep-dive\\episodes\\10-cloud-native-application-platform-aks-dapr-keda-",
+      "prompt": "PS ...\\10-aks> ",
+      "prepare": [
+        "Start-Sleep -Seconds 150   # make sure the cooldown has passed with an empty subscription"
+      ],
+      "commands": [
+        "kubectl get scaledobject,deploy,pods -n contoso-finance",
+        "#pause 4"
+      ],
+      "also": [
+        "Right-hand capture (browser, labadmin): portal > Service Bus > purchase-events > Subscriptions > finance-review, active message count 0. Mask the namespace name and subscription id."
+      ]
+    },
+    {
+      "name": "scale-out",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\deep-dive\\episodes\\10-cloud-native-application-platform-aks-dapr-keda-",
+      "prompt": "PS ...\\10-aks> ",
+      "commands": [
+        "$o = Get-Content outputs.json | ConvertFrom-Json",
+        "python scripts/send_burst.py --namespace $o.serviceBusNamespace.value --count 60 --poison 2",
+        "kubectl get pods -n contoso-finance -w --request-timeout=200s",
+        "#pause 2",
+        "#clear",
+        "kubectl get pods -n contoso-finance -w --request-timeout=240s",
+        "#pause 3"
+      ],
+      "also": [
+        "The first watch shows pods going from 0 to several Running while the sixty valid messages are handled (1.5 s each per handler); the second watch, started about two minutes after the last message, shows pods Terminating back to zero. State the real replica count in the narration.",
+        "Third capture (browser): portal finance-review active count falling to 0 (refresh), run alongside the first watch."
+      ]
+    },
+    {
+      "name": "logs",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\deep-dive\\episodes\\10-cloud-native-application-platform-aks-dapr-keda-",
+      "prompt": "PS ...\\10-aks> ",
+      "commands": [
+        "kubectl logs -n contoso-finance -l app=finance-worker -c worker --tail=40",
+        "#pause 5"
+      ],
+      "also": [
+        "Expect 'Finance review opened for PR-90xx' lines from several pods and two 'Delivery DROP' warnings. Then portal (browser): finance-review active 0 and dead-letter 0. Record right after the burst, before the pods are gone, or the logs of terminated pods are lost."
+      ]
+    }
+  ],
+  "teardown": [
+    "az group delete -n rg-mglab-deep-dive-10 --yes",
+    "kubectl config delete-context aks-mgl10; kubectl config delete-cluster aks-mgl10",
+    "Remove-Item outputs.json, build -Recurse -Force -ErrorAction SilentlyContinue"
+  ],
+  "needs": [
+    "azure",
+    "paid:AKS 2 x Standard_D2s_v5 nodes per hour, Service Bus Standard, ACR Basic (delete same day)"
+  ]
+}

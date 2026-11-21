@@ -1,0 +1,64 @@
+{
+  "note": "The approval prompt is answered by piping 'y' (the recorder does not type): the pipe is visible on screen, the prompt and the model are real. 'result' is a second real run of the same command (the model may choose differently); cut both screens from whichever take matches the narration.",
+  "prepare": [
+    "python -m venv .venv",
+    "$env:PATH = \"$PWD\\.venv\\Scripts;$env:PATH\"",
+    "python -m pip install -q -r requirements.txt",
+    "$env:PYTHONPATH = 'src'",
+    "# owner signs in as labadmin (device code), not on camera",
+    "az login --use-device-code --only-show-errors | Out-Null",
+    "$me = az ad signed-in-user show --query id -o tsv",
+    "az group create -n rg-mglab-ai-5 -l swedencentral -o none",
+    "$o = az deployment group create -g rg-mglab-ai-5 -f infra/main.bicep -p infra/main.bicepparam -p developerPrincipalId=$me --query properties.outputs -o json | ConvertFrom-Json",
+    "$env:AOAI = $o.aoaiEndpoint.value; $env:AOAI_NAME = $o.aoaiName.value",
+    "Remove-Item Env:OPENAI_API_KEY -ErrorAction SilentlyContinue   # keeps the generic client on Azure",
+    "Start-Sleep -Seconds 300   # role assignment propagation (up to 5 minutes)",
+    "python -m apagent.run --endpoint $env:AOAI --deployment chat --approve none | Out-Null   # warm-up",
+    "Remove-Item audit, outbox -Recurse -Force -ErrorAction SilentlyContinue"
+  ],
+  "screens": [
+    {
+      "name": "approval",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\ai\\episodes\\05-ai-agents-orchestration",
+      "prompt": "PS ep05> ",
+      "commands": [
+        "'y', 'y' | python -m apagent.run --endpoint $env:AOAI --deployment chat --audit audit/run.jsonl",
+        "#pause 6"
+      ]
+    },
+    {
+      "name": "result",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\ai\\episodes\\05-ai-agents-orchestration",
+      "prompt": "PS ep05> ",
+      "commands": [
+        "'y', 'y' | python -m apagent.run --endpoint $env:AOAI --deployment chat --audit audit/result.jsonl",
+        "#pause 8"
+      ]
+    },
+    {
+      "name": "pipeline",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\ai\\episodes\\05-ai-agents-orchestration",
+      "prompt": "PS ep05> ",
+      "commands": [
+        "python -m apagent.pipeline INV-2026-0142 --endpoint $env:AOAI --deployment chat",
+        "#pause 6"
+      ]
+    }
+  ],
+  "teardown": [
+    "az group delete -n rg-mglab-ai-5 --yes",
+    "az cognitiveservices account purge -g rg-mglab-ai-5 -n $env:AOAI_NAME -l swedencentral",
+    "Remove-Item audit, outbox, .venv -Recurse -Force -ErrorAction SilentlyContinue"
+  ],
+  "needs": [
+    "azure",
+    "paid:azure-openai-tokens",
+    "quota:gpt-5-mini-DataZoneStandard-swedencentral"
+  ]
+}

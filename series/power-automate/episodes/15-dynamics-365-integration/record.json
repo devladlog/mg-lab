@@ -1,0 +1,78 @@
+{
+  "note": "Live-session recording of the screen scenes (series/tools/rec). Everything lives in the Dynamics 365 'Sales trial' environment (30-day trial created 21 Nov 2026: record before about 21 Dec 2026). Three browser screens and one terminal screen (query). The token and the org URL live only in environment variables of the session and are never printed.",
+  "prepare": [
+    "python -m pip install -r requirements-test.txt --quiet",
+    "$env:PSModulePath = (Join-Path (Resolve-Path ..\\..\\..\\..).Path '.tools\\Modules') + ';' + $env:PSModulePath",
+    "python -m pytest",
+    "pwsh -NoProfile -Command \"Invoke-Pester ./tests/Invoke-DataverseQuery.Tests.ps1\"",
+    "Push-Location .\\src; python -m d365kit lint (Get-ChildItem solution\\Workflows\\Wonopportunityfollowup-*.json | Where-Object Name -match '[0-9]\\.json$').FullName; Pop-Location",
+    "# owner signs in: az login (token for the Web API) and the browser profiles for alex.demo (Sales Hub), labadmin (make.powerautomate.com) and jordan.demo (Outlook on the web). Nothing is typed or stored here.",
+    "if (-not $env:DV_ORG) { $env:DV_ORG = Read-Host 'Sales trial org URL' }",
+    "$env:DATAVERSE_TOKEN = az account get-access-token --resource $env:DV_ORG --query accessToken -o tsv   # owner signs in (az login), never echoed",
+    "$env:MG_TODAY = (Get-Date -Format 'yyyy-MM-dd')",
+    "New-Item -ItemType Directory -Force -Path .\\out | Out-Null",
+    "pac solution pack --zipfile .\\out\\SalesFollowUp.zip --folder .\\src\\solution --packagetype Unmanaged",
+    "# owner (tenant, demo.md Setup 1-4): in the Sales trial environment give alex.demo the Salesperson role; import out\\SalesFollowUp.zip in make.powerautomate.com (environment Sales trial), create the Dataverse and Outlook connections as labadmin (self-service Power Automate Premium trial if asked: say so on camera), replace the placeholder addresses with jordan.demo's address and turn both flows on",
+    "# owner (demo.md Setup 4): as alex.demo create the account Fabrikam and the five opportunities (Fabrikam laptop refresh 12,500, Adatum chairs 1,800, Litware monitors 4,200, Northwind docks 3,000 [close as lost], Tailspin printers 900 [owner sam.demo]) with the close dates from the table",
+    "# owner (demo.md Setup 5a-5d): check that Close as Won fires the trigger on a spare opportunity, export and compare the flow JSON, run the digest filter once in the terminal, run the digest flow once with Test > Manually"
+  ],
+  "screens": [
+    {
+      "name": "won",
+      "kind": "browser",
+      "url": "https://<org>.crm4.dynamics.com/",
+      "account": "alex.demo",
+      "steps": [
+        "Open Sales Hub in the Sales trial environment as Alex Demo and the opportunity 'Fabrikam laptop refresh' (12,500 EUR)",
+        "Select Close as Won and show the dialog (actual revenue 12,500), then confirm",
+        "Switch to make.powerautomate.com as labadmin: run history of 'Won opportunity follow-up'",
+        "Show the trigger, Get opportunity, List existing kickoff tasks, Create kickoff task and Tell finance all green"
+      ],
+      "mask": ["org URL in the address bar", "environment ID", "user names except Alex Demo", "GUIDs in run inputs"]
+    },
+    {
+      "name": "task",
+      "kind": "browser",
+      "url": "https://<org>.crm4.dynamics.com/",
+      "account": "alex.demo",
+      "steps": [
+        "Open the opportunity timeline in Sales Hub and show exactly one open task 'Kick-off call', regarding the opportunity, owner Alex Demo, due in three days",
+        "Select Reactivate on the opportunity and close it as won again",
+        "Show the run history with a second run where 'Create kickoff task' is skipped, and the timeline still showing one task"
+      ],
+      "mask": ["org URL in the address bar", "environment ID", "GUIDs in run inputs"]
+    },
+    {
+      "name": "query",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\power-automate\\episodes\\15-dynamics-365-integration",
+      "prompt": "PS ep15> ",
+      "commands": [
+        "./src/scripts/Invoke-DataverseQuery.ps1 -OrgUrl $env:DV_ORG -Table opportunities -Filter \"statecode eq 0 and estimatedclosedate lt $env:MG_TODAY\" -Select name,estimatedvalue,estimatedclosedate -Expand 'parentaccountid($select=name)' -OrderBy 'estimatedclosedate asc,opportunityid asc' -PageSize 2 -FormattedValues -PrintOnly",
+        "#pause 4",
+        "./src/scripts/Invoke-DataverseQuery.ps1 -OrgUrl $env:DV_ORG -Table opportunities -Filter \"statecode eq 0 and estimatedclosedate lt $env:MG_TODAY\" -Select name,estimatedvalue,estimatedclosedate -Expand 'parentaccountid($select=name)' -OrderBy 'estimatedclosedate asc,opportunityid asc' -PageSize 2 -FormattedValues",
+        "#pause 4"
+      ],
+      "mask": ["org URL in the printed request", "GUIDs in the rows", "the access token is never printed"]
+    },
+    {
+      "name": "digest",
+      "kind": "browser",
+      "url": "https://outlook.office.com/mail/",
+      "account": "jordan.demo",
+      "steps": [
+        "As Jordan Demo (sales manager) open the mail 'Overdue opportunities: 3' in Outlook on the web",
+        "Show the HTML table with Opportunity, Account, Owner, Estimated value and Should have closed (Fabrikam laptop refresh, Adatum chairs, Tailspin printers; owners Alex Demo and Sam Demo)",
+        "Next to it open the run history of 'Overdue opportunities digest' (manual test run)"
+      ],
+      "mask": ["org URL in links and run inputs", "environment ID", "tenant domain in e-mail addresses"]
+    }
+  ],
+  "teardown": [
+    "# owner (tenant): turn off both flows; delete the solution Sales follow-up with its flows and connection references; delete the five test opportunities, the account Fabrikam and the Kick-off call tasks; remove alex.demo's Salesperson role if it was added only for this episode; the trial environment itself stays",
+    "Remove-Item Env:DATAVERSE_TOKEN, Env:DV_ORG, Env:MG_TODAY -ErrorAction SilentlyContinue",
+    "Remove-Item .\\out -Recurse -Force -ErrorAction SilentlyContinue"
+  ],
+  "needs": ["tenant", "premium-trial", "d365-sales-trial"]
+}

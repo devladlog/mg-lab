@@ -1,0 +1,70 @@
+{
+  "note": "Live-session recording of the screen scenes (series/tools/rec). Four portal screens. The two workbooks are generated locally by the episode's own excelfake tool and uploaded in the portal; the trigger polls (up to five minutes).",
+  "prepare": [
+    "# owner signs in: browser profiles for labadmin (SharePoint, Excel on the web, make.powerautomate.com, Outlook) and jordan.demo (uploads the price list). Nothing is typed or stored here.",
+    "python -m pip install -r requirements-test.txt --quiet",
+    "New-Item -ItemType Directory -Force -Path .\\out | Out-Null",
+    "Push-Location .\\src; python -m excelfake make-workbooks ..\\out; Pop-Location",
+    "Get-ChildItem .\\out | Select-Object Name, Length",
+    "# owner (tenant, demo.md Setup 1-4): upload out\\Purchasing catalogue.xlsx to Purchasing > Documents; create the Office Script 'Upsert prices' from src\\officescript\\UpsertPrices.ts and move it to Documents/Scripts; library Price lists with folder Rejected; solution Price lists (PriceLists) with its environment variables and the flow 'Supplier price list import', turned on",
+    "# owner (demo.md Setup 8): as jordan.demo upload out\\Fabrikam price list 2026-12.xlsx to Price lists and wait for the real run"
+  ],
+  "screens": [
+    {
+      "name": "library",
+      "kind": "browser",
+      "url": "https://<tenant>.sharepoint.com/sites/Purchasing/Price%20lists",
+      "account": "labadmin",
+      "steps": [
+        "Open the library 'Price lists' on the Purchasing site and show 'Fabrikam price list 2026-12.xlsx' uploaded by Jordan Demo",
+        "Insert: open the workbook in Excel on the web, table Prices (Item No., Description, Unit price, Valid from)",
+        "Scroll to the bottom: 400 rows and the four bad rows (empty item number, n/a, 12,50, -3.2)"
+      ],
+      "mask": ["tenant name in the address bar, the SharePoint header and the Excel header"]
+    },
+    {
+      "name": "run",
+      "kind": "browser",
+      "url": "https://make.powerautomate.com/",
+      "account": "labadmin",
+      "steps": [
+        "Open the run history of 'Supplier price list import' and the real run for 'Fabrikam price list 2026-12.xlsx'",
+        "Show every action green, 'Too many rows' false and 'Stop not all rows read' skipped",
+        "Open the output panel of 'List price rows': 400 items; open its Settings to show pagination On, threshold 5000",
+        "Expand 'Upsert catalogue' output: result with inserted 15, updated 288, unchanged 92, duplicatesInFile 1, duplicateRowsInCatalogue 1 and bigChanges FAB-0100, FAB-0200, FAB-0300"
+      ],
+      "mask": ["site URLs, drive IDs (b!...) and the script ID in the action inputs", "environment ID in the address bar", "tenant name"]
+    },
+    {
+      "name": "catalogue",
+      "kind": "browser",
+      "url": "https://<tenant>.sharepoint.com/sites/Purchasing/Shared%20Documents",
+      "account": "labadmin",
+      "steps": [
+        "Open 'Purchasing catalogue.xlsx' in Excel on the web, table Catalogue",
+        "Show FAB-0005 with the new price and both FAB-0007 rows with the same new price",
+        "Scroll to the end and show FAB-0381 to FAB-0395 appended, Valid from 2026-12-01 as a date and Source 'Fabrikam price list 2026-12.xlsx'",
+        "Optional insert: Automate tab, the 'Upsert prices' script in the Code Editor"
+      ],
+      "mask": ["tenant name in the address bar and the Excel header"]
+    },
+    {
+      "name": "email",
+      "kind": "browser",
+      "url": "https://outlook.office.com/mail/",
+      "account": "labadmin",
+      "steps": [
+        "Open the mail 'Price list Fabrikam price list 2026-12.xlsx: 288 updated, 15 new, 4 rejected'",
+        "Show the counts and the HTML table with FAB-0100, FAB-0200 and FAB-0300",
+        "Insert: open Price lists/Rejected/Fabrikam price list 2026-12-rejected.csv in Excel and show the four rows with the Problem column"
+      ],
+      "mask": ["tenant domain in the mailbox address", "tenant name in the suite bar and the Excel header"]
+    }
+  ],
+  "teardown": [
+    "# owner (tenant): turn the flow off (and delete the pagination-off copy if one was made); delete the uploaded price lists and the Rejected CSVs; keep the Upsert prices script and the solution for episode 9 or delete them",
+    "Remove-Item .\\out -Recurse -Force -ErrorAction SilentlyContinue",
+    "Get-ChildItem -Path . -Filter 'PriceLists*.zip' -ErrorAction SilentlyContinue | Remove-Item -Force"
+  ],
+  "needs": ["tenant"]
+}

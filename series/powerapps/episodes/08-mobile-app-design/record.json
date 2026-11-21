@@ -1,0 +1,90 @@
+{
+  "note": "Live-session recording of the screen scenes (series/tools/rec). prepare/teardown run on the laptop, not recorded; terminal commands are typed and run for real. $env:MG_DEV_URL (DEV org URL) and the other MG_* variables are set by the owner as user environment variables on the laptop and never appear on screen.",
+  "prepare": [
+    "Read-Host 'Owner: episodes 1-7 are in DEV; Equipment and Loan tables have Can be taken offline on; Equipment Desk (phone) is rebuilt per demo.md steps 2-4 (display settings, LoansScreen, offline profile published, app published) and is in the solution; optional role Equipment Desk Offline for alex.demo; test data CT-0043 overdue, CT-0107 due soon, CT-0108 later, CT-0042 returned; the phone is signed in to the lab tenant with the initial offline sync finished; Code 128 labels CT-0043, CT-0107, CT-0042 and an EAN product barcode are ready. Press Enter'"
+  ],
+  "screens": [
+    {
+      "name": "phone-rotate",
+      "kind": "app",
+      "app": "Power Apps mobile (Android or iOS) on a real phone, recorded with the phone's own screen recorder",
+      "account": "labadmin (or alex.demo with the offline role)",
+      "steps": [
+        "Open Equipment Desk (phone): list upright",
+        "Tap CT-0043: loan full screen, header 'CT-0043'",
+        "Back arrow to the list, open CT-0107",
+        "Rotate the phone: two panes, no scrolling"
+      ],
+      "mask": [
+        "account name and avatar in Power Apps mobile",
+        "tenant name on the app list",
+        "notification bar (turn on Do Not Disturb)",
+        "device name"
+      ]
+    },
+    {
+      "name": "phone-offline",
+      "kind": "app",
+      "app": "Power Apps mobile (Android or iOS) on a real phone, recorded with the phone's own screen recorder",
+      "account": "labadmin (or alex.demo with the offline role)",
+      "steps": [
+        "Turn airplane mode on: yellow offline banner, globe shows not connected",
+        "Open CT-0043: 'Send reminder (needs a connection)' is disabled",
+        "Mark returned > confirm: success banner, globe shows changes pending; tap the globe for the device status page",
+        "Airplane mode off: globe connected",
+        "On the laptop show the model-driven app: CT-0043 Available (cutaway)"
+      ],
+      "mask": [
+        "account name and avatar in Power Apps mobile",
+        "tenant name on the app list",
+        "notification bar (turn on Do Not Disturb)",
+        "device name",
+        "laptop cutaway: environment name, tenant name, user names"
+      ]
+    },
+    {
+      "name": "phone-scan",
+      "kind": "app",
+      "app": "Power Apps mobile (Android or iOS) on a real phone, recorded with the phone's own screen recorder",
+      "account": "labadmin (or alex.demo with the offline role)",
+      "steps": [
+        "Reset CT-0043 first (Returned on cleared, status On loan) and wait for the sync",
+        "Open loans > Scan tag: scan the Code 128 label CT-0043: the loan opens",
+        "Scan an EAN product barcode: warning",
+        "Scan CT-0042: 'has no open loan'",
+        "Type ct-0107 in the tag box: it opens"
+      ],
+      "mask": [
+        "account name and avatar in Power Apps mobile",
+        "tenant name on the app list",
+        "notification bar (turn on Do Not Disturb)",
+        "device name"
+      ]
+    },
+    {
+      "name": "browser-wide",
+      "kind": "browser",
+      "url": "https://make.powerapps.com/",
+      "account": "labadmin",
+      "steps": [
+        "Microsoft Edge on the laptop: Apps > 'Equipment Desk (phone)' > Play",
+        "DevTools device toolbar: tablet-size viewport upright, then sideways",
+        "Close DevTools and use the full window: two panes, 'Select a loan to see it here.', no globe icon"
+      ],
+      "mask": [
+        "environment name and org URL in the address bar and the environment picker",
+        "tenant name in the top bar",
+        "account name, e-mail and avatar in the account menu"
+      ]
+    }
+  ],
+  "teardown": [
+    "Write-Host 'Reminder: reset the test loans, airplane mode off, delete the raw phone recordings after export, remove the Equipment Desk Offline role from alex.demo, sign the phone out of the lab tenant if it is not a lab device.'"
+  ],
+  "needs": [
+    "tenant",
+    "premium-trial",
+    "device:phone",
+    "barcode-labels"
+  ]
+}

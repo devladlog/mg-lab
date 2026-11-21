@@ -1,0 +1,112 @@
+{
+  "note": "Live-session recording of the screen scenes (series/tools/rec). prepare/teardown run on the laptop, not recorded; commands are typed and run for real in Git Bash scripts via 'bash'.",
+  "prepare": [
+    "# laptop toolchain for the bash scripts: Git Bash first on PATH, python3 and zip shims in %TEMP% (the laptop has neither)",
+    "$shim = Join-Path $env:TEMP 'mgshim'; New-Item -ItemType Directory -Force $shim | Out-Null; [IO.File]::WriteAllText(\"$shim\\python3\", \"#!/bin/bash`nexec python `\"`$@`\"`n\"); [IO.File]::WriteAllText(\"$shim\\zip.py\", \"import sys,os,zipfile`nz=zipfile.ZipFile(os.path.abspath(sys.argv[-2]),'w',zipfile.ZIP_DEFLATED)`n[z.write(os.path.join(r,n),os.path.relpath(os.path.join(r,n),'.').replace(os.sep,'/')) for r,d,f in os.walk('.') for n in f]`nz.close()`n\"); [IO.File]::WriteAllText(\"$shim\\zip\", \"#!/bin/bash`nexec python `\"`$(dirname `\"`$0`\")/zip.py`\" `\"`$@`\"`n\")",
+    "$env:PATH = \"$shim;C:\\Program Files\\Git\\bin;$env:USERPROFILE\\.azure\\bin;$env:LOCALAPPDATA\\Microsoft\\WinGet\\Links;$env:PATH\"",
+    "az account show --query name -o none 2>$null; if ($LASTEXITCODE -ne 0) { az login --use-device-code }   # owner signs in as labadmin",
+    "if (-not $env:ALERT_EMAIL) { throw 'Set ALERT_EMAIL (the recorder mailbox) before recording; it must not be shown on screen' }",
+    "bash infra/deploy.sh rg-contoso-monitoring swedencentral   # about 8 minutes",
+    "$env:APP_URL = (Get-Content \"$HOME\\.contoso-orders-monitoring\\outputs.json\" | ConvertFrom-Json).appUrl.value",
+    "bash infra/load.sh $env:APP_URL 100   # about 2 minutes of mixed traffic",
+    "Start-Sleep -Seconds 300   # telemetry ingestion is not instant",
+    "# portal check before recording: Logs > AppRequests | take 5 | project AppRoleName must be contoso-orders-api (the alert query filters on it); if not, stop and tell the episode builder"
+  ],
+  "screens": [
+    {
+      "name": "transaction",
+      "kind": "browser",
+      "url": "https://portal.azure.com/#browse/resourcegroups",
+      "account": "labadmin",
+      "steps": [
+        "Open rg-contoso-monitoring > the Application Insights resource > Investigate > Transaction search",
+        "Filter Event types to Request, open a POST /orders with result 201",
+        "In the end-to-end transaction details show the request, the child orders.price span (properties order.channel, order.line_count, order.total) and the Azure blob dependency (PUT to the orders container)"
+      ],
+      "mask": [
+        "subscription ID and name",
+        "tenant name/domain in the top bar and account menu",
+        "random suffixes in resource names",
+        "*.azurewebsites.net host names",
+        "Application Insights, storage account and workspace names"
+      ]
+    },
+    {
+      "name": "orders-by-channel",
+      "kind": "browser",
+      "url": "https://portal.azure.com/#browse/resourcegroups",
+      "account": "labadmin",
+      "steps": [
+        "Open rg-contoso-monitoring > Log Analytics workspace > Logs (close the query-picker dialog)",
+        "Paste queries/orders-by-channel.kql and run it: a timechart with two series, web and partner",
+        "Optional second tab: queries/sampling-check.kql showing RetainedPercentage (expect values at or near 100; say what was captured)"
+      ],
+      "mask": [
+        "subscription ID and name",
+        "tenant name/domain in the top bar and account menu",
+        "random suffixes in resource names",
+        "*.azurewebsites.net host names",
+        "workspace name"
+      ]
+    },
+    {
+      "name": "alert-fired",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\azure\\episodes\\05-monitoring-application-insights",
+      "prompt": "PS 05-monitoring-application-insights> ",
+      "commands": [
+        "bash infra/chaos.sh rg-contoso-monitoring 30",
+        "$n = 0; do { Start-Sleep -Seconds 5; $code = curl.exe -s -o NUL -w \"%{http_code}\" \"$env:APP_URL/healthz\"; $n++ } until ($code -eq '200' -or $n -ge 40)   # the app restarts after the setting change",
+        "bash infra/load.sh $env:APP_URL 100",
+        "#pause 6"
+      ],
+      "mask": [
+        "app host name",
+        "the ALERT_EMAIL value must never appear"
+      ],
+      "maxMinutes": 10,
+      "companion": {
+        "kind": "browser",
+        "url": "https://portal.azure.com/#view/Microsoft_Azure_Monitoring/AzureMonitoringBrowseBlade/~/alertsV2",
+        "steps": [
+          "About 5-10 minutes after the load: Azure Monitor > Alerts",
+          "Show the fired alert-orders-failed-requests (Sev 2) and alert-orders-failure-ratio with dimension OperationName = POST /orders",
+          "Optional: the alert e-mail (mask the address)"
+        ]
+      },
+      "note": "The tally shows HTTP 500 lines next to 201/400/404/422. The Azure Monitor Alerts blade (right half of the capture) is a browser capture done after the terminal scene; the kit records only the terminal."
+    },
+    {
+      "name": "availability",
+      "kind": "browser",
+      "url": "https://portal.azure.com/#browse/resourcegroups",
+      "account": "labadmin",
+      "steps": [
+        "Open rg-contoso-monitoring > the Application Insights resource > Investigate > Availability",
+        "Toggle Scatter plot",
+        "Show the orders-api-healthz standard test with green results from the five European locations (West Europe, North Europe, France Central, UK South, UK West)",
+        "Hover one dot so location and duration are visible"
+      ],
+      "mask": [
+        "subscription ID and name",
+        "tenant name/domain in the top bar and account menu",
+        "random suffixes in resource names",
+        "*.azurewebsites.net host names",
+        "app host name in the web test"
+      ]
+    }
+  ],
+  "teardown": [
+    "bash infra/chaos.sh rg-contoso-monitoring 0",
+    "bash infra/teardown.sh rg-contoso-monitoring",
+    "Remove-Item Env:APP_URL -ErrorAction SilentlyContinue",
+    "az group exists --name rg-contoso-monitoring   # false when done"
+  ],
+  "needs": [
+    "azure",
+    "tenant",
+    "tool:dotnet10",
+    "env:ALERT_EMAIL (recorder mailbox)"
+  ]
+}

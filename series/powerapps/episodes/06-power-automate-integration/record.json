@@ -1,0 +1,101 @@
+{
+  "note": "Live-session recording of the screen scenes (series/tools/rec). prepare/teardown run on the laptop, not recorded; terminal commands are typed and run for real. $env:MG_DEV_URL (DEV org URL) and the other MG_* variables are set by the owner as user environment variables on the laptop and never appear on screen.",
+  "prepare": [
+    "# owner signs in once, off camera: az login --allow-no-subscriptions",
+    "$env:DATAVERSE_URL = $env:MG_DEV_URL; $env:DATAVERSE_TOKEN = az account get-access-token --resource $env:DATAVERSE_URL --query accessToken -o tsv",
+    "Copy-Item src\\flow\\SendLoanReminder.clientdata.json $env:TEMP\\SendLoanReminder.clientdata.json.bak -Force",
+    "(Get-Content src\\flow\\SendLoanReminder.clientdata.json -Raw).Replace(\"'@contoso.com'\", \"'@$($env:MG_LAB_MAIL_DOMAIN)'\") | Set-Content src\\flow\\SendLoanReminder.clientdata.json -NoNewline",
+    "Push-Location src\\FlowDeploy; dotnet build -nologo -v q; dotnet run --no-build -- ../flow/SendLoanReminder.clientdata.json; Pop-Location",
+    "Read-Host 'Owner: Solutions > Equipment Desk > Connection references: pick a Dataverse and an Office 365 Outlook connection for each new reference; then add the flow to Equipment Desk (phone) with the btnRemind block from LoansScreen.pa.yaml, save and publish; test loans: CT-0043 overdue for the borrower test user, one not overdue or returned. Press Enter'"
+  ],
+  "screens": [
+    {
+      "name": "flow-designer",
+      "kind": "browser",
+      "url": "https://make.powerautomate.com/",
+      "account": "labadmin",
+      "steps": [
+        "Solutions > Equipment Desk: SendLoanReminder and the two connection references",
+        "Open SendLoanReminder in the designer",
+        "Show the PowerApps (V2) trigger (LoanId), Get loan, Today, Problem, Can remind (True: Send reminder, Respond sent, Respond send failed; False: Respond skipped), Respond not found"
+      ],
+      "mask": [
+        "environment name and org URL in the address bar and the environment picker",
+        "tenant name in the top bar",
+        "account name, e-mail and avatar in the account menu",
+        "connection names"
+      ]
+    },
+    {
+      "name": "app-send",
+      "kind": "browser",
+      "url": "https://make.powerapps.com/",
+      "account": "labadmin",
+      "steps": [
+        "Play 'Equipment Desk (phone)' in the phone preview > Open loans",
+        "Tap 'Send reminder' on the overdue CT-0043 row: 'Sending...' with the other buttons disabled, then green 'Reminder sent to alex.demo@contoso.com for CT-0043.'",
+        "Switch to Outlook on the web (https://outlook.office.com/) as the borrower test user: 'Please return CT-0043 Laptop 14'",
+        "Back in the app tap it on the not-overdue or returned loan: yellow 'No reminder sent: it isn't overdue yet.'"
+      ],
+      "mask": [
+        "environment name and org URL in the address bar and the environment picker",
+        "tenant name in the top bar",
+        "account name, e-mail and avatar in the account menu",
+        "any real mail domain: only the fictional *.demo@contoso.com addresses may stay",
+        "the borrower mailbox address and the real mail domain in Outlook"
+      ]
+    },
+    {
+      "name": "flow-run",
+      "kind": "browser",
+      "url": "https://make.powerautomate.com/",
+      "account": "labadmin",
+      "steps": [
+        "Solutions > Equipment Desk > SendLoanReminder > 28-day run history",
+        "Open the successful run: Problem empty, True branch, Send reminder and Respond sent succeeded",
+        "Open the refused run: Problem says 'it isn't overdue yet', Respond skipped"
+      ],
+      "mask": [
+        "environment name and org URL in the address bar and the environment picker",
+        "tenant name in the top bar",
+        "account name, e-mail and avatar in the account menu",
+        "real addresses in run inputs and outputs, connection names"
+      ]
+    },
+    {
+      "name": "run-only-users",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\powerapps\\episodes\\06-power-automate-integration\\src\\FlowDeploy",
+      "prompt": "PS FlowDeploy> ",
+      "commands": [
+        "dotnet run --no-build -- ../flow/SendLoanReminder.clientdata.json --activate",
+        "#pause 4"
+      ],
+      "url": "https://make.powerautomate.com/",
+      "account": "labadmin",
+      "steps": [
+        "After the terminal part: SendLoanReminder > Details > Run only users > Edit",
+        "Show Dataverse and Office 365 Outlook both as 'Provided by run-only user'"
+      ],
+      "mask": [
+        "environment name and org URL in the address bar and the environment picker",
+        "tenant name in the top bar",
+        "account name, e-mail and avatar in the account menu",
+        "connection names and ids"
+      ]
+    }
+  ],
+  "teardown": [
+    "Copy-Item $env:TEMP\\SendLoanReminder.clientdata.json.bak src\\flow\\SendLoanReminder.clientdata.json -Force",
+    "Remove-Item $env:TEMP\\SendLoanReminder.clientdata.json.bak -ErrorAction SilentlyContinue",
+    "Remove-Item Env:DATAVERSE_TOKEN, Env:DATAVERSE_URL -ErrorAction SilentlyContinue",
+    "Write-Host 'Reminder: the flow stays for later episodes (or turn it off); delete reminder mails that show anything real; reset the test loans; az logout if signed in only for this.'"
+  ],
+  "needs": [
+    "tenant",
+    "premium-trial",
+    "mailbox:borrower test user",
+    "env:MG_LAB_MAIL_DOMAIN"
+  ]
+}

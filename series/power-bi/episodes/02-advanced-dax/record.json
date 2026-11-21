@@ -1,0 +1,76 @@
+{
+  "note": "Live-session recording of the screen scenes (series/tools/rec). prepare/teardown run on the laptop, not recorded; commands are typed and run for real. Steps of browser/app screens are done by hand by the person recording.",
+  "prepare": [
+    "New-Item -ItemType Directory -Force C:\\MGLab\\power-bi | Out-Null",
+    "Remove-Item C:\\MGLab\\power-bi\\ep02 -Recurse -Force -ErrorAction SilentlyContinue",
+    "Copy-Item -Path (Get-Location).Path -Destination C:\\MGLab\\power-bi\\ep02 -Recurse -Force",
+    "New-Item -ItemType Directory -Force C:\\MGLab\\power-bi\\star | Out-Null",
+    "Copy-Item .\\src\\data\\star\\*.csv C:\\MGLab\\power-bi\\star\\ -Force"
+  ],
+  "screens": [
+    {
+      "name": "dax-time-intelligence",
+      "kind": "app",
+      "app": "Power BI Desktop",
+      "steps": [
+        "Open C:\\MGLab\\power-bi\\ep02\\src\\ContosoSales.pbip and Refresh (fallback: blank report > TMDL view > create-model.tmdl > Apply > Refresh)",
+        "Open DAX query view; if the saved tabs are not listed, create the five tabs and paste the files from ContosoSales.SemanticModel\\DAXQueries",
+        "Zoom the editor to 130% and drag the splitter so the result grid is large",
+        "Tab 01 Time intelligence > Run: 12 rows 2025-01 to 2025-12",
+        "Check 2025-01 Sales 40267.82, Sales PY 32659.46, YoY % 0.233, Last 3 Months 158840.78; 2025-12 Sales YTD 967472.88; highlight the January row"
+      ],
+      "mask": [
+        "account name and picture at the top right of Power BI Desktop (sign out first)",
+        "Windows user name in any file path (record from C:\\MGLab)"
+      ]
+    },
+    {
+      "name": "dax-context-transition",
+      "kind": "app",
+      "app": "Power BI Desktop",
+      "steps": [
+        "DAX query view, tab 03 Context transition: show the DEFINE MEASURE block (do not click Update model)",
+        "Run: 2024 | 244 | 300 and 2025 | 247 | 300",
+        "Highlight the Without transition column"
+      ],
+      "mask": [
+        "account name and picture at the top right of Power BI Desktop (sign out first)",
+        "Windows user name in any file path (record from C:\\MGLab)"
+      ]
+    },
+    {
+      "name": "dax-ranking",
+      "kind": "app",
+      "app": "Power BI Desktop",
+      "steps": [
+        "DAX query view, tab 04 Ranking and share > Run: 19 rows ordered by Category then Rank",
+        "Scroll the grid so the end of Accessories and the start of Bikes (rank back to 1) are visible",
+        "Check Accessories / Rear Light Radar 39228.90 rank 1 share 0.301; Bikes / Enduro 300 175040.40 rank 1 0.2243; Clothing / Jersey Aero 25392.55 rank 1 0.4471"
+      ],
+      "mask": [
+        "account name and picture at the top right of Power BI Desktop (sign out first)",
+        "Windows user name in any file path (record from C:\\MGLab)"
+      ]
+    },
+    {
+      "name": "dax-yoy-gotcha",
+      "kind": "app",
+      "app": "Power BI Desktop",
+      "steps": [
+        "DAX query view, tab 02 YoY gotcha > Run: rows 2024, 2025, 2026",
+        "2025: YoY % naive 0.0811 and YoY % 0.0811; 2026: Sales blank, Sales PY 967472.88, YoY % naive -1, YoY % blank",
+        "Highlight the 2026 row"
+      ],
+      "mask": [
+        "account name and picture at the top right of Power BI Desktop (sign out first)",
+        "Windows user name in any file path (record from C:\\MGLab)"
+      ]
+    }
+  ],
+  "teardown": [
+    "Remove-Item C:\\MGLab\\power-bi\\ep02 -Recurse -Force -ErrorAction SilentlyContinue",
+    "Remove-Item C:\\MGLab\\power-bi\\star -Recurse -Force -ErrorAction SilentlyContinue"
+  ],
+  "needs": [],
+  "owner_notes": "Local only. Discard any .pbi / diagramLayout.json Desktop writes into the repo copy (the working copy is C:\\MGLab\\power-bi\\ep02)."
+}

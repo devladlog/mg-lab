@@ -1,0 +1,101 @@
+{
+  "note": "Live-session recording of the screen scenes (series/tools/rec). prepare/teardown run on the laptop, not recorded; commands are typed and run for real. Extra keys (note, followup, manual_prepare, manual_teardown) are for the recorder person; the kit ignores them. Every python command opens its own MSAL interactive sign-in (the token cache is in memory): the owner signs in as labadmin when the browser asks, or exports the app-registration variables in the shell before recording (never in a file). The Teams team and channel ids are not shown on screen (they are only used in prepare).",
+  "prepare": [
+    "python -m pip install --user -q -r requirements.txt",
+    "if (-not $env:DATAVERSE_URL) { throw 'Set $env:DATAVERSE_URL to the lab environment URL in this shell first (the owner does this; it is never written in a file).' }",
+    "if (-not $env:MGL_TEAM_ID -or -not $env:MGL_CHANNEL_ID) { throw 'Set $env:MGL_TEAM_ID and $env:MGL_CHANNEL_ID (from Get link to channel; URL-decoded) in this shell first (owner; never written in a file).' }",
+    "Push-Location src; python -m flowkit envvars --set mgl_AlertTeamId=$env:MGL_TEAM_ID --set mgl_AlertChannelId=$env:MGL_CHANNEL_ID; Pop-Location"
+  ],
+  "manual_prepare": [
+    "Teams: create the private team MG Lab Finance with channel Finance Risk, member sam.demo; note the team and channel ids.",
+    "Build the flow 'Notify high-risk project requests' in solution MGLabDataverse (Dataverse trigger Added or Modified on mgl_riskscore, filter mgl_riskscore ge 70; bound action mgl_AssessProjectRequest; Teams post with the two environment variables); save and turn on; check two connection references exist.",
+    "Smoke test with PR-0002 (budget 80,000); reset PR-0004 to budget 42,000.",
+    "If the designer flags premium: start the self-service Power Automate Premium trial for labadmin."
+  ],
+  "screens": [
+    {
+      "name": "flow-designer",
+      "kind": "browser",
+      "url": "https://make.powerautomate.com/",
+      "account": "labadmin",
+      "steps": [
+        "Select the environment DEV (top right)",
+        "Solutions, MGLabDataverse, open the cloud flow 'Notify high-risk project requests'",
+        "Expand the trigger: Change type Added or Modified, Table Project Requests, Scope Organization, Select columns mgl_riskscore, Filter rows mgl_riskscore ge 70",
+        "Show 'Perform a bound action' (Project Requests, mgl_AssessProjectRequest, Row ID from the trigger)",
+        "Show 'Post message in a chat or channel' (Flow bot, Channel, Team and Channel from the two environment variables)"
+      ],
+      "mask": [
+        "tenant name in the top bar",
+        "environment name and org URL (address bar and header)",
+        "user e-mail and avatar in the account menu",
+        "team and channel ids"
+      ]
+    },
+    {
+      "name": "flowkit-pull-lint",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\dynamics-365\\episodes\\06-integration-with-power-platform\\src",
+      "prompt": "PS src> ",
+      "commands": [
+        "python -m flowkit pull",
+        "#pause 3",
+        "python -m flowkit lint --file ../flows/notify-high-risk-project-requests.json",
+        "#pause 3",
+        "python -m flowkit lint --file ../tests/fixtures/bad-flow.clientdata.json",
+        "#pause 5"
+      ],
+      "note": "The last lint is expected to exit 1 (F011, F020, F040 on the fixture)."
+    },
+    {
+      "name": "teams-alert",
+      "kind": "browser",
+      "url": "https://teams.microsoft.com/",
+      "account": "alex.demo (form save in the app), then sam.demo or labadmin (Teams)",
+      "steps": [
+        "As alex.demo: open the Project Requests app, PR-0004, change Budget 42,000 to 75,000 with Business Justification empty, save (small inset)",
+        "Switch to Teams signed in as sam.demo or labadmin",
+        "Open team MG Lab Finance, channel Finance Risk",
+        "Wait for the Flow bot post: 'PR-0004 ... is High risk (NN).' with the Reasons line (expect a delay: async plug-in, then flow trigger)"
+      ],
+      "mask": [
+        "tenant name in the top bar",
+        "environment name and org URL (address bar and header)",
+        "user e-mail and avatar in the account menu",
+        "avatars",
+        "team name if it reveals the tenant",
+        "Teams channel link (contains the tenant id)"
+      ]
+    },
+    {
+      "name": "flowkit-runs",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\dynamics-365\\episodes\\06-integration-with-power-platform\\src",
+      "prompt": "PS src> ",
+      "commands": [
+        "python -m flowkit runs --days 7",
+        "#pause 5"
+      ],
+      "prepare": [
+        "Push-Location src; python -m flowkit settings --out ../flows/test-settings.json; python -m flowkit settings --check ../flows/test-settings.json; Pop-Location"
+      ],
+      "note": "Prepare runs the off-camera settings check for the ALM scene (expect 4 problems until a test environment's values are filled in)."
+    }
+  ],
+  "teardown": [
+    "Remove-Item ./flows/test-settings.json -Force -ErrorAction SilentlyContinue"
+  ],
+  "manual_teardown": [
+    "Turn off and delete the flow and its two connection references (and the connections).",
+    "Delete the environment variable definitions and values.",
+    "Delete the Teams team MG Lab Finance.",
+    "Run episode 5's teardown (apikit remove, delete mgl_riskscore) if nothing else needs it; restore PR-0002 and PR-0004 budgets."
+  ],
+  "needs": [
+    "tenant",
+    "premium-trial:Power Automate Premium for labadmin (only if the designer flags the Dataverse connector)",
+    "teams"
+  ]
+}

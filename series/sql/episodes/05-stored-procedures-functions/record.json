@@ -1,0 +1,94 @@
+{
+  "note": "Live-session recording (series/tools/rec). prepare/teardown run on the laptop, not recorded. Passwords are never in this file: the owner types the connection string once when prepare asks (Server=10.50.0.30,1433;Database=master;UID=<login>;<the login's password entry>;Encrypt=yes;TrustServerCertificate=yes); prepare keeps it in the MG_SQL_BASE variable of this session and derives SQL_CONNECTION_STRING for each database; teardown removes both. T-SQL set-up runs on CON-SQL01 over PowerShell Direct as the lab Administrator with Windows authentication (SQL Server's own sysadmin group is Domain Admins). Episode login: lab_demo (db_owner in ContosoBikesApp).",
+  "prepare": [
+    "$sql = { param($vm, $text) Invoke-Command -VMName $vm -Credential $cred -ArgumentList $text -ScriptBlock { param($t) $c = New-Object System.Data.SqlClient.SqlConnection 'Server=localhost;Integrated Security=SSPI;TrustServerCertificate=True'; $c.Open(); try { foreach ($b in ($t -split '(?im)^\\s*GO\\s*$')) { if ($b.Trim()) { $m = $c.CreateCommand(); $m.CommandText = $b; $m.CommandTimeout = 600; [void]$m.ExecuteNonQuery() } } } finally { $c.Close() } } }",
+    "& $sql 'CON-SQL01' \"IF SUSER_ID(N'lab_demo') IS NULL THROW 50000, N'Create the login lab_demo first (episode 3 demo.md, setup step 3; owner types its password off camera).', 1;\"",
+    "& $sql 'CON-SQL01' (Get-Content -Raw src\\sql\\00-create-database.sql)",
+    "& $sql 'CON-SQL01' \"USE ContosoBikesApp;`nGO`nIF USER_ID(N'lab_demo') IS NULL CREATE USER lab_demo FOR LOGIN lab_demo;`nALTER ROLE db_owner ADD MEMBER lab_demo;\"",
+    "if (-not $env:MG_SQL_BASE) { $env:MG_SQL_BASE = Read-Host 'Connection string for lab_demo on 10.50.0.30,1433 (typed off camera, never saved; format in the note of record.json)' -MaskInput }",
+    "$env:SQL_CONNECTION_STRING = $env:MG_SQL_BASE -replace 'Database=[^;]*', 'Database=ContosoBikesApp'",
+    "python -m pip install -q -r requirements.txt",
+    "python src/proc_lab.py --engine sqlserver --setup --step r01-inlining-catalog"
+  ],
+  "screens": [
+    {
+      "name": "r01-is-inlineable",
+      "kind": "app",
+      "app": "SSMS 22",
+      "prepare": [
+        "python src/proc_lab.py --engine sqlserver --setup --step r01-inlining-catalog"
+      ],
+      "steps": [
+        "Open SSMS 22 and connect to 10.50.0.30,1433 with SQL Server Authentication as lab_demo (secret typed off camera, Remember off); in Options > Connection Properties set the database to ContosoBikesApp and tick Trust server certificate (lab only)",
+        "Open src/sql/r01-inlining-catalog.sql (query text visible) and run it",
+        "Show the 3-row grid: ufn_CustomerOrderSummary / SQL_INLINE_TABLE_VALUED_FUNCTION / 1, ufn_DaysSinceOrder / SQL_SCALAR_FUNCTION / 0, ufn_LineTotal / SQL_SCALAR_FUNCTION / 1"
+      ],
+      "mask": [
+        "server address 10.50.0.30 and the login name (Connect dialog, title bar, status bar, Object Explorer): connect through a hosts alias so it reads CON-SQL01, or blur",
+        "laptop machine name and Windows user name in title bars"
+      ],
+      "scene": "inlining-screen"
+    },
+    {
+      "name": "d01-place-order",
+      "kind": "app",
+      "app": "SSMS 22",
+      "prepare": [
+        "python src/proc_lab.py --engine sqlserver --setup --step r01-inlining-catalog"
+      ],
+      "steps": [
+        "Open SSMS 22 and connect to 10.50.0.30,1433 with SQL Server Authentication as lab_demo (secret typed off camera, Remember off); in Options > Connection Properties set the database to ContosoBikesApp and tick Trust server certificate (lab only)",
+        "Open src/sql/d01-place-order.sql (DECLARE @lines Sales.OrderLineList, the two-line INSERT, EXEC with @OrderId OUTPUT) and run it",
+        "Show the one-row grid: yes / 2 / 201.85 / 38 / 119"
+      ],
+      "mask": [
+        "server address 10.50.0.30 and the login name (Connect dialog, title bar, status bar, Object Explorer): connect through a hosts alias so it reads CON-SQL01, or blur",
+        "laptop machine name and Windows user name in title bars"
+      ],
+      "scene": "place-order-screen"
+    },
+    {
+      "name": "d03-naive-out-of-stock",
+      "kind": "app",
+      "app": "SSMS 22",
+      "prepare": [
+        "python src/proc_lab.py --engine sqlserver --setup --step r01-inlining-catalog --step d01-place-order --step d02-unknown-customer"
+      ],
+      "steps": [
+        "Open SSMS 22 and connect to 10.50.0.30,1433 with SQL Server Authentication as lab_demo (secret typed off camera, Remember off); in Options > Connection Properties set the database to ContosoBikesApp and tick Trust server certificate (lab only)",
+        "Open src/sql/d03-naive-out-of-stock.sql and run it",
+        "Messages tab: Msg 547, the UPDATE statement conflicted with the CHECK constraint CK_Products_StockQty",
+        "Results tab of batch 2, one row: 1 / 2 / 2 / 119 / 0 (two shots or a split image: Messages first, then Results)"
+      ],
+      "mask": [
+        "server address 10.50.0.30 and the login name (Connect dialog, title bar, status bar, Object Explorer): connect through a hosts alias so it reads CON-SQL01, or blur",
+        "laptop machine name and Windows user name in title bars"
+      ],
+      "note": "d01 and d02 are played by the runner in prepare, as in the runner order; d02's grid (50001 / Unknown customer. / 0) is not captured.",
+      "scene": "gotcha-screen"
+    },
+    {
+      "name": "runner-summary",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\sql\\episodes\\05-stored-procedures-functions",
+      "prompt": "PS> ",
+      "commands": [
+        "python src/proc_lab.py --engine sqlserver --setup",
+        "#pause 6"
+      ],
+      "maxMinutes": 10,
+      "scene": "runner-screen"
+    }
+  ],
+  "teardown": [
+    "$sql = { param($vm, $text) Invoke-Command -VMName $vm -Credential $cred -ArgumentList $text -ScriptBlock { param($t) $c = New-Object System.Data.SqlClient.SqlConnection 'Server=localhost;Integrated Security=SSPI;TrustServerCertificate=True'; $c.Open(); try { foreach ($b in ($t -split '(?im)^\\s*GO\\s*$')) { if ($b.Trim()) { $m = $c.CreateCommand(); $m.CommandText = $b; $m.CommandTimeout = 600; [void]$m.ExecuteNonQuery() } } } finally { $c.Close() } } }",
+    "& $sql 'CON-SQL01' \"IF DB_ID(N'ContosoBikesApp') IS NOT NULL BEGIN ALTER DATABASE ContosoBikesApp SET SINGLE_USER WITH ROLLBACK IMMEDIATE; DROP DATABASE ContosoBikesApp; END\"",
+    "Remove-Item Env:SQL_CONNECTION_STRING, Env:MG_SQL_BASE -ErrorAction SilentlyContinue"
+  ],
+  "needs": [
+    "lab-vms",
+    "tool:SSMS",
+    "login:lab_demo"
+  ]
+}

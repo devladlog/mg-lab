@@ -1,0 +1,92 @@
+{
+  "note": "Live-session recording of the screen scenes (series/tools/rec). prepare/teardown run on the laptop, not recorded; commands are typed and run for real. Screens that mix a terminal and a portal carry the second half in also[] (when = before/after the main part). Scenes read MG_LAB_ADMIN_UPN / MG_LAB_DOMAIN (set by prepare, derived from the signed-in labadmin).",
+  "prepare": [
+    "if (-not (Get-Module -ListAvailable -Name Microsoft.Graph.Authentication)) { Install-Module Microsoft.Graph.Authentication -Scope CurrentUser -Force -AllowClobber }",
+    "Connect-MgGraph -Scopes LicenseAssignment.Read.All, User.Read.All, AuditLog.Read.All, RoleManagement.Read.Directory, LicenseAssignment.ReadWrite.All, User.ReadWrite.All -NoWelcome  # owner signs in (browser)",
+    "function Set-LabVar($n, $v) { [Environment]::SetEnvironmentVariable($n, \"$v\", 'User'); Set-Item \"env:$n\" \"$v\" }",
+    "$upn = (Invoke-MgGraphRequest -Uri /v1.0/me).userPrincipalName; Set-LabVar MG_LAB_ADMIN_UPN $upn; Set-LabVar MG_LAB_DOMAIN $upn.Split('@')[1]",
+    "function Get-LabUserId($n) { (Invoke-MgGraphRequest -Uri \"/v1.0/users/$n@$env:MG_LAB_DOMAIN\").id }",
+    "# trial SKU names come from the tenant, not from memory",
+    "$skus = (Invoke-MgGraphRequest -Uri /v1.0/subscribedSkus).value; $dyn = $skus | Where-Object skuPartNumber -match 'DYN365|DYNAMICS' | Select-Object -First 1",
+    "$c = Get-Content ./src/licensing.json -Raw | ConvertFrom-Json; $c.inactivity.inactiveDays = 3; $c.inactivity.neverSignedInGraceDays = 0; $c.prices.perUserPerMonth = [pscustomobject]@{ SPE_E5 = 50 }; if ($dyn) { $c.prices.perUserPerMonth | Add-Member -NotePropertyName $dyn.skuPartNumber -NotePropertyValue 0; $c.reclaim.allowedSkuPartNumbers = @($dyn.skuPartNumber) }; $c | ConvertTo-Json -Depth 8 | Set-Content ./src/licensing.lab.json   # the prices are examples, not Microsoft's and not what the lab pays",
+    "# one disabled account for real: taylor.demo (sign-in blocked, licences stay); re-enabled in teardown",
+    "Invoke-MgGraphRequest -Method PATCH -Uri \"/v1.0/users/$(Get-LabUserId 'taylor.demo')\" -Body @{ accountEnabled = $false }",
+    "./src/Invoke-LicensingOptimization.ps1 -ConfigFile ./src/licensing.lab.json -SaveSnapshot ./src/snapshot.lab.json -OutFile ./src/audit.lab.md   # off-camera dry run: signInActivity present, labadmin not in the plan"
+  ],
+  "screens": [
+    {
+      "name": "licences",
+      "kind": "browser",
+      "url": "https://admin.microsoft.com/#/licenses",
+      "account": "labadmin",
+      "steps": [
+        "Billing > Licenses: the E5 trial, Business Standard and the other trials with Available and Assigned counts",
+        "Open one product: the Users tab and the Groups tab show who holds it"
+      ],
+      "mask": [
+        "tenant name",
+        "sku ids",
+        "user e-mail domains"
+      ]
+    },
+    {
+      "name": "audit",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\microsoft-365\\episodes\\09-licensing-optimization\\src",
+      "prompt": "PS> ",
+      "commands": [
+        "./Invoke-LicensingOptimization.ps1 -ConfigFile ./licensing.lab.json -OutFile ./audit.lab.md",
+        "#pause 8"
+      ]
+    },
+    {
+      "name": "reclaim",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\microsoft-365\\episodes\\09-licensing-optimization\\src",
+      "prompt": "PS> ",
+      "commands": [
+        "./Invoke-LicensingOptimization.ps1 -ConfigFile ./licensing.lab.json -Reclaim -RollbackFile ./rollback.lab.json -WhatIf",
+        "Test-Path ./rollback.lab.json",
+        "./Invoke-LicensingOptimization.ps1 -ConfigFile ./licensing.lab.json -Reclaim -RollbackFile ./rollback.lab.json -Confirm:$false",
+        "#pause 3",
+        "./Invoke-LicensingOptimization.ps1 -Restore ./rollback.lab.json",
+        "#pause 4"
+      ],
+      "also": [
+        {
+          "kind": "browser",
+          "url": "https://admin.microsoft.com/#/users",
+          "account": "labadmin",
+          "steps": [
+            "Between the Reclaim and the Restore commands: Microsoft 365 admin center > Users > Active users > riley.demo > Licenses and apps: the Dynamics trial is gone",
+            "After the Restore: refresh, it is back (licence changes can take a moment)",
+            "Show rollback.lab.json with skuId and user ids masked or cropped"
+          ],
+          "mask": [
+            "tenant name",
+            "sku ids and user ids in the rollback file"
+          ],
+          "when": "between"
+        }
+      ],
+      "note": "The reclaim plan covers every never-signed-in lab user holding the allowed trial SKU (riley.demo expected, possibly more); -Confirm:$false removes for all of them and -Restore puts all of them back. Run it only on lab accounts."
+    }
+  ],
+  "teardown": [
+    "if (Test-Path ./src/rollback.lab.json) { ./src/Invoke-LicensingOptimization.ps1 -Restore ./src/rollback.lab.json }",
+    "Invoke-MgGraphRequest -Method PATCH -Uri \"/v1.0/users/$((Invoke-MgGraphRequest -Uri \"/v1.0/users/taylor.demo@$env:MG_LAB_DOMAIN\").id)\" -Body @{ accountEnabled = $true }",
+    "Remove-Item ./src/licensing.lab.json, ./src/snapshot.lab.json, ./src/audit.lab.md, ./src/rollback.lab.json -ErrorAction SilentlyContinue",
+    "Disconnect-MgGraph",
+    "# by hand: compare each lab user's licences with series/LAB.md (E5, Entra ID Governance, Dynamics 365 Sales trial)",
+    "foreach ($n in 'MG_LAB_ADMIN_UPN', 'MG_LAB_DOMAIN') { [Environment]::SetEnvironmentVariable($n, $null, 'User') }"
+  ],
+  "needs": [
+    "tenant",
+    "trial:Microsoft 365 E5 (Entra ID P2 for signInActivity)",
+    "role:Global Administrator (labadmin)",
+    "state:riley.demo and taylor.demo have never signed in",
+    "optional-not-defined:group-assigned duplicate licence (DuplicateDirectAndGroup) and Business Standard on sam.demo (not verified; skip if the service refuses)"
+  ]
+}

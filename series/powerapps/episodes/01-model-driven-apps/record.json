@@ -1,0 +1,95 @@
+{
+  "note": "Live-session recording of the screen scenes (series/tools/rec). prepare/teardown run on the laptop, not recorded; terminal commands are typed and run for real. $env:MG_DEV_URL (DEV org URL) and the other MG_* variables are set by the owner as user environment variables on the laptop and never appear on screen.",
+  "prepare": [
+    "# owner signs in once, off camera: az login --allow-no-subscriptions",
+    "$env:DATAVERSE_URL = $env:MG_DEV_URL; $env:DATAVERSE_TOKEN = az account get-access-token --resource $env:DATAVERSE_URL --query accessToken -o tsv",
+    "Push-Location src; npm ci --no-audit --no-fund; npm run build; Pop-Location",
+    "Push-Location src; node provision/provision.ts --webresource dist/contoso_/scripts/loanform.js --role 'Basic User'; Pop-Location",
+    "Push-Location src; node provision/provision.ts --webresource dist/contoso_/scripts/loanform.js --role 'Basic User'; Pop-Location",
+    "Read-Host 'Owner: in the maker portal add the On Load handler to the Loan main form (library contoso_/scripts/loanform.js, function Contoso.LoanForm.onLoad, Pass execution context ticked), add the missing columns to the form, save and publish; create test equipment CT-0042 Laptop, CT-0107 Monitor, CT-0311 Phone and loans for alex.demo@contoso.com and sam.demo@contoso.com, one due 3 days ago and not returned. Press Enter when done'"
+  ],
+  "screens": [
+    {
+      "name": "solution",
+      "kind": "browser",
+      "url": "https://make.powerapps.com/",
+      "account": "labadmin",
+      "steps": [
+        "Pick the DEV environment in the environment picker",
+        "Open Solutions",
+        "Open the solution 'Equipment Desk'",
+        "Stay on Objects: show the tables Equipment and Loan, the app Equipment Desk, the site map and the web resource contoso_/scripts/loanform.js"
+      ],
+      "mask": [
+        "environment name and org URL in the address bar and the environment picker",
+        "tenant name in the top bar",
+        "account name, e-mail and avatar in the account menu"
+      ]
+    },
+    {
+      "name": "app-designer",
+      "kind": "browser",
+      "url": "https://make.powerapps.com/",
+      "account": "labadmin",
+      "steps": [
+        "Solutions > Equipment Desk",
+        "Select the app 'Equipment Desk' > Edit (modern app designer)",
+        "Show the navigation: area 'Equipment Desk', group 'Lending', pages Equipment and Loans",
+        "Select the Loans page and show the preview with the test loans"
+      ],
+      "mask": [
+        "environment name and org URL in the address bar and the environment picker",
+        "tenant name in the top bar",
+        "account name, e-mail and avatar in the account menu"
+      ]
+    },
+    {
+      "name": "form-handler",
+      "kind": "browser",
+      "url": "https://make.powerapps.com/",
+      "account": "labadmin",
+      "steps": [
+        "Solutions > Equipment Desk > table Loan > Forms",
+        "Open the Loan main form in the form designer",
+        "Open Events (form properties)",
+        "On Load > + Event handler",
+        "Show library contoso_/scripts/loanform.js, function Contoso.LoanForm.onLoad and the 'Pass execution context as first parameter' checkbox ticked (highlight it)",
+        "Close the dialog without changing anything"
+      ],
+      "mask": [
+        "environment name and org URL in the address bar and the environment picker",
+        "tenant name in the top bar",
+        "account name, e-mail and avatar in the account menu"
+      ]
+    },
+    {
+      "name": "due-date-error",
+      "kind": "browser",
+      "url": "https://make.powerapps.com/",
+      "account": "labadmin",
+      "steps": [
+        "Apps > 'Equipment Desk' > Play (the running model-driven app)",
+        "Loans > New Loan: show loan date (today) and due date (+14 days) defaulted",
+        "Pick equipment CT-0042 Laptop; loan name fills in by itself",
+        "Set the due date before the loan date: red field notification 'Due date can't be before the loan date.'",
+        "Try Save: it is blocked",
+        "Cutaway: open the loan that was due three days ago: yellow banner 'Overdue by 3 days. Contact the borrower.'"
+      ],
+      "mask": [
+        "environment name and org URL in the address bar and the environment picker",
+        "tenant name in the top bar",
+        "account name, e-mail and avatar in the account menu",
+        "any real mail domain: only the fictional *.demo@contoso.com addresses may stay"
+      ]
+    }
+  ],
+  "teardown": [
+    "Remove-Item Env:DATAVERSE_TOKEN, Env:DATAVERSE_URL -ErrorAction SilentlyContinue",
+    "Remove-Item src\\node_modules, src\\dist -Recurse -Force -ErrorAction SilentlyContinue",
+    "Write-Host 'The Equipment Desk solution, tables, app and test data stay for episodes 2-4 and are removed after the series (demo.md tear-down). Run az logout if az was signed in only for this.'"
+  ],
+  "needs": [
+    "tenant",
+    "premium-trial"
+  ]
+}

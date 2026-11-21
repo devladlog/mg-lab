@@ -1,0 +1,101 @@
+{
+  "note": "Live-session recording of the screen scenes (series/tools/rec). prepare/teardown run on the laptop, not recorded; commands are typed and run for real. Steps of browser/app screens are done by hand by the person recording.",
+  "prepare": [
+    "New-Item -ItemType Directory -Force C:\\MGLab\\power-bi | Out-Null",
+    "Remove-Item C:\\MGLab\\power-bi\\ep10 -Recurse -Force -ErrorAction SilentlyContinue",
+    "Copy-Item -Path (Get-Location).Path -Destination C:\\MGLab\\power-bi\\ep10 -Recurse -Force",
+    "# owner signs in to Azure (interactive)",
+    "az login",
+    "$sfx = -join ((97..122) | Get-Random -Count 6 | ForEach-Object { [char]$_ })",
+    "$srv = \"contoso-lab-sql-$sfx\"",
+    "$login = 'sqladmin' + $sfx",
+    "$sqlPw = Read-Host 'SQL admin password (owner types, never stored)' -MaskInput",
+    "az group create -n rg-mglab-powerbi-10 -l westeurope --query name",
+    "az sql server create -n $srv -g rg-mglab-powerbi-10 -l westeurope --admin-user $login --admin-password $sqlPw --query name",
+    "az sql db create -n ContosoBikesIR -s $srv -g rg-mglab-powerbi-10 --edition GeneralPurpose --family Gen5 --capacity 2 --compute-model Serverless --use-free-limit true --free-limit-exhaustion-behavior AutoPause --query useFreeLimit",
+    "$myIp = (Invoke-RestMethod https://api.ipify.org)",
+    "az sql server firewall-rule create -g rg-mglab-powerbi-10 -s $srv -n laptop --start-ip-address $myIp --end-ip-address $myIp --query name",
+    "az sql server firewall-rule create -g rg-mglab-powerbi-10 -s $srv -n azure-services --start-ip-address 0.0.0.0 --end-ip-address 0.0.0.0 --query name",
+    "Set-Item Env:SQLCMDPASSWORD $sqlPw",
+    "sqlcmd -S \"$srv.database.windows.net\" -d ContosoBikesIR -U $login -b -i .\\src\\sql\\01-create-and-load.sql",
+    "sqlcmd -S \"$srv.database.windows.net\" -d ContosoBikesIR -U $login -b -i .\\src\\sql\\03-checks.sql",
+    "Remove-Item Env:SQLCMDPASSWORD"
+  ],
+  "screens": [
+    {
+      "name": "desktop-filter",
+      "kind": "app",
+      "app": "Power BI Desktop",
+      "steps": [
+        "Open C:\\MGLab\\power-bi\\ep10\\src\\ContosoSalesIR.pbip; Transform data > Edit parameters > SqlServer = the server name; sign in with the SQL login; Refresh",
+        "Query list: SqlServer, SqlDatabase, RangeStart, RangeEnd and the Sales query with the filter step",
+        "Right-click the InPeriod step > View Native Query: enabled, SQL with both dates in the WHERE (if greyed out say so)"
+      ],
+      "mask": [
+        "SQL server name (blur)",
+        "account picture and name",
+        "account name and picture at the top right of Power BI Desktop (sign out first)",
+        "Windows user name in any file path (record from C:\\MGLab)"
+      ]
+    },
+    {
+      "name": "policy-dialog",
+      "kind": "app",
+      "app": "Power BI Desktop",
+      "steps": [
+        "Sales table context menu > Incremental refresh",
+        "Switch on: archive 3 years, refresh 10 days, detect data changes on Modified Date; Only refresh complete days as wanted (note what it does to the TMDL policy)",
+        "Leave Get the latest data in real time off and say why (needs Premium); then Home > Publish > Contoso Sales (Lab) once (never again)"
+      ],
+      "mask": [
+        "account picture and name",
+        "tenant domain"
+      ]
+    },
+    {
+      "name": "ssms-partitions",
+      "kind": "app",
+      "app": "SSMS 22",
+      "steps": [
+        "Workspace settings: copy the workspace connection string (XMLA read-write enabled by the capacity admin)",
+        "SSMS Connect > Analysis Services, server = that string, sign in as alex.demo",
+        "Databases > ContosoSalesIR > Tables > Sales > Partitions: expect 28 partitions on 2026-11-21 (18 historical, 10 refresh)",
+        "Compare with python tools\\ir_partitions.py --model ..\\src\\ContosoSalesIR.SemanticModel\\definition --date <recording day>; write down the real partition names (month numbering)"
+      ],
+      "mask": [
+        "workspace connection string and tenant name",
+        "account e-mail in the connect dialog",
+        "Windows user name"
+      ]
+    },
+    {
+      "name": "after-changes",
+      "kind": "browser",
+      "url": "https://app.powerbi.com/",
+      "account": "alex.demo",
+      "steps": [
+        "Terminal: run sql\\02-late-changes.sql on the database (sqlcmd as in prepare, password typed off camera)",
+        "Service: refresh the model; report shows the recent-days correction, Sales Amount card first state",
+        "Terminal at C:\\MGLab\\power-bi\\ep10\\src: .\\pipeline\\Invoke-PartitionRefresh.ps1 -WorkspaceId $ws -SemanticModelId $ds -Table Sales -Partition <March 2023 partition name from SSMS> -SkipRefreshPolicy (rehearse with -WhatIf first)",
+        "Show the Sales Amount card again: record both states"
+      ],
+      "mask": [
+        "server name",
+        "workspace and model ids in the URL",
+        "account picture and name"
+      ]
+    }
+  ],
+  "teardown": [
+    "Remove-Item C:\\MGLab\\power-bi\\ep10 -Recurse -Force -ErrorAction SilentlyContinue",
+    "# owner signs in to Azure again if the session expired",
+    "az group delete -n rg-mglab-powerbi-10 --yes --no-wait",
+    "# owner: delete the published model ContosoSalesIR and its report in the workspace"
+  ],
+  "needs": [
+    "tenant",
+    "azure",
+    "premium-trial"
+  ],
+  "owner_notes": "Azure SQL free tier (cost 0, AutoPause at the monthly limit). Capacity XMLA read-write and the tenant setting for XMLA endpoints must be enabled by labadmin. Close SSMS/sqlcmd sessions afterwards so the database can pause."
+}

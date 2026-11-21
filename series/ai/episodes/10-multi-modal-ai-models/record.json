@@ -1,0 +1,84 @@
+{
+  "note": "Voice notes are synthetic (say so in narration). Do not tune pictures, thresholds or prompt. The clean screenshot is shown in an image viewer for two seconds before 'ticket' (open build/images/vpn-clean.png in the viewer, outside the terminal window).",
+  "prepare": [
+    "python -m venv .venv",
+    "$env:PATH = \"$PWD\\.venv\\Scripts;$env:PATH\"",
+    "python -m pip install -q -r requirements.txt",
+    "$env:PYTHONPATH = 'src'",
+    "# owner signs in as labadmin (device code), not on camera",
+    "az login --use-device-code --only-show-errors | Out-Null",
+    "$me = az ad signed-in-user show --query id -o tsv",
+    "az group create -n rg-mglab-ai-10 -l swedencentral -o none",
+    "$o = az deployment group create -g rg-mglab-ai-10 -f infra/main.bicep -p infra/main.bicepparam -p developerPrincipalId=$me --query properties.outputs -o json | ConvertFrom-Json",
+    "$env:MMTICKET_ENDPOINT = $o.aoaiEndpoint.value; $env:AOAI_NAME = $o.aoaiName.value",
+    "python -m mmticket samples --out build/images",
+    "Start-Sleep -Seconds 300   # role assignment propagation (up to 5 minutes)",
+    "python -m mmticket voice --out build/audio   # 5 synthetic voice notes; listen to each once",
+    "python -m mmticket transcribe build/audio/vpn-clean.mp3 | Out-Null   # quick check"
+  ],
+  "screens": [
+    {
+      "name": "ticket",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\ai\\episodes\\10-multi-modal-ai-models",
+      "prompt": "PS ep10> ",
+      "commands": [
+        "python -m mmticket ticket --image build/images/vpn-clean.png --audio build/audio/vpn-clean.mp3 --detail high",
+        "#pause 8"
+      ]
+    },
+    {
+      "name": "deployments",
+      "kind": "browser",
+      "url": "https://ai.azure.com/",
+      "account": "labadmin",
+      "steps": [
+        "Open Models + endpoints (or Azure portal > the resource > Deployments)",
+        "Show 'vision' (gpt-4.1-mini 2025-04-14), 'whisper' (whisper 001) and 'tts' (tts 001), all Standard",
+        "Open the resource's authentication view and show local (key) authentication disabled"
+      ],
+      "mask": [
+        "subscription name and ID",
+        "tenant name / directory in the top bar",
+        "signed-in user name, UPN and avatar in the account menu",
+        "resource name suffix"
+      ]
+    },
+    {
+      "name": "conflict",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\ai\\episodes\\10-multi-modal-ai-models",
+      "prompt": "PS ep10> ",
+      "commands": [
+        "python -m mmticket ticket --image build/images/vpn-conflict.png --audio build/audio/vpn-conflict.mp3 --detail high",
+        "python -m mmticket transcribe build/audio/vpn-conflict.mp3",
+        "#pause 8"
+      ]
+    },
+    {
+      "name": "evaluate",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\ai\\episodes\\10-multi-modal-ai-models",
+      "prompt": "PS ep10> ",
+      "commands": [
+        "python -m mmticket evaluate --images build/images --audio-dir build/audio ; \"exit=$LASTEXITCODE\"",
+        "#pause 10"
+      ],
+      "maxMinutes": 15
+    }
+  ],
+  "teardown": [
+    "az group delete -n rg-mglab-ai-10 --yes",
+    "az cognitiveservices account purge -g rg-mglab-ai-10 -n $env:AOAI_NAME -l swedencentral",
+    "Remove-Item build, .venv -Recurse -Force -ErrorAction SilentlyContinue"
+  ],
+  "needs": [
+    "azure",
+    "paid:azure-openai-tokens",
+    "quota:gpt-4.1-mini-whisper-tts-standard-swedencentral",
+    "image-viewer"
+  ]
+}

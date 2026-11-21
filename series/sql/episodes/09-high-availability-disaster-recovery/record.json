@@ -1,0 +1,102 @@
+{
+  "note": "Live-session recording (series/tools/rec). prepare/teardown run on the laptop, not recorded. Passwords are never in this file: the owner types the connection string once when prepare asks (Server=10.50.0.30,1433;Database=master;UID=<login>;<the login's password entry>;Encrypt=yes;TrustServerCertificate=yes); prepare keeps it in the MG_SQL_BASE variable of this session and derives SQL_CONNECTION_STRING for each database; teardown removes both. T-SQL set-up runs on CON-SQL01 over PowerShell Direct as the lab Administrator with Windows authentication (SQL Server's own sysadmin group is Domain Admins). Episode login: lab_demo, made sysadmin for this episode only. Both databases live on CON-SQL01: the episode shows log-shipping mechanics, not protection against losing the server (the narration says so).",
+  "prepare": [
+    "$sql = { param($vm, $text) Invoke-Command -VMName $vm -Credential $cred -ArgumentList $text -ScriptBlock { param($t) $c = New-Object System.Data.SqlClient.SqlConnection 'Server=localhost;Integrated Security=SSPI;TrustServerCertificate=True'; $c.Open(); try { foreach ($b in ($t -split '(?im)^\\s*GO\\s*$')) { if ($b.Trim()) { $m = $c.CreateCommand(); $m.CommandText = $b; $m.CommandTimeout = 600; [void]$m.ExecuteNonQuery() } } } finally { $c.Close() } } }",
+    "& $sql 'CON-SQL01' \"IF SUSER_ID(N'lab_demo') IS NULL THROW 50000, N'Create the login lab_demo first (episode 3 demo.md, setup step 3; owner types its password off camera).', 1;\"",
+    "& $sql 'CON-SQL01' \"IF IS_SRVROLEMEMBER(N'sysadmin', N'lab_demo') = 0 ALTER SERVER ROLE sysadmin ADD MEMBER lab_demo;\"",
+    "if (-not $env:MG_SQL_BASE) { $env:MG_SQL_BASE = Read-Host 'Connection string for lab_demo on 10.50.0.30,1433 (typed off camera, never saved; format in the note of record.json)' -MaskInput }",
+    "$env:SQL_CONNECTION_STRING = $env:MG_SQL_BASE -replace 'Database=[^;]*', 'Database=master'",
+    "python -m pip install -q -r requirements.txt"
+  ],
+  "screens": [
+    {
+      "name": "h03-standby-readable",
+      "kind": "app",
+      "app": "SSMS 22",
+      "prepare": [
+        "python src/ha_lab.py --engine sqlserver --setup --step h01-rpo-before"
+      ],
+      "steps": [
+        "Open SSMS 22 and connect to 10.50.0.30,1433 with SQL Server Authentication as lab_demo (secret typed off camera, Remember off); in Options > Connection Properties set the database to master and tick Trust server certificate (lab only) (keep query windows in master while running steps)",
+        "Run src/sql/h02-init-standby.sql; run src/sql/d01-order-1009.sql with ContosoBikesHA selected (then switch back to master); run src/sql/h03-ship-log.sql",
+        "Grid: Orders on the primary 9, Orders on the standby 9, Log backups restored on the standby 1",
+        "Refresh Object Explorer: ContosoBikesHA_Standby shows (Standby / Read-Only)"
+      ],
+      "mask": [
+        "server address and login name (Connect dialog, title bar, Object Explorer)",
+        "backup folder path in BACKUP/RESTORE messages (lab VM path, blur if preferred)",
+        "laptop machine name and Windows user name in title bars"
+      ],
+      "scene": "standby-screen"
+    },
+    {
+      "name": "h06-chain-broken",
+      "kind": "app",
+      "app": "SSMS 22",
+      "prepare": [
+        "python src/ha_lab.py --engine sqlserver --setup --step h02-init-standby --step h03-ship-log --step h04-standby-write --step h05-rogue-log-backup"
+      ],
+      "steps": [
+        "Open SSMS 22 and connect to 10.50.0.30,1433 with SQL Server Authentication as lab_demo (secret typed off camera, Remember off); in Options > Connection Properties set the database to master and tick Trust server certificate (lab only)",
+        "Run src/sql/d03-order-1011.sql with ContosoBikesHA selected (switch back to master), then src/sql/h06-ship-log-fails.sql",
+        "Messages tab: Msg 4305 ... too recent to apply ... An earlier log backup that includes LSN ... can be restored. and RESTORE LOG is terminating abnormally.",
+        "Grid: primary 11, standby 9, log backups restored on the standby 1"
+      ],
+      "mask": [
+        "server address and login name (Connect dialog, title bar, Object Explorer)",
+        "backup folder path in BACKUP/RESTORE messages (lab VM path, blur if preferred)",
+        "laptop machine name and Windows user name in title bars"
+      ],
+      "note": "The runner plays h02, d01, h03, h04, d02 and h05 in prepare; the recorder then runs d03 and h06 by hand.",
+      "scene": "gotcha-screen"
+    },
+    {
+      "name": "h08-failover",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\sql\\episodes\\09-high-availability-disaster-recovery",
+      "prompt": "PS> ",
+      "prepare": [
+        "python src/ha_lab.py --engine sqlserver --setup --step h02-init-standby --step h03-ship-log --step h04-standby-write --step h05-rogue-log-backup --step h06-ship-log-fails --step h07-repair-chain"
+      ],
+      "commands": [
+        "python src/ha_lab.py --engine sqlserver --step h08-failover",
+        "#pause 5"
+      ],
+      "maxMinutes": 10,
+      "note": "The runner's h08 step plays d04 and the failover while the camera is on. The SSMS half of the split screen (h08 grid RESTORING / ONLINE / 12 / 1 and Object Explorer 'ContosoBikesHA (Restoring...)') is a separate SSMS capture composed beside it: connect to 10.50.0.30,1433 as lab_demo, run src/sql/h08-failover.sql's result query, mask server and login.",
+      "scene": "failover-screen"
+    },
+    {
+      "name": "h10-rpo-after",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\sql\\episodes\\09-high-availability-disaster-recovery",
+      "prompt": "PS> ",
+      "prepare": [
+        "python src/ha_lab.py --engine sqlserver --setup"
+      ],
+      "commands": [
+        "python src/ha_lab.py --engine sqlserver --report --rpo 15",
+        "#pause 5"
+      ],
+      "maxMinutes": 10,
+      "note": "prepare runs the full ten-step runner so the state is the one after h10 (ContosoBikesHA SKIPPED, ContosoBikesHA_Standby NO BACKUP).",
+      "scene": "rpo-screen"
+    }
+  ],
+  "teardown": [
+    "$sql = { param($vm, $text) Invoke-Command -VMName $vm -Credential $cred -ArgumentList $text -ScriptBlock { param($t) $c = New-Object System.Data.SqlClient.SqlConnection 'Server=localhost;Integrated Security=SSPI;TrustServerCertificate=True'; $c.Open(); try { foreach ($b in ($t -split '(?im)^\\s*GO\\s*$')) { if ($b.Trim()) { $m = $c.CreateCommand(); $m.CommandText = $b; $m.CommandTimeout = 600; [void]$m.ExecuteNonQuery() } } } finally { $c.Close() } } }",
+    "if (-not $env:MG_SQL_BASE) { $env:MG_SQL_BASE = Read-Host 'Connection string for lab_demo on 10.50.0.30,1433 (typed off camera, never saved; format in the note of record.json)' -MaskInput }",
+    "$env:SQL_CONNECTION_STRING = $env:MG_SQL_BASE -replace 'Database=[^;]*', 'Database=master'",
+    "python src/ha_lab.py --engine sqlserver --reset-only",
+    "Invoke-Command -VMName CON-SQL01 -Credential $cred { $c = New-Object System.Data.SqlClient.SqlConnection 'Server=localhost;Integrated Security=SSPI;TrustServerCertificate=True'; $c.Open(); $m = $c.CreateCommand(); $m.CommandText = \"SELECT CONCAT(CONVERT(nvarchar(260), SERVERPROPERTY('InstanceDefaultBackupPath')), '|', CONVERT(nvarchar(260), SERVERPROPERTY('InstanceDefaultDataPath')), '|', CONVERT(nvarchar(260), SERVERPROPERTY('InstanceDefaultLogPath')))\"; $dirs = \"$($m.ExecuteScalar())\" -split '\\|'; $c.Close(); foreach ($d in $dirs) { if ($d) { foreach ($p in 'MGLab_ContosoBikesHA_*') { Get-ChildItem -LiteralPath $d -Filter $p -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue } } } }",
+    "& $sql 'CON-SQL01' \"IF IS_SRVROLEMEMBER(N'sysadmin', N'lab_demo') = 1 ALTER SERVER ROLE sysadmin DROP MEMBER lab_demo;\"",
+    "Remove-Item Env:SQL_CONNECTION_STRING, Env:MG_SQL_BASE -ErrorAction SilentlyContinue"
+  ],
+  "needs": [
+    "lab-vms",
+    "tool:SSMS",
+    "login:lab_demo"
+  ]
+}

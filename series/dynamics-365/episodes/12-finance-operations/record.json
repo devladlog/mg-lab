@@ -1,0 +1,143 @@
+{
+  "note": "Live-session recording of the screen scenes (series/tools/rec). prepare/teardown run on the laptop, not recorded; commands are typed and run for real. Extra keys (note, followup, manual_prepare, manual_teardown) are for the recorder person; the kit ignores them. Run the recording session from an elevated shell (the container script needs it). The first container build (about 15 GB download) is done the day before with .\\setup\\New-LabBusinessCentral.ps1 -AcceptEula in elevated Windows PowerShell 5.1.",
+  "prepare": [
+    "python -m pip install --user -q -r requirements.txt",
+    "if (-not (Get-Command docker -ErrorAction SilentlyContinue)) { throw 'Docker Desktop (Windows containers) is not installed on the laptop yet: see blocked.' }"
+  ],
+  "manual_prepare": [
+    "Install Docker Desktop (owner confirms the licence terms), switch to Windows containers, then build the container the day before.",
+    "bckit seed once, note the BC numbers of Contoso Retail, Contoso Logistics Ltd, Contoso Hospitality Group.",
+    "Dataverse (Sales trial): account number on Contoso Retail; create Contoso Logistics Holdings and Contoso Legacy Store (LEGACY-1); person Alex Demo gives R005.",
+    "BC web client as admin: create and post a Sales Invoice for Contoso Retail; export MGL_BC_CONTOSO_NO."
+  ],
+  "screens": [
+    {
+      "name": "bc-container",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\dynamics-365\\episodes\\12-finance-operations",
+      "prompt": "PS ep12> ",
+      "commands": [
+        "powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\\setup\\New-LabBusinessCentral.ps1 -AcceptEula",
+        "#pause 4",
+        "docker ps",
+        "#pause 4"
+      ],
+      "note": "Second (idempotent) run: Docker check line, 'Container mglab-bc is already running.', API ok line. No password appears.",
+      "followup": {
+        "kind": "browser",
+        "url": "http://mglab-bc/BC/",
+        "account": "admin (container user; the owner types the password off camera)",
+        "steps": [
+          "Open the Business Central web client on CRONUS USA, Inc.",
+          "Show the company name in the header"
+        ],
+        "mask": [
+          "nothing secret exists; never show the password or a web service access key"
+        ]
+      }
+    },
+    {
+      "name": "bckit-customers",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\dynamics-365\\episodes\\12-finance-operations\\src",
+      "prompt": "PS src> ",
+      "commands": [
+        "python -m bckit doctor",
+        "#pause 3",
+        "python -m bckit seed --company \"CRONUS USA, Inc.\"",
+        "#pause 3",
+        "python -m bckit customers --company \"CRONUS USA, Inc.\" --limit 12",
+        "#pause 5"
+      ],
+      "prepare": [
+        ".\\setup\\New-LabBusinessCentral.ps1 -SetEnv"
+      ],
+      "note": "The prepare sets BC_* in the recording process without printing the password. If the first attempt fails (401), keep the real error and what fixed it."
+    },
+    {
+      "name": "bckit-invoices",
+      "kind": "browser",
+      "url": "http://mglab-bc/BC/",
+      "account": "admin (container user; password typed off camera)",
+      "steps": [
+        "Open the posted Sales Invoice for Contoso Retail: number and amount visible",
+        "(Before recording: Sales Invoices, New, customer Contoso Retail, one item line, Post)"
+      ],
+      "mask": [
+        "nothing secret on screen; never the password"
+      ],
+      "prepare": [
+        ".\\setup\\New-LabBusinessCentral.ps1 -SetEnv",
+        "if (-not $env:MGL_BC_CONTOSO_NO) { throw 'Set $env:MGL_BC_CONTOSO_NO (the BC customer number of Contoso Retail) in this shell first (owner).' }"
+      ],
+      "note": "After the web client part, the terminal part runs in the same session (see followup).",
+      "followup": {
+        "kind": "terminal",
+        "target": "host",
+        "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\dynamics-365\\episodes\\12-finance-operations\\src",
+        "prompt": "PS src> ",
+        "commands": [
+          "python -m bckit invoices --company \"CRONUS USA, Inc.\" --customer $env:MGL_BC_CONTOSO_NO",
+          "#pause 4",
+          "python -m bckit invoices --company \"CRONUS USA, Inc.\" --status Open --limit 5",
+          "#pause 5"
+        ]
+      }
+    },
+    {
+      "name": "bckit-reconcile",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\dynamics-365\\episodes\\12-finance-operations\\src",
+      "prompt": "PS src> ",
+      "commands": [
+        "python -m bckit reconcile --name-contains Contoso",
+        "\"exit=$LASTEXITCODE\"",
+        "#pause 5",
+        "python -m bckit reconcile",
+        "\"exit=$LASTEXITCODE\"",
+        "#pause 5"
+      ],
+      "prepare": [
+        ".\\setup\\New-LabBusinessCentral.ps1 -SetEnv",
+        "if (-not $env:DATAVERSE_URL) { throw 'Set $env:DATAVERSE_URL to the lab environment URL in this shell first (the owner does this; it is never written in a file).' }"
+      ],
+      "note": "DATAVERSE_URL must point at the Sales trial environment. Scoped run expects R001, R002, R003, R005 and exit 1. Sign-in to Dataverse is interactive (leave the app-secret variables unset).",
+      "followup": {
+        "kind": "browser",
+        "url": "http://mglab-bc/BC/",
+        "account": "admin (BC web client) and labadmin (Dataverse, make.powerapps.com / Sales Hub)",
+        "steps": [
+          "BC web client: Customers, open the Contoso Retail card (number visible)",
+          "Sales Hub: Accounts, open Contoso Retail: same Account Number"
+        ],
+        "mask": [
+          "tenant name in the top bar",
+          "environment name and org URL (address bar and header)",
+          "user e-mail and avatar in the account menu",
+          "never the BC password"
+        ]
+      }
+    }
+  ],
+  "teardown": [
+    "Remove-Item Env:BC_PASSWORD, Env:BC_USER, Env:BC_BASE_URL -ErrorAction SilentlyContinue",
+    "powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\\setup\\New-LabBusinessCentral.ps1 -Remove"
+  ],
+  "manual_teardown": [
+    "Optional when the episode is finished for good: delete C:\\bcartifacts.cache and the BC images created for mglab-bc (docker rmi, those only).",
+    "Dataverse: clear Contoso Retail's account number; delete Contoso Logistics Holdings and Contoso Legacy Store.",
+    "Docker Desktop: back to Linux containers if other episodes need them."
+  ],
+  "needs": [
+    "docker",
+    "paid:none (container is free; about 15 GB disk)",
+    "licence:Docker Desktop terms (owner confirms before installing)",
+    "elevated-shell",
+    "tenant",
+    "trial:Dynamics 365 Sales trial environment (ends about 21 Dec 2026)"
+  ],
+  "blocked": "Docker Desktop is not installed on the recording laptop (LAB.md toolchain), so the Business Central container and the bc-container, bckit-customers, bckit-invoices and bckit-reconcile screens cannot be recorded until the owner installs it (Windows containers, licence terms) and builds the container; the kit's terminal player runs PowerShell 7 while the container script wants an elevated Windows PowerShell 5.1 (hence powershell.exe in the commands)."
+}

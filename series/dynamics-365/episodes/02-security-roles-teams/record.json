@@ -1,0 +1,104 @@
+{
+  "note": "Live-session recording of the screen scenes (series/tools/rec). prepare/teardown run on the laptop, not recorded; commands are typed and run for real. Extra keys (note, followup, manual_prepare, manual_teardown) are for the recorder person; the kit ignores them. Every python command opens its own MSAL interactive sign-in (the token cache is in memory): the owner signs in as labadmin when the browser asks, or exports the app-registration variables in the shell before recording (never in a file). Never show or keep lab.json (real names and ids).",
+  "prepare": [
+    "python -m pip install --user -q -r requirements.txt",
+    "if (-not $env:DATAVERSE_URL) { throw 'Set $env:DATAVERSE_URL to the lab environment URL in this shell first (the owner does this; it is never written in a file).' }"
+  ],
+  "manual_prepare": [
+    "Admin center, environment DEV: business units Sales (parent root) and Sales Portugal (parent Sales).",
+    "Roles (copy Basic User): Project Requester, Project Approver, PMO Team Member with the Project Request settings from demo.md.",
+    "Users: alex.demo to Sales Portugal with Project Requester; sam.demo to Sales Portugal, no direct role.",
+    "Teams: owner team PMO Lisbon (role PMO Team Member, member sam.demo), access team PR-0004 deal room (alex.demo, sam.demo), optional Entra group team Sales Approvers.",
+    "Records: PR-0001 owned by alex.demo, PR-0002 by PMO Lisbon, PR-0004 shared with the deal room (Read, Write, Append). Export the two GUIDs as MGL_PR0001_ID and MGL_PR0004_ID."
+  ],
+  "screens": [
+    {
+      "name": "role-editor",
+      "kind": "browser",
+      "url": "https://admin.powerplatform.microsoft.com/",
+      "account": "labadmin",
+      "steps": [
+        "Manage, Environments, open DEV, Settings",
+        "Users + permissions, Security roles",
+        "Open 'Project Approver'",
+        "In the table list find Project Request: Read = Parent: Child Business Unit; Write, Append, Append To = Business Unit",
+        "Open the role's Settings (Member's privilege inheritance): 'Direct User (Basic) access level and Team privileges'"
+      ],
+      "mask": [
+        "tenant name in the top bar",
+        "environment name and org URL (address bar and header)",
+        "user e-mail and avatar in the account menu"
+      ]
+    },
+    {
+      "name": "teams",
+      "kind": "browser",
+      "url": "https://admin.powerplatform.microsoft.com/",
+      "account": "labadmin",
+      "steps": [
+        "Manage, Environments, open DEV, Settings",
+        "Users + permissions, Teams",
+        "Show the Team type column",
+        "Make PMO Lisbon (Owner), PR-0004 deal room (Access) and, if created, Sales Approvers (Microsoft Entra Security group) visible together"
+      ],
+      "mask": [
+        "tenant name in the top bar",
+        "environment name and org URL (address bar and header)",
+        "user e-mail and avatar in the account menu",
+        "any real user names (only lab users may appear)"
+      ]
+    },
+    {
+      "name": "verify",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\dynamics-365\\episodes\\02-security-roles-teams\\src",
+      "prompt": "PS src> ",
+      "commands": [
+        "python -m rolecheck export --table mgl_projectrequest --out ../lab.json > $null",
+        "#pause 2",
+        "python -m rolecheck verify --model ../lab.json --user \"Alex Demo\" --record $env:MGL_PR0001_ID",
+        "#pause 4",
+        "python -m rolecheck verify --model ../lab.json --user \"Sam Demo\" --record $env:MGL_PR0004_ID",
+        "#pause 5"
+      ],
+      "prepare": [
+        "if (-not $env:MGL_PR0001_ID -or -not $env:MGL_PR0004_ID) { throw 'Set $env:MGL_PR0001_ID and $env:MGL_PR0004_ID (record GUIDs from the record URLs) in this shell first (owner).' }"
+      ],
+      "note": "export prints its summary on stderr (stdout goes to lab.json). Record whatever Dataverse answers, including a differing row."
+    },
+    {
+      "name": "check-access",
+      "kind": "browser",
+      "url": "https://make.powerapps.com/",
+      "account": "alex.demo",
+      "steps": [
+        "Open a private browser window and sign in as alex.demo",
+        "Select environment DEV, Apps, open the model-driven app that contains Project Request",
+        "Open Project Requests, open PR-0004",
+        "Command bar, Check access (the ... menu if collapsed)",
+        "Show how access was granted (expected: shared, through the access team)"
+      ],
+      "mask": [
+        "tenant name in the top bar",
+        "environment name and org URL (address bar and header)",
+        "user e-mail and avatar in the account menu",
+        "GUIDs in the address bar",
+        "real user names (only lab users)"
+      ]
+    }
+  ],
+  "teardown": [
+    "Remove-Item ./lab.json -Force -ErrorAction SilentlyContinue"
+  ],
+  "manual_teardown": [
+    "Remove the share on PR-0004; delete teams PR-0004 deal room, PMO Lisbon (reassign PR-0002 first), Sales Approvers.",
+    "Remove roles from alex.demo and sam.demo, delete the three custom roles, move users back to the root business unit.",
+    "Disable business unit Sales, then delete Sales Portugal first and Sales second.",
+    "Delete the optional Entra group."
+  ],
+  "needs": [
+    "tenant",
+    "users:alex.demo,sam.demo with Dynamics 365 Sales trial licences (already assigned)"
+  ]
+}

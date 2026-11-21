@@ -1,0 +1,104 @@
+{
+  "note": "Live-session recording of the screen scenes (series/tools/rec). prepare/teardown run on the laptop, not recorded; commands are typed and run for real in Git Bash scripts via 'bash'.",
+  "prepare": [
+    "# laptop toolchain for the bash scripts: Git Bash first on PATH, python3 and zip shims in %TEMP% (the laptop has neither)",
+    "$shim = Join-Path $env:TEMP 'mgshim'; New-Item -ItemType Directory -Force $shim | Out-Null; [IO.File]::WriteAllText(\"$shim\\python3\", \"#!/bin/bash`nexec python `\"`$@`\"`n\"); [IO.File]::WriteAllText(\"$shim\\zip.py\", \"import sys,os,zipfile`nz=zipfile.ZipFile(os.path.abspath(sys.argv[-2]),'w',zipfile.ZIP_DEFLATED)`n[z.write(os.path.join(r,n),os.path.relpath(os.path.join(r,n),'.').replace(os.sep,'/')) for r,d,f in os.walk('.') for n in f]`nz.close()`n\"); [IO.File]::WriteAllText(\"$shim\\zip\", \"#!/bin/bash`nexec python `\"`$(dirname `\"`$0`\")/zip.py`\" `\"`$@`\"`n\")",
+    "$env:PATH = \"$shim;C:\\Program Files\\Git\\bin;$env:USERPROFILE\\.azure\\bin;$env:LOCALAPPDATA\\Microsoft\\WinGet\\Links;$env:PATH\"",
+    "az account show --query name -o none 2>$null; if ($LASTEXITCODE -ne 0) { az login --use-device-code }   # owner signs in as labadmin",
+    "if (-not $env:BUDGET_EMAIL) { throw 'Set BUDGET_EMAIL (the recorder mailbox) before recording; it must not be shown on screen' }",
+    "az extension add --name resource-graph --upgrade --only-show-errors",
+    "bash infra/deploy-budget.sh   # what-if, then create (subscription scope)",
+    "bash infra/deploy-waste-demo.sh rg-contoso-waste swedencentral   # about 3 minutes; lists 4 resources at the end",
+    "$env:SUB_ID = az account show --query id -o tsv   # in the environment only, never printed",
+    "$env:PYTHONPATH = (Resolve-Path src).Path",
+    "Start-Sleep -Seconds 300   # Resource Graph indexes new resources within minutes"
+  ],
+  "screens": [
+    {
+      "name": "estimate-ep2",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\azure\\episodes\\06-cost-optimization",
+      "prompt": "PS 06-cost-optimization> ",
+      "commands": [
+        "bash infra/estimate-ep2.sh rg-contoso-whatif swedencentral 25",
+        "$LASTEXITCODE",
+        "#pause 8"
+      ],
+      "mask": [
+        "subscription ID"
+      ],
+      "maxMinutes": 10,
+      "note": "Prices are live, so small differences from 24.90 and 246.40 EUR are expected; say what came out. Afterwards hand ~/.contoso-cost/whatif-lab.json and whatif-prod.json to the episode builder (check them for identifiers first)."
+    },
+    {
+      "name": "cost-analysis",
+      "kind": "browser",
+      "url": "https://portal.azure.com/#view/Microsoft_Azure_CostManagement/Menu/~/costanalysis",
+      "account": "labadmin",
+      "steps": [
+        "Record at least one day after episodes 1-5 ran (cost data is 8-24 hours late)",
+        "Cost Management > Cost analysis, scope = the lab subscription, current month (or last month)",
+        "View Accumulated costs or Daily costs, Group by > Tag > workload",
+        "Show segments for order-intake, contoso and contoso-orders plus Untagged"
+      ],
+      "mask": [
+        "subscription name and ID",
+        "tenant name and account in the header"
+      ],
+      "note": "Costs stay in history after the resources of episodes 1-5 are deleted."
+    },
+    {
+      "name": "budget",
+      "kind": "browser",
+      "url": "https://portal.azure.com/#view/Microsoft_Azure_CostManagement/Menu/~/budgets",
+      "account": "labadmin",
+      "steps": [
+        "Cost Management > Budgets > budget-contoso-lab",
+        "Show amount 10, reset period monthly, the filter on tag workload (order-intake, contoso, contoso-orders), alert conditions Actual 50 %, Actual 90 %, Forecasted 100 %, and the current spend (can be empty right after creation: say so or record next day)"
+      ],
+      "mask": [
+        "alert recipient e-mail address",
+        "subscription name and ID"
+      ]
+    },
+    {
+      "name": "waste",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\azure\\episodes\\06-cost-optimization",
+      "prompt": "PS 06-cost-optimization> ",
+      "commands": [
+        "python -m costwatch waste --subscriptions $env:SUB_ID --az az.cmd",
+        "#pause 10"
+      ],
+      "mask": [
+        "subscription ID (kept in an environment variable)",
+        "public IP address of pip-contoso-forgotten"
+      ],
+      "maxMinutes": 5,
+      "companion": {
+        "kind": "browser",
+        "url": "https://portal.azure.com/#view/HubsExtension/ArgQueryBlade",
+        "steps": [
+          "Resource Graph Explorer > paste queries/unattached-disks.kql > Run",
+          "Show two rows: disk-orphaned-os (createOption FromImage) and disk-empty-never-used (Empty)"
+        ]
+      },
+      "note": "Expect the priced table (plan about 11.80, IP about 3.28, orphaned disk about 1.38, empty disk 0.00), the untagged table with the public IP and the Advisor section (likely '(none)': keep it). If lastOwnershipUpdate of the empty disk is not empty or createOption is missing, tell the episode builder. az.cmd is passed because Python on Windows cannot start az without the .cmd extension. The Resource Graph half of the capture is a browser capture done by the owner; the kit records the terminal."
+    }
+  ],
+  "teardown": [
+    "bash infra/teardown.sh rg-contoso-waste rg-contoso-whatif   # the budget is free and stays",
+    "Remove-Item Env:SUB_ID, Env:PYTHONPATH -ErrorAction SilentlyContinue",
+    "az group exists --name rg-contoso-waste",
+    "az group exists --name rg-contoso-whatif"
+  ],
+  "needs": [
+    "azure",
+    "tenant",
+    "env:BUDGET_EMAIL (recorder mailbox)",
+    "tool:python"
+  ],
+  "blocked": "The cost-analysis screen can only be recorded at least a day after episodes 1-5 have run (Cost Management data lags 8-24 hours); the other screens are not blocked."
+}

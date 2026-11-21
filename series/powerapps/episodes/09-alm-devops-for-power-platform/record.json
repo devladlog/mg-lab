@@ -1,0 +1,93 @@
+{
+  "note": "Live-session recording of the screen scenes (series/tools/rec). prepare/teardown run on the laptop, not recorded; terminal commands are typed and run for real. $env:MG_DEV_URL (DEV org URL) and the other MG_* variables are set by the owner as user environment variables on the laptop and never appear on screen.",
+  "prepare": [
+    "# owner signs in once, off camera: pac auth create --deviceCode (labadmin, interactive)",
+    "Read-Host 'Owner: TEST and PROD environments (MG Lab TEST / MG Lab PROD) created; service principals for DEV, TEST and PROD made with pac admin create-service-principal (secrets in a password manager, never on screen); Dataverse and Outlook connections in TEST and PROD shared with the application users. Press Enter'",
+    "Read-Host 'Owner: Azure DevOps (organization devladlog): Power Platform Build Tools installed, private project with repo, src contents pushed to main, service connections mglab-dev/test/prod, variable groups equipmentdesk-test/prod, environments with the PROD approval, build service repository permissions, pipelines export-solution-to-git and build-and-release created. Press Enter'",
+    "Read-Host 'Owner: DEV has the environment variable Reminder domain (default contoso.com, current value removed from the solution) and SendLoanReminder uses it. Press Enter'"
+  ],
+  "screens": [
+    {
+      "name": "solution-dev",
+      "kind": "browser",
+      "url": "https://make.powerapps.com/",
+      "account": "labadmin",
+      "steps": [
+        "Select the DEV environment: Solutions > Equipment Desk (unmanaged)",
+        "Components: the environment variable Reminder domain (default contoso.com, current value empty), the two connection references, SendLoanReminder",
+        "Open SendLoanReminder: the Problem expression uses the variable"
+      ],
+      "mask": [
+        "environment name and org URL in the address bar and the environment picker",
+        "tenant name in the top bar",
+        "account name, e-mail and avatar in the account menu",
+        "connection names and ids"
+      ]
+    },
+    {
+      "name": "export-run",
+      "kind": "browser",
+      "url": "https://dev.azure.com/",
+      "account": "labadmin",
+      "steps": [
+        "Open the private lab project > Pipelines > export-solution-to-git: run it, then open the finished run",
+        "Show the steps and the mirror/lint output",
+        "Repos > Branches > export/<run> > Create a pull request: show the diff",
+        "Complete the pull request into main"
+      ],
+      "mask": [
+        "Azure DevOps organization and project names",
+        "user names and avatars",
+        "service connection names",
+        "any application id or secret (none may be visible)"
+      ]
+    },
+    {
+      "name": "release-run",
+      "kind": "browser",
+      "url": "https://dev.azure.com/",
+      "account": "labadmin",
+      "steps": [
+        "Pipelines > build-and-release > Run pipeline with 'Upgrade an already installed solution' off",
+        "Show Build green, Test green, Prod waiting for approval",
+        "Open the Build log: the Checker step; artifact 'drop' with both zips",
+        "Approve Prod with the comment 'TEST checked' and show it turn green"
+      ],
+      "mask": [
+        "Azure DevOps organization and project names",
+        "user names and avatars",
+        "environment URLs in the logs",
+        "service connection names"
+      ]
+    },
+    {
+      "name": "prod-managed",
+      "kind": "browser",
+      "url": "https://make.powerapps.com/",
+      "account": "labadmin",
+      "steps": [
+        "Switch to the PROD environment: Solutions > Equipment Desk shows Managed with version 1.0.<build>.<rev>",
+        "Open the environment variable Reminder domain: current value contoso.com",
+        "Switch to TEST: current value test.contoso.com",
+        "In PROD the flow SendLoanReminder is On"
+      ],
+      "mask": [
+        "environment name and org URL in the address bar and the environment picker",
+        "tenant name in the top bar",
+        "account name, e-mail and avatar in the account menu",
+        "environment names (MG Lab TEST/PROD), connection names and ids"
+      ]
+    }
+  ],
+  "teardown": [
+    "pac auth clear",
+    "Write-Host 'Reminder: delete the Azure DevOps project; delete the three app registrations and the application users; delete the TEST and PROD environments; clear the password-manager entries. DEV keeps the solution; do not re-run episode 6 FlowDeploy (it puts the hard-coded domain back).'"
+  ],
+  "needs": [
+    "tenant",
+    "premium-trial",
+    "azure-devops",
+    "env:TEST and PROD trial environments",
+    "entra-app-registration"
+  ]
+}

@@ -1,0 +1,145 @@
+{
+  "note": "Live-session recording of the screen scenes (series/tools/rec). prepare/teardown run on the laptop, not recorded; commands are typed and run for real. Prepare statements run in one PowerShell session with the episode folder as current directory; variables do not survive into the screens, so each screen re-derives what it needs.",
+  "prepare": [
+    "$ep = (Get-Location).Path",
+    "New-Item -ItemType Directory -Force C:\\work\\bin | Out-Null",
+    "[IO.File]::WriteAllText('C:\\work\\bin\\python3', \"#!/bin/sh`nexec python `\"`$@`\"`n\")",
+    "if ($env:PATH -notlike '*C:\\work\\bin*') { $env:PATH = 'C:\\work\\bin;C:\\Program Files\\Git\\bin;' + $env:PATH + ';C:\\Program Files\\Git\\usr\\bin' }",
+    "$env:PYTHON = 'python'",
+    "New-Item -ItemType Directory -Force C:\\work | Out-Null",
+    "# owner signed in off camera: gh auth login (scopes repo, delete_repo). Never run gh auth status on camera.",
+    "$owner = gh api user --jq .login",
+    "if (gh repo view \"$owner/guardrails-demo\" --json name 2>$null) { gh repo delete \"$owner/guardrails-demo\" --yes }",
+    "if (Test-Path C:\\work\\guardrails-demo) { Remove-Item C:\\work\\guardrails-demo -Recurse -Force }",
+    "Set-Location C:\\work",
+    "gh repo create guardrails-demo --public --clone",
+    "Set-Location C:\\work\\guardrails-demo",
+    "Copy-Item -Recurse -Force \"$ep\\src\\kit\\*\" .",
+    "Get-ChildItem 'C:\\work\\guardrails-demo\\.githooks' -Recurse -File -Force -Include *.cs,*.csproj,*.props,*.slnx,*.slnf,*.json,*.md,*.yml,*.yaml,*.py,*.sh,*.toml,*.config,*.http,*.runsettings,*.playlist,*.ts,Dockerfile,compose.yaml,CODEOWNERS,.gitignore,.gitattributes,.editorconfig,pre-commit,commit-msg -ErrorAction SilentlyContinue | Where-Object { $_.FullName -notmatch '\\\\(node_modules|bin|obj|\\.git)\\\\' } | ForEach-Object { [IO.File]::WriteAllText($_.FullName, ([IO.File]::ReadAllText($_.FullName) -replace \"`r`n\", \"`n\")) }; Get-ChildItem 'C:\\work\\guardrails-demo\\scripts' -Recurse -File -Force -Include *.cs,*.csproj,*.props,*.slnx,*.slnf,*.json,*.md,*.yml,*.yaml,*.py,*.sh,*.toml,*.config,*.http,*.runsettings,*.playlist,*.ts,Dockerfile,compose.yaml,CODEOWNERS,.gitignore,.gitattributes,.editorconfig,pre-commit,commit-msg -ErrorAction SilentlyContinue | Where-Object { $_.FullName -notmatch '\\\\(node_modules|bin|obj|\\.git)\\\\' } | ForEach-Object { [IO.File]::WriteAllText($_.FullName, ([IO.File]::ReadAllText($_.FullName) -replace \"`r`n\", \"`n\")) }; Get-ChildItem 'C:\\work\\guardrails-demo\\tools' -Recurse -File -Force -Include *.cs,*.csproj,*.props,*.slnx,*.slnf,*.json,*.md,*.yml,*.yaml,*.py,*.sh,*.toml,*.config,*.http,*.runsettings,*.playlist,*.ts,Dockerfile,compose.yaml,CODEOWNERS,.gitignore,.gitattributes,.editorconfig,pre-commit,commit-msg -ErrorAction SilentlyContinue | Where-Object { $_.FullName -notmatch '\\\\(node_modules|bin|obj|\\.git)\\\\' } | ForEach-Object { [IO.File]::WriteAllText($_.FullName, ([IO.File]::ReadAllText($_.FullName) -replace \"`r`n\", \"`n\")) }",
+    "(Get-Content .github\\CODEOWNERS) -replace '@contoso/dev-team', \"@$owner\" -replace '@contoso/platform-team', \"@$owner\" -replace ' @contoso/security', '' | Set-Content .github\\CODEOWNERS",
+    "New-Item -ItemType Directory -Force tests | Out-Null; [IO.File]::WriteAllText(\"$PWD\\tests\\test_smoke.py\", \"def test_smoke():`n    assert True`n\")",
+    "git config user.name 'Alex Demo'; git config user.email 'alex.demo@contoso.com'",
+    "bash scripts/setup-dev.sh",
+    "git add .; git commit -m 'chore: add repo guardrails'; git push -u origin main",
+    "# first PR so the three check names exist, then lock main",
+    "git switch -c chore/first-ci; git commit --allow-empty -m 'ci: first run'; git push",
+    "gh pr create --fill; gh pr checks --watch",
+    "gh pr merge --squash --delete-branch",
+    "git switch main; git pull",
+    "bash scripts/configure-repo.sh \"$owner/guardrails-demo\"",
+    "bash scripts/apply-ruleset.sh \"$owner/guardrails-demo\""
+  ],
+  "screens": [
+    {
+      "name": "badcommit",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "C:\\work\\guardrails-demo",
+      "prompt": "$ ",
+      "prepare": [
+        "New-Item -ItemType Directory -Force C:\\work\\bin | Out-Null",
+        "[IO.File]::WriteAllText('C:\\work\\bin\\python3', \"#!/bin/sh`nexec python `\"`$@`\"`n\")",
+        "if ($env:PATH -notlike '*C:\\work\\bin*') { $env:PATH = 'C:\\work\\bin;C:\\Program Files\\Git\\bin;' + $env:PATH + ';C:\\Program Files\\Git\\usr\\bin' }",
+        "$env:PYTHON = 'python'",
+        "Set-Location C:\\work\\guardrails-demo",
+        "git switch main 2>$null; git branch -D feature/orders-paging 2>$null; git reset -q --hard"
+      ],
+      "commands": [
+        "bash scripts/setup-dev.sh",
+        "#pause 2",
+        "git switch -c feature/orders-paging",
+        "New-Item -ItemType Directory -Force src | Out-Null; 'PAGE_SIZE = 50' | Set-Content src/orders.py; git add src/orders.py",
+        "git commit -m \"updated stuff\"",
+        "#pause 6",
+        "git commit -m \"feat(orders): add paging\"",
+        "#pause 3"
+      ],
+      "note": "Runs in PowerShell 7 with Git Bash on PATH, so `bash` is Git Bash and the hooks find python3 through the shim from prepare."
+    },
+    {
+      "name": "secret",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "C:\\work\\guardrails-demo",
+      "prompt": "$ ",
+      "prepare": [
+        "New-Item -ItemType Directory -Force C:\\work\\bin | Out-Null",
+        "[IO.File]::WriteAllText('C:\\work\\bin\\python3', \"#!/bin/sh`nexec python `\"`$@`\"`n\")",
+        "if ($env:PATH -notlike '*C:\\work\\bin*') { $env:PATH = 'C:\\work\\bin;C:\\Program Files\\Git\\bin;' + $env:PATH + ';C:\\Program Files\\Git\\usr\\bin' }",
+        "$env:PYTHON = 'python'",
+        "Set-Location C:\\work\\guardrails-demo",
+        "git switch feature/orders-paging 2>$null; if ($LASTEXITCODE -ne 0) { git switch -c feature/orders-paging }"
+      ],
+      "commands": [
+        "('GH_TOKEN = \"ghp_' + (-join ((48..57 + 65..90 + 97..122) | Get-Random -Count 36 | ForEach-Object { [char]$_ })) + '\"') | Set-Content src/settings.py",
+        "Get-Content src/settings.py",
+        "git add src/settings.py",
+        "git commit -m \"feat: read token\"",
+        "#pause 5",
+        "git restore --staged src/settings.py; Remove-Item src/settings.py",
+        "git switch main",
+        "New-Item x -ItemType File | Out-Null; git add x",
+        "git commit -m \"docs: x\"",
+        "#pause 5",
+        "git restore --staged x; Remove-Item x"
+      ],
+      "note": "The token is random and fake (ghp_ plus 36 characters); it never leaves the machine because the pre-commit hook blocks it. Blur it in the edit anyway."
+    },
+    {
+      "name": "ruleset",
+      "kind": "browser",
+      "url": "https://github.com/devladlog/guardrails-demo/settings/rules",
+      "account": "the lab GitHub account (repo admin, signed in by the owner)",
+      "steps": [
+        "Open the repository guardrails-demo, then Settings, then Rules, then Rulesets",
+        "Open the ruleset 'protect-main'",
+        "Show Enforcement status: Active, and Target branches: Default",
+        "Scroll to Restrict deletions and Block force pushes (both ticked)",
+        "Scroll to Require a pull request: 1 approval, code owners, dismiss stale approvals, most recent push approval, conversation resolution, allowed merge method Squash only",
+        "Scroll to Require status checks to pass: test, secret-scan, pr-title, with the strict (up to date) option",
+        "If it does not fit on one screen, take two captures and keep the one with the pull request and status checks sections"
+      ],
+      "mask": [
+        "repository owner in the URL bar, breadcrumbs and avatar menu",
+        "owner name in the code owners line"
+      ]
+    },
+    {
+      "name": "pr",
+      "kind": "browser",
+      "url": "https://github.com/devladlog/guardrails-demo/pulls",
+      "account": "the lab GitHub account (signed in by the owner)",
+      "prepare": [
+        "New-Item -ItemType Directory -Force C:\\work\\bin | Out-Null",
+        "[IO.File]::WriteAllText('C:\\work\\bin\\python3', \"#!/bin/sh`nexec python `\"`$@`\"`n\")",
+        "if ($env:PATH -notlike '*C:\\work\\bin*') { $env:PATH = 'C:\\work\\bin;C:\\Program Files\\Git\\bin;' + $env:PATH + ';C:\\Program Files\\Git\\usr\\bin' }",
+        "$env:PYTHON = 'python'",
+        "Set-Location C:\\work\\guardrails-demo",
+        "git switch feature/orders-paging",
+        "git push -u origin feature/orders-paging",
+        "if (-not (gh pr list --head feature/orders-paging --json number --jq '.[].number')) { gh pr create --title 'updated orders' --body 'Paging for orders' }",
+        "gh pr checks --watch"
+      ],
+      "steps": [
+        "Open the pull request 'updated orders' (feature/orders-paging into main) on the Conversation tab",
+        "Scroll to the bottom: pr-title failed (red), test and secret-scan passed, 'Review required', merge button disabled, only 'Squash and merge' offered",
+        "Click the title Edit button and rename it to: feat(orders): add paging",
+        "Open the Checks tab, re-run the failed pr-title job (Re-run failed jobs), go back to Conversation",
+        "Show pr-title green and only the review still missing"
+      ],
+      "mask": [
+        "repository owner in the URL bar, breadcrumbs and avatar menu",
+        "reviewer / author name if it is not the public lab account"
+      ]
+    }
+  ],
+  "teardown": [
+    "# gh needs the delete_repo scope: the owner ran gh auth refresh -s delete_repo",
+    "$owner = gh api user --jq .login; gh repo delete \"$owner/guardrails-demo\" --yes",
+    "Set-Location C:\\work; Remove-Item C:\\work\\guardrails-demo -Recurse -Force -ErrorAction SilentlyContinue"
+  ],
+  "needs": [
+    "github",
+    "gh-cli-signed-in"
+  ]
+}

@@ -1,0 +1,66 @@
+{
+  "note": "Live-session recording of the screen scenes (series/tools/rec). Four portal screens in DEV. Uses the process mining 90-day trial already running in DEV (started 21 Nov 2026, until about 19 Feb 2027); no Azure resources, no extra cost. The 'kpis' screen is split: the browser on the left, a terminal pane on the right running the episode's own pmkit.",
+  "prepare": [
+    "python -m pip install -r requirements-test.txt --quiet",
+    "python -m pytest",
+    "# owner signs in: browser profile for labadmin (make.powerautomate.com, environment DEV, private window). Nothing is typed or stored here.",
+    "Test-Path .\\src\\samples\\purchase-requests-eventlog.csv"
+  ],
+  "screens": [
+    {
+      "name": "upload",
+      "kind": "browser",
+      "url": "https://make.powerautomate.com/",
+      "account": "labadmin",
+      "steps": [
+        "Select environment DEV and open Process mining > Start here",
+        "Name the process 'Purchase requests' and choose Import data",
+        "Choose a data source > Text/CSV > 'Upload file (Preview)' and select src\\samples\\purchase-requests-eventlog.csv (if the label differs, keep the real one and fix script.yaml)",
+        "Show the Power Query preview of the first rows"
+      ],
+      "mask": ["org URL and environment ID in the address bar", "user name and tenant name in the top bar"]
+    },
+    {
+      "name": "mapping",
+      "kind": "browser",
+      "url": "https://make.powerautomate.com/",
+      "account": "labadmin",
+      "steps": [
+        "On the 'Map your data' screen set CaseId = Case ID, ActivityName = Activity name, StartTimestamp = Start timestamp, EndTimestamp = End timestamp, Resource = Resource",
+        "Set Amount = Financial per case (first event) and Category = Case level attribute (first event)",
+        "Show the 'Save and analyze' button, then select it (note any time zone warning)"
+      ],
+      "mask": ["org URL and environment ID in the address bar", "user name and tenant name in the top bar"]
+    },
+    {
+      "name": "map",
+      "kind": "browser",
+      "url": "https://make.powerautomate.com/",
+      "account": "labadmin",
+      "steps": [
+        "Open the process 'Purchase requests' and its Map tab: nine activities",
+        "Select the Performance layer with Mean duration and highlight the long transition from Manager review to Finance review",
+        "Switch to the Rework layer and show the loop around Manager review and Revise request"
+      ],
+      "mask": ["org URL and environment ID in the address bar", "user name and tenant name in the top bar"]
+    },
+    {
+      "name": "kpis",
+      "kind": "browser",
+      "url": "https://make.powerautomate.com/",
+      "account": "labadmin",
+      "steps": [
+        "Open the process 'Purchase requests' > Summary tab (left half of the screen)",
+        "Show the KPIs (average case duration, self-loop cases, loop cases, rework cases), Variants by frequency and the case, activity and variant counts",
+        "In a terminal pane on the right half run, from src: python -m pmkit analyze samples\\purchase-requests-eventlog.csv --before \"Manager review\" \"Place order\"",
+        "Compare the two: 300 cases, 1,781 events, 17 variants, 227.2 h, 28.0 percent rework; say what the screen shows if the definitions differ"
+      ],
+      "mask": ["org URL and environment ID in the address bar", "user name and tenant name in the top bar"]
+    }
+  ],
+  "teardown": [
+    "# owner (tenant): delete the process 'Purchase requests' and its uploaded data in Process mining; remove any trial licence assigned only for the recording",
+    "Remove-Item .\\out -Recurse -Force -ErrorAction SilentlyContinue"
+  ],
+  "needs": ["tenant", "trial:process-mining"]
+}

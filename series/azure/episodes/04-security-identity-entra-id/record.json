@@ -1,0 +1,113 @@
+{
+  "note": "Live-session recording of the screen scenes (series/tools/rec). prepare/teardown run on the laptop, not recorded; commands are typed and run for real in Git Bash scripts via 'bash'. The 'user' screen signs in as alex.demo in a separate Azure CLI config folder (AZURE_CONFIG_DIR) so labadmin stays signed in for the other screens.",
+  "prepare": [
+    "# laptop toolchain for the bash scripts: Git Bash first on PATH, python3 and zip shims in %TEMP% (the laptop has neither)",
+    "$shim = Join-Path $env:TEMP 'mgshim'; New-Item -ItemType Directory -Force $shim | Out-Null; [IO.File]::WriteAllText(\"$shim\\python3\", \"#!/bin/bash`nexec python `\"`$@`\"`n\"); [IO.File]::WriteAllText(\"$shim\\zip.py\", \"import sys,os,zipfile`nz=zipfile.ZipFile(os.path.abspath(sys.argv[-2]),'w',zipfile.ZIP_DEFLATED)`n[z.write(os.path.join(r,n),os.path.relpath(os.path.join(r,n),'.').replace(os.sep,'/')) for r,d,f in os.walk('.') for n in f]`nz.close()`n\"); [IO.File]::WriteAllText(\"$shim\\zip\", \"#!/bin/bash`nexec python `\"`$(dirname `\"`$0`\")/zip.py`\" `\"`$@`\"`n\")",
+    "$env:PATH = \"$shim;C:\\Program Files\\Git\\bin;$env:USERPROFILE\\.azure\\bin;$env:LOCALAPPDATA\\Microsoft\\WinGet\\Links;$env:PATH\"",
+    "az account show --query name -o none 2>$null; if ($LASTEXITCODE -ne 0) { az login --use-device-code }   # owner signs in as labadmin",
+    "az bicep upgrade   # Microsoft Graph Bicep needs a current Bicep CLI (Azure CLI 2.73 or newer)"
+  ],
+  "screens": [
+    {
+      "name": "graph-deploy",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\azure\\episodes\\04-security-identity-entra-id",
+      "prompt": "PS 04-security-identity-entra-id> ",
+      "commands": [
+        "bash infra/deploy.sh rg-mglab-azure-04 swedencentral",
+        "#pause 6"
+      ],
+      "mask": [
+        "tenant ID",
+        "subscription ID",
+        "object IDs"
+      ],
+      "maxMinutes": 10,
+      "note": "Runs as labadmin (the account that may create app registrations and app role assignments). If processorCanWrite fails with a principal-not-found error right after the identity was created, run it again (directory replication) and keep that in the episode."
+    },
+    {
+      "name": "app-roles",
+      "kind": "browser",
+      "url": "https://entra.microsoft.com/",
+      "account": "labadmin",
+      "steps": [
+        "App registrations > All applications > 'contoso orders API' > App roles: show Orders.ReadWrite.All (Applications) and Orders.Reader (Users)",
+        "Optional: Expose an API (App ID URI and the Orders.Read scope with the Azure CLI as authorized client)",
+        "Certificates & secrets: show there are none (b-roll for 'zero secrets')",
+        "Enterprise applications > 'contoso orders API' > Properties: Assignment required = Yes",
+        "Users and groups: Alex Demo with Orders.Reader (the managed identity may only appear under its own Enterprise application > Permissions)"
+      ],
+      "mask": [
+        "tenant name in the header and tenant ID",
+        "object IDs and client IDs",
+        "subscription ID",
+        "real user names: the reader must be the fictional Alex Demo"
+      ],
+      "prepare": [
+        "$apiId = (Get-Content \"$HOME\\.contoso-orders\\outputs.json\" | ConvertFrom-Json).apiClientId",
+        "$sp = az ad sp show --id $apiId --query id -o tsv; $role = az ad sp show --id $apiId --query \"appRoles[?value=='Orders.Reader'].id | [0]\" -o tsv; $alex = az ad user list --filter \"startswith(userPrincipalName,'alex.demo@')\" --query \"[0].id\" -o tsv",
+        "@{ principalId = $alex; resourceId = $sp; appRoleId = $role } | ConvertTo-Json -Compress | Set-Content \"$env:TEMP\\ep04-assign.json\" -Encoding ascii",
+        "az rest --method POST --uri \"https://graph.microsoft.com/v1.0/servicePrincipals/$sp/appRoleAssignedTo\" --headers \"Content-Type=application/json\" --body \"@$env:TEMP\\ep04-assign.json\" -o none 2>$null   # Alex Demo becomes the Orders.Reader; deploy.sh made labadmin the reader"
+      ],
+      "note": "Two captures side by side: App roles blade, and Enterprise application Users and groups plus Properties."
+    },
+    {
+      "name": "call-as-user",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\azure\\episodes\\04-security-identity-entra-id",
+      "prompt": "PS 04-security-identity-entra-id> ",
+      "commands": [
+        "bash infra/call-as-user.sh",
+        "#pause 8"
+      ],
+      "prepare": [
+        "bash infra/lab-preauthorize-cli.sh   # LAB ONLY, as labadmin (owner of the app): lets az request Orders.Read without a consent prompt",
+        "$env:AZURE_CONFIG_DIR = Join-Path $HOME '.azure-alex'",
+        "az login --use-device-code --allow-no-subscriptions   # owner signs in as alex.demo (the fictional reader)",
+        "$null = Start-Process 'C:\\Program Files\\Git\\bin\\bash.exe' -ArgumentList 'infra/run-api-local.sh' -WorkingDirectory (Get-Location).Path -WindowStyle Hidden -RedirectStandardOutput \"$env:TEMP\\ep04-api.log\" -RedirectStandardError \"$env:TEMP\\ep04-api.err\"",
+        "for ($i = 0; $i -lt 90 -and -not (Test-NetConnection localhost -Port 5080 -WarningAction SilentlyContinue).TcpTestSucceeded; $i++) { Start-Sleep -Seconds 2 }   # the API listens on http://localhost:5080"
+      ],
+      "mask": [
+        "oid, tid and client ID GUIDs in the claims block",
+        "never print a raw token"
+      ],
+      "maxMinutes": 5,
+      "note": "Expected: aud = API client ID, scp = Orders.Read, roles = [Orders.Reader], kind = delegated; GET /orders 200, GET /me 200, POST /orders 403. A 401 with an audience error means a v1.0 token (see the gotcha scene)."
+    },
+    {
+      "name": "app-token",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\azure\\episodes\\04-security-identity-entra-id",
+      "prompt": "PS 04-security-identity-entra-id> ",
+      "commands": [
+        "bash infra/prove-app-token.sh rg-mglab-azure-04",
+        "#pause 8"
+      ],
+      "prepare": [
+        "Remove-Item Env:AZURE_CONFIG_DIR -ErrorAction SilentlyContinue   # back to the labadmin Azure CLI session (creates the container instance)"
+      ],
+      "mask": [
+        "GUIDs in the claims JSON"
+      ],
+      "maxMinutes": 8,
+      "note": "If the log says python3: not found, the azure-cli image changed: replace the image with a Microsoft-published Python base image, keep the same --command-line, and note it in the README."
+    }
+  ],
+  "teardown": [
+    "Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -match 'run-api-local|Contoso.Orders.Api' -and $_.ProcessId -ne $PID } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }",
+    "Remove-Item Env:AZURE_CONFIG_DIR -ErrorAction SilentlyContinue",
+    "Remove-Item \"$HOME\\.azure-alex\" -Recurse -Force -ErrorAction SilentlyContinue",
+    "bash infra/teardown.sh rg-mglab-azure-04   # service principal and app deleted and purged, group deleted",
+    "az ad app list --display-name \"contoso orders API\" --query \"[].appId\" -o tsv   # nothing listed",
+    "Remove-Item \"$env:TEMP\\ep04-assign.json\" -Force -ErrorAction SilentlyContinue"
+  ],
+  "needs": [
+    "azure",
+    "tenant",
+    "tool:dotnet10",
+    "user:alex.demo"
+  ]
+}

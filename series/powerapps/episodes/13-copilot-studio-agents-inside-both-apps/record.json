@@ -1,0 +1,78 @@
+{
+  "note": "Live-session recording of the screen scenes (series/tools/rec). prepare/teardown run on the laptop, not recorded; terminal commands are typed and run for real. $env:MG_DEV_URL (DEV org URL) and the other MG_* variables are set by the owner as user environment variables on the laptop and never appear on screen.",
+  "prepare": [
+    "# owner signs in once, off camera: az login --allow-no-subscriptions",
+    "$env:DATAVERSE_ACCESS_TOKEN = az account get-access-token --resource $env:MG_DEV_URL --query accessToken -o tsv",
+    "pwsh -NoProfile -File src/scripts/Set-ColumnDescriptions.ps1 -EnvironmentUrl $env:MG_DEV_URL",
+    "python -m pip install --quiet python-docx; python src/scripts/build_checklists.py --out $env:TEMP\\checklists",
+    "Read-Host 'Owner: SharePoint site mglab-inspections with the library Inspection checklists and the three Word files uploaded; Dataverse search on in DEV; agent Inspection Assistant created (instructions, Authenticate with Microsoft, Dataverse and SharePoint knowledge Ready, topic log-a-finding, agent flow CreateFinding attached and published); each demo question asked once as a warm-up. Press Enter'"
+  ],
+  "screens": [
+    {
+      "name": "agent-test-panel",
+      "kind": "browser",
+      "url": "https://copilotstudio.microsoft.com/",
+      "account": "labadmin",
+      "steps": [
+        "Open the agent Inspection Assistant > Overview: Knowledge section with Dataverse and SharePoint both Ready",
+        "Test panel: 'Which items are still open on INS-01003?': short list citing the inspection items table",
+        "'How do I check a fire door?': answer from checklist-fire-doors.docx, names the file",
+        "'What did the reviewer write on INS-01003?': it refuses (secured column)",
+        "Type 'log a finding', answer yes, INS-01003, 'Test finding', Housekeeping, Minor, 'Recorded during the episode 13 demo.': 'Finding created: ...'; open the item in the model-driven app: notes start '[Agent] '",
+        "Repeat with severity Major and notes 'short': the flow refuses, nothing written"
+      ],
+      "mask": [
+        "environment name and org URL in the address bar and the environment picker",
+        "tenant name in the top bar",
+        "account name, e-mail and avatar in the account menu",
+        "the SharePoint site URL"
+      ]
+    },
+    {
+      "name": "canvas-agent",
+      "kind": "browser",
+      "url": "https://make.powerapps.com/",
+      "account": "alex.demo",
+      "steps": [
+        "Part B: play the Contoso Inspections canvas app in an InPrivate window as alex.demo",
+        "Open INS-01003 > Ask the assistant, type 'Which items are still open?' > Ask",
+        "Type 'log a finding', answer the five questions, confirm yes: reply starts 'Finding created', items list refreshes, new row notes '[Agent] ...'"
+      ],
+      "mask": [
+        "environment name and org URL in the address bar and the environment picker",
+        "tenant name in the top bar",
+        "account name, e-mail and avatar in the account menu",
+        "any real mail domain: only the fictional *.demo@contoso.com addresses may stay",
+        "connection ids in the connection dialog"
+      ]
+    },
+    {
+      "name": "model-driven-agent",
+      "kind": "browser",
+      "url": "https://make.powerapps.com/",
+      "account": "sam.demo",
+      "steps": [
+        "Part B: open Inspection Back Office as sam.demo (InPrivate), open INS-01003",
+        "Press 'Ask the assistant': a dialog with the answer"
+      ],
+      "mask": [
+        "environment name and org URL in the address bar and the environment picker",
+        "tenant name in the top bar",
+        "account name, e-mail and avatar in the account menu",
+        "any real mail domain: only the fictional *.demo@contoso.com addresses may stay"
+      ]
+    }
+  ],
+  "teardown": [
+    "Remove-Item Env:DATAVERSE_ACCESS_TOKEN -ErrorAction SilentlyContinue",
+    "Remove-Item $env:TEMP\\checklists -Recurse -Force -ErrorAction SilentlyContinue",
+    "Write-Host 'Reminder: delete the agent Inspection Assistant and the solution Contoso Inspections Agent, the Copilot Studio connection, the SharePoint site mglab-inspections (and its recycle bin), the [Agent] finding rows; undo any admin center Copilot setting change.'"
+  ],
+  "needs": [
+    "tenant",
+    "premium-trial",
+    "copilot-studio-trial",
+    "paid:Copilot Credits capacity or pay-as-you-go plan (Part B only)"
+  ],
+  "blocked": "canvas-agent and model-driven-agent (Part B) need a published agent: a Copilot Studio trial cannot publish, and the lab has no Copilot Credits capacity or pay-as-you-go plan for DEV. Only agent-test-panel (Part A) can be recorded today."
+}

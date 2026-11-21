@@ -1,0 +1,102 @@
+{
+  "note": "Live-session recording of the screen scenes (series/tools/rec). prepare/teardown run on the laptop, not recorded; commands are typed and run for real. Steps of browser/app screens are done by hand by the person recording.",
+  "prepare": [
+    "New-Item -ItemType Directory -Force C:\\MGLab\\power-bi | Out-Null",
+    "Remove-Item C:\\MGLab\\power-bi\\ep07 -Recurse -Force -ErrorAction SilentlyContinue",
+    "Copy-Item -Path (Get-Location).Path -Destination C:\\MGLab\\power-bi\\ep07 -Recurse -Force",
+    "Import-Module MicrosoftPowerBIMgmt.Profile, MicrosoftPowerBIMgmt.Workspaces, MicrosoftPowerBIMgmt.Data, MicrosoftPowerBIMgmt.Reports",
+    "Connect-PowerBIServiceAccount   # owner signs in as labadmin (interactive)"
+  ],
+  "screens": [
+    {
+      "name": "df-editor",
+      "kind": "browser",
+      "url": "https://app.fabric.microsoft.com/",
+      "account": "labadmin",
+      "steps": [
+        "Workspace Contoso Data (Lab) > dataflow Contoso Bikes Prep > Edit",
+        "Queries pane: groups Parameters, Staging, Output and the six output queries; select Sales (4,071 rows in the preview if shown) and open Diagram view",
+        "Back in the workspace list: the finished Refresh with its time"
+      ],
+      "mask": [
+        "SharePoint site URL (ExportSite value)",
+        "tenant name in the URL",
+        "account picture and name"
+      ]
+    },
+    {
+      "name": "df-model",
+      "kind": "app",
+      "app": "Power BI Desktop + browser",
+      "steps": [
+        "Open C:\\MGLab\\power-bi\\ep07\\src\\ContosoSales.pbip; Transform data: query Product, Applied steps Source, Workspaces, Workspace, Dataflow, Product",
+        "Edit parameters (WorkspaceId, DataflowId masked, UpnDomain); sign in to the Dataflows connector as labadmin; Refresh",
+        "Report page Sales overview, Year slicer cleared: Sales amount 1,862,401.98, Orders 2,440",
+        "Home > Publish > Contoso Data (Lab)",
+        "Service: model Settings > Parameters (ids masked); Endorsement > Promoted with a description, tick Make discoverable if shown"
+      ],
+      "mask": [
+        "WorkspaceId and DataflowId parameter values",
+        "tenant domain (UpnDomain)",
+        "account picture and name"
+      ]
+    },
+    {
+      "name": "df-thin",
+      "kind": "app",
+      "app": "Power BI Desktop + browser",
+      "steps": [
+        "New Desktop window > Get data > Power BI semantic models: catalog with ContosoSales (Promoted, workspace Contoso Data (Lab)) > Connect",
+        "Data pane with all tables and measures; status bar Connected live",
+        "One page: cards Sales amount, Orders, Visible stores and a table of stores; save as StoreManagers.pbip; also record definition.pbir of the saved project",
+        "Publish > Contoso Sales (Lab); in the service open Lineage view: SharePoint > dataflow > model > reports in both workspaces"
+      ],
+      "mask": [
+        "tenant domain, workspace ids in URLs, account picture and name"
+      ]
+    },
+    {
+      "name": "df-audit",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "C:\\MGLab\\power-bi\\ep07\\src\\service",
+      "prompt": "PS C:\\MGLab\\power-bi\\ep07\\src\\service> ",
+      "commands": [
+        "./Invoke-SharedModelCheck.ps1 -DataWorkspaceId $dataWs -ReportWorkspaceId $salesWs",
+        "#pause 5"
+      ],
+      "prepare": [
+        "Import-Module MicrosoftPowerBIMgmt.Profile, MicrosoftPowerBIMgmt.Workspaces, MicrosoftPowerBIMgmt.Data, MicrosoftPowerBIMgmt.Reports",
+        "Connect-PowerBIServiceAccount   # owner signs in as labadmin (interactive)",
+        "$dataWs = (Get-PowerBIWorkspace -Name 'Contoso Data (Lab)').Id",
+        "$salesWs = (Get-PowerBIWorkspace -Name 'Contoso Sales (Lab)').Id"
+      ],
+      "note": "Expected: two counts lines, SM001 (ContosoSales in both workspaces), SM002 (thin report); record exactly what SM003 and others report."
+    },
+    {
+      "name": "df-rls",
+      "kind": "browser",
+      "url": "https://app.powerbi.com/",
+      "account": "labadmin",
+      "steps": [
+        "Model ContosoSales in Contoso Data (Lab) > Security: alex.demo, sam.demo, riley.demo, taylor.demo in Store Managers",
+        "Manage permissions: Build for the same users (record the dialog wording)",
+        "InPrivate window signed in as sam.demo opens the thin report StoreManagers: Signed in as Sam Demo, Visible stores 1, table with Contoso Madrid only, Sales amount 366,058.87, Orders 484"
+      ],
+      "mask": [
+        "tenant domain in e-mail addresses and Signed in as card",
+        "browser URL ids",
+        "account picture and name"
+      ]
+    }
+  ],
+  "teardown": [
+    "Remove-Item C:\\MGLab\\power-bi\\ep07 -Recurse -Force -ErrorAction SilentlyContinue",
+    "# owner: delete the Azure DevOps project mglab-pbi-ep07 and the thin report StoreManagers; keep or delete the workspaces as agreed (demo.md)"
+  ],
+  "needs": [
+    "tenant",
+    "premium-trial"
+  ],
+  "owner_notes": "Owner setup off camera (demo.md Setup 1-5): SharePoint site ContosoBikesData with exports and security folders, workspace Contoso Data (Lab), dataflow imported through Git integration (Azure DevOps project mglab-pbi-ep07) or built by hand. Gen2 dataflow import path is unverified."
+}

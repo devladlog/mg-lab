@@ -1,0 +1,76 @@
+{
+  "note": "Live-session recording of the screen scenes (series/tools/rec). prepare/teardown run on the laptop, not recorded; commands are typed and run for real. Screens that mix a terminal and a portal carry the second half in also[] (when = before/after the main part). Scenes read MG_LAB_ADMIN_UPN / MG_LAB_DOMAIN (set by prepare, derived from the signed-in labadmin).",
+  "prepare": [
+    "if (-not (Get-Module -ListAvailable -Name Microsoft.Graph.Authentication)) { Install-Module Microsoft.Graph.Authentication -Scope CurrentUser -Force -AllowClobber }",
+    "Connect-MgGraph -Scopes RoleManagement.ReadWrite.Directory -NoWelcome  # owner signs in (browser); only to give labadmin the two read roles for this recording",
+    "$me = (Invoke-MgGraphRequest -Uri /v1.0/me).id; $added = Join-Path $env:TEMP 'mglab-ep01-roles.txt'; Remove-Item $added -ErrorAction SilentlyContinue",
+    "foreach ($r in 'Global Reader', 'Reports Reader') { $def = (Invoke-MgGraphRequest -Uri \"/v1.0/roleManagement/directory/roleDefinitions?`$filter=displayName eq '$r'\").value[0]; $has = (Invoke-MgGraphRequest -Uri \"/v1.0/roleManagement/directory/roleAssignments?`$filter=principalId eq '$me' and roleDefinitionId eq '$($def.id)'\").value; if (-not $has) { Invoke-MgGraphRequest -Method POST -Uri /v1.0/roleManagement/directory/roleAssignments -Body @{ principalId = $me; roleDefinitionId = $def.id; directoryScopeId = '/' } | Out-Null; Add-Content $added $def.id } }",
+    "Connect-MgGraph -Scopes ServiceHealth.Read.All, ServiceMessage.Read.All, Reports.Read.All, ReportSettings.Read.All, LicenseAssignment.Read.All, RoleManagement.Read.Directory, SecurityEvents.Read.All -NoWelcome  # owner signs in (browser)",
+    "Remove-Item ./src/report.md, ./src/snapshot.json -ErrorAction SilentlyContinue",
+    "(Invoke-MgGraphRequest -Uri /v1.0/admin/reportSettings).displayConcealedNames   # must be True so the gotcha scene reproduces (leave the Reports setting at its default)"
+  ],
+  "screens": [
+    {
+      "name": "sample-run",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\microsoft-365\\episodes\\01-tenant-administration-monitoring\\src",
+      "prompt": "PS> ",
+      "commands": [
+        "./Invoke-TenantHealthCheck.ps1 -FromSnapshot ../tests/fixtures/snapshot.json -Now 2026-11-20T09:30:00Z -OutFile ../sample/report.md -FailOnHigh",
+        "$LASTEXITCODE",
+        "#pause 4"
+      ]
+    },
+    {
+      "name": "live-run",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\microsoft-365\\episodes\\01-tenant-administration-monitoring\\src",
+      "prompt": "PS> ",
+      "commands": [
+        "./Invoke-TenantHealthCheck.ps1 -OutFile ./report.md -SnapshotFile ./snapshot.json",
+        "#pause 5"
+      ]
+    },
+    {
+      "name": "concealed",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\microsoft-365\\episodes\\01-tenant-administration-monitoring\\src",
+      "prompt": "PS> ",
+      "commands": [
+        "Import-Module ./M365TenantHealth/M365TenantHealth.psd1",
+        "Get-M365UsageReport -Report getOffice365ActiveUserDetail -Period D30 | Select-Object -First 3 'User Principal Name', 'Display Name' | Format-Table",
+        "(Get-Content ./snapshot.json -Raw | ConvertFrom-Json).reportSettings",
+        "#pause 5"
+      ]
+    },
+    {
+      "name": "report-setting",
+      "kind": "browser",
+      "url": "https://admin.microsoft.com/#/Settings/Services/:/Settings/L1/Reports",
+      "account": "labadmin",
+      "steps": [
+        "Open Settings > Org settings > Services tab",
+        "Select 'Reports'",
+        "Show the panel with 'Conceal user, group, and site names in all reports' ticked (do NOT change it)",
+        "Pause on the checkbox for a few seconds, then close the panel with the X"
+      ],
+      "mask": [
+        "tenant name in the top bar",
+        "labadmin name and e-mail in the account menu"
+      ]
+    }
+  ],
+  "teardown": [
+    "Remove-Item ./src/report.md, ./src/snapshot.json -ErrorAction SilentlyContinue",
+    "$added = Join-Path $env:TEMP 'mglab-ep01-roles.txt'; if (Test-Path $added) { Connect-MgGraph -Scopes RoleManagement.ReadWrite.Directory -NoWelcome; foreach ($d in Get-Content $added) { $a = (Invoke-MgGraphRequest -Uri \"/v1.0/roleManagement/directory/roleAssignments?`$filter=roleDefinitionId eq '$d' and principalId eq '$((Invoke-MgGraphRequest -Uri /v1.0/me).id)'\").value; foreach ($x in $a) { Invoke-MgGraphRequest -Method DELETE -Uri \"/v1.0/roleManagement/directory/roleAssignments/$($x.id)\" } }; Remove-Item $added }",
+    "Disconnect-MgGraph",
+    "# optional, only if consent was granted just for this recording: Entra admin center > Enterprise applications > Microsoft Graph Command Line Tools > Permissions"
+  ],
+  "needs": [
+    "tenant",
+    "role:Global Reader + Reports Reader on labadmin (prepare adds them, teardown removes them)"
+  ]
+}

@@ -1,0 +1,120 @@
+{
+  "note": "Live-session recording of the SharePoint episode screens (series/tools/rec). prepare/teardown run on the laptop, not recorded. Set MG_TENANT, MG_UPN_DOMAIN and MG_PNP_CLIENT_ID in the environment before queueing (never in a file). Sign-ins are device-code, done by the owner. Episodes 1-9 chain: set MG_KEEP_CHAIN=1 while recording them in order so teardown keeps what the next episode uses; unset it for a full clean-up. The home site is a tenant-wide setting: prepare records the current value so teardown can restore it. Provision and switch on global navigation the day before the browser screens (it can take up to 24 hours).",
+  "prepare": [
+    "if (-not $env:MG_TENANT -or -not $env:MG_UPN_DOMAIN -or -not $env:MG_PNP_CLIENT_ID) { throw 'Set MG_TENANT (lab tenant short name), MG_UPN_DOMAIN (sign-in domain of the lab users) and MG_PNP_CLIENT_ID (the MG Lab PnP app) in the environment first' }",
+    "if (-not (Get-Module -ListAvailable PnP.PowerShell)) { Install-Module PnP.PowerShell -Scope CurrentUser -Force }",
+    "$env:MG_TENANT_URL = \"https://${env:MG_TENANT}.sharepoint.com\"; $env:MG_ADMIN_URL = \"https://${env:MG_TENANT}-admin.sharepoint.com\"; $env:MG_EP = (Get-Location).Path",
+    "$env:MG_LABADMIN_UPN = \"labadmin@$env:MG_UPN_DOMAIN\"; $env:MG_ALEX_UPN = \"alex.demo@$env:MG_UPN_DOMAIN\"; $env:MG_SAM_UPN = \"sam.demo@$env:MG_UPN_DOMAIN\"; $env:MG_JORDAN_UPN = \"jordan.demo@$env:MG_UPN_DOMAIN\"; $env:MG_RILEY_UPN = \"riley.demo@$env:MG_UPN_DOMAIN\"",
+    "Connect-PnPOnline -Url $env:MG_ADMIN_URL -ClientId $env:MG_PNP_CLIENT_ID -DeviceLogin   # owner signs in",
+    "$env:MG_PREV_HOMESITE = \"$(Get-PnPHomeSite)\"; Write-Host \"previous home site: [$env:MG_PREV_HOMESITE]\"",
+    "Get-PnPOrgAssetsLibrary | Out-Host",
+    "if (-not (Get-PnPTenantSite -Url \"$env:MG_TENANT_URL/sites/Operations\" -ErrorAction SilentlyContinue)) { throw 'Hub /sites/Operations not found: record episode 07 first (MG_KEEP_CHAIN=1)' }",
+    "if (-not (Get-PnPTenantSite -Url \"$env:MG_TENANT_URL/sites/Intranet\" -ErrorAction SilentlyContinue)) { New-PnPSite -Type CommunicationSite -Title 'Contoso Intranet' -Url \"$env:MG_TENANT_URL/sites/Intranet\" -Wait }",
+    "# manual, in the browser: share /sites/Intranet with 'Everyone except external users' as visitors (IL005 checks it)"
+  ],
+  "screens": [
+    {
+      "name": "provision",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\sharepoint\\episodes\\08-intranet-design",
+      "prompt": "PS sharepoint-08> ",
+      "prepare": [
+        "if (-not $env:MG_TENANT -or -not $env:MG_UPN_DOMAIN -or -not $env:MG_PNP_CLIENT_ID) { throw 'Set MG_TENANT (lab tenant short name), MG_UPN_DOMAIN (sign-in domain of the lab users) and MG_PNP_CLIENT_ID (the MG Lab PnP app) in the environment first' }",
+        "if (-not (Get-Module -ListAvailable PnP.PowerShell)) { Install-Module PnP.PowerShell -Scope CurrentUser -Force }",
+        "$env:MG_TENANT_URL = \"https://${env:MG_TENANT}.sharepoint.com\"; $env:MG_ADMIN_URL = \"https://${env:MG_TENANT}-admin.sharepoint.com\"; $env:MG_EP = (Get-Location).Path",
+        "$env:MG_LABADMIN_UPN = \"labadmin@$env:MG_UPN_DOMAIN\"; $env:MG_ALEX_UPN = \"alex.demo@$env:MG_UPN_DOMAIN\"; $env:MG_SAM_UPN = \"sam.demo@$env:MG_UPN_DOMAIN\"; $env:MG_JORDAN_UPN = \"jordan.demo@$env:MG_UPN_DOMAIN\"; $env:MG_RILEY_UPN = \"riley.demo@$env:MG_UPN_DOMAIN\""
+      ],
+      "commands": [
+        "$t = @{ TenantUrl = $env:MG_TENANT_URL; AdminUrl = $env:MG_ADMIN_URL; ClientId = $env:MG_PNP_CLIENT_ID }",
+        "#clear",
+        "./src/Invoke-IntranetDesign.ps1 -BlueprintPath ./src/intranet/contoso-intranet.json @t -Provision",
+        "#pause 8"
+      ],
+      "note": "Device-code sign-ins off camera. Record what really happens (Set-PnPHomeSite -Force, org assets CDN prompt, default nodes)."
+    },
+    {
+      "name": "app-bar",
+      "kind": "browser",
+      "url": "https://<tenant>.sharepoint.com/sites/Purchasing",
+      "account": "alex.demo",
+      "steps": [
+        "Setup first, as labadmin on /sites/Intranet (brief or off camera): Settings > Global navigation: Enable on, Title 'Contoso', Logo contoso-globalnav-20.png from Brand Images, Navigation source 'Home site navigation', Save",
+        "As Alex Demo, open any SharePoint page such as Contoso Purchasing",
+        "Select the Contoso logo in the app bar on the left",
+        "Hold on the panel: Work (Operations > Contoso Operations, Purchasing, Facilities) and How do I (Everyday tasks > Buy something, Move office; Purchasing team > Supplier documents)",
+        "If the panel is empty, wait (up to 24 hours) and retry"
+      ],
+      "mask": [
+        "tenant host in the address bar (pipeline/mask.js)",
+        "account avatar and display name in the top bar"
+      ],
+      "note": "Optional second capture as Sam Demo (no 'Purchasing team' label)."
+    },
+    {
+      "name": "picker",
+      "kind": "browser",
+      "url": "https://<tenant>.sharepoint.com/sites/Purchasing/SitePages/how-to-buy.aspx",
+      "account": "alex.demo",
+      "steps": [
+        "Edit the page (Edit button)",
+        "Add an Image web part (+), select Change",
+        "In the file picker select 'Your organization' in the left pane",
+        "Hold on the card with the Contoso logo thumbnail, open it and show the two logos",
+        "Discard the page edit afterwards"
+      ],
+      "mask": [
+        "tenant host in the address bar (pipeline/mask.js)",
+        "account avatar and display name in the top bar",
+        "organization name on the card if it is the real tenant name"
+      ]
+    },
+    {
+      "name": "check",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\sharepoint\\episodes\\08-intranet-design",
+      "prompt": "PS sharepoint-08> ",
+      "prepare": [
+        "if (-not $env:MG_TENANT -or -not $env:MG_UPN_DOMAIN -or -not $env:MG_PNP_CLIENT_ID) { throw 'Set MG_TENANT (lab tenant short name), MG_UPN_DOMAIN (sign-in domain of the lab users) and MG_PNP_CLIENT_ID (the MG Lab PnP app) in the environment first' }",
+        "if (-not (Get-Module -ListAvailable PnP.PowerShell)) { Install-Module PnP.PowerShell -Scope CurrentUser -Force }",
+        "$env:MG_TENANT_URL = \"https://${env:MG_TENANT}.sharepoint.com\"; $env:MG_ADMIN_URL = \"https://${env:MG_TENANT}-admin.sharepoint.com\"; $env:MG_EP = (Get-Location).Path",
+        "$env:MG_LABADMIN_UPN = \"labadmin@$env:MG_UPN_DOMAIN\"; $env:MG_ALEX_UPN = \"alex.demo@$env:MG_UPN_DOMAIN\"; $env:MG_SAM_UPN = \"sam.demo@$env:MG_UPN_DOMAIN\"; $env:MG_JORDAN_UPN = \"jordan.demo@$env:MG_UPN_DOMAIN\"; $env:MG_RILEY_UPN = \"riley.demo@$env:MG_UPN_DOMAIN\""
+      ],
+      "commands": [
+        "$t = @{ TenantUrl = $env:MG_TENANT_URL; AdminUrl = $env:MG_ADMIN_URL; ClientId = $env:MG_PNP_CLIENT_ID }",
+        "#clear",
+        "./src/Invoke-IntranetDesign.ps1 -BlueprintPath ./src/intranet/contoso-intranet.json @t -Check",
+        "#pause 4",
+        "# somebody renames 'How do I' in the home site navigation",
+        "Connect-PnPOnline -Url \"$($t.TenantUrl)/sites/Intranet\" -ClientId $t.ClientId -DeviceLogin   # owner signs in",
+        "$n = Get-PnPNavigationNode -Location TopNavigationBar | Where-Object Title -eq 'How do I'; Set-PnPNavigationNode -Identity $n.Id -Title 'How to'",
+        "./src/Invoke-IntranetDesign.ps1 -BlueprintPath ./src/intranet/contoso-intranet.json @t -Check",
+        "#pause 6"
+      ],
+      "note": "The device-code prompt for the rename connection is shown off camera. Expect IL006 and '1 error(s)'."
+    }
+  ],
+  "teardown": [
+    "if (-not $env:MG_TENANT -or -not $env:MG_UPN_DOMAIN -or -not $env:MG_PNP_CLIENT_ID) { throw 'Set MG_TENANT (lab tenant short name), MG_UPN_DOMAIN (sign-in domain of the lab users) and MG_PNP_CLIENT_ID (the MG Lab PnP app) in the environment first' }",
+    "if (-not (Get-Module -ListAvailable PnP.PowerShell)) { Install-Module PnP.PowerShell -Scope CurrentUser -Force }",
+    "$env:MG_TENANT_URL = \"https://${env:MG_TENANT}.sharepoint.com\"; $env:MG_ADMIN_URL = \"https://${env:MG_TENANT}-admin.sharepoint.com\"; $env:MG_EP = (Get-Location).Path",
+    "$env:MG_LABADMIN_UPN = \"labadmin@$env:MG_UPN_DOMAIN\"; $env:MG_ALEX_UPN = \"alex.demo@$env:MG_UPN_DOMAIN\"; $env:MG_SAM_UPN = \"sam.demo@$env:MG_UPN_DOMAIN\"; $env:MG_JORDAN_UPN = \"jordan.demo@$env:MG_UPN_DOMAIN\"; $env:MG_RILEY_UPN = \"riley.demo@$env:MG_UPN_DOMAIN\"",
+    "$t = @{ TenantUrl = $env:MG_TENANT_URL; AdminUrl = $env:MG_ADMIN_URL; ClientId = $env:MG_PNP_CLIENT_ID }",
+    "./src/Invoke-IntranetDesign.ps1 -BlueprintPath ./src/intranet/contoso-intranet.json @t -Provision",
+    "Connect-PnPOnline -Url $env:MG_ADMIN_URL -ClientId $env:MG_PNP_CLIENT_ID -DeviceLogin   # owner signs in",
+    "Remove-PnPOrgAssetsLibrary -LibraryUrl \"$env:MG_TENANT_URL/sites/Intranet/BrandImages\" -ErrorAction SilentlyContinue",
+    "Remove-PnPOrgNewsSite -OrgNewsSiteUrl \"$env:MG_TENANT_URL/sites/Operations\" -ErrorAction SilentlyContinue",
+    "if ($env:MG_PREV_HOMESITE) { Set-PnPHomeSite -HomeSiteUrl $env:MG_PREV_HOMESITE -Force } else { Remove-PnPHomeSite -Force -ErrorAction SilentlyContinue }",
+    "Remove-PnPTenantTheme -Identity 'Contoso Operations' -ErrorAction SilentlyContinue",
+    "# manual: switch global navigation off on the home site (Settings > Global navigation) before the site is deleted",
+    "Remove-PnPTenantSite -Url \"$env:MG_TENANT_URL/sites/Intranet\" -Force -ErrorAction SilentlyContinue"
+  ],
+  "needs": [
+    "tenant",
+    "episode:07",
+    "role:sharepoint-admin",
+    "app:MG Lab PnP (+ Graph Group.Read.All delegated)",
+    "wait:global navigation (up to 24 h)"
+  ]
+}

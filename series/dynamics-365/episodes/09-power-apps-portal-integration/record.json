@@ -1,0 +1,129 @@
+{
+  "note": "Live-session recording of the screen scenes (series/tools/rec). prepare/teardown run on the laptop, not recorded; commands are typed and run for real. Extra keys (note, followup, manual_prepare, manual_teardown) are for the recorder person; the kit ignores them. DATAVERSE_URL must point at the Sales trial environment (trial site expires with it, about 21 Dec 2026). Every python command opens its own MSAL interactive sign-in (the token cache is in memory): the owner signs in as labadmin when the browser asks, or exports the app-registration variables in the shell before recording (never in a file). ./site-download holds real ids: never commit it.",
+  "prepare": [
+    "python -m pip install --user -q -r requirements.txt",
+    "if (-not $env:DATAVERSE_URL) { throw 'Set $env:DATAVERSE_URL to the lab environment URL in this shell first (the owner does this; it is never written in a file).' }",
+    "pac auth create --environment $env:DATAVERSE_URL   # owner signs in (interactive)",
+    "if (-not $env:MGL_SITE_ID -or -not $env:MGL_MODEL_VERSION) { throw 'Set $env:MGL_SITE_ID (from pac pages list) and $env:MGL_MODEL_VERSION (1 or 2) in this shell first (owner).' }",
+    "pac pages download --path ./site-download --webSiteId $env:MGL_SITE_ID --modelVersion $env:MGL_MODEL_VERSION"
+  ],
+  "manual_prepare": [
+    "make.powerpages.microsoft.com as labadmin: create the trial site 'Contoso Retail store support' in the Sales trial environment; share the private site with alex.demo and open it once as alex.demo.",
+    "Web role Store managers on alex.demo's contact; table permissions 'Store manager cases' (Case, Contact, Read + Create) and 'Own contact' (Self, Read).",
+    "Site settings Webapi/incident/enabled, Webapi/incident/fields, Webapi/contact/enabled, Webapi/contact/fields; restart the site.",
+    "Page Support with the list, title input, button and support-api.js; browse it as alex.demo.",
+    "Episode 8 SLA still set if the Hub screen should show timers."
+  ],
+  "screens": [
+    {
+      "name": "pages-site",
+      "kind": "browser",
+      "url": "https://make.powerpages.microsoft.com/",
+      "account": "labadmin",
+      "steps": [
+        "Select the Sales trial environment",
+        "Open the site 'Contoso Retail store support' (Edit)",
+        "Pages workspace: select the Support page; the site name is visible"
+      ],
+      "mask": [
+        "tenant name in the top bar",
+        "environment name and org URL (address bar and header)",
+        "user e-mail and avatar in the account menu",
+        "site URL (powerappsportals.com)"
+      ]
+    },
+    {
+      "name": "pagekit-lint",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\dynamics-365\\episodes\\09-power-apps-portal-integration\\src",
+      "prompt": "PS src> ",
+      "commands": [
+        "python -m pagekit inspect $env:MGL_SITE_DIR",
+        "#pause 3",
+        "$f = Get-ChildItem \"$env:MGL_SITE_DIR/site-settings\" -Filter '*incident*fields*' | Select-Object -First 1",
+        "$orig = Get-Content $f.FullName -Raw",
+        "$orig -replace '(?m)^value:.*$', 'value: \"*\"' | Set-Content $f.FullName -NoNewline",
+        "python -m pagekit lint $env:MGL_SITE_DIR --expect",
+        "#pause 4",
+        "$orig | Set-Content $f.FullName -NoNewline",
+        "python -m pagekit lint $env:MGL_SITE_DIR --expect",
+        "#pause 4"
+      ],
+      "prepare": [
+        "$env:MGL_SITE_DIR = (Get-ChildItem ./site-download -Directory | Select-Object -First 1).FullName"
+      ],
+      "note": "The wildcard edit changes only the local download copy (never uploaded) and is restored in the next command. Confirm the file name and the 'value' key from a real download (demo.md step 5). Blur ids."
+    },
+    {
+      "name": "pages-table-permissions",
+      "kind": "browser",
+      "url": "https://make.powerpages.microsoft.com/",
+      "account": "labadmin",
+      "steps": [
+        "Open the site in the design studio, Security workspace, Table permissions",
+        "Open 'Store manager cases': table Case, access type Contact, relationship, privileges Read and Create, role Store managers",
+        "Open 'Own contact': Contact table, access type Self"
+      ],
+      "mask": [
+        "tenant name in the top bar",
+        "environment name and org URL (address bar and header)",
+        "user e-mail and avatar in the account menu",
+        "site URL (powerappsportals.com)"
+      ]
+    },
+    {
+      "name": "pages-api-call",
+      "kind": "browser",
+      "url": "https://make.powerpages.microsoft.com/",
+      "account": "alex.demo",
+      "steps": [
+        "Open the site (Preview, or its powerappsportals.com address) in a private window and sign in as alex.demo (Microsoft Entra)",
+        "Open the Support page: the case list rendered by listCases",
+        "Open browser developer tools, Network tab",
+        "Create the case 'Till offline in store 12' (High) with the button (createCase)",
+        "Select the POST to the incidents route: show the request headers (hide the token value) and the entityid response header"
+      ],
+      "mask": [
+        "tenant name in the top bar",
+        "environment name and org URL (address bar and header)",
+        "user e-mail and avatar in the account menu",
+        "site URL",
+        "__RequestVerificationToken value in the Network tab",
+        "record GUIDs"
+      ]
+    },
+    {
+      "name": "hub-portal-case",
+      "kind": "browser",
+      "url": "https://make.powerapps.com/",
+      "account": "labadmin",
+      "steps": [
+        "Select the Sales trial environment, Apps, open Customer Service Hub (play)",
+        "Service, Cases, open 'Till offline in store 12'",
+        "Show customer = alex.demo's portal contact and the SLA timers (if the episode 8 default SLA is still set; otherwise say so)"
+      ],
+      "mask": [
+        "tenant name in the top bar",
+        "environment name and org URL (address bar and header)",
+        "user e-mail and avatar in the account menu"
+      ]
+    }
+  ],
+  "teardown": [
+    "Remove-Item ./site-download -Recurse -Force -ErrorAction SilentlyContinue"
+  ],
+  "manual_teardown": [
+    "Delete the demo cases created from the portal (and alex.demo's contact if unneeded).",
+    "Delete the table permissions, the Store managers web role and the four Webapi site settings.",
+    "Delete the trial site (admin center, Power Pages sites).",
+    "Tear down episode 8's SLA if no longer needed."
+  ],
+  "needs": [
+    "tenant",
+    "trial:Dynamics 365 Sales trial environment (ends about 21 Dec 2026)",
+    "trial:Power Pages trial site",
+    "tool:pac (Power Platform CLI, signed in by the owner)",
+    "licence:Power Pages (trial site covers the recording)"
+  ]
+}

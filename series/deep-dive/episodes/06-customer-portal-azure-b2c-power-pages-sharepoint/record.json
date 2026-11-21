@@ -1,0 +1,103 @@
+{
+  "note": "Deep-dive #6. Uses Microsoft Entra External ID (an external tenant), not Azure AD B2C (closed to new customers). Each customer in its own InPrivate window. The Power Pages site is a trial site.",
+  "prepare": [
+    "npm test",
+    "Invoke-Pester ./tests",
+    "# owner signs in (device code), not recorded",
+    "az login --use-device-code --allow-no-subscriptions",
+    "Connect-MgGraph -Scopes Application.ReadWrite.All -NoWelcome   # owner signs in (for Initialize-ExternalId, as the external tenant's admin)",
+    "# manual: Entra admin center > Manage tenants > Create > External, name 'Contoso customers', domain contosocustomers (or next free), location Europe, subscription = lab, resource group rg-mglab-deep-dive-06",
+    "# manual: Dataverse table 'Support request' in solution 'Customer portal' (DEV) exactly as dataverse/support-request-table.json, main form with the Document Locations subgrid, document management on",
+    "# manual: accounts Northwind Traders and Adventure Works; contacts Riley Demo, Alex Demo (Northwind), Taylor Demo (Adventure Works) with the exact e-mail they sign up with; one seed request each for Alex and Taylor",
+    "# manual: SharePoint site /sites/customer-docs and server-based SharePoint integration for DEV; Power Pages site 'Contoso support', SharePoint Integration = Yes",
+    "$env:MG_EXT_TENANT = Read-Host 'External tenant ID (owner types, never recorded)'; $env:MG_REPLY_URL = Read-Host 'Reply URL from the Power Pages identity provider wizard (owner types)'",
+    "./external-id/Initialize-ExternalId.ps1 -TenantId $env:MG_EXT_TENANT -ReplyUrl $env:MG_REPLY_URL -WhatIf   # owner signs in as the external tenant admin",
+    "./external-id/Initialize-ExternalId.ps1 -TenantId $env:MG_EXT_TENANT -ReplyUrl $env:MG_REPLY_URL",
+    "./external-id/Initialize-ExternalId.ps1 -TenantId $env:MG_EXT_TENANT -ReplyUrl $env:MG_REPLY_URL   # second run: Exists for all five steps",
+    "# manual: paste Client ID, Authority, Metadata address in the wizard; contact mapping with email = On; external logout = On",
+    "# manual: web role 'Customer contacts' on the three contacts; table permissions tree from portal/table-permissions.json; page /support/ with page permission; site settings from portal/site-settings.json; web file support-requests.js; web template from portal/web-templates/my-requests.html; page /support/request/ with the update form",
+    "# manual: dry run with all four people in separate InPrivate windows, then delete the requests the dry run created (keep the two seed requests)"
+  ],
+  "screens": [
+    {
+      "name": "external-id-signup",
+      "kind": "browser",
+      "url": "https://<portal-host>/ (the Contoso support site, InPrivate window)",
+      "account": "none (Riley Demo signs up during the take)",
+      "steps": [
+        "Open the portal home in an InPrivate window",
+        "Sign in > Microsoft Entra External ID (Contoso customers)",
+        "On the external tenant's sign-up page: Riley Demo's e-mail, Next, the one-time verification code from the lab mailbox, a password, name Riley Demo",
+        "Back on the portal: signed in as Riley Demo, the Support menu item is visible"
+      ],
+      "mask": [
+        "portal host name in the address bar",
+        "e-mail domain (keep riley.demo readable)",
+        "external tenant domain and id",
+        "contents of the verification e-mail except its subject"
+      ]
+    },
+    {
+      "name": "support-requests",
+      "kind": "browser",
+      "url": "https://<portal-host>/support/",
+      "account": "riley.demo (customer sign-in)",
+      "steps": [
+        "As Riley open /support/: Alex's Northwind request is listed, Taylor's Adventure Works request is not",
+        "Submit a new request: 'Pallet arrived damaged', category Delivery",
+        "Message 'Request sent' appears; the new row is at the top with its SR-0000x reference, marked as hers"
+      ],
+      "mask": [
+        "portal host name",
+        "e-mail domain",
+        "contact and record GUIDs in links"
+      ]
+    },
+    {
+      "name": "request-documents",
+      "kind": "browser",
+      "url": "https://<portal-host>/support/request/",
+      "account": "riley.demo (customer sign-in)",
+      "steps": [
+        "Open Riley's new request (basic form, mode 'Updates an existing record')",
+        "In the documents subgrid upload pallet-photos.pdf",
+        "Second capture: as labadmin open the SharePoint site Customer docs > the Support request library > the folder named after the request: the PDF is inside"
+      ],
+      "mask": [
+        "portal host name",
+        "tenant name in the SharePoint address",
+        "record GUIDs"
+      ]
+    },
+    {
+      "name": "isolation",
+      "kind": "browser",
+      "url": "https://<portal-host>/support/",
+      "account": "taylor.demo, jordan.demo, riley.demo (separate InPrivate windows)",
+      "steps": [
+        "(a) As Taylor (Adventure Works contact) open /support/: only Adventure Works rows",
+        "(b) As Jordan (signed up, no registered contact) open /support/: the access denied page",
+        "(c) As Riley open the browser console and run ContosoSupport.createClient({fetch: fetch.bind(window), getToken: () => ContosoSupport.tokenFromShell(shell)}).createRequest({title: 'Forged request', category: 100000003}, '<Alex contact ID>') and show the rejected promise (HTTP status and message)",
+        "If the forged create succeeds, STOP: it is a finding. Note it in the README, delete the row and re-record without (c)"
+      ],
+      "mask": [
+        "portal host name",
+        "e-mail domains",
+        "Alex's contact GUID in the console command"
+      ]
+    }
+  ],
+  "teardown": [
+    "# manual: Power Platform admin center > Power Pages: delete the 'Contoso support' site; delete solution 'Customer portal' and the seed accounts and contacts in DEV; turn off server-based SharePoint integration if it was off before",
+    "# manual: SharePoint: delete the 'Customer docs' site and remove it from the deleted sites",
+    "# manual: external tenant: delete every user except the admin, the user flow, all app registrations including b2c-extensions-app, then Manage tenants > Delete 'Contoso customers'",
+    "az group delete -n rg-mglab-deep-dive-06 --yes   # once the tenant resource is gone",
+    "Remove-Item Env:MG_EXT_TENANT, Env:MG_REPLY_URL -ErrorAction SilentlyContinue; Disconnect-MgGraph"
+  ],
+  "needs": [
+    "tenant",
+    "azure",
+    "premium-trial",
+    "licence:Power Apps Premium self-service trial for labadmin (Power Pages Management app)"
+  ]
+}

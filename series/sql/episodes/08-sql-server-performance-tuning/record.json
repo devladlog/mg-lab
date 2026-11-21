@@ -1,0 +1,113 @@
+{
+  "note": "Live-session recording (series/tools/rec). prepare/teardown run on the laptop, not recorded. Passwords are never in this file: the owner types the connection string once when prepare asks (Server=10.50.0.30,1433;Database=master;UID=<login>;<the login's password entry>;Encrypt=yes;TrustServerCertificate=yes); prepare keeps it in the MG_SQL_BASE variable of this session and derives SQL_CONNECTION_STRING for each database; teardown removes both. T-SQL set-up runs on CON-SQL01 over PowerShell Direct as the lab Administrator with Windows authentication (SQL Server's own sysadmin group is Domain Admins). Episode login: lab_demo, made sysadmin for this episode only (server-state DMVs and ALTER DATABASE for READ_COMMITTED_SNAPSHOT).",
+  "prepare": [
+    "$sql = { param($vm, $text) Invoke-Command -VMName $vm -Credential $cred -ArgumentList $text -ScriptBlock { param($t) $c = New-Object System.Data.SqlClient.SqlConnection 'Server=localhost;Integrated Security=SSPI;TrustServerCertificate=True'; $c.Open(); try { foreach ($b in ($t -split '(?im)^\\s*GO\\s*$')) { if ($b.Trim()) { $m = $c.CreateCommand(); $m.CommandText = $b; $m.CommandTimeout = 600; [void]$m.ExecuteNonQuery() } } } finally { $c.Close() } } }",
+    "& $sql 'CON-SQL01' \"IF SUSER_ID(N'lab_demo') IS NULL THROW 50000, N'Create the login lab_demo first (episode 3 demo.md, setup step 3; owner types its password off camera).', 1;\"",
+    "& $sql 'CON-SQL01' \"IF IS_SRVROLEMEMBER(N'sysadmin', N'lab_demo') = 0 ALTER SERVER ROLE sysadmin ADD MEMBER lab_demo;\"",
+    "& $sql 'CON-SQL01' \"GRANT VIEW SERVER PERFORMANCE STATE TO lab_demo;\"",
+    "if (-not $env:MG_SQL_BASE) { $env:MG_SQL_BASE = Read-Host 'Connection string for lab_demo on 10.50.0.30,1433 (typed off camera, never saved; format in the note of record.json)' -MaskInput }",
+    "$env:SQL_CONNECTION_STRING = $env:MG_SQL_BASE -replace 'Database=[^;]*', 'Database=master'",
+    "python -m pip install -q -r requirements.txt",
+    "python src/perf_lab.py --engine sqlserver --setup --step t01-config-review"
+  ],
+  "screens": [
+    {
+      "name": "t02-top-queries",
+      "kind": "app",
+      "app": "SSMS 22",
+      "prepare": [
+        "python src/perf_lab.py --engine sqlserver --reset-only",
+        "python src/perf_lab.py --engine sqlserver --setup --step t01-config-review"
+      ],
+      "steps": [
+        "Open SSMS 22 and connect to 10.50.0.30,1433 with SQL Server Authentication as lab_demo (secret typed off camera, Remember off); in Options > Connection Properties set the database to ContosoBikesPerf and tick Trust server certificate (lab only)",
+        "Open src/sql/w01-workload.sql and run it (a few seconds)",
+        "Open src/sql/t02-top-queries.sql and run it: two rows, scan / 3 / 1 / large AvgLogicalReads and seek / 50 / 2 / single-digit AvgLogicalReads; keep Executions and RankByReads visible"
+      ],
+      "mask": [
+        "server address 10.50.0.30 and the login name (Connect dialog, title bar, status bar, Object Explorer): connect through a hosts alias so it reads CON-SQL01, or blur",
+        "laptop machine name and Windows user name in title bars"
+      ],
+      "scene": "top-screen"
+    },
+    {
+      "name": "t03c-diagnose",
+      "kind": "app",
+      "app": "SSMS 22",
+      "prepare": [
+        "python src/perf_lab.py --engine sqlserver --reset-only",
+        "python src/perf_lab.py --engine sqlserver --setup --step t01-config-review"
+      ],
+      "steps": [
+        "Open SSMS 22 and connect to 10.50.0.30,1433 with SQL Server Authentication as lab_demo (secret typed off camera, Remember off); in Options > Connection Properties set the database to ContosoBikesPerf and tick Trust server certificate (lab only) (open three query windows = three sessions: writer, reader, diagnoser)",
+        "Diagnoser window: run EXEC Tune.usp_TakeWaitSnapshot N'before-blocking'",
+        "Window 1: run src/sql/t03a-blocker.sql (opens a transaction and leaves it open)",
+        "Window 2: run src/sql/t03b-reader.sql: it spins (blocked)",
+        "Window 3: run src/sql/t03c-diagnose.sql: one row, WaitType LCK_M_S, BlockerOpenTransactions 1, BlockedStatement with the mglab-blocked-report comment, BlockerLastStatement with BEGIN TRANSACTION and the UPDATE"
+      ],
+      "mask": [
+        "server address 10.50.0.30 and the login name (Connect dialog, title bar, status bar, Object Explorer): connect through a hosts alias so it reads CON-SQL01, or blur",
+        "laptop machine name and Windows user name in title bars",
+        "session numbers and wait_resource in the diagnosis grid (they change every run)"
+      ],
+      "scene": "gotcha-screen"
+    },
+    {
+      "name": "t03-rcsi-reader",
+      "kind": "app",
+      "app": "SSMS 22",
+      "prepare": [
+        "python src/perf_lab.py --engine sqlserver --reset-only",
+        "python src/perf_lab.py --engine sqlserver --setup --step t01-config-review"
+      ],
+      "steps": [
+        "Open SSMS 22 and connect to 10.50.0.30,1433 with SQL Server Authentication as lab_demo (secret typed off camera, Remember off); in Options > Connection Properties set the database to ContosoBikesPerf and tick Trust server certificate (lab only) (windows 1 and 2 as writer and reader)",
+        "First round: window 1 t03a-blocker.sql, window 2 t03b-reader.sql (blocks), take Tune.usp_TakeWaitSnapshot N'after-blocking', then window 1 t03d-release.sql (ROLLBACK): window 2 returns Shipped",
+        "Close windows 1 and 2 and any other connection to the database; from a window on master run src/sql/t03e-enable-rcsi.sql; take the before-rcsi snapshot",
+        "Reopen windows 1 and 2 side by side: window 1 t03a-blocker.sql (transaction left open, shown in the status bar), window 2 t03b-reader.sql returns at once with one row Status = Shipped, execution time 00:00:00; point out it is the committed value, not Cancelled"
+      ],
+      "mask": [
+        "server address 10.50.0.30 and the login name (Connect dialog, title bar, status bar, Object Explorer): connect through a hosts alias so it reads CON-SQL01, or blur",
+        "laptop machine name and Windows user name in title bars",
+        "session numbers in the query tabs"
+      ],
+      "scene": "rcsi-screen"
+    },
+    {
+      "name": "t04-wait-delta",
+      "kind": "app",
+      "app": "SSMS 22",
+      "prepare": [
+        "python src/perf_lab.py --engine sqlserver --reset-only",
+        "python src/perf_lab.py --engine sqlserver --setup --step t01-config-review",
+        "python src/perf_lab.py --engine sqlserver --step t03-blocking"
+      ],
+      "steps": [
+        "Open SSMS 22 and connect to 10.50.0.30,1433 with SQL Server Authentication as lab_demo (secret typed off camera, Remember off); in Options > Connection Properties set the database to ContosoBikesPerf and tick Trust server certificate (lab only)",
+        "Open src/sql/t04-wait-delta.sql and run it: LCK_M_S at the top, WaitingTasksDelta 1, WaitTimeMsDelta in the thousands, then small waits such as WRITELOG",
+        "Open src/sql/t04b-wait-delta-after-rcsi.sql and run it: no LCK_M_ row, only small waits; keep WaitType and WaitTimeMsDelta visible"
+      ],
+      "mask": [
+        "server address 10.50.0.30 and the login name (Connect dialog, title bar, status bar, Object Explorer): connect through a hosts alias so it reads CON-SQL01, or blur",
+        "laptop machine name and Windows user name in title bars"
+      ],
+      "note": "The runner's t03-blocking step plays the blocking round, RCSI and takes the four snapshots in Tune.WaitSnapshot; roll back any leftover open transaction in SSMS.",
+      "scene": "waits-screen"
+    }
+  ],
+  "teardown": [
+    "$sql = { param($vm, $text) Invoke-Command -VMName $vm -Credential $cred -ArgumentList $text -ScriptBlock { param($t) $c = New-Object System.Data.SqlClient.SqlConnection 'Server=localhost;Integrated Security=SSPI;TrustServerCertificate=True'; $c.Open(); try { foreach ($b in ($t -split '(?im)^\\s*GO\\s*$')) { if ($b.Trim()) { $m = $c.CreateCommand(); $m.CommandText = $b; $m.CommandTimeout = 600; [void]$m.ExecuteNonQuery() } } } finally { $c.Close() } } }",
+    "if (-not $env:MG_SQL_BASE) { $env:MG_SQL_BASE = Read-Host 'Connection string for lab_demo on 10.50.0.30,1433 (typed off camera, never saved; format in the note of record.json)' -MaskInput }",
+    "$env:SQL_CONNECTION_STRING = $env:MG_SQL_BASE -replace 'Database=[^;]*', 'Database=master'",
+    "python src/perf_lab.py --engine sqlserver --reset-only",
+    "& $sql 'CON-SQL01' \"IF DB_ID(N'ContosoBikesPerf') IS NOT NULL BEGIN ALTER DATABASE ContosoBikesPerf SET SINGLE_USER WITH ROLLBACK IMMEDIATE; DROP DATABASE ContosoBikesPerf; END\"",
+    "& $sql 'CON-SQL01' \"IF EXISTS (SELECT 1 FROM sys.server_principals WHERE name = N'lab_demo') REVOKE VIEW SERVER PERFORMANCE STATE FROM lab_demo;\"",
+    "& $sql 'CON-SQL01' \"IF IS_SRVROLEMEMBER(N'sysadmin', N'lab_demo') = 1 ALTER SERVER ROLE sysadmin DROP MEMBER lab_demo;\"",
+    "Remove-Item Env:SQL_CONNECTION_STRING, Env:MG_SQL_BASE -ErrorAction SilentlyContinue"
+  ],
+  "needs": [
+    "lab-vms",
+    "tool:SSMS",
+    "login:lab_demo"
+  ]
+}

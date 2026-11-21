@@ -1,0 +1,112 @@
+{
+  "note": "Deep-dive #7. Order: policy-portal, calls, topic, worker. The calls screen holds take 1 and, after a 65 s pause, take 2 (rate limit): take 2 replays PR-1002's idempotency key so Service Bus duplicate detection drops it and the topic counts shown in the next screen stay 2 and 1 (deviation from demo.md's PR-2000 loop, which would add 25 messages).",
+  "prepare": [
+    "dotnet test tests/PurchaseEvents.Tests -m:1",
+    "Invoke-Pester ./scripts/PurchaseGateway.Tests.ps1",
+    "# owner signs in (device code), not recorded",
+    "az login --use-device-code",
+    "./apim/entra/New-GatewayApps.ps1 -WhatIf",
+    "$ids = ./apim/entra/New-GatewayApps.ps1   # prints tenantId, apiClientId, callerClientId; secret stays in $env:PURCHASE_CALLER_SECRET",
+    "$env:MG_TENANT_ID = $ids.tenantId; $env:MG_API_CLIENT = $ids.apiClientId; $env:MG_CALLER_CLIENT = $ids.callerClientId",
+    "az group create -n rg-mglab-deep-dive-07 -l westeurope -o none",
+    "az deployment group create -g rg-mglab-deep-dive-07 -f infra/main.bicep -p apiClientId=$ids.apiClientId publisherEmail=(az ad signed-in-user show --query userPrincipalName -o tsv) receiverPrincipalId=(az ad signed-in-user show --query id -o tsv) --query properties.outputs -o json > $env:TEMP\\apim-outputs.json",
+    "$out = Get-Content $env:TEMP\\apim-outputs.json | ConvertFrom-Json; $env:MG_GATEWAY_URL = $out.gatewayUrl.value; $env:MG_SB_FQDN = $out.serviceBusNamespaceFqdn.value; $env:MG_APIM07 = $out.apimName.value",
+    "Start-Sleep -Seconds 300   # role assignments can take about five minutes",
+    "$sub = az account show --query id -o tsv",
+    "$env:APIM_KEY = az rest --method post --uri \"https://management.azure.com/subscriptions/$sub/resourceGroups/rg-mglab-deep-dive-07/providers/Microsoft.ApiManagement/service/$($env:MG_APIM07)/subscriptions/lab-caller/listSecrets?api-version=2024-05-01\" --query primaryKey -o tsv",
+    "Import-Module ./scripts/PurchaseGateway.psm1 -Force",
+    "$token = Get-GatewayToken -TenantId $env:MG_TENANT_ID -CallerClientId $env:MG_CALLER_CLIENT -ApiClientId $env:MG_API_CLIENT",
+    "Send-PurchaseEvent -GatewayUrl $env:MG_GATEWAY_URL -SubscriptionKey $env:APIM_KEY -Token $token -PurchaseRequestId PR-9001 -Total 10 | Select-Object StatusCode   # smoke call, expect 202",
+    "dotnet run --project src/PurchaseEvents.Worker -- --namespace $env:MG_SB_FQDN --topic purchase-events --subscription all-events --max-messages 1   # drain the smoke message so counts start from zero",
+    "Start-Sleep -Seconds 65   # quiet minute before the rate-limit take"
+  ],
+  "screens": [
+    {
+      "name": "policy-portal",
+      "kind": "browser",
+      "url": "https://portal.azure.com/",
+      "account": "labadmin",
+      "steps": [
+        "Azure portal > API Management services > the Consumption instance",
+        "APIs > Contoso purchasing events > POST /purchase-events",
+        "Inbound processing > Policy code editor",
+        "Show validate-jwt, rate-limit and validate-content; named values appear as {{...}}, not their values"
+      ],
+      "mask": [
+        "subscription name and id",
+        "APIM service name and gateway host",
+        "tenant id in the named values and the OpenID metadata URL",
+        "client ids"
+      ]
+    },
+    {
+      "name": "calls",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\deep-dive\\episodes\\07-enterprise-api-management-apim-service-bus",
+      "prompt": "PS ...\\07-apim> ",
+      "commands": [
+        "Import-Module ./scripts/PurchaseGateway.psm1 -Force",
+        "$token = Get-GatewayToken -TenantId $env:MG_TENANT_ID -CallerClientId $env:MG_CALLER_CLIENT -ApiClientId $env:MG_API_CLIENT",
+        "Send-PurchaseEvent -GatewayUrl $env:MG_GATEWAY_URL -SubscriptionKey $env:APIM_KEY -Token $token -PurchaseRequestId PR-1001 -Total 1476 | Select-Object StatusCode, IdempotencyKey, RetryAfter",
+        "$k = [guid]::NewGuid().ToString()",
+        "Send-PurchaseEvent -GatewayUrl $env:MG_GATEWAY_URL -SubscriptionKey $env:APIM_KEY -Token $token -PurchaseRequestId PR-1002 -Total 7380 -IdempotencyKey $k | Select-Object StatusCode, IdempotencyKey, RetryAfter",
+        "Send-PurchaseEvent -GatewayUrl $env:MG_GATEWAY_URL -SubscriptionKey $env:APIM_KEY -Token $token -PurchaseRequestId PR-1002 -Total 7380 -IdempotencyKey $k | Select-Object StatusCode, IdempotencyKey, RetryAfter",
+        "#pause 2",
+        "Send-PurchaseEvent -GatewayUrl $env:MG_GATEWAY_URL -SubscriptionKey $env:APIM_KEY -PurchaseRequestId PR-1002 -Total 7380 -IdempotencyKey $k | Select-Object StatusCode, IdempotencyKey, RetryAfter",
+        "Send-PurchaseEvent -GatewayUrl $env:MG_GATEWAY_URL -SubscriptionKey $env:APIM_KEY -Token $token -PurchaseRequestId PR-1003 -Total 1 -RawBody '{\"total\":-1}' | Select-Object StatusCode, IdempotencyKey, RetryAfter",
+        "#pause 4",
+        "#clear",
+        "#pause 65",
+        "1..25 | ForEach-Object { Send-PurchaseEvent -GatewayUrl $env:MG_GATEWAY_URL -SubscriptionKey $env:APIM_KEY -Token $token -PurchaseRequestId PR-1002 -Total 7380 -IdempotencyKey $k } | Select-Object StatusCode, Remaining, RetryAfter",
+        "#pause 5"
+      ],
+      "also": [
+        "Expected: 202, 202, 202 (same id echoed), 401 (no token), 400 (negative total); then 202s followed by 429 with a RetryAfter value. The gateway URL, subscription key, secret and token stay in environment variables or variables and are never printed."
+      ]
+    },
+    {
+      "name": "topic",
+      "kind": "browser",
+      "url": "https://portal.azure.com/",
+      "account": "labadmin",
+      "steps": [
+        "Azure portal > the Service Bus namespace > Topics > purchase-events > Subscriptions",
+        "Show all-events with active message count 2 and finance-review with 1 (worker not started yet)",
+        "Open finance-review > Service Bus Explorer > Peek from start: one message, Subject purchase.high, MessageId equal to the key used in the terminal, content type application/json"
+      ],
+      "mask": [
+        "subscription name and id",
+        "Service Bus namespace name and host"
+      ]
+    },
+    {
+      "name": "worker",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\deep-dive\\episodes\\07-enterprise-api-management-apim-service-bus",
+      "prompt": "PS ...\\07-apim> ",
+      "commands": [
+        "dotnet run --project src/PurchaseEvents.Worker -- --namespace $env:MG_SB_FQDN --topic purchase-events --subscription all-events --max-messages 2",
+        "#pause 3",
+        "dotnet run --project src/PurchaseEvents.Worker -- --namespace $env:MG_SB_FQDN --topic purchase-events --subscription finance-review --max-messages 1",
+        "#pause 4"
+      ],
+      "also": [
+        "demo.md shows two panes side by side (all-events left, finance-review right); a single scene is one terminal, so the two workers run one after the other with --max-messages. For the split view, set two panes in Windows Terminal by hand and record the screen instead."
+      ]
+    }
+  ],
+  "teardown": [
+    "az group delete -n rg-mglab-deep-dive-07 --yes --no-wait",
+    "az apim deletedservice purge --location westeurope --service-name $env:MG_APIM07   # soft delete keeps the name for 48 h (run when the group delete has finished)",
+    "az ad app delete --id $env:MG_CALLER_CLIENT; az ad app delete --id $env:MG_API_CLIENT",
+    "Remove-Item Env:APIM_KEY, Env:PURCHASE_CALLER_SECRET, Env:MG_GATEWAY_URL, Env:MG_SB_FQDN, Env:MG_APIM07, Env:MG_TENANT_ID, Env:MG_API_CLIENT, Env:MG_CALLER_CLIENT -ErrorAction SilentlyContinue",
+    "Remove-Item $env:TEMP\\apim-outputs.json -ErrorAction SilentlyContinue"
+  ],
+  "needs": [
+    "tenant",
+    "azure",
+    "paid:Service Bus Standard base charge and APIM Consumption calls (same-day delete)"
+  ]
+}

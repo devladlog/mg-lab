@@ -1,0 +1,99 @@
+{
+  "note": "Do not edit datasets or thresholds to force drift. If the model's outputs did not drift, the 'alert' screen becomes Monitor > Alerts > Alert rules showing the rule, and the narration is adjusted. Re-takes need fresh window labels (baseline2/current2).",
+  "prepare": [
+    "python -m venv .venv",
+    "$env:PATH = \"$PWD\\.venv\\Scripts;$env:PATH\"",
+    "python -m pip install -q -r requirements.txt",
+    "$env:PYTHONPATH = 'src'",
+    "# owner signs in as labadmin (device code), not on camera",
+    "az login --use-device-code --only-show-errors | Out-Null",
+    "$me = az ad signed-in-user show --query id -o tsv",
+    "az group create -n rg-mglab-ai-8 -l swedencentral -o none",
+    "$o = az deployment group create -g rg-mglab-ai-8 -f infra/main.bicep -p infra/main.bicepparam -p developerPrincipalId=$me --query properties.outputs -o json | ConvertFrom-Json",
+    "$env:AOAI = $o.aoaiEndpoint.value; $env:AOAI_NAME = $o.aoaiName.value; $env:APPINSIGHTS = $o.appInsightsConnectionString.value; $env:WS = $o.workspaceId.value",
+    "Start-Sleep -Seconds 300   # role assignment propagation (up to 5 minutes)",
+    "python -m hrmon.traffic --data data/golden.jsonl --window warmup --aoai-endpoint $env:AOAI --appinsights $env:APPINSIGHTS | Out-Null   # warm-up: 16 triaged, 0 failed"
+  ],
+  "screens": [
+    {
+      "name": "traffic",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\ai\\episodes\\08-ai-model-monitoring-drift",
+      "prompt": "PS ep08> ",
+      "commands": [
+        "python -m hrmon.traffic --data data/baseline.jsonl --window baseline --aoai-endpoint $env:AOAI --appinsights \"$env:APPINSIGHTS\" --golden data/golden.jsonl",
+        "python -m hrmon.traffic --data data/current.jsonl --window current --aoai-endpoint $env:AOAI --appinsights \"$env:APPINSIGHTS\" --golden data/golden.jsonl",
+        "#pause 5"
+      ],
+      "maxMinutes": 15
+    },
+    {
+      "name": "kql",
+      "kind": "browser",
+      "url": "https://portal.azure.com/",
+      "account": "labadmin",
+      "prepare": [
+        "Start-Sleep -Seconds 240   # telemetry ingestion delay (3-5 minutes)"
+      ],
+      "steps": [
+        "Open the Log Analytics workspace in rg-mglab-ai-08 > Logs",
+        "Run: AppTraces | where Message == \"triage\" | summarize n=count() by window=tostring(Properties[\"hr_window\"]), lang=tostring(Properties[\"hr_lang\"]) | order by window",
+        "Show the table (optionally the column chart) with English and Portuguese counts per window"
+      ],
+      "mask": [
+        "subscription name and ID",
+        "tenant name / directory in the top bar",
+        "signed-in user name, UPN and avatar in the account menu",
+        "resource name suffix",
+        "workspace name (mglab-mon-law-...)"
+      ]
+    },
+    {
+      "name": "monitor",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\ai\\episodes\\08-ai-model-monitoring-drift",
+      "prompt": "PS ep08> ",
+      "commands": [
+        "python -m hrmon.monitor --workspace-id $env:WS --baseline baseline --current current --appinsights \"$env:APPINSIGHTS\" ; \"exit=$LASTEXITCODE\"",
+        "#pause 10"
+      ],
+      "mask": [
+        "the workspace id is only in an environment variable; never echo it"
+      ]
+    },
+    {
+      "name": "alert",
+      "kind": "browser",
+      "url": "https://portal.azure.com/",
+      "account": "labadmin",
+      "prepare": [
+        "Start-Sleep -Seconds 600   # the alert rule runs every 5 minutes; fires 5-20 minutes after the monitor run"
+      ],
+      "steps": [
+        "Open Monitor > Alerts and filter the resource group to rg-mglab-ai-08",
+        "Open the fired alert 'mglab-mon-drift-alert' (severity 2)",
+        "Show the condition (query on AppTraces drift_report, Count > 0) and the fired time"
+      ],
+      "mask": [
+        "subscription name and ID",
+        "tenant name / directory in the top bar",
+        "signed-in user name, UPN and avatar in the account menu",
+        "resource name suffix",
+        "resource names in the alert details"
+      ]
+    }
+  ],
+  "teardown": [
+    "az group delete -n rg-mglab-ai-8 --yes",
+    "az cognitiveservices account purge -g rg-mglab-ai-8 -n $env:AOAI_NAME -l swedencentral",
+    "Remove-Item records*.jsonl, .venv -Recurse -Force -ErrorAction SilentlyContinue"
+  ],
+  "needs": [
+    "azure",
+    "paid:azure-openai-tokens",
+    "paid:log-analytics-ingestion-and-alert-rule",
+    "quota:gpt-5-mini-DataZoneStandard-swedencentral"
+  ]
+}

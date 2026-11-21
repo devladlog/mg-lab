@@ -1,0 +1,119 @@
+{
+  "note": "Live-session recording of the SharePoint episode screens (series/tools/rec). prepare/teardown run on the laptop, not recorded. Set MG_TENANT, MG_UPN_DOMAIN and MG_PNP_CLIENT_ID in the environment before queueing (never in a file). Sign-ins are device-code, done by the owner. Episodes 1-9 chain: set MG_KEEP_CHAIN=1 while recording them in order so teardown keeps what the next episode uses; unset it for a full clean-up. Needs delegated Graph permissions on the PnP app (Group.ReadWrite.All, ChannelMember.ReadWrite.All) and Teams policies that allow private and shared channels. Run -Provision the day before the browser screens.",
+  "prepare": [
+    "if (-not $env:MG_TENANT -or -not $env:MG_UPN_DOMAIN -or -not $env:MG_PNP_CLIENT_ID) { throw 'Set MG_TENANT (lab tenant short name), MG_UPN_DOMAIN (sign-in domain of the lab users) and MG_PNP_CLIENT_ID (the MG Lab PnP app) in the environment first' }",
+    "if (-not (Get-Module -ListAvailable PnP.PowerShell)) { Install-Module PnP.PowerShell -Scope CurrentUser -Force }",
+    "$env:MG_TENANT_URL = \"https://${env:MG_TENANT}.sharepoint.com\"; $env:MG_ADMIN_URL = \"https://${env:MG_TENANT}-admin.sharepoint.com\"; $env:MG_EP = (Get-Location).Path",
+    "$env:MG_LABADMIN_UPN = \"labadmin@$env:MG_UPN_DOMAIN\"; $env:MG_ALEX_UPN = \"alex.demo@$env:MG_UPN_DOMAIN\"; $env:MG_SAM_UPN = \"sam.demo@$env:MG_UPN_DOMAIN\"; $env:MG_JORDAN_UPN = \"jordan.demo@$env:MG_UPN_DOMAIN\"; $env:MG_RILEY_UPN = \"riley.demo@$env:MG_UPN_DOMAIN\"",
+    "$env:MG_UPN_SUFFIX = $env:MG_UPN_DOMAIN",
+    "Connect-PnPOnline -Url $env:MG_ADMIN_URL -ClientId $env:MG_PNP_CLIENT_ID -DeviceLogin   # owner signs in",
+    "if (Get-PnPTeamsTeam -Filter \"displayName eq 'Contoso Purchasing Team'\" -ErrorAction SilentlyContinue) { Write-Host 'Team already exists: plan will find it by name' }"
+  ],
+  "screens": [
+    {
+      "name": "provision",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\sharepoint\\episodes\\09-integration-with-teams",
+      "prompt": "PS sharepoint-09> ",
+      "prepare": [
+        "if (-not $env:MG_TENANT -or -not $env:MG_UPN_DOMAIN -or -not $env:MG_PNP_CLIENT_ID) { throw 'Set MG_TENANT (lab tenant short name), MG_UPN_DOMAIN (sign-in domain of the lab users) and MG_PNP_CLIENT_ID (the MG Lab PnP app) in the environment first' }",
+        "if (-not (Get-Module -ListAvailable PnP.PowerShell)) { Install-Module PnP.PowerShell -Scope CurrentUser -Force }",
+        "$env:MG_TENANT_URL = \"https://${env:MG_TENANT}.sharepoint.com\"; $env:MG_ADMIN_URL = \"https://${env:MG_TENANT}-admin.sharepoint.com\"; $env:MG_EP = (Get-Location).Path",
+        "$env:MG_LABADMIN_UPN = \"labadmin@$env:MG_UPN_DOMAIN\"; $env:MG_ALEX_UPN = \"alex.demo@$env:MG_UPN_DOMAIN\"; $env:MG_SAM_UPN = \"sam.demo@$env:MG_UPN_DOMAIN\"; $env:MG_JORDAN_UPN = \"jordan.demo@$env:MG_UPN_DOMAIN\"; $env:MG_RILEY_UPN = \"riley.demo@$env:MG_UPN_DOMAIN\"",
+        "$env:MG_UPN_SUFFIX = $env:MG_UPN_DOMAIN"
+      ],
+      "commands": [
+        "$t = @{ TenantUrl = $env:MG_TENANT_URL; AdminUrl = $env:MG_ADMIN_URL; ClientId = $env:MG_PNP_CLIENT_ID; UpnSuffix = $env:MG_UPN_SUFFIX }",
+        "#clear",
+        "./src/Invoke-TeamsIntegration.ps1 -PlanPath ./src/teams/purchasing.team.json @t -Provision",
+        "#pause 8"
+      ],
+      "note": "One device-code sign-in (admin) off camera. Team and channel sites can take minutes; record what really happens."
+    },
+    {
+      "name": "files",
+      "kind": "browser",
+      "url": "https://teams.microsoft.com/",
+      "account": "alex.demo (and riley.demo in a second profile)",
+      "steps": [
+        "Open Teams > Contoso Purchasing Team > channel 'Supplier Reviews' > Files tab > Open in SharePoint",
+        "Show the team site's Documents library: folders General and Supplier Reviews, and the Contoso Operations hub bar if shown",
+        "Back in Teams open channel 'Contract Negotiation' > Files > Open in SharePoint: a different site with its own address and Documents library",
+        "Show both address bars (host masked, site names visible); check 'Facilities Handover' shows the same pattern",
+        "Second profile as Riley Demo (member, not in the private channel): 'Contract Negotiation' is not in the channel list"
+      ],
+      "mask": [
+        "tenant host in the address bar (pipeline/mask.js)",
+        "account avatar and display name in the top bar",
+        "avatars of users",
+        "Teams group id in URLs"
+      ]
+    },
+    {
+      "name": "tab",
+      "kind": "browser",
+      "url": "https://teams.microsoft.com/",
+      "account": "alex.demo",
+      "steps": [
+        "Open Contoso Purchasing Team > General channel",
+        "Show the tab row: Posts, Files, How to buy",
+        "Open 'How to buy': the buying guide page of Contoso Purchasing renders inside Teams",
+        "Open the 'Supplier Reviews' channel and its 'Supplier Documents' tab (the episode 4 library)",
+        "If a tab shows a sign-in or 'refused to connect' message, record that as is"
+      ],
+      "mask": [
+        "tenant host in the address bar (pipeline/mask.js)",
+        "account avatar and display name in the top bar"
+      ]
+    },
+    {
+      "name": "check",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\sharepoint\\episodes\\09-integration-with-teams",
+      "prompt": "PS sharepoint-09> ",
+      "prepare": [
+        "if (-not $env:MG_TENANT -or -not $env:MG_UPN_DOMAIN -or -not $env:MG_PNP_CLIENT_ID) { throw 'Set MG_TENANT (lab tenant short name), MG_UPN_DOMAIN (sign-in domain of the lab users) and MG_PNP_CLIENT_ID (the MG Lab PnP app) in the environment first' }",
+        "if (-not (Get-Module -ListAvailable PnP.PowerShell)) { Install-Module PnP.PowerShell -Scope CurrentUser -Force }",
+        "$env:MG_TENANT_URL = \"https://${env:MG_TENANT}.sharepoint.com\"; $env:MG_ADMIN_URL = \"https://${env:MG_TENANT}-admin.sharepoint.com\"; $env:MG_EP = (Get-Location).Path",
+        "$env:MG_LABADMIN_UPN = \"labadmin@$env:MG_UPN_DOMAIN\"; $env:MG_ALEX_UPN = \"alex.demo@$env:MG_UPN_DOMAIN\"; $env:MG_SAM_UPN = \"sam.demo@$env:MG_UPN_DOMAIN\"; $env:MG_JORDAN_UPN = \"jordan.demo@$env:MG_UPN_DOMAIN\"; $env:MG_RILEY_UPN = \"riley.demo@$env:MG_UPN_DOMAIN\"",
+        "$env:MG_UPN_SUFFIX = $env:MG_UPN_DOMAIN"
+      ],
+      "commands": [
+        "$t = @{ TenantUrl = $env:MG_TENANT_URL; AdminUrl = $env:MG_ADMIN_URL; ClientId = $env:MG_PNP_CLIENT_ID; UpnSuffix = $env:MG_UPN_SUFFIX }",
+        "#clear",
+        "./src/Invoke-TeamsIntegration.ps1 -PlanPath ./src/teams/purchasing.team.json @t -Check",
+        "#pause 4",
+        "# the owner of Contract Negotiation removes Alex from the channel",
+        "Remove-PnPTeamsChannelUser -Team 'Contoso Purchasing Team' -Channel 'Contract Negotiation' -Identity $env:MG_ALEX_UPN -Force",
+        "./src/Invoke-TeamsIntegration.ps1 -PlanPath ./src/teams/purchasing.team.json @t -Check",
+        "#pause 6"
+      ],
+      "note": "Done with the signed-in labadmin PnP connection left by the script (labadmin is a team owner); if that connection is not usable, remove Alex in Teams as Jordan Demo (Manage channel > Members) and re-run -Check. Expect TL004 and '1 error(s)'."
+    }
+  ],
+  "teardown": [
+    "if (-not $env:MG_TENANT -or -not $env:MG_UPN_DOMAIN -or -not $env:MG_PNP_CLIENT_ID) { throw 'Set MG_TENANT (lab tenant short name), MG_UPN_DOMAIN (sign-in domain of the lab users) and MG_PNP_CLIENT_ID (the MG Lab PnP app) in the environment first' }",
+    "if (-not (Get-Module -ListAvailable PnP.PowerShell)) { Install-Module PnP.PowerShell -Scope CurrentUser -Force }",
+    "$env:MG_TENANT_URL = \"https://${env:MG_TENANT}.sharepoint.com\"; $env:MG_ADMIN_URL = \"https://${env:MG_TENANT}-admin.sharepoint.com\"; $env:MG_EP = (Get-Location).Path",
+    "$env:MG_LABADMIN_UPN = \"labadmin@$env:MG_UPN_DOMAIN\"; $env:MG_ALEX_UPN = \"alex.demo@$env:MG_UPN_DOMAIN\"; $env:MG_SAM_UPN = \"sam.demo@$env:MG_UPN_DOMAIN\"; $env:MG_JORDAN_UPN = \"jordan.demo@$env:MG_UPN_DOMAIN\"; $env:MG_RILEY_UPN = \"riley.demo@$env:MG_UPN_DOMAIN\"",
+    "$env:MG_UPN_SUFFIX = $env:MG_UPN_DOMAIN",
+    "$t = @{ TenantUrl = $env:MG_TENANT_URL; AdminUrl = $env:MG_ADMIN_URL; ClientId = $env:MG_PNP_CLIENT_ID; UpnSuffix = $env:MG_UPN_SUFFIX }",
+    "./src/Invoke-TeamsIntegration.ps1 -PlanPath ./src/teams/purchasing.team.json @t -Provision",
+    "Connect-PnPOnline -Url $env:MG_ADMIN_URL -ClientId $env:MG_PNP_CLIENT_ID -DeviceLogin   # owner signs in",
+    "$g = (Get-PnPTeamsTeam -Filter \"displayName eq 'Contoso Purchasing Team'\").GroupId",
+    "if ($g) { Remove-PnPTeamsTeam -Identity $g -Force; Start-Sleep -Seconds 30; Remove-PnPDeletedMicrosoft365Group -Identity $g -ErrorAction SilentlyContinue }",
+    "Get-PnPTenantDeletedSite | Where-Object Url -like '*contoso-purchasing-team*' | ForEach-Object { Remove-PnPTenantDeletedSite -Identity $_.Url -Force -ErrorAction SilentlyContinue }"
+  ],
+  "needs": [
+    "tenant",
+    "episode:03",
+    "episode:04",
+    "episode:07",
+    "role:sharepoint-admin",
+    "app:MG Lab PnP (+ delegated Graph Group.ReadWrite.All, ChannelMember.ReadWrite.All)",
+    "teams-policy:private+shared channels",
+    "two browser profiles"
+  ]
+}

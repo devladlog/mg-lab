@@ -1,0 +1,70 @@
+{
+  "note": "Live-session recording of the screen scenes (series/tools/rec). All four screens are portal screens in the lab tenant (DEV).",
+  "prepare": [
+    "# owner signs in: browser profiles for labadmin (make.powerautomate.com, SharePoint) and jordan.demo (Outlook on the web, member of finance-approvers). Nothing is typed or stored here.",
+    "# owner (tenant, demo.md Setup 1): turn the episode 2 approval flow OFF, then create last week's items in Purchase Requests: [CC-4100] Laptops for two new developers 12,500 Approved; [CC-4100] USB-C docking stations 1,800 Approved; [cc-2200] Ergonomic chairs for the support team 4,350.50 Approved; Conference tickets 950 Approved; [CC-3300] Monitor arms 120 Approved; [CC-2200] Standing desks 2,400 Rejected; [CC-4100] Mechanical keyboard 89.90 Pending (created by alex.demo, jordan.demo and taylor.demo)",
+    "# owner (demo.md Setup 2-4): solution Purchasing Reports (PurchasingReports) with the flow 'Weekly purchasing digest'; run it once with Test > Manually so the run and the e-mail to finance-approvers exist",
+    "python -m pip install -r requirements-test.txt --quiet",
+    "python -m pytest"
+  ],
+  "screens": [
+    {
+      "name": "list",
+      "kind": "browser",
+      "url": "https://<tenant>.sharepoint.com/sites/Purchasing/Lists/Purchase%20Requests/AllItems.aspx",
+      "account": "labadmin",
+      "steps": [
+        "Open the list 'Purchase Requests' and filter it to last week",
+        "Show the Status column (Approved, Rejected, Pending)",
+        "Point at the titles with a cost-centre prefix, the lower-case '[cc-2200]' one and 'Conference tickets' without a prefix",
+        "Pause on the full list"
+      ],
+      "mask": ["tenant name in the address bar and the SharePoint header", "any e-mail address that is not a lab user"]
+    },
+    {
+      "name": "select-designer",
+      "kind": "browser",
+      "url": "https://make.powerautomate.com/",
+      "account": "labadmin",
+      "steps": [
+        "Select environment DEV, open Solutions > Purchasing Reports",
+        "Open the flow 'Weekly purchasing digest' in the new designer",
+        "Expand the 'Rows' (Select) action: map in key/value mode with reference, costCentre, item, requester, amount, submitted",
+        "Click into the costCentre value to open the expression editor and show the if(and(startsWith(...)), toUpper(slice(...)), 'Unassigned') expression",
+        "Pause with the editor open"
+      ],
+      "mask": ["environment ID in the address bar", "tenant name in the top bar", "site URL inside the Get items card"]
+    },
+    {
+      "name": "run-total",
+      "kind": "browser",
+      "url": "https://make.powerautomate.com/",
+      "account": "labadmin",
+      "steps": [
+        "Open the run history of 'Weekly purchasing digest' and the manual test run",
+        "Show every action green and no 'Apply to each' anywhere",
+        "Expand 'Total' (Compose) and show the output (the lab week's total)",
+        "Expand 'By cost centre' (Select) and show the array with costCentre, requests and total per cost centre"
+      ],
+      "mask": ["environment ID in the address bar", "tenant name", "e-mail addresses in the run outputs that are not lab users"]
+    },
+    {
+      "name": "digest-email",
+      "kind": "browser",
+      "url": "https://outlook.office.com/mail/",
+      "account": "jordan.demo",
+      "steps": [
+        "In the browser profile of Jordan Demo open the finance-approvers group mailbox (or the inbox where the digest lands)",
+        "Open the mail 'Approved purchases, week of <date>: <total> EUR'",
+        "Show the first line with the count and the Monday-to-Sunday dates",
+        "Scroll to the 'By cost centre' table and the 'Top three' table with reference, item, requester, amount and Lisbon time"
+      ],
+      "mask": ["real tenant domain and e-mail addresses", "tenant name in the suite bar"]
+    }
+  ],
+  "teardown": [
+    "# owner (tenant): turn the digest flow off; turn the episode 2 approval flow back on if it is still needed; delete last week's sample requests if the list is not reused",
+    "Get-ChildItem -Path . -Filter 'PurchasingReports_*.zip' -ErrorAction SilentlyContinue | Remove-Item -Force"
+  ],
+  "needs": ["tenant"]
+}

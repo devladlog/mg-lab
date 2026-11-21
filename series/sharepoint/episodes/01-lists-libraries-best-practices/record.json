@@ -1,0 +1,111 @@
+{
+  "note": "Live-session recording of the SharePoint episode screens (series/tools/rec). prepare/teardown run on the laptop, not recorded. Set MG_TENANT, MG_UPN_DOMAIN and MG_PNP_CLIENT_ID in the environment before queueing (never in a file). Sign-ins are device-code, done by the owner. Episodes 1-9 chain: set MG_KEEP_CHAIN=1 while recording them in order so teardown keeps what the next episode uses; unset it for a full clean-up.",
+  "prepare": [
+    "if (-not $env:MG_TENANT -or -not $env:MG_UPN_DOMAIN -or -not $env:MG_PNP_CLIENT_ID) { throw 'Set MG_TENANT (lab tenant short name), MG_UPN_DOMAIN (sign-in domain of the lab users) and MG_PNP_CLIENT_ID (the MG Lab PnP app) in the environment first' }",
+    "if (-not (Get-Module -ListAvailable PnP.PowerShell)) { Install-Module PnP.PowerShell -Scope CurrentUser -Force }",
+    "$env:MG_TENANT_URL = \"https://${env:MG_TENANT}.sharepoint.com\"; $env:MG_ADMIN_URL = \"https://${env:MG_TENANT}-admin.sharepoint.com\"; $env:MG_EP = (Get-Location).Path",
+    "$env:MG_LABADMIN_UPN = \"labadmin@$env:MG_UPN_DOMAIN\"; $env:MG_ALEX_UPN = \"alex.demo@$env:MG_UPN_DOMAIN\"; $env:MG_SAM_UPN = \"sam.demo@$env:MG_UPN_DOMAIN\"; $env:MG_JORDAN_UPN = \"jordan.demo@$env:MG_UPN_DOMAIN\"; $env:MG_RILEY_UPN = \"riley.demo@$env:MG_UPN_DOMAIN\"",
+    "$env:MG_SITE = \"$env:MG_TENANT_URL/sites/ListsDemo\"",
+    "Connect-PnPOnline -Url $env:MG_ADMIN_URL -ClientId $env:MG_PNP_CLIENT_ID -DeviceLogin   # owner signs in",
+    "if (-not (Get-PnPTenantSite -Url $env:MG_SITE -ErrorAction SilentlyContinue)) { New-PnPSite -Type CommunicationSite -Title 'Lists Demo' -Url $env:MG_SITE -Wait }",
+    "Connect-PnPOnline -Url $env:MG_SITE -ClientId $env:MG_PNP_CLIENT_ID -DeviceLogin   # owner signs in",
+    "foreach ($l in 'Purchase Requests','Contracts','Legacy Requests') { Remove-PnPList -Identity $l -Force -ErrorAction SilentlyContinue }"
+  ],
+  "screens": [
+    {
+      "name": "provision",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\sharepoint\\episodes\\01-lists-libraries-best-practices",
+      "prompt": "PS sharepoint-01> ",
+      "prepare": [
+        "if (-not $env:MG_TENANT -or -not $env:MG_UPN_DOMAIN -or -not $env:MG_PNP_CLIENT_ID) { throw 'Set MG_TENANT (lab tenant short name), MG_UPN_DOMAIN (sign-in domain of the lab users) and MG_PNP_CLIENT_ID (the MG Lab PnP app) in the environment first' }",
+        "if (-not (Get-Module -ListAvailable PnP.PowerShell)) { Install-Module PnP.PowerShell -Scope CurrentUser -Force }",
+        "$env:MG_TENANT_URL = \"https://${env:MG_TENANT}.sharepoint.com\"; $env:MG_ADMIN_URL = \"https://${env:MG_TENANT}-admin.sharepoint.com\"; $env:MG_EP = (Get-Location).Path",
+        "$env:MG_LABADMIN_UPN = \"labadmin@$env:MG_UPN_DOMAIN\"; $env:MG_ALEX_UPN = \"alex.demo@$env:MG_UPN_DOMAIN\"; $env:MG_SAM_UPN = \"sam.demo@$env:MG_UPN_DOMAIN\"; $env:MG_JORDAN_UPN = \"jordan.demo@$env:MG_UPN_DOMAIN\"; $env:MG_RILEY_UPN = \"riley.demo@$env:MG_UPN_DOMAIN\"",
+        "$env:MG_SITE = \"$env:MG_TENANT_URL/sites/ListsDemo\""
+      ],
+      "commands": [
+        "$site = $env:MG_SITE; $app = $env:MG_PNP_CLIENT_ID",
+        "#clear",
+        "./src/Invoke-ListDesign.ps1 -DesignPath ./src/designs/purchase-requests.json -SiteUrl $site -ClientId $app -SeedItems 40 -RequesterEmail $env:MG_ALEX_UPN",
+        "#pause 5"
+      ],
+      "note": "The script signs in with a device code itself: sign in off camera (or cut the code), never record it."
+    },
+    {
+      "name": "indexed-columns",
+      "kind": "browser",
+      "url": "https://<tenant>.sharepoint.com/sites/ListsDemo/Lists/PurchaseRequests/AllItems.aspx",
+      "account": "labadmin",
+      "steps": [
+        "Open the Purchase Requests list",
+        "Select the gear icon (Settings) > List settings",
+        "Scroll to the Columns section and select 'Indexed columns'",
+        "Hold on the page: Status, Requester, Department and Due date are indexed (four)",
+        "Go back, open the Contracts library > gear > Library settings > Versioning settings",
+        "Hold on 'Automatic' version history limits"
+      ],
+      "mask": [
+        "tenant host in the address bar (pipeline/mask.js)",
+        "account avatar and display name in the top bar",
+        "site URL in the page links",
+        "PnP app and user names if shown in the settings pages"
+      ]
+    },
+    {
+      "name": "open-requests",
+      "kind": "browser",
+      "url": "https://<tenant>.sharepoint.com/sites/ListsDemo/Lists/PurchaseRequests/AllItems.aspx",
+      "account": "alex.demo",
+      "steps": [
+        "Open the Purchase Requests list",
+        "Open the view picker (top right, current view name)",
+        "Hold on the three views: Open requests, My open requests, Due in 7 days",
+        "Select 'My open requests' and show the rows (fictional titles such as 'Laptop #003', requester Alex Demo)"
+      ],
+      "mask": [
+        "tenant host in the address bar (pipeline/mask.js)",
+        "account avatar and display name in the top bar"
+      ]
+    },
+    {
+      "name": "audit",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\sharepoint\\episodes\\01-lists-libraries-best-practices",
+      "prompt": "PS sharepoint-01> ",
+      "prepare": [
+        "if (-not $env:MG_TENANT -or -not $env:MG_UPN_DOMAIN -or -not $env:MG_PNP_CLIENT_ID) { throw 'Set MG_TENANT (lab tenant short name), MG_UPN_DOMAIN (sign-in domain of the lab users) and MG_PNP_CLIENT_ID (the MG Lab PnP app) in the environment first' }",
+        "if (-not (Get-Module -ListAvailable PnP.PowerShell)) { Install-Module PnP.PowerShell -Scope CurrentUser -Force }",
+        "$env:MG_TENANT_URL = \"https://${env:MG_TENANT}.sharepoint.com\"; $env:MG_ADMIN_URL = \"https://${env:MG_TENANT}-admin.sharepoint.com\"; $env:MG_EP = (Get-Location).Path",
+        "$env:MG_LABADMIN_UPN = \"labadmin@$env:MG_UPN_DOMAIN\"; $env:MG_ALEX_UPN = \"alex.demo@$env:MG_UPN_DOMAIN\"; $env:MG_SAM_UPN = \"sam.demo@$env:MG_UPN_DOMAIN\"; $env:MG_JORDAN_UPN = \"jordan.demo@$env:MG_UPN_DOMAIN\"; $env:MG_RILEY_UPN = \"riley.demo@$env:MG_UPN_DOMAIN\"",
+        "$env:MG_SITE = \"$env:MG_TENANT_URL/sites/ListsDemo\""
+      ],
+      "commands": [
+        "$site = $env:MG_SITE; $app = $env:MG_PNP_CLIENT_ID",
+        "#clear",
+        "./src/Invoke-ListDesign.ps1 -DesignPath ./src/designs/audit-demo.json -SiteUrl $site -ClientId $app -Force",
+        "#clear",
+        "./src/Invoke-ListDesign.ps1 -AuditList 'Legacy Requests' -ExpectedItems 60000 -SiteUrl $site -ClientId $app",
+        "#pause 6"
+      ],
+      "note": "Capture only the audit output: expect LD012 on 'All Items' and 'Everything', LD013 on 'Big ones'. Record what it really says."
+    }
+  ],
+  "teardown": [
+    "if (-not $env:MG_TENANT -or -not $env:MG_UPN_DOMAIN -or -not $env:MG_PNP_CLIENT_ID) { throw 'Set MG_TENANT (lab tenant short name), MG_UPN_DOMAIN (sign-in domain of the lab users) and MG_PNP_CLIENT_ID (the MG Lab PnP app) in the environment first' }",
+    "if (-not (Get-Module -ListAvailable PnP.PowerShell)) { Install-Module PnP.PowerShell -Scope CurrentUser -Force }",
+    "$env:MG_TENANT_URL = \"https://${env:MG_TENANT}.sharepoint.com\"; $env:MG_ADMIN_URL = \"https://${env:MG_TENANT}-admin.sharepoint.com\"; $env:MG_EP = (Get-Location).Path",
+    "$env:MG_LABADMIN_UPN = \"labadmin@$env:MG_UPN_DOMAIN\"; $env:MG_ALEX_UPN = \"alex.demo@$env:MG_UPN_DOMAIN\"; $env:MG_SAM_UPN = \"sam.demo@$env:MG_UPN_DOMAIN\"; $env:MG_JORDAN_UPN = \"jordan.demo@$env:MG_UPN_DOMAIN\"; $env:MG_RILEY_UPN = \"riley.demo@$env:MG_UPN_DOMAIN\"",
+    "$env:MG_SITE = \"$env:MG_TENANT_URL/sites/ListsDemo\"",
+    "Connect-PnPOnline -Url $env:MG_SITE -ClientId $env:MG_PNP_CLIENT_ID -DeviceLogin   # owner signs in",
+    "foreach ($l in 'Contracts','Legacy Requests') { Remove-PnPList -Identity $l -Recycle -Force -ErrorAction SilentlyContinue }",
+    "if ($env:MG_KEEP_CHAIN -ne '1') { Remove-PnPList -Identity 'Purchase Requests' -Recycle -Force -ErrorAction SilentlyContinue }"
+  ],
+  "needs": [
+    "tenant",
+    "role:site-owner",
+    "app:MG Lab PnP"
+  ]
+}

@@ -1,0 +1,113 @@
+{
+  "note": "Live recording of the four screens of deep-dive #1. Portal work is by a person; only prepare/teardown run as statements. Fictional invoices from samples/out.",
+  "prepare": [
+    "# owner signs in (device code), not recorded",
+    "az login --use-device-code",
+    "$env:MG_TENANT = Read-Host 'Lab tenant short name for SharePoint URLs (owner types, never recorded)'",
+    "$env:PNP_CLIENT_ID = Read-Host 'PnP app registration client id (owner types)'",
+    "az functionapp list-flexconsumption-locations -o table",
+    "az provider register --namespace Microsoft.PowerPlatform --wait",
+    "python -m pip install -q -r requirements.txt",
+    "python samples/make_samples.py",
+    "az group create -n rg-mglab-deep-dive-01 -l westeurope -o none",
+    "az deployment group create -g rg-mglab-deep-dive-01 -f infra/main.bicep -p infra/main.bicepparam --query properties.outputs -o json > $env:TEMP\\docintel-outputs.json",
+    "$out = Get-Content $env:TEMP\\docintel-outputs.json | ConvertFrom-Json",
+    "Push-Location src; func azure functionapp publish $out.functionAppName.value; Pop-Location",
+    "$env:MG_KV01 = 'kv-mgl01-' + (-join ((97..122) | Get-Random -Count 6 | ForEach-Object { [char]$_ }))",
+    "az keyvault create -g rg-mglab-deep-dive-01 -n $env:MG_KV01 -l westeurope --enable-rbac-authorization true -o none",
+    "az role assignment create --role 'Key Vault Secrets Officer' --assignee (az ad signed-in-user show --query id -o tsv) --scope (az keyvault show -n $env:MG_KV01 --query id -o tsv) -o none",
+    "Start-Sleep -Seconds 90   # role assignment propagation",
+    "az keyvault secret set --vault-name $env:MG_KV01 -n invoice-api-key --value (az functionapp keys list -g rg-mglab-deep-dive-01 -n $out.functionAppName.value --query functionKeys.default -o tsv) -o none",
+    "$env:INVOICE_API_URL = $out.extractUrl.value; python samples/smoke.py (Get-ChildItem samples/out/*.pdf).FullName   # off camera smoke test: fabrikam-clean Ready, other two Needs review",
+    "# manual: create SharePoint site /sites/finance-lab as labadmin if missing, with alex.demo as member (edit rights)",
+    "./provision/New-InvoiceInbox.ps1 -SiteUrl \"https://$($env:MG_TENANT).sharepoint.com/sites/finance-lab\" -ClientId $env:PNP_CLIENT_ID -WhatIf   # owner signs in",
+    "./provision/New-InvoiceInbox.ps1 -SiteUrl \"https://$($env:MG_TENANT).sharepoint.com/sites/finance-lab\" -ClientId $env:PNP_CLIENT_ID",
+    "./provision/New-InvoiceInbox.ps1 -SiteUrl \"https://$($env:MG_TENANT).sharepoint.com/sites/finance-lab\" -ClientId $env:PNP_CLIENT_ID   # second run: Exists for all 13 columns",
+    "# manual: edit the All Documents view (Name, Review status, Vendor, Invoice number, Total, Currency, Confidence, Review reasons)",
+    "# manual: Power Automate, solution 'Invoice intake' in DEV as labadmin: environment variables mgl_SiteUrl, mgl_InvoicesLibrary, mgl_InvoiceApiUrl, mgl_InvoiceApiKey (Secret, Key Vault invoice-api-key); flow exactly as flow/definition.json (Get API key with secure inputs and outputs, Extract invoice HTTP with exponential retry, Find duplicates, Final status, Update file properties, failure branch); turn it on",
+    "# manual: leave the library empty: the three PDFs are uploaded on camera in the first screen"
+  ],
+  "screens": [
+    {
+      "name": "library-upload",
+      "kind": "browser",
+      "url": "https://<tenant>.sharepoint.com/sites/finance-lab",
+      "account": "alex.demo",
+      "steps": [
+        "Sign in as Alex Demo (own browser profile) and open the Invoices Inbox library, All Documents view",
+        "Upload the three files from samples/out: fabrikam-clean.pdf, fabrikam-over-limit.pdf, fabrikam-mismatch.pdf (drag them into the library)",
+        "Wait for the three rows to appear and hold: Review status Pending, all other invoice columns empty",
+        "Show Created by / Modified by = Alex Demo"
+      ],
+      "mask": [
+        "tenant name in the address bar and the suite bar",
+        "user names and avatars other than Alex Demo (labadmin's name masked)",
+        "any e-mail domain"
+      ]
+    },
+    {
+      "name": "flow-run",
+      "kind": "browser",
+      "url": "https://make.powerautomate.com/",
+      "account": "labadmin",
+      "steps": [
+        "Switch to the DEV environment",
+        "Solutions > Invoice intake > open the flow Invoice intake > 28-day run history (wait 1 to 5 minutes after the upload: the trigger polls)",
+        "Open the run for fabrikam-mismatch.pdf: all actions green",
+        "Expand Get API key: 'Content not shown due to security configuration'",
+        "Expand Extract invoice briefly (inputs are secured), then Update file properties"
+      ],
+      "mask": [
+        "environment name and ID in the top bar and address bar",
+        "function app host name in the HTTP action",
+        "tenant name and user e-mail in the account menu",
+        "any GUIDs in the run URL"
+      ]
+    },
+    {
+      "name": "library-results",
+      "kind": "browser",
+      "url": "https://<tenant>.sharepoint.com/sites/finance-lab",
+      "account": "labadmin",
+      "steps": [
+        "Open Invoices Inbox, All Documents, refresh until all three runs are done (1 to 5 minutes)",
+        "Show fabrikam-clean.pdf: Ready, Vendor, Invoice number, Total 1476, EUR, Confidence",
+        "Show the other two rows: Needs review",
+        "Do not edit any value by hand"
+      ],
+      "mask": [
+        "tenant name in the address bar and the suite bar",
+        "user names and avatars other than Alex Demo (labadmin's name masked)",
+        "any e-mail domain"
+      ]
+    },
+    {
+      "name": "review-reasons",
+      "kind": "browser",
+      "url": "https://<tenant>.sharepoint.com/sites/finance-lab",
+      "account": "labadmin",
+      "steps": [
+        "Select fabrikam-mismatch.pdf and open the Details pane (or the edit form)",
+        "Show Review reasons: Subtotal + tax (1467.00) does not match total (1476.00).",
+        "Scroll once to show Vendor, Invoice number and Confidence"
+      ],
+      "mask": [
+        "tenant name in the address bar and the suite bar",
+        "user names and avatars other than Alex Demo (labadmin's name masked)",
+        "any e-mail domain"
+      ]
+    }
+  ],
+  "teardown": [
+    "az group delete -n rg-mglab-deep-dive-01 --yes --no-wait",
+    "az keyvault purge -n $env:MG_KV01 --location westeurope   # run once the group delete has finished (soft delete keeps the name)",
+    "Remove-Item $env:TEMP\\docintel-outputs.json -ErrorAction SilentlyContinue; Remove-Item Env:INVOICE_API_URL, Env:MG_KV01 -ErrorAction SilentlyContinue",
+    "# manual: Power Automate: turn off and delete the 'Invoice intake' flow and solution (with its environment variables) in DEV",
+    "# manual: SharePoint: delete the Invoices Inbox library; remove the PnP app registration only if it was created just for this episode"
+  ],
+  "needs": [
+    "tenant",
+    "azure",
+    "premium-trial"
+  ]
+}

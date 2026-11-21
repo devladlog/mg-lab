@@ -1,0 +1,68 @@
+{
+  "note": "Live-session recording of the screen scenes (series/tools/rec). Four portal screens; the flow polls the list, so each trigger takes a few minutes. The request is assumed to be PR-00041: adapt if the lab item ID differs.",
+  "prepare": [
+    "# owner signs in: browser profiles for labadmin (SharePoint, make.powerautomate.com, Outlook), alex.demo and jordan.demo (SharePoint, for the who-can-see-what shot). Nothing is typed or stored here.",
+    "# owner (tenant, demo.md Setup 1-3): site Purchasing; Alex Demo and Jordan Demo get Contribute on the Purchase Requests list only (note it for teardown); Sam Demo in Purchasing Members; list Purchase Requests with OrderFolder column and versioning on; library Orders with RequestId and RequestAmount",
+    "# owner (tenant, demo.md Setup 4-5): solution Purchase Orders (PurchaseOrders) with the two environment variables and the flow 'Purchase order folder', turned on",
+    "# owner (demo.md Setup 6): as alex.demo create 'Laptops for two new developers' 12,500, let it be approved, wait for the run that creates the PR folder and the quiet run after it; then as alex.demo change Amount to 14,200 for the escalated screen",
+    "python -m pip install -r requirements-test.txt --quiet",
+    "python -m pytest"
+  ],
+  "screens": [
+    {
+      "name": "site",
+      "kind": "browser",
+      "url": "https://<tenant>.sharepoint.com/sites/Purchasing/Lists/Purchase%20Requests/AllItems.aspx",
+      "account": "labadmin",
+      "steps": [
+        "Open the list 'Purchase Requests' and show PR-00041 'Laptops for two new developers', 12,500, Approved, created by Alex Demo, with the Order folder column",
+        "Open the library 'Orders' and show it empty",
+        "Back on the list open List settings > Versioning settings and show 'Create a version each time you edit an item' = Yes"
+      ],
+      "mask": ["tenant name in the address bar and the SharePoint header", "any e-mail address that is not a lab user"]
+    },
+    {
+      "name": "run-folder",
+      "kind": "browser",
+      "url": "https://make.powerautomate.com/",
+      "account": "labadmin",
+      "steps": [
+        "Open the flow 'Purchase order folder' and the run started by approving PR-00041",
+        "Expand 'Get changes' and show ColumnHasChanged with Status true and Amount false",
+        "Show the 'Needs order folder' true branch all green: Create order folder, Ensure requester, Get read role and Break inheritance in parallel, Grant requester read, Create summary file, Tag summary file, Get list item type, Link folder on request, Tell requester",
+        "Keep the output panel of 'Ensure requester' collapsed (it contains a login name)"
+      ],
+      "mask": ["site URLs in the action inputs", "list and item GUIDs", "principal IDs and login names in REST outputs", "environment ID in the address bar", "tenant name"]
+    },
+    {
+      "name": "folder-permissions",
+      "kind": "browser",
+      "url": "https://<tenant>.sharepoint.com/sites/Purchasing/Orders",
+      "account": "labadmin",
+      "steps": [
+        "Open the library Orders and the folder PR-00041; show the summary file with Request ID 41 and Request amount 12,500",
+        "Open Manage access > Advanced for the folder and show 'This folder has unique permissions': Purchasing Owners Full Control, Purchasing Members Edit, Alex Demo Read, no other requester",
+        "Go back to the request item and show the Order folder link",
+        "Optional insert: as jordan.demo open the Orders library and show that PR-00041 is not visible"
+      ],
+      "mask": ["tenant name in every SharePoint URL and the Order folder link", "principal IDs", "any account that is not a lab user"]
+    },
+    {
+      "name": "escalated",
+      "kind": "browser",
+      "url": "https://<tenant>.sharepoint.com/sites/Purchasing/Lists/Purchase%20Requests/AllItems.aspx",
+      "account": "labadmin",
+      "steps": [
+        "Open PR-00041 after Alex Demo edited Amount to 14,200: Status Escalated and Decision comments 'Amount changed to 14,200.00 EUR after approval by Alex Demo. Needs a new decision.'",
+        "Open the high-importance mail 'PR-00041: amount changed after approval' in the purchasing-team mailbox",
+        "Optional: show the Run history with the escalation run followed by no run for the flow's own write (a skipped trigger check only)"
+      ],
+      "mask": ["tenant name in URLs, item links and e-mail links", "environment ID in the address bar", "tenant domain in e-mail addresses"]
+    }
+  ],
+  "teardown": [
+    "# owner (tenant): turn the flow off (it polls the list); delete the test requests and the PR folders in Orders (or keep them for episode 7); undo the Contribute permissions on the list and the group membership from setup step 1",
+    "Get-ChildItem -Path . -Filter 'PurchaseOrders_*.zip' -ErrorAction SilentlyContinue | Remove-Item -Force"
+  ],
+  "needs": ["tenant"]
+}

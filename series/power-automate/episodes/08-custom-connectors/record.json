@@ -1,0 +1,84 @@
+{
+  "note": "Live-session recording of the screen scenes (series/tools/rec). Five portal screens (Power Automate and GitHub, two browser profiles). The GitHub repository is a private throwaway; the fine-grained token is pasted into the connection dialog by the owner and never written anywhere.",
+  "prepare": [
+    "python -m pip install -r requirements-test.txt --quiet",
+    "python -m pytest",
+    "# owner signs in: the pac sign-in below and the browser profiles for labadmin (make.powerautomate.com, SharePoint) and the lab GitHub account. Nothing is typed or stored here.",
+    "if (-not $env:DEV_URL) { $env:DEV_URL = Read-Host 'DEV environment URL' }",
+    "pac auth create --name dev --environment $env:DEV_URL   # owner signs in, off camera",
+    "# owner (tenant, demo.md Setup 2-3): list IT Requests with SourceLink column and the category value Other; Power Automate Premium self-service trial for labadmin (custom connector needs a premium or trial licence); solution GitHubIntake (publisher contoso, prefix cts); GitHub repo it-automation-demo (private) with labels urgent and hardware; fine-grained token, 7 days, this repository only, Webhooks and Issues read/write",
+    "Push-Location .\\src\\connector; pac connector create --api-definition-file apiDefinition.swagger.json --api-properties-file apiProperties.json --solution-unique-name GitHubIntake; pac connector list; Pop-Location",
+    "# owner (demo.md Setup 4-5, 8): create the connection (GitHub user name + token), build the flow 'GitHub issue to IT request' in the solution and turn it on; then open the issue 'Laptop won't boot before a client demo' with the labels hardware and urgent and wait for the run"
+  ],
+  "screens": [
+    {
+      "name": "connector",
+      "kind": "browser",
+      "url": "https://make.powerautomate.com/",
+      "account": "labadmin",
+      "steps": [
+        "Select environment DEV, open Solutions > GitHubIntake",
+        "Open the custom connector 'Contoso IT GitHub' and select Edit",
+        "On the Definition page show the trigger 'When an issue is opened' and the action 'Add a comment to an issue'",
+        "Scroll to the Policies section and show the three 'Set HTTP header' policies",
+        "Second capture, same scene: open the Security page: Basic authentication with the labels 'GitHub user name' and 'Fine-grained personal access token'"
+      ],
+      "mask": ["environment URL and ID in the address bar", "account name and tenant name in the top bar"]
+    },
+    {
+      "name": "webhook",
+      "kind": "browser",
+      "url": "https://github.com/",
+      "account": "the lab GitHub account (owner signs in)",
+      "steps": [
+        "Turn the flow on in Power Automate first, then open the repository it-automation-demo > Settings > Webhooks",
+        "Show one webhook with event 'Issues' and content type application/json",
+        "Open Recent Deliveries and show a single delivery of event ping with response 200"
+      ],
+      "mask": ["GitHub account name (repository owner, avatar, header)", "webhook callback URL (it carries a signature)", "never show the token"]
+    },
+    {
+      "name": "run",
+      "kind": "browser",
+      "url": "https://make.powerautomate.com/",
+      "account": "labadmin",
+      "steps": [
+        "Open the run history of 'GitHub issue to IT request' and the run started by the issue 'Laptop won't boot before a client demo' (labels hardware and urgent)",
+        "Expand the trigger output: action 'opened' and the issue title",
+        "Show 'Create IT request' green",
+        "Show 'Comment on issue' green and expand its output with the new comment URL"
+      ],
+      "mask": ["environment URL and ID in the address bar", "GitHub account name in the trigger output and the comment URL", "tenant name"]
+    },
+    {
+      "name": "result",
+      "kind": "browser",
+      "url": "https://<tenant>.sharepoint.com/sites/ITHelpdesk/Lists/IT%20Requests/AllItems.aspx",
+      "account": "labadmin",
+      "steps": [
+        "Split view, left: the IT Requests list with the new item '[GitHub] Laptop won't boot before a client demo', Priority High, Status New, Source link set",
+        "Right: the GitHub issue with the comment from the token's account: 'Thanks, ... Contoso IT is tracking this as IT request #...' with the link"
+      ],
+      "mask": ["tenant name in the SharePoint URL and header", "GitHub account name", "never show the token"]
+    },
+    {
+      "name": "off",
+      "kind": "browser",
+      "url": "https://make.powerautomate.com/",
+      "account": "labadmin",
+      "steps": [
+        "Open the flow 'GitHub issue to IT request' and select Turn off; show the status Off",
+        "Open GitHub > it-automation-demo > Settings > Webhooks, refresh the page and show the list empty",
+        "If the webhook is still there, keep it on screen: the narration and README are fixed to match"
+      ],
+      "mask": ["GitHub account name", "environment URL and ID in the address bar", "webhook callback URL if it is still listed"]
+    }
+  ],
+  "teardown": [
+    "# owner (GitHub): check that the webhook is gone; revoke the fine-grained token; delete the throwaway repository it-automation-demo",
+    "# owner (tenant): delete the connection and any copy of the flow; delete the junk and demo items from IT Requests; keep the solution GitHubIntake and the connector for episode 9, or delete both; end or keep the self-service Power Automate Premium trial (no cost)",
+    "Get-ChildItem -Path . -Filter 'GitHubIntake*.zip' -ErrorAction SilentlyContinue | Remove-Item -Force",
+    "pac auth clear"
+  ],
+  "needs": ["tenant", "premium-trial", "api-key:github"]
+}

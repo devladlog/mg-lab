@@ -1,0 +1,94 @@
+{
+  "note": "Deep-dive #2. Sweden Central for Azure OpenAI. Python on the laptop is 3.10 (demo.md asks 3.11+): check pip install works, else add 3.11. Two browser profiles: Alex and Sam.",
+  "prepare": [
+    "# owner signs in (device code), not recorded",
+    "az login --use-device-code",
+    "az provider register --namespace Microsoft.CognitiveServices --wait",
+    "$env:MG_TENANT_ID = az account show --query tenantId -o tsv",
+    "python -m pip install -q -r requirements.txt",
+    "# manual (Entra admin center as labadmin): groups 'HR Copilot - Employees' (Alex, Sam) and 'HR Copilot - Managers' (Sam)",
+    "az ad group create --display-name 'HR Copilot - Employees' --mail-nickname hrcopilot-employees -o none; az ad group create --display-name 'HR Copilot - Managers' --mail-nickname hrcopilot-managers -o none",
+    "foreach ($u in 'alex.demo','sam.demo') { $oid = az ad user list --filter \"startswith(userPrincipalName,'$u@')\" --query '[0].id' -o tsv; az ad group member add --group 'HR Copilot - Employees' --member-id $oid }",
+    "az ad group member add --group 'HR Copilot - Managers' --member-id (az ad user list --filter \"startswith(userPrincipalName,'sam.demo@')\" --query '[0].id' -o tsv)",
+    "Copy-Item indexer/libraries.json indexer/libraries.local.json -Force   # then put the two real group object ids in it (never committed)",
+    "# manual: app registrations 'HR Copilot API' (Expose an API, user_impersonation, groups claim = groups assigned to the application, both groups assigned), 'HR Copilot Connector' (client secret, admin consent), 'HR Copilot Indexer' (client secret, Graph Sites.Selected application permission, read grant on /sites/hr-lab)",
+    "# manual: SharePoint site /sites/hr-lab with libraries Policies (leave-policy.md, travel-policy.md, it-faq.md, handbook.docx) and Managers (salary-bands.md, permissions broken, only HR Copilot - Managers)",
+    "$env:MG_API_CLIENT = Read-Host 'HR Copilot API client id (owner types)'; $env:MG_IDX_CLIENT = Read-Host 'HR Copilot Indexer client id (owner types)'",
+    "az group create -n rg-mglab-deep-dive-02 -l swedencentral -o none",
+    "az deployment group create -g rg-mglab-deep-dive-02 -f infra/main.bicep -p infra/main.bicepparam -p apiClientId=$env:MG_API_CLIENT ingestPrincipalId=$(az ad sp show --id $env:MG_IDX_CLIENT --query id -o tsv) ingestPrincipalType=ServicePrincipal --query properties.outputs -o json > $env:TEMP\\copilot-outputs.json",
+    "$o = Get-Content $env:TEMP\\copilot-outputs.json | ConvertFrom-Json",
+    "Push-Location src; func azure functionapp publish $o.functionAppName.value; Pop-Location",
+    "$env:SEARCH_ENDPOINT = $o.searchEndpoint.value; $env:OPENAI_ENDPOINT = $o.openAiEndpoint.value; $env:SEARCH_INDEX = 'hr-policies'",
+    "$env:AZURE_TENANT_ID = $env:MG_TENANT_ID; $env:AZURE_CLIENT_ID = $env:MG_IDX_CLIENT",
+    "Set-Item Env:AZURE_CLIENT_SECRET (Read-Host -MaskInput 'HR Copilot Indexer secret (owner types)')",
+    "Start-Sleep -Seconds 180   # role assignment propagation (a 403 from Search or OpenAI right after deployment means wait)",
+    "python indexer/cli.py create-index",
+    "# manual: custom connector from connector/apiDefinition.swagger.json (host = function host, OAuth 2.0 Entra ID, HR Copilot Connector, resource api://<API client id>), copy Redirect URL into the connector app registration; test AskHrPolicies as Alex",
+    "# manual: Copilot Studio agent 'HR Policy Copilot' in DEV: authenticate with Microsoft, tool = AskHrPolicies (user authentication), instructions as in demo.md; give sam.demo maker access to DEV",
+    "# manual: injection check (off camera): as Alex ask 'How do I reset my password?' and write the real outcome in the README"
+  ],
+  "screens": [
+    {
+      "name": "ingest-run",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\deep-dive\\episodes\\02-enterprise-ai-copilot-azure-openai-power-platfor",
+      "prompt": "PS ...\\02-enterprise-ai-copilot> ",
+      "commands": [
+        "python indexer/cli.py ingest --config indexer/libraries.local.json | ForEach-Object { $_ -replace '[0-9a-f]{8}-[0-9a-f-]{27}', '<group-id>' }",
+        "#pause 4"
+      ],
+      "also": [
+        "Group object ids in the output are replaced on screen by <group-id>; the output itself is real"
+      ]
+    },
+    {
+      "name": "employee",
+      "kind": "browser",
+      "url": "https://copilotstudio.microsoft.com/",
+      "account": "alex.demo",
+      "steps": [
+        "Sign in as Alex Demo (own browser profile), environment DEV, open the agent HR Policy Copilot",
+        "Open Test your agent",
+        "Ask: Can I carry over leave days?  (answer with a citation to the leave policy)",
+        "Ask: What's the salary range for band M2?  (expect: I couldn't find this in the documents you have access to.)",
+        "If the agent paraphrases, keep it when facts and citation are right"
+      ],
+      "mask": [
+        "tenant name and domain",
+        "user principal name (keep display name Alex Demo)",
+        "environment name and ID",
+        "function host name in any tool detail"
+      ]
+    },
+    {
+      "name": "manager",
+      "kind": "browser",
+      "url": "https://copilotstudio.microsoft.com/",
+      "account": "sam.demo",
+      "steps": [
+        "Sign in as Sam Demo (own browser profile), environment DEV, open HR Policy Copilot > Test your agent",
+        "Ask: What's the salary range for band M2?",
+        "Show the answer: 66,000 to 82,000 EUR with a citation to Contoso salary bands 2027"
+      ],
+      "mask": [
+        "tenant name and domain",
+        "user principal name (keep display name Sam Demo)",
+        "environment name and ID"
+      ]
+    }
+  ],
+  "teardown": [
+    "az group delete -n rg-mglab-deep-dive-02 --yes --no-wait",
+    "Remove-Item indexer/libraries.local.json, $env:TEMP\\copilot-outputs.json -ErrorAction SilentlyContinue",
+    "Remove-Item Env:AZURE_CLIENT_SECRET, Env:AZURE_CLIENT_ID, Env:AZURE_TENANT_ID, Env:SEARCH_ENDPOINT, Env:OPENAI_ENDPOINT, Env:SEARCH_INDEX -ErrorAction SilentlyContinue",
+    "# manual: purge the soft-deleted Azure OpenAI and Cognitive Services accounts (portal) if the names are needed again",
+    "# manual: delete the custom connector and connections, the Copilot Studio agent, the three app registrations, the two groups, the Policies and Managers libraries"
+  ],
+  "needs": [
+    "tenant",
+    "azure",
+    "premium-trial",
+    "licence:Copilot Studio trial (labadmin, sam.demo)"
+  ]
+}
