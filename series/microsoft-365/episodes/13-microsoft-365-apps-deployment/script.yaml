@@ -1,0 +1,247 @@
+# DEVLADLOG Microsoft 365 — episode 13 (draft: code and tests are real; screen scenes still need the lab recording)
+episode: 13
+slug: microsoft-365-apps-deployment
+series_label: "MICROSOFT 365"
+series_name: "DEVLADLOG Microsoft 365"
+file_prefix: "microsoft-365"
+title: "Microsoft 365 Apps Deployment"
+subtitle: "One JSON file, two ways to deploy: the Office Deployment Tool and Intune"
+voice: am_michael
+thumbnail_text: "ONE FILE\nTWO WAYS\nTO DEPLOY"
+youtube:
+  title: "Microsoft 365 Apps Deployment as Code: ODT and Intune from One File | DEVLADLOG Microsoft 365 #13"
+  tags: [Microsoft 365 Apps, Office Deployment Tool, configuration.xml, Intune, update channels, Monthly Enterprise Channel, Click-to-Run, PowerShell, Microsoft Graph, M365 admin]
+sources:
+  - https://www.devladlog.com/articles/office-365/2025-03-05-apps-deployment-complete-guide-2025/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Which Office is on that PC?"
+    sub: "Microsoft 365 Apps deployment, as code"
+    short: hook
+    narration: >
+      You deployed Microsoft three sixty five Apps once. Months later, which channel is each PC on, how far behind is
+      it, and is anything still the old Store version? In this episode one small file describes the deployment, and
+      we use it two ways: an Office Deployment Tool configuration for a real Windows eleven machine, and an Intune app
+      made through Microsoft Graph. Then we check what really got installed.
+
+  - id: needs
+    type: bullets
+    heading: "What you need"
+    bullets:
+      - "A licence that includes Microsoft 365 Apps, assigned to the user"
+      - "Windows 11 VM, local administrator, internet access"
+      - "Office Deployment Tool: setup dot exe and one XML file"
+      - "Graph scopes: DeviceManagementApps and Reports.Read.All"
+    narration: >
+      You need a licence that includes Microsoft three sixty five Apps, a Windows machine where you are local
+      administrator, and the Office Deployment Tool, which is just setup dot exe and an XML file. For Intune and the
+      reports, Graph asks for two scopes. Our test machine is the Windows eleven virtual machine from the Intune episode, so everything you see runs on a real
+      device in our lab tenant, with fictional users.
+
+  - id: config
+    type: code
+    heading: "One file: apps dot json"
+    lang: json
+    code: |
+      "deployment": {
+        "channel": "MonthlyEnterprise",
+        "officeClientEdition": "64",
+        "products": [{
+          "id": "O365ProPlusRetail",
+          "languages": ["en-us", "pt-pt"],
+          "excludeApps": ["Lync", "Publisher"]
+        }],
+        "displayLevel": "None",
+        "acceptEula": true,
+        "removeMsi": true
+      }
+    narration: >
+      The deployment is one file. Monthly Enterprise Channel, sixty four bit, English and Portuguese, without Skype
+      for Business and Publisher, no user interface, and remove any old M S I Office. The loader refuses values that
+      Microsoft's documentation doesn't list, so a typo in the channel fails here, not on a thousand PCs.
+
+  - id: xml
+    type: code
+    heading: "The configuration dot xml it builds"
+    lang: xml
+    code: |
+      <Configuration>
+        <Add OfficeClientEdition="64" Channel="MonthlyEnterprise">
+          <Product ID="O365ProPlusRetail">
+            <Language ID="en-us" />
+            <Language ID="pt-pt" />
+            <ExcludeApp ID="Lync" />
+            <ExcludeApp ID="Publisher" />
+          </Product>
+        </Add>
+        <Updates Enabled="TRUE" />
+        <Display Level="None" AcceptEULA="TRUE" />
+        <RemoveMSI />
+        <Property Name="FORCEAPPSHUTDOWN" Value="FALSE" />
+      </Configuration>
+    narration: >
+      That becomes the standard Office Deployment Tool file. The first language sets the shell language, and Lync is
+      the name the tool uses for Skype for Business. A second function checks any configuration file against the
+      documented values, including ones you wrote by hand.
+
+  - id: install-screen
+    type: screen
+    heading: "Install on a real PC"
+    image: screens/install.jpg
+    bar: "Windows 11 VM CON-W11-01 · elevated PowerShell (lab tenant, masked)"
+    demo: >
+      Setup in demo.md. On CON-W11-01 as local administrator: ./Invoke-AppsDeploy.ps1 -Inventory (shows NotInstalled),
+      then ./Invoke-AppsDeploy.ps1 -Install -OdtPath C:\ODT\setup.exe -WhatIf (shows the command and file), then without
+      -WhatIf (confirm). Wait for "Products configured successfully" as printed by setup. Open Word: File > Account shows
+      the signed-in lab user, the product activated, and the update channel as it really is. Rewrite narration to match.
+    narration: >
+      On the virtual machine, the check says nothing is installed. A what if shows exactly what would run. Then the
+      real install: the tool downloads Office from the content delivery network and configures it silently. When it
+      finishes, Word opens and the account page shows our lab user, an activated product, and the channel.
+
+  - id: intune-code
+    type: code
+    heading: "The same file, as an Intune app"
+    lang: powershell
+    code: |
+      [ordered]@{
+          '@odata.type'   = '#microsoft.graph.officeSuiteApp'
+          displayName     = [string]$i.displayName
+          productIds      = @($ids)
+          excludedApps    = $excluded
+          updateChannel   = $script:IntuneChannel[$ch]
+          officePlatformArchitecture = $arch
+          localesToInstall = @($langs)
+          installProgressDisplayLevel = ([string]$d.displayLevel).ToLowerInvariant()
+          shouldUninstallOlderVersionsOfOffice = [bool]$d.removeMsi
+      }
+    narration: >
+      For Intune, the same settings become an office suite app in Microsoft Graph. Channel names are translated: the
+      Monthly Enterprise Channel becomes monthly Enterprise, and Semi Annual becomes deferred. Only product I Ds and
+      excluded apps that Graph lists are allowed. One honest note: this Intune API is documented in the beta version only.
+
+  - id: intune-screen
+    type: screen
+    heading: "Publish and assign"
+    image: screens/publish.jpg
+    bar: "PowerShell + Microsoft Intune admin center · Apps (lab tenant, masked)"
+    demo: >
+      Connect-MgGraph -Scopes DeviceManagementApps.ReadWrite.All; ./Invoke-AppsDeploy.ps1 -ConfigFile ./apps.lab.json
+      -PublishIntune -WhatIf (row WhatIf-Create), then real (row Created), then again (row Unchanged). Intune admin center >
+      Apps > Windows > the app: Properties (channel, architecture, languages, excluded apps) and Assignments (the lab
+      group, Required). Rewrite narration to the real output; if Graph rejects a property, show the real error.
+    narration: >
+      First a what if, then the real publish, and a second run that says unchanged. In the Intune admin center the app
+      looks like one created by hand, with the same channel, languages and excluded apps, assigned to the lab group.
+
+  - id: gotcha
+    type: code
+    heading: "The gotcha: which version key?"
+    lang: powershell
+    short: gotcha
+    code: |
+      $c2r = 'HKLM:\SOFTWARE\Microsoft\Office\ClickToRun'
+      PackageVersion = Read-ADRegistryValue "$c2r\Inventory\Office\16.0" 'OfficePackageVersion'
+      ProductIds     = Read-ADRegistryValue "$c2r\Inventory\Office\16.0" 'OfficeProductReleaseIds'
+      CdnBaseUrl     = Read-ADRegistryValue "$c2r\Configuration" 'CDNBaseUrl'
+      # Not VersionToReport: Microsoft calls it internal telemetry,
+      # not an installation-state contract.
+    narration: >
+      Here's the gotcha. Plenty of scripts read the version to report value from the Click to Run key. Microsoft's
+      guidance says that value is telemetry, and it can differ from what is really installed. Use the inventory key,
+      package version and product release I Ds. Our check does, and it matches the channel from the C D N address.
+
+  - id: inventory-screen
+    type: screen
+    heading: "What is really installed"
+    image: screens/inventory.jpg
+    bar: "VM CON-W11-01 · PowerShell (lab tenant, masked)"
+    demo: >
+      On CON-W11-01 after the install: ./Invoke-AppsDeploy.ps1 -Inventory. Capture the property list (PackageVersion, ProductIds,
+      Architecture, Channel) and the findings table as it really is (likely zero findings on a fresh install). Optional:
+      show the registry keys in regedit side by side. Do not invent findings. Rewrite narration to the real output.
+    narration: >
+      The inventory reads the machine and compares it with Microsoft's release discovery service, which needs no
+      sign in. Here is the real package version, the product, and the channel it resolved to. It flags a build that
+      is behind, a channel that doesn't match the file, a thirty two bit install, and the old Store installation type.
+
+  - id: channels
+    type: bullets
+    heading: "Channels: what Learn says"
+    bullets:
+      - "Default channel for Microsoft 365 Apps is Current Channel"
+      - "One channel per device: you can't mix"
+      - "Beta Channel is not supported: test only"
+      - "Since version 2606: Semi-Annual follows Monthly Enterprise"
+    narration: >
+      Four things from the documentation. Current Channel is the default. A device has one channel, even with Visio
+      and Project installed. Beta Channel is not a supported build. And since version twenty six oh six, the
+      Semi Annual Enterprise Channel receives the same updates as Monthly Enterprise, so some reports may still show
+      the old name. Also, if you deploy with Intune and a settings catalog channel policy, make them agree.
+
+  - id: activation-code
+    type: code
+    heading: "The audit looks at activations"
+    lang: powershell
+    short: audit
+    code: |
+      if (-not $shared -and ($win + $mac) -ge $limit) {
+          & $f 'Medium' 'DesktopAtLimit' "$win Windows + $mac Mac activations."
+      }
+      if ($age -gt $stale) {
+          & $f 'Low' 'StaleActivation' "Last activated $age days ago (limit $stale)."
+      }
+      if (($win + $mac) -eq 0 -and $mobile -gt 0 -and -not $shared) {
+          & $f 'Info' 'MobileOnly' "$mobile mobile activation(s), no desktop."
+      }
+    narration: >
+      Licensing matters after install. One licence covers up to five desktops, five tablets and five phones, and
+      shared computer activation doesn't count against it. The audit reads the Graph activations report and flags
+      users at the desktop limit, stale activations, and mobile only users.
+
+  - id: activation-screen
+    type: screen
+    heading: "Who has activated what"
+    image: screens/activation.jpg
+    bar: "PowerShell · Microsoft Graph reports (lab tenant, masked)"
+    demo: >
+      Connect-MgGraph -Scopes Reports.Read.All; ./Invoke-AppsDeploy.ps1 -ActivationAudit -OutFile ./activation.lab.md.
+      Capture the summary and table for the lab's real users (alex.demo after the VM install, if the report has refreshed;
+      Learn does not state the report delay, so record what the report really has). If the report shows concealed
+      names, say so (admin center > Settings > Org settings > Reports). Mask UPNs. Rewrite narration to the real findings.
+    narration: >
+      This is the live report from the lab tenant. Who activated, on how many Windows and Mac devices, and the
+      findings, highest first. The report only has data after a device activates and the report refreshes, so for
+      a fresh install this can be short, and we show what it really says.
+
+  - id: tests
+    type: code
+    heading: "Fifty seven tests, no tenant"
+    lang: text
+    code: |
+      $ Invoke-Pester ./tests
+      Describing configuration.xml
+        [+] accepts the example files from Microsoft Learn
+        [+] flags what Learn says is invalid
+      Describing Intune officeSuiteApp body
+        [+] only uses properties and enum values that Learn documents
+      Describing Set-ADOfficeSuiteApp (Graph mocked)
+        [+] says Unchanged on the second run and sends no PATCH
+      Describing Client findings
+        [+] flags the Store installation type as High
+
+      Tests Passed: 57, Failed: 0, Skipped: 0
+    narration: >
+      Fifty seven Pester tests run without a tenant: the config rules, the XML against Microsoft's own examples, the
+      Intune body, every create and update path with Graph mocked, and each finding, using a copy of the real release
+      data. The install wrapper is tested by running a real process.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      Code, tests and the shot list are on GitHub, and the complete Apps deployment guide with its companion articles
+      is on dev lad log dot com. Next episode: Microsoft Forms, and getting data out of it with Graph.

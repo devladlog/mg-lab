@@ -1,0 +1,219 @@
+# DEVLADLOG Microsoft 365 — episode 14 (draft: code and tests are real; screen scenes still need the lab recording)
+episode: 14
+slug: microsoft-forms-data-collection
+series_label: "MICROSOFT 365"
+series_name: "DEVLADLOG Microsoft 365"
+file_prefix: "microsoft-365"
+title: "Microsoft Forms & Data Collection"
+subtitle: "Forms has no response API: a flow, a SharePoint list built from one file, and a data-quality check"
+voice: am_michael
+thumbnail_text: "FORMS HAS\nNO API\nNOW WHAT?"
+youtube:
+  title: "Microsoft Forms Data Collection: Flow, SharePoint List and Graph | DEVLADLOG Microsoft 365 #14"
+  tags: [Microsoft Forms, Power Automate, SharePoint list, Microsoft Graph, data collection, survey, PowerShell, data quality, Microsoft 365 admin, Forms admin settings]
+sources:
+  - https://www.devladlog.com/articles/office-365/2025-06-08-forms-data-collection-complete-guide-2025/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Where do the responses go?"
+    sub: "Microsoft Forms data collection, done properly"
+    short: hook
+    narration: >
+      A form collects answers. Then somebody exports them to Excel every Monday, and nobody knows if the numbers are
+      complete. In this episode we build the other way: a real form in our lab tenant, a flow that writes every
+      response to a SharePoint list, a list created from one JSON file with Microsoft Graph, and a check that tells
+      you what is wrong with the data you collected.
+
+  - id: needs
+    type: bullets
+    heading: "What you need"
+    bullets:
+      - "Microsoft Forms and Power Automate in the tenant"
+      - "A SharePoint team site for the list"
+      - "Graph scopes: Sites.Read.All and Sites.Manage.All"
+      - "PowerShell 7 and the Graph authentication module"
+    narration: >
+      You need Forms and Power Automate, which our lab tenant has, a SharePoint team site to hold the list, and two
+      Graph scopes: Sites Read All, and Sites Manage All to create the list. All with fictional lab users, and every screen you see is the real service.
+      The code is on GitHub, so you can run the same steps in your own tenant.
+
+  - id: design
+    type: bullets
+    heading: "The design, and why"
+    bullets:
+      - "Forms: one trigger, two actions, no create or read API"
+      - "So: Form (by hand) → flow (by hand) → list (as code)"
+      - "The list is the data store; Graph reads it"
+      - "A check finds duplicates, gaps and bad values"
+    narration: >
+      Here is the thing the blog posts skip. The Forms connector gives a flow one trigger, when a new response is
+      submitted, and two actions, get form details and get response details. There is no public API to create a form or
+      to read its responses. So the form and the flow are built by hand, and everything around them is code.
+
+  - id: spec
+    type: code
+    heading: "One file describes the data"
+    lang: json
+    code: |
+      "questions": [
+        { "title": "Which department are you in?", "column": "Department",
+          "type": "choice", "choices": ["Finance", "Sales", "IT", "Operations"], "required": true },
+        { "title": "How was the Microsoft 365 Apps rollout?", "column": "Rating",
+          "type": "rating", "min": 1, "max": 5, "required": true },
+        { "title": "Which apps gave you trouble?", "column": "AppIssue",
+          "type": "multiChoice", "choices": ["Word", "Excel", "Outlook", "PowerPoint", "Teams", "None"] },
+        { "title": "May we contact you?", "column": "ContactMe", "type": "yesNo" }
+      ]
+    narration: >
+      The form is a pulse survey about the Microsoft three sixty five Apps rollout from the last episode. The file
+      lists each question, its column, its type and its rules. The loader refuses column names that collide with
+      SharePoint's own, duplicate choices, and a rating without bounds.
+
+  - id: list-body
+    type: code
+    heading: "Questions become columns"
+    lang: powershell
+    code: |
+      'choice'      { $c.choice = [ordered]@{ allowTextEntry = $false; displayAs = 'dropDownMenu'; choices = @($Question.choices) } }
+      'multiChoice' { $c.choice = [ordered]@{ allowTextEntry = $false; displayAs = 'checkBoxes'; choices = @($Question.choices) } }
+      'rating'      { $c.number = [ordered]@{ decimalPlaces = 'none'; minimum = [double]$Question.min; maximum = [double]$Question.max } }
+      'yesNo'       { $c.boolean = [ordered]@{} }
+      'date'        { $c.dateTime = [ordered]@{ format = 'dateOnly'; displayAs = 'default' } }
+    narration: >
+      Each question becomes a Graph column definition, using the facets and values from the documentation: choice,
+      number with a minimum and maximum, boolean and date time. A test checks every value against the lists in Learn.
+
+  - id: provision-screen
+    type: screen
+    heading: "Create the list, twice"
+    image: screens/provision.jpg
+    bar: "PowerShell + SharePoint team site · Site contents (lab tenant, masked)"
+    demo: >
+      Setup in demo.md (team site, local form.lab.json with the real site URL). Connect-MgGraph -Scopes Sites.Read.All,Sites.Manage.All;
+      ./Invoke-FormsData.ps1 -SpecFile ./form.lab.json -Provision -WhatIf (row WhatIf-Create), then real (row Created), then again (row
+      Unchanged). Then the site's Site contents > the list > List settings or the list view: the columns, ResponseId required and unique.
+      Rewrite narration to the real output. If Graph rejects a property, show the real error.
+    narration: >
+      A what if first, then the real thing: the list is created with all its columns in one call. Run it again and
+      it says unchanged. If the list exists and a column is missing, it adds only that column. It never changes or
+      deletes a column that already holds data. In SharePoint, there it is, with the response I D required and unique.
+
+  - id: flow-screen
+    type: screen
+    heading: "The form and the flow"
+    image: screens/flow.jpg
+    bar: "Microsoft Forms + Power Automate designer (lab tenant, masked)"
+    demo: >
+      As labadmin: forms.office.com > the form "Microsoft 365 Apps rollout pulse" with the six questions of form.json (show the editor).
+      Then make.powerautomate.com (environment DEV): the flow When a new response is submitted > Get response details > Create item
+      (SharePoint, the new list), with the mapping from ./Invoke-FormsData.ps1 -FlowMap on screen next to it. Show the flow saved and on.
+      Rewrite narration to what the designer really shows (dynamic content names).
+    narration: >
+      The form is made by hand, with the same six questions. The flow is three steps: the trigger, get response
+      details, and create item in the new list. The mapping table from the module tells us which dynamic content goes
+      in which column, so we are not guessing in the designer.
+
+  - id: connector
+    type: bullets
+    heading: "The connector, as documented"
+    bullets:
+      - "Works with organizational accounts only"
+      - "Group forms are not in the drop-down: paste the Form Id"
+      - "Throttling: 300 calls per connection per 60 seconds"
+      - "One trigger: when a new response is submitted"
+    narration: >
+      Four facts from the connector page. It works only with organizational accounts. Group forms don't show up in the
+      drop down, so you paste the form I D from the address bar, only the part after Form I D equals. Calls are throttled
+      to three hundred per minute per connection. And there is exactly one trigger.
+
+  - id: gotcha
+    type: code
+    heading: "The gotcha: nothing guarantees one row"
+    lang: powershell
+    short: gotcha
+    code: |
+      [ordered]@{
+          name = 'ResponseId'; required = $true
+          indexed = $true; enforceUniqueValues = $true
+          number = [ordered]@{ decimalPlaces = 'none' }
+      }
+    narration: >
+      Here's the gotcha. A flow can run twice, fail, or be turned off, and Forms won't tell you. So the response I D
+      goes into the list as a required, unique column: a second write for the same response is rejected. And the check
+      later reports gaps in the numbers, so you can compare them with the responses tab in Forms.
+
+  - id: findings
+    type: code
+    heading: "Data quality, not just counts"
+    lang: powershell
+    short: findings
+    code: |
+      if ((Get-FDProp $q 'required' $false) -and (Test-FDEmpty $v)) { Add-F 'Medium' 'MissingRequired' $rid "'$($q.column)' is required and empty." }
+      foreach ($x in @($v)) { if ($x -notin @($q.choices)) { Add-F 'Medium' 'InvalidChoice' $rid "'$($q.column)' holds '$x'." } }
+      if ($n -lt $mn -or $n -gt $mx) { Add-F 'Medium' 'OutOfRange' $rid "'$($q.column)' is $n, outside $mn..$mx." }
+      Add-F 'Info' 'ResponseIdGap' ($gaps -join ',') "No row for response id(s) $($gaps -join ', ')."
+    narration: >
+      The check reads the list through Graph and looks for missing required answers, values that are not one of the
+      choices, numbers out of range, duplicate response I Ds, gaps, double submits within ten minutes, anonymous
+      responses, and low ratings with no comment. Then a summary: answers per choice, the average rating, responses per day.
+
+  - id: analyze-screen
+    type: screen
+    heading: "Real responses, real report"
+    image: screens/analyze.jpg
+    bar: "Forms + SharePoint list + PowerShell (lab tenant, masked)"
+    demo: >
+      Three lab users (alex.demo, sam.demo, jordan.demo, each in a separate private browser window) submit the form for real. Show the flow
+      runs succeeded (Power Automate > My flows > run history) and the rows in the SharePoint list. Then Connect-MgGraph -Scopes Sites.Read.All;
+      ./Invoke-FormsData.ps1 -SpecFile ./form.lab.json -Analyze. Capture the summary and findings exactly as they are (maybe 0 findings).
+      To create a real finding: delete one response in Forms (Responses tab), re-run: ResponseIdGap. Do not invent data.
+      Rewrite narration to the real numbers.
+    narration: >
+      Three lab users submitted the form, and the flow wrote their answers to the list. This is the real report: the
+      summary, then the findings. To show a finding without faking anything, we delete one response in Forms, and the
+      check reports the gap in the response numbers.
+
+  - id: admin
+    type: bullets
+    heading: "Admin settings worth a look"
+    bullets:
+      - "External sharing: four options, all on by default"
+      - "Record names by default: on"
+      - "Internal phishing protection: on"
+      - "Bing and YouTube in forms: on"
+    narration: >
+      Last, the administrator settings. In the Microsoft three sixty five admin center, under org settings, Forms
+      has external sharing with four options, recording names of people in your organization, internal phishing
+      protection, and Bing and YouTube. All are on by default. And Forms blocks forms that look like phishing and
+      sends the details to the message center. Both matter for a data collection you want to trust.
+
+  - id: tests
+    type: code
+    heading: "Forty eight tests, no tenant"
+    lang: text
+    code: |
+      $ Invoke-Pester ./tests
+      Describing Graph list body
+        [+] only uses enum values that Learn lists
+      Describing Set-FDList (Graph mocked with a small fake site)
+        [+] adds only the missing columns, one POST each
+        [+] reports drift on an existing column and leaves it alone
+      Describing Response findings
+        [+] flags a duplicate ResponseId as High
+        [+] reports the gap in response ids with the caveat
+
+      Tests Passed: 48, Failed: 0, Skipped: 0
+    narration: >
+      Forty eight Pester tests run without a tenant: the spec rules, the column bodies against Microsoft's
+      documentation, every create and add column path with Graph mocked, and each finding on a fictional list. Nothing in those tests ever appears on screen:
+      the demo uses the real form, the real flow and the real list.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      Code, tests and the shot list are on GitHub, and the complete Forms guide with its companion articles is on dev
+      lad log dot com. Next episode: Planner and To Do, and the task data behind them.
