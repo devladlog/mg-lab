@@ -1,0 +1,212 @@
+episode: 15
+slug: administration-governance
+series_label: "POWER BI"
+series_name: "DEVLADLOG Power BI"
+file_prefix: "power-bi"
+title: "Administration and Governance"
+subtitle: "A read-only Monday check: tenant settings drift, orphaned workspaces, scanner findings and the activity log"
+voice: am_michael
+thumbnail_text: "GOVERN\nTHE\nTENANT"
+youtube:
+  title: "Power BI Governance: Activity Log, Scanner API and Tenant Settings Drift | DEVLADLOG Power BI #15"
+  tags: [Power BI, Power BI administration, governance, activity log, Scanner API, metadata scanning, tenant settings, Fabric admin API, PowerShell, Pester, orphaned workspaces]
+sources:
+  - https://www.devladlog.com/articles/power-bi/2025-08-11-administration-governance-complete-guide-2025/
+  - https://learn.microsoft.com/en-us/rest/api/power-bi/admin/get-activity-events
+  - https://learn.microsoft.com/en-us/power-bi/enterprise/service-admin-metadata-scanning
+  - https://learn.microsoft.com/en-us/rest/api/power-bi/admin/groups-get-groups-as-admin
+  - https://learn.microsoft.com/en-us/rest/api/fabric/admin/tenants/list-tenant-settings
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Who changed what, and who owns it?"
+    sub: "A read-only governance check for a Power BI tenant"
+    short: hook
+    narration: >
+      Every Monday someone should be able to answer three questions about the Power BI tenant. Did a setting change?
+      Is there a workspace nobody owns? And what happened yesterday? In this episode we answer them with a PowerShell module
+      that only reads, that has tests, and that never prints an email address.
+
+  - id: plan
+    type: bullets
+    heading: "One check, four sources"
+    bullets:
+      - "Tenant settings against a baseline file"
+      - "Workspaces without an Admin"
+      - "The metadata scanner and nine rules"
+      - "Yesterday's activity events"
+    narration: >
+      Four sources, one report. The tenant settings, compared with a baseline you keep in a file. Workspaces that have no
+      admin. The metadata scanner, with nine rules applied to what it returns. And the activity events of the day before.
+      Nothing in the tenant is changed. The tests run without a tenant, so you can read and change the rules safely.
+
+  - id: activity
+    type: code
+    heading: "Activity events: a token, not a page number"
+    lang: powershell
+    code: |
+      $r = Invoke-PbiAdminApi -Method Get -Url $url
+      foreach ($e in @(Get-Prop $r @('activityEventEntities'))) { if ($e) { $e } }
+      # A response can carry a continuation token and no events; keep going until there is no token.
+      $token = Get-Prop $r @('continuationToken')
+      $url = "admin/activityevents?continuationToken='$token'$filterPart"
+      } while ($token)
+    narration: >
+      The activity log first. Learn says a request covers one U T C day, within the last twenty eight days, and at most two
+      hundred requests an hour. So the function takes a date, and pages with the continuation token. A page can come back
+      with a token and no events, so the loop only stops when the token is gone.
+
+  - id: rules
+    type: code
+    heading: "Nine rules, each with a severity"
+    lang: powershell
+    code: |
+      GV001 = @{ Severity = 'warning'; Text = 'an item (semantic model, report, dashboard, dataflow) has no sensitivity label' }
+      GV002 = @{ Severity = 'info';    Text = 'a semantic model is neither promoted nor certified' }
+      GV003 = @{ Severity = 'error';   Text = 'an item uses a data source the scanner reports as misconfigured' }
+      GV004 = @{ Severity = 'warning'; Text = 'the scanner could not read a semantic model schema (a blind spot for every other rule)' }
+      GV005 = @{ Severity = 'error';   Text = 'a workspace has no Admin (orphaned)' }
+      GV006 = @{ Severity = 'warning'; Text = 'an item is shared with the whole organization (principal type None)' }
+    narration: >
+      The rules are data, not prose. Labels, endorsement, misconfigured data sources, unreadable schemas, orphaned
+      workspaces, and items shared with the whole organization, three more after that. Each has a severity, and the script
+      exits with a code when something is as bad as you decide. Error by default.
+
+  - id: scan
+    type: code
+    heading: "The scanner: ask, poll, collect"
+    lang: powershell
+    code: |
+      for ($i = 0; $i -lt $ids.Count; $i += 100) {
+          $chunk = @($ids[$i..([Math]::Min($i + 99, $ids.Count - 1))])
+          $scan = Invoke-PbiAdminApi -Method Post -Url $getInfo -Body @{ workspaces = $chunk }
+          $scanId = $scan.id
+          $watch = [System.Diagnostics.Stopwatch]::StartNew()
+          while ($true) {
+              $st = Invoke-PbiAdminApi -Method Get -Url "admin/workspaces/scanStatus/$scanId"
+              $status = [string] (Get-Prop $st @('status'))
+              if ($status -eq 'Succeeded') { break }
+    narration: >
+      The scanner works in three calls. Ask for up to a hundred workspaces, poll the status, then collect the result, which
+      Learn says stays for twenty four hours. One chunk at a time, so the limit of sixteen simultaneous calls is never
+      reached, and the loop has a timeout. Which workspaces? Only the ones that changed, from the modified workspaces call.
+
+  - id: orphan
+    type: code
+    heading: "An empty list is an answer"
+    lang: powershell
+    code: |
+      # An empty users array is a real answer (nobody has access), so test that the property exists; Get-Prop would return $null for an empty array.
+      if ($type -eq 'Workspace' -and $ws.PSObject.Properties['users'] -and $null -ne $ws.users) {
+          $wsUsers = @($ws.users)
+          $admins = @($wsUsers | Where-Object { $_ -and (Get-Prop $_ @('groupUserAccessRight')) -eq 'Admin' })
+          if ($admins.Count -eq 0) { New-Finding GV005 $wn 'workspace' $wn 'no user, group or app has the Admin right' }
+      }
+    short: orphan
+    narration: >
+      A bug the first test run found. A workspace with no users at all has an empty users list, and PowerShell turns an
+      empty list into nothing. The rule never fired for the worst case. The fix checks that the property exists. And when
+      the scan was run without artifact users, the rule stays silent, because silence is not the same as all clear.
+
+  - id: report
+    type: screen
+    heading: "The Monday report"
+    image: screens/governance-report.jpg
+    bar: "Windows Terminal and Markdown preview · lab tenant · Contoso Sales (Lab)"
+    demo: "Terminal in the episode's src folder, Connect-PowerBIServiceAccount done off camera as labadmin. Run './Invoke-GovernanceAudit.ps1 -BaselinePath ./policy/tenant-baseline.json -FabricToken $fabric' (prompts and tokens off camera). Then open out/governance-<date>.md in the preview: the sections Tenant settings drift, Orphaned workspaces, Scan findings (table with rule, severity, workspace, item) and Activity. Names and user aliases only; blur the workspace GUIDs if any are visible. Also show './Invoke-GovernanceAudit.ps1 -ScanResultPath ../tests/fixtures/scan-result.json -SkipActivity' as the offline run with 12 findings. Needs the tenant for the real run."
+    narration: >
+      Here is the Monday report. Settings drift at the top, then orphaned workspaces, then the scan findings as a table
+      with rule, severity, workspace and item, then yesterday's activity. A section that was not run says not run. It
+      never says all clear. And with a saved scan result the same rules run offline, which is how the tests work.
+
+  - id: retry
+    type: code
+    heading: "Tenant settings: the other token, and a polite retry"
+    lang: powershell
+    code: |
+      if ([int] $resp.StatusCode -eq 429 -and $try -lt $MaxRetry) {
+          # Learn (List Tenant Settings): 25 requests per minute; 429 carries Retry-After in seconds.
+          $wait = 5
+          $vals = $null
+          if ($resp.Headers.TryGetValues('Retry-After', [ref] $vals)) { $wait = [int] ($vals | Select-Object -First 1) }
+          Start-Sleep -Seconds $wait
+          continue
+      }
+    narration: >
+      Tenant settings come from the Fabric admin A P I, not the Power B I one, so they need their own token, for the Fabric
+      audience. Learn says twenty five requests a minute, and a too many requests answer carries a retry after header. The
+      function waits that long and tries again. A test proves it against a real H T T P listener on the loopback address.
+
+  - id: drift
+    type: code
+    heading: "Drift is a comparison, not a diff of text"
+    lang: powershell
+    code: |
+      if ([bool] $b.enabled -ne [bool] $c.Enabled) {
+          [pscustomobject]@{ Setting = $b.settingName; Kind = 'EnabledChanged'; Was = "enabled=$($b.enabled)"; Now = "enabled=$($c.Enabled)" }
+      }
+      $was = @(@($b.enabledSecurityGroups) | Where-Object { $_ } | Sort-Object)
+      $is = @($c.Groups)
+      if (($was -join '|') -ne ($is -join '|')) {
+          [pscustomobject]@{ Setting = $b.settingName; Kind = 'GroupsChanged'; Was = ($was -join ', '); Now = ($is -join ', ') }
+      }
+    narration: >
+      Drift is a comparison of what matters. Is the setting on or off, and which security groups does it apply to. The
+      baseline is a file you write once from a reviewed tenant, and keep in source control. A setting missing from the
+      answer is reported too, and a new setting is information, not an alarm.
+
+  - id: drift-screen
+    type: screen
+    heading: "Change a setting, see the drift"
+    image: screens/settings-drift.jpg
+    bar: "Power BI admin portal and Windows Terminal · lab tenant"
+    demo: "Admin portal, Tenant settings: switch off one harmless setting from the baseline (write down which one, for example Certification, with its group 'Contoso Certifiers (Lab)'), Apply. In the terminal run the audit after the wait (see the gotcha scene) and show the section Tenant settings drift: '- **<SettingName>** EnabledChanged: enabled=True -> enabled=False'. Then switch the setting back on and show 'No difference from the baseline'. Needs the tenant."
+    narration: >
+      In the lab we switch off one setting in the admin portal, and run the check. The report names the setting and says
+      what it was and what it is now. We switch it back on, and the report says no difference. This is the cheapest way to
+      learn that somebody changed something in the admin portal.
+
+  - id: activity-screen
+    type: screen
+    heading: "Yesterday, in numbers"
+    image: screens/activity-summary.jpg
+    bar: "Windows Terminal · lab tenant · activity of the previous UTC day"
+    demo: "Terminal: 'Get-PbiActivitySummary -Event @(Get-PbiActivityEvent -Date (Get-Date).AddDays(-1))' after a day on which labadmin, alex.demo, sam.demo, jordan.demo, riley.demo and taylor.demo opened and exported a few reports (do this the day before). Show total events, events per activity, the most viewed reports with distinct users (aliases only) and the risky operations. Write down which operation names really appear. Needs the tenant."
+    narration: >
+      And the activity of yesterday. Total events, events per activity, the most viewed reports with the number of
+      distinct users, and the operations a governance review reads first, such as export, share and publish to web. Users
+      appear as aliases, never with the domain.
+
+  - id: gotcha
+    type: screen
+    heading: "Gotcha: the data is late, and so are the settings"
+    image: screens/lag.jpg
+    bar: "Windows Terminal and admin portal · lab tenant"
+    demo: "Immediately after Apply on a tenant setting (and after an action by sam.demo such as exporting a report), run the audit and show that the drift or the event is not there yet. Wait, run again, show it. Write down how long it really took: Learn gives up to 15 minutes for a setting and 30 to 60 minutes for activity events. Needs the tenant."
+    short: gotcha
+    narration: >
+      Now the honest part. Learn says a tenant setting can take up to fifteen minutes to apply, and activity events can
+      arrive thirty to sixty minutes late. So a check that runs right after a change reports nothing, and that is not
+      good news. Run it on a schedule, a good while after the working day, and read yesterday, not now.
+
+  - id: ship
+    type: bullets
+    heading: "Before you run it on a real tenant"
+    bullets:
+      - "Fabric administrator, or a service principal the admin APIs allow"
+      - "Read-only: no setting, workspace or item is changed"
+      - "Keep the baseline file in source control"
+      - "Reports hold names and aliases, no domains or ids"
+    narration: >
+      Before you run it on a real tenant. You need the Fabric administrator role, or a service principal the admin A P Is
+      allow. The module only reads. Keep the baseline in source control, so a change to it is a reviewed change. And the
+      report holds names and aliases, never domains or identifiers, so you can paste it into a ticket.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The module, the audit script and the tests are on GitHub, and the complete guide to administration and governance is on
+      dev lad log dot com. Links in the description. This was DEVLADLOG Power BI, by Momento Galático.

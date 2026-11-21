@@ -1,0 +1,205 @@
+episode: 16
+slug: ai-insights-smart-narratives
+series_label: "POWER BI"
+series_name: "DEVLADLOG Power BI"
+file_prefix: "power-bi"
+title: "AI Insights and Smart Narratives"
+subtitle: "Key influencers, decomposition tree, anomalies and narratives, each checked against plain Python"
+voice: am_michael
+thumbnail_text: "AI\nFOUND\nTHE STORY?"
+youtube:
+  title: "Power BI AI Visuals: Key Influencers, Anomalies, Smart Narrative | DEVLADLOG Power BI #16"
+  tags: [Power BI, Power BI AI visuals, key influencers, decomposition tree, anomaly detection, smart narrative, Copilot, Q&A deprecation, DAX, semantic model, Python]
+sources:
+  - https://www.devladlog.com/articles/power-bi/2026-06-03-ai-insights-complete-guide-2026/
+  - https://learn.microsoft.com/en-us/power-bi/visuals/power-bi-visualization-influencers
+  - https://learn.microsoft.com/en-us/power-bi/visuals/power-bi-visualization-decomposition-tree
+  - https://learn.microsoft.com/en-us/power-bi/visuals/power-bi-visualization-anomaly-detection
+  - https://learn.microsoft.com/en-us/power-bi/visuals/power-bi-visualization-smart-narrative
+  - https://learn.microsoft.com/en-us/power-bi/create-reports/copilot-introduction
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Did the AI find the story?"
+    sub: "Four Power BI AI visuals, each checked against the data"
+    short: hook
+    narration: >
+      Power BI has four visuals that promise to find the story for you. Contoso Bikes has a simple question. Why do some
+      orders get a low rating? In this episode we run all four on the model we already have, and before we believe any
+      of them, we check the answer with a few lines of plain Python.
+
+  - id: plan
+    type: bullets
+    heading: "Four visuals, one model"
+    bullets:
+      - "Key influencers: what drives a Low rating"
+      - "Decomposition tree: where the big number comes from"
+      - "Anomaly detection: the odd days in daily sales"
+      - "Smart narrative: the sentence, written from measures"
+      - "A readiness check and a Python reference"
+    narration: >
+      Four visuals, one model. Key influencers asks what drives a low rating. The decomposition tree drills into the
+      biggest number. Anomaly detection marks the odd days in the sales line. And a smart narrative writes the sentence.
+      Around them, a readiness check and a reference script, because these visuals fail quietly.
+
+  - id: planted
+    type: code
+    heading: "A rating the lab made up, said out loud"
+    lang: python
+    code: |
+      def low_rating_probability(delivery, channel):
+          p = BASE_LOW
+          if delivery == "Slow":
+              p *= SLOW_FACTOR
+          if channel == "Online":
+              p *= ONLINE_FACTOR
+          return p
+    narration: >
+      First, the grain. Key influencers works at the level of the table that holds the metric, so we build one row per
+      order. The Contoso export has no survey, so the lab simulates a rating, and the code says so. Slow delivery and
+      online orders raise the odds of a low rating. We plant that effect on purpose, so we know what the visual should
+      find.
+
+  - id: limits
+    type: code
+    heading: "The limits, as constants"
+    lang: python
+    code: |
+      MIN_TARGET = 100        # Learn: at least 100 observations for the selected state
+      MIN_COMPARISON = 10     # Learn: at least 10 observations for the comparison states
+      MAX_UNIQUE = 10         # Learn: warning above 10 unique values in the analysed metric
+      SAMPLE_CAP = 10_000     # Learn: the visual runs on a sample of 10,000 data points
+      MIN_POINTS = 4          # Learn (anomaly detection): at least 4 data points
+    narration: >
+      Before any visual, a checklist. Learn says key influencers needs at least one hundred observations of the state you
+      analyse, and ten to compare with. It warns above ten unique values, and it works on a sample of ten thousand rows.
+      Anomaly detection wants four points. Our profile has two hundred eighty nine low ratings, so it passes.
+
+  - id: implicit
+    type: code
+    heading: "The model can break it too"
+    lang: python
+    code: |
+      def discourages_implicit_measures(model_dir):
+          text = (Path(model_dir) / "model.tmdl").read_text(encoding="utf-8")
+          return re.search(r"^\s*discourageImplicitMeasures\s*(?::\s*true)?\s*$", text, flags=re.M) is not None
+    narration: >
+      One check is about the model, not the data. Learn says key influencers does not support a categorical metric when
+      the model discourages implicit measures. Episode four turned that setting on. So the model in this episode leaves it
+      off, and the checker reports an error if it is ever back.
+
+  - id: influencers
+    type: screen
+    heading: "Key influencers on the rating"
+    image: screens/key-influencers.jpg
+    bar: "Power BI Desktop · Contoso Sales AI · page AI insights"
+    demo: "Desktop, report page 'AI insights', Key influencers visual selected. Analyze = Survey Rating, 'What influences Survey Rating to be' = Low. Explain by: Channel, Store Country, Customer Country, Contains Bike, Lines, Delivery. Expand by empty. Show the Key influencers tab with the first two bubbles selected in turn (reference expects Delivery is Slow first, about 3.4x, then Channel is Online, about 1.65x), then the Top segments tab. Record what Desktop really shows. Needs Desktop only."
+    narration: >
+      Here is key influencers in Desktop. Analyze is the survey rating, the state is low, and we explain it by channel,
+      country, bike, lines and delivery. The reference says slow delivery comes first, about three point four times as
+      likely, with online second, about one point six five. Contains bike should sit near one. If the visual disagrees, find out why before you show it.
+
+  - id: ratio
+    type: code
+    heading: "The reference is the ratio Learn describes"
+    lang: python
+    code: |
+      rate_in = hit_by[value] / n
+      rate_out = (sum(hit) - hit_by[value]) / n_out
+      lift = rate_in / rate_out if rate_out else float("inf")
+      result.append({"field": field, "value": value, "n": n, "rate_in": rate_in,
+                     "rate_out": rate_out, "lift": lift})
+    short: ratio
+    narration: >
+      The reference is not a copy of the visual. It is the comparison Learn uses to explain the result. The rate of low
+      ratings inside a value, divided by the rate in all the other values. Power BI fits a logistic regression, so it can disagree on thin groups. We check direction and order.
+
+  - id: tree
+    type: screen
+    heading: "Decomposition tree: let the A I choose the next split"
+    image: screens/decomposition-tree.jpg
+    bar: "Power BI Desktop · Contoso Sales AI · decomposition tree"
+    demo: "Desktop, a Decomposition tree visual. Analyze = Sales Amount (measure), Explain by = Category, Subcategory, Channel (Store[Channel]), Store, Customer Country. Click the plus next to the root, choose High value: the light bulb field is the A I split; hover the light bulb for the tooltip. Then Low value. Then the format option Analysis type: Absolute versus Relative, and show the result differs. Record what Desktop really shows. Needs Desktop only."
+    narration: >
+      The decomposition tree analyses sales amount. Click the plus, choose high value, and the A I split picks the next
+      field for you, marked with a light bulb. Low value does the opposite. Learn says a manual split after an A I split
+      turns it into a normal level, and the splits are recalculated when you pick another node. Absolute looks for the
+      biggest number. Relative looks for the one that stands out.
+
+  - id: anomaly
+    type: screen
+    heading: "Anomaly detection: a line, a date axis, one series"
+    image: screens/anomaly-detection.jpg
+    bar: "Power BI Desktop · Contoso Sales AI · line chart with anomalies"
+    demo: "Desktop, line chart: Axis = Date[Date] (continuous date axis), Values = Sales Amount, no legend. Analytics pane, Anomalies on, sensitivity default. Select one marked point and show the Anomalies pane with the explanations and their strength; run once with Explain by = Store, Category. In the terminal, off screen or as an inset, 'python src/reference_insights.py --star <star folder>' lists candidate days (2024-06-05 is the first in the list for seed 42). Record which days Desktop really marks. Needs Desktop only."
+    narration: >
+      Anomaly detection lives on a line chart with a date axis. One series, no legend, at least four points. The shaded
+      band is the expected range, and Learn names the S R C N N algorithm behind it. Our reference script lists days far
+      from their neighbours, for example the fifth of June, twenty twenty four. That is a hint, not a prediction. Select
+      whatever the visual marks and read the explanation, with its strength per field.
+
+  - id: measure
+    type: code
+    heading: "The sentence is a measure"
+    lang: dax
+    code: |
+      measure 'Narrative YoY' =
+      VAR Growth = [Sales YoY %]
+      RETURN
+      IF(
+      ISBLANK(Growth),
+      "There is no prior-year period to compare with.",
+      "That is " & FORMAT(ABS(Growth), "0.0%") & IF(Growth >= 0, " above", " below") & " the same period last year."
+      )
+    narration: >
+      A smart narrative has two modes. Copilot mode needs a licence and a paid capacity, so here we use Custom mode, which
+      Learn describes without Copilot. We write the sentences as measures, so the same wording works in a card, a text box
+      and the narrative. Above or below, and a clear text when there is no last year.
+
+  - id: narrative
+    type: screen
+    heading: "Smart narrative with our own values"
+    image: screens/smart-narrative.jpg
+    bar: "Power BI Desktop · Contoso Sales AI · Narrative, Custom mode"
+    demo: "Desktop, Narrative visual in Custom mode. Edit the text, use the Value button to insert the measures Narrative Sales, Narrative YoY and Narrative Top Category as dynamic values. Slicer Date[Year] = 2025: the test expects 'Sales were 967,473 in the selected period.', 'That is 8.1% above the same period last year.', 'Bikes leads the mix.' Then select 2024 for the 'no prior-year' text. Show a data point selection changing the automatic part. The DAX was never run outside Desktop: this screen is its proof. Needs Desktop only."
+    narration: >
+      On the page the narrative mixes our words with dynamic values from those measures. Learn says custom mode makes up
+      to four summaries per visual and sixteen per page. For twenty twenty five the reference expects sales of nine
+      hundred sixty seven thousand four hundred seventy three, eight point one percent above last year, and bikes leading
+      the mix. The D A X was not run outside Desktop, so this screen is the proof.
+
+  - id: gotcha
+    type: screen
+    heading: "Gotcha: Copilot needs paid capacity, Q and A is going away"
+    image: screens/copilot-trial.jpg
+    bar: "Power BI Desktop · Narrative, Copilot mode · trial capacity"
+    demo: "Desktop (or the service), the Narrative visual with the Copilot mode selected, workspace Contoso Sales (Lab) on the Fabric trial capacity. Show whatever message appears (Learn's wording for an unsupported workspace: 'Copilot isn't available because none of your workspaces have the necessary capacity assigned'). Then switch to Custom. Record the exact message. Needs the lab tenant and the trial capacity; no paid capacity is bought for this recording."
+    short: gotcha
+    narration: >
+      Now the honest part. Copilot needs a paid Fabric capacity, F two or higher, or Power BI Premium, P one or higher.
+      Learn says trial capacities are not supported, and our lab runs on a trial, so we show Custom mode and nothing more.
+      And Q and A, the old question box? Learn pages say it goes away in February twenty twenty seven, while the release
+      notes say December twenty twenty six. Plan for the earlier date.
+
+  - id: ship
+    type: bullets
+    heading: "Before you ship it"
+    bullets:
+      - "Run the readiness check on the data first"
+      - "Keep discourageImplicitMeasures off for key influencers"
+      - "Compare each visual with a simple reference"
+      - "An influencer is a pattern, not a cause"
+      - "Key influencers: no DirectQuery, no Publish to web"
+    narration: >
+      Before you ship it. Run the readiness check on the data. Keep that implicit measures setting off where key
+      influencers is used. Compare each visual with something simple you can read. Remember that an influencer is a
+      pattern in the data, not a cause. And key influencers does not support Direct Query or Publish to web.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The data builder, the readiness check, the reference script and the model are on GitHub, and the complete guide to A I
+      insights is on dev lad log dot com. Links in the description. This was DEVLADLOG Power BI, by Momento Galático.

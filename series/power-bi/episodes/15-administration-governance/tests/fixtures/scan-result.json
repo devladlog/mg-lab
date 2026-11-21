@@ -1,0 +1,236 @@
+{
+  "workspaces": [
+    {
+      "id": "00000000-0000-0000-0000-000000000001",
+      "name": "Contoso Sales (Lab)",
+      "type": "Workspace",
+      "state": "Active",
+      "isOnDedicatedCapacity": true,
+      "capacityId": "00000000-0000-0000-0000-000000000100",
+      "users": [
+        {
+          "displayName": "Lab Admin",
+          "emailAddress": "labadmin@contoso.com",
+          "groupUserAccessRight": "Admin",
+          "identifier": "labadmin@contoso.com",
+          "principalType": "User"
+        },
+        {
+          "displayName": "Alex Demo",
+          "emailAddress": "alex.demo@contoso.com",
+          "groupUserAccessRight": "Viewer",
+          "identifier": "alex.demo@contoso.com",
+          "principalType": "User"
+        }
+      ],
+      "reports": [
+        {
+          "id": "00000000-0000-0000-0000-000000000011",
+          "name": "Contoso Sales",
+          "datasetId": "00000000-0000-0000-0000-000000000021",
+          "reportType": "PowerBIReport",
+          "sensitivityLabel": {
+            "labelId": "00000000-0000-0000-0000-000000000900"
+          },
+          "users": [
+            {
+              "displayName": "Alex Demo",
+              "emailAddress": "alex.demo@contoso.com",
+              "reportUserAccessRight": "Read",
+              "principalType": "User"
+            }
+          ]
+        }
+      ],
+      "datasets": [
+        {
+          "id": "00000000-0000-0000-0000-000000000021",
+          "name": "ContosoSales",
+          "configuredBy": "labadmin@contoso.com",
+          "targetStorageMode": "Abf",
+          "sensitivityLabel": {
+            "labelId": "00000000-0000-0000-0000-000000000900"
+          },
+          "endorsementDetails": {
+            "endorsement": "Promoted"
+          },
+          "roles": [
+            {
+              "name": "Store Managers",
+              "modelPermission": "Read",
+              "members": [
+                {
+                  "memberName": "alex.demo@contoso.com",
+                  "memberType": "User",
+                  "identityProvider": "AzureAD"
+                }
+              ],
+              "tablePermissions": [
+                {
+                  "name": "Store",
+                  "filterExpression": "[StoreKey] IN ..."
+                }
+              ]
+            },
+            {
+              "name": "Head Office",
+              "modelPermission": "Read",
+              "members": [],
+              "tablePermissions": []
+            }
+          ],
+          "tables": [
+            {
+              "name": "Sales",
+              "columns": [
+                {
+                  "name": "Quantity",
+                  "dataType": "Int64"
+                }
+              ],
+              "measures": [
+                {
+                  "name": "Sales Amount",
+                  "expression": "SUMX(Sales, Sales[Quantity] * Sales[Unit Price])"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "dashboards": [],
+      "dataflows": []
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000002",
+      "name": "Contoso Sandbox (Lab)",
+      "type": "Workspace",
+      "state": "Active",
+      "isOnDedicatedCapacity": false,
+      "users": [],
+      "reports": [
+        {
+          "id": "00000000-0000-0000-0000-000000000012",
+          "name": "Sandbox Report",
+          "datasetId": "00000000-0000-0000-0000-000000000022",
+          "reportType": "PowerBIReport",
+          "users": [
+            {
+              "displayName": "Whole organization",
+              "reportUserAccessRight": "Read",
+              "principalType": "None"
+            }
+          ]
+        }
+      ],
+      "datasets": [
+        {
+          "id": "00000000-0000-0000-0000-000000000022",
+          "name": "Sandbox Model",
+          "configuredBy": "alex.demo@contoso.com",
+          "misconfiguredDatasourceUsages": [
+            {
+              "datasourceInstanceId": "00000000-0000-0000-0000-000000000300"
+            }
+          ],
+          "tables": []
+        }
+      ],
+      "dashboards": [],
+      "dataflows": []
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000003",
+      "name": "Contoso Old Pilot (Lab)",
+      "type": "Workspace",
+      "state": "Deleted",
+      "isOnDedicatedCapacity": false,
+      "users": [
+        {
+          "displayName": "Lab Admin",
+          "emailAddress": "labadmin@contoso.com",
+          "groupUserAccessRight": "Admin",
+          "identifier": "labadmin@contoso.com",
+          "principalType": "User"
+        }
+      ],
+      "reports": [],
+      "datasets": [
+        {
+          "id": "00000000-0000-0000-0000-000000000023",
+          "name": "Pilot Realtime",
+          "configuredBy": "sam.demo@contoso.com",
+          "sensitivityLabel": {
+            "labelId": "00000000-0000-0000-0000-000000000900"
+          },
+          "endorsementDetails": {
+            "endorsement": "None"
+          },
+          "schemaRetrievalError": "Unsupported request. RealTime dataset are not supported"
+        }
+      ],
+      "dashboards": [],
+      "dataflows": []
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000004",
+      "name": "My workspace",
+      "type": "PersonalGroup",
+      "state": "Active",
+      "isOnDedicatedCapacity": false,
+      "reports": [
+        {
+          "id": "00000000-0000-0000-0000-000000000013",
+          "name": "Jordan scratch",
+          "datasetId": "00000000-0000-0000-0000-000000000024",
+          "reportType": "PowerBIReport"
+        }
+      ],
+      "datasets": [],
+      "dashboards": [],
+      "dataflows": []
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000005",
+      "name": "Contoso Empty (Lab)",
+      "type": "Workspace",
+      "state": "Active",
+      "isOnDedicatedCapacity": true,
+      "users": [
+        {
+          "displayName": "Lab Admin",
+          "emailAddress": "labadmin@contoso.com",
+          "groupUserAccessRight": "Admin",
+          "identifier": "labadmin@contoso.com",
+          "principalType": "User"
+        }
+      ],
+      "reports": [],
+      "datasets": [],
+      "dashboards": [],
+      "dataflows": []
+    }
+  ],
+  "datasourceInstances": [
+    {
+      "datasourceType": "Sql",
+      "connectionDetails": {
+        "server": "sql.contoso.com",
+        "database": "ContosoSales"
+      },
+      "datasourceId": "00000000-0000-0000-0000-000000000301",
+      "gatewayId": "00000000-0000-0000-0000-000000000400"
+    }
+  ],
+  "misconfiguredDatasourceInstances": [
+    {
+      "datasourceType": "Sql",
+      "connectionDetails": {
+        "server": "sql.contoso.com",
+        "database": "Sandbox"
+      },
+      "datasourceId": "00000000-0000-0000-0000-000000000300",
+      "gatewayId": "00000000-0000-0000-0000-000000000401"
+    }
+  ]
+}

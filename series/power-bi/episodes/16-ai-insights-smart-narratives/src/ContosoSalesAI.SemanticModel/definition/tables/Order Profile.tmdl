@@ -1,0 +1,126 @@
+/// One row per order (the grain the AI visuals need). Built by data/build_order_profile.py from the star schema.
+table 'Order Profile'
+
+	/// Count of orders in the current filter context.
+	measure 'Profile Orders' = COUNTROWS('Order Profile')
+		formatString: #,0
+		displayFolder: Base
+
+	/// Share of orders whose Order Size is Large.
+	measure 'Large Order Rate' =
+			DIVIDE(
+			    CALCULATE(COUNTROWS('Order Profile'), 'Order Profile'[Order Size] = "Large"),
+			    [Profile Orders]
+			)
+		formatString: 0.0%
+		displayFolder: Base
+
+	/// Share of orders whose Delivery is Slow.
+	measure 'Slow Delivery Rate' =
+			DIVIDE(
+			    CALCULATE(COUNTROWS('Order Profile'), 'Order Profile'[Delivery] = "Slow"),
+			    [Profile Orders]
+			)
+		formatString: 0.0%
+		displayFolder: Base
+
+	/// Share of orders whose Survey Rating is Low.
+	measure 'Low Rating Rate' =
+			DIVIDE(
+			    CALCULATE(COUNTROWS('Order Profile'), 'Order Profile'[Survey Rating] = "Low"),
+			    [Profile Orders]
+			)
+		formatString: 0.0%
+		displayFolder: Base
+
+	/// Unique per order; use it in Expand by, never in Explain by.
+	column 'Order Number'
+		dataType: string
+		isKey
+		summarizeBy: none
+		sourceColumn: OrderNumber
+
+	column 'Order Date'
+		dataType: dateTime
+		isHidden
+		formatString: yyyy-mm-dd
+		summarizeBy: none
+		sourceColumn: OrderDate
+
+	column Channel
+		dataType: string
+		summarizeBy: none
+		sourceColumn: Channel
+
+	column 'Store Country'
+		dataType: string
+		summarizeBy: none
+		sourceColumn: StoreCountry
+
+	column 'Customer Country'
+		dataType: string
+		summarizeBy: none
+		sourceColumn: CustomerCountry
+
+	column 'Contains Bike'
+		dataType: string
+		summarizeBy: none
+		sourceColumn: ContainsBike
+
+	column Lines
+		dataType: int64
+		formatString: 0
+		summarizeBy: none
+		sourceColumn: Lines
+
+	column Units
+		dataType: int64
+		formatString: #,0
+		summarizeBy: none
+		sourceColumn: Units
+
+	column 'Order Value'
+		dataType: decimal
+		formatString: #,0.00
+		summarizeBy: none
+		sourceColumn: OrderValue
+
+	/// Small below 100, Medium below 1,000, Large from 1,000 (see data/build_order_profile.py).
+	column 'Order Size'
+		dataType: string
+		summarizeBy: none
+		sourceColumn: OrderSize
+
+	column 'Ship Days'
+		dataType: int64
+		formatString: 0
+		summarizeBy: none
+		sourceColumn: ShipDays
+
+	/// Fast up to 3 days from order to ship, Slow above 3.
+	column Delivery
+		dataType: string
+		summarizeBy: none
+		sourceColumn: Delivery
+
+	/// SIMULATED rating (High or Low) with a planted effect of Delivery and Channel; see data/build_order_profile.py.
+	column 'Survey Rating'
+		dataType: string
+		summarizeBy: none
+		sourceColumn: SurveyRating
+
+	partition 'Order Profile' = m
+		mode: import
+		source =
+				let
+				    Source = Csv.Document(File.Contents(DataFolder & "order_profile.csv"), [Delimiter = ",", Encoding = 65001, QuoteStyle = QuoteStyle.Csv]),
+				    Promoted = Table.PromoteHeaders(Source, [PromoteAllScalars = true]),
+				    Typed = Table.TransformColumnTypes(Promoted, {
+				        {"OrderNumber", type text}, {"OrderDate", type date},
+				        {"Channel", type text}, {"StoreCountry", type text}, {"CustomerCountry", type text},
+				        {"ContainsBike", type text}, {"Lines", Int64.Type}, {"Units", Int64.Type},
+				        {"OrderValue", Currency.Type}, {"OrderSize", type text},
+				        {"ShipDays", Int64.Type}, {"Delivery", type text}, {"SurveyRating", type text}
+				    }, "en-US")
+				in
+				    Typed
