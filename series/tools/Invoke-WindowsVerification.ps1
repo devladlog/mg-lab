@@ -32,7 +32,8 @@ $dotnet = Get-Tool dotnet; $pwsh = Get-Tool pwsh; $winps = Get-Tool powershell; 
 
 function Invoke-Suite {
     param([string]$Episode, [string]$Kind, [string]$WorkDir, [string]$Exe, [string[]]$ArgList)
-    $safe = ($Episode -replace '[\\/:]', '_') + "__$Kind"
+    $safe = ("$Episode" + '__' + "$Kind") -replace '[\\/:*?"<>| ]', '_'
+    if ($safe.Length -gt 150) { $safe = $safe.Substring(0, 150) }
     $log = Join-Path $out "logs\$safe.log"
     $sw = [Diagnostics.Stopwatch]::StartNew()
     Write-Host ("[{0:HH:mm:ss}] {1} :: {2}" -f (Get-Date), $Episode, $Kind) -ForegroundColor Cyan
