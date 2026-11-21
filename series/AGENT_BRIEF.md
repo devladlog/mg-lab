@@ -79,3 +79,9 @@ tenant, anything you could not verify or finish. Be honest: a partial episode cl
 The container has 2 CPUs and ~7 GB RAM shared by ~8 builders at a time. Keep it light: one build/test at a time,
 `dotnet build -m:1`, `npm ci --no-audit --no-fund`, kill any server you start, delete `node_modules`, `bin`, `obj`
 when done. Don't start long-running containers. If a build gets OOM-killed, retry once later, then report it.
+
+## PowerShell / Pester gotchas (learned)
+- Under `-WhatIf`, `ForEach-Object <propName>` prints "What if: Retrieve..." and returns nothing; use script blocks inside functions that support `-WhatIf`.
+- Pester 5+: a function defined in a `Describe` body is not visible inside `It`; define helpers in the top-level `BeforeAll`.
+- Mocks of PnP.PowerShell cmdlets need a real `PnPConnection` instance (`RuntimeHelpers.GetUninitializedObject`) and pipe-bind types (read `$Site.Url`).
+- .NET: xUnit v3 on Microsoft.Testing.Platform needs `dotnet test --project <csproj>` (`-m:1` is rejected there). The MAUI XAML source generator runs on Linux without the maui workload (plain net10.0 + Microsoft.Maui.Controls PackageReference, no UseMaui).

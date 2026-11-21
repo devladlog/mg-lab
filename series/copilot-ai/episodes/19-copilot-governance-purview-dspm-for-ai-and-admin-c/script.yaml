@@ -1,0 +1,207 @@
+# DEVLADLOG Copilot & AI - episode 19 (draft: screen scenes need the recording described in demo.md)
+episode: 19
+slug: copilot-governance-purview-dspm-for-ai-and-admin-c
+series_label: "COPILOT & AI"
+series_name: "DEVLADLOG Copilot & AI"
+file_prefix: "copilot-ai"
+title: "Copilot Governance: Purview DSPM and Admin Controls"
+subtitle: "What Copilot can reach, what blocks it, what proves it"
+voice: am_michael
+thumbnail_text: "COPILOT\nGOVERNANCE\nPURVIEW DSPM"
+youtube:
+  title: "Copilot Governance: Purview DSPM for AI, DLP and Oversharing Checks | DEVLADLOG Copilot & AI #19"
+  tags: [Microsoft Purview, DSPM for AI, Data Security Posture Management, Copilot governance, Copilot oversharing, data loss prevention, sensitivity labels, Restricted Content Discovery, SharePoint Advanced Management, Microsoft 365 Copilot, PowerShell]
+next_episode: "Azure AI Foundry Agent Service with Multiple Models"
+sources:
+  - "https://learn.microsoft.com/purview/ai-microsoft-purview"
+  - "https://learn.microsoft.com/purview/data-security-posture-management-learn-about"
+  - "https://learn.microsoft.com/purview/data-security-posture-management-oversharing"
+  - "https://learn.microsoft.com/purview/dlp-microsoft365-copilot-location-learn-about"
+  - "https://learn.microsoft.com/purview/retention-policies-copilot"
+  - "https://learn.microsoft.com/sharepoint/restricted-content-discovery"
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Copilot only shows what users can already open"
+    sub: "So what can they already open?"
+    short: hook
+    narration: >
+      Copilot respects permissions. That sounds safe, until you remember how many files at Contoso are open to
+      everyone. Copilot does not create oversharing. It finds it, in seconds. In this episode we measure it, we put
+      Purview guard rails around it, and we write the checks as code. Welcome to Dev Lad Log, Copilot and A I.
+
+  - id: layers
+    type: bullets
+    heading: "Three layers of Copilot governance"
+    bullets:
+      - "Reach: permissions, sharing links, discovery"
+      - "Protection: sensitivity labels and DLP"
+      - "Proof: audit, retention, activity explorer"
+      - "Purview DSPM is the front door to all three"
+    narration: >
+      Three layers. Reach: who can open what, through permissions, links and discovery. Protection: sensitivity labels
+      and data loss prevention. And proof: audit, retention and activity explorer. Data Security Posture Management in
+      Microsoft Purview is the front door to all three.
+
+  - id: rename
+    type: bullets
+    heading: "Name check: DSPM for AI is now classic"
+    bullets:
+      - "Current: Purview, Solutions, DSPM"
+      - "Objectives, AI observability, data risk assessments"
+      - "Previous versions: DSPM for AI (classic), DSPM (classic)"
+      - "New features land in the current version only"
+    narration: >
+      A naming warning, because tutorials online mix them up. The current solution is simply called Data Security
+      Posture Management. The old DSPM for A I is now labelled classic, and Microsoft says new features go to the
+      current version only. You will find objectives, A I observability and data risk assessments there.
+
+  - id: dspm-posture
+    type: screen
+    heading: "DSPM: posture and objectives"
+    image: screens/dspm-posture.jpg
+    bar: "purview.microsoft.com · Solutions · DSPM · Lab Admin"
+    demo: "Browser as labadmin on purview.microsoft.com, Solutions, DSPM (NOT the classic entries). Show Posture, then Objectives with the card 'Prevent oversharing of sensitive data' and 'Prevent data exposure in Microsoft 365 Copilot and Microsoft Copilot interactions', and Setup tasks. Record the real state: Copilot interaction numbers will be empty (no Copilot licence). Mask tenant name."
+    narration: >
+      Here it is in the lab tenant. Posture, and the data security objectives. Prevent oversharing of sensitive data.
+      Prevent data exposure in Copilot interactions. Each one groups policies and recommended actions. Our numbers for
+      Copilot interactions are empty, and that is honest: nobody in this tenant holds the Copilot licence.
+
+  - id: assessment
+    type: screen
+    heading: "Data risk assessments: the oversharing report"
+    image: screens/risk-assessment.jpg
+    bar: "Purview · DSPM · Discover · Data risk assessments"
+    short: assessment
+    demo: "Same portal: Discover, Data risk assessments, Microsoft 365 tab. Show the default assessment summary (items found, sensitive items, links sharing data with anyone) and open one site's flyout with Overview, Identify, Protect and Monitor. Mask site URLs that contain the tenant name."
+    narration: >
+      The data risk assessment is the heart of it. A default assessment runs weekly on the top hundred SharePoint sites
+      by usage. It counts items, sensitive items, and links that share data with anyone. Open a site and the Protect
+      tab proposes the fixes: restrict by label with DLP, restrict discovery, auto label, or retire old content.
+
+  - id: snapshot-code
+    type: code
+    heading: "Read the settings as code"
+    lang: powershell
+    code: |
+      $snap.auditLog = Get-SectionSafe -Name 'auditLog' -Errors $errors -Script {
+          Get-AdminAuditLogConfig | Select-Object UnifiedAuditLogIngestionEnabled }
+
+      $snap.dlpPolicies = Get-SectionSafe -Name 'dlpPolicies' -Errors $errors -Script {
+          Get-DlpCompliancePolicy | ForEach-Object { ... EnforcementPlanes, Locations, Rules ... } }
+
+      $snap.sharePointTenant = ... Get-SPOTenant | Select-Object SharingCapability,
+          ShowEveryoneExceptExternalUsersClaim,
+          AllowEveryoneExceptExternalUsersClaimInPrivateSite, DefaultSharingLinkType
+
+      # a section that cannot be read is recorded, never passed
+      catch { $Errors[$Name] = $_.Exception.Message; $null }
+    narration: >
+      Portals are nice, but a posture you cannot diff is a posture you cannot defend. This read only script snapshots
+      the audit setting, labels, DLP policies, the SharePoint tenant sharing settings and each site, into one JSON file.
+      If a section cannot be read, the error is recorded. It is never silently counted as a pass. Run it before every rollout wave and keep the JSON in version control, so
+      you can show exactly what changed between two waves.
+
+  - id: check-screen
+    type: screen
+    heading: "The checks, before the fix"
+    image: screens/posture-before.jpg
+    bar: "lab Windows terminal · python -m copilot_governance"
+    demo: "Terminal on the lab laptop (dark theme, 18 pt): connect (off camera), run ./src/scripts/Export-CopilotGovernanceSnapshot.ps1 -OutFile before.json, then 'cd src; python -m copilot_governance ../before.json'. Visible: FAIL on G03 (no Copilot DLP policy) and the WARN lines for the Everyone except external users claim and external sharing. Record the real output of the tenant and mask the tenant domain; do not edit the text."
+    narration: >
+      Run the checks. In the lab tenant the big failure is G zero three: no data loss prevention policy covers the
+      Copilot location. Warnings follow for the Everyone except external users claim and for external sharing on
+      sites without a label. Every line carries the fix.
+
+  - id: dlp-code
+    type: code
+    heading: "A DLP policy for the Copilot location"
+    lang: powershell
+    code: |
+      $locations = ConvertTo-Json -Compress -InputObject @([ordered]@{
+          Workload = 'Applications'
+          Location = '470f2276-e011-4e9d-a6ec-20768be3a4b0'   # Microsoft 365 Copilot
+          Inclusions = @(@{ Type = 'Tenant'; Identity = 'All' }) })
+
+      New-DlpCompliancePolicy -Name $pol.Name -Locations $locations `
+          -EnforcementPlanes @('CopilotExperiences') -Mode TestWithoutNotifications
+
+      New-DlpComplianceRule -Name $rule.Name -Policy $rule.Policy -AdvancedRule $rule.AdvancedRule `
+          -RestrictAccess @(@{ setting = 'ExcludeContentProcessing'; value = 'Block' })
+    narration: >
+      The fix, from the Learn example. A policy on the Copilot location, enforcement plane Copilot Experiences, and a
+      rule that excludes content processing for the chosen sensitivity labels. Our script creates it in simulation
+      mode, and prints a dry run unless you add the apply switch.
+
+  - id: dlp-screen
+    type: screen
+    heading: "The policy in Purview, in simulation"
+    image: screens/dlp-policy.jpg
+    bar: "Purview · Data Loss Prevention · Policies"
+    demo: "Run ./src/scripts/New-CopilotLabelDlpPolicy.ps1 -LabelName 'Highly Confidential' first WITHOUT -Apply (dry-run JSON on screen), then with -Apply. Then show Purview, Data Loss Prevention, Policies: the policy 'MG Lab - Copilot: block labelled content', location Microsoft Copilot, Copilot Chat, and Copilot Cowork, mode in simulation. Needs the label 'Highly Confidential' to exist (see demo.md setup)."
+    narration: >
+      And here it is in Purview. Location: Microsoft Copilot, Copilot Chat and Copilot Cowork. Mode: simulation. We
+      read the simulation results first, then switch it on. Microsoft says changes can take up to four hours to reach
+      Copilot, so do not test the minute you save.
+
+  - id: limits
+    type: bullets
+    heading: "Gotcha: what DLP for Copilot does not do"
+    short: gotcha
+    bullets:
+      - "Labelled items can still show up as citations and links"
+      - "Files uploaded into a prompt are not scanned"
+      - "A label applied mid session is enforced at next open"
+      - "The Copilot location is only in the Custom template"
+    narration: >
+      The honest limits. A labelled file is not processed, but it can still appear as a citation, so the user gets a
+      link, not a summary. Files uploaded into a prompt are not scanned by D L P, only the typed text. In Word, Excel
+      and PowerPoint the policy is evaluated when the file opens. And the Copilot location lives only in the Custom
+      policy template.
+
+  - id: prompt-block
+    type: screen
+    heading: "A sensitive prompt, blocked"
+    image: screens/prompt-block.jpg
+    bar: "copilot.cloud.microsoft · Alex Demo · policy enforcing"
+    demo: "Only if the preview 'block sensitive information types in prompts' has reached the lab tenant (check first). Add a second rule to the policy: Content contains, Sensitive information types, Credit Card Number, action Prevent Copilot from processing content, Processing prompts; mode Enable; wait up to four hours. As alex.demo in Copilot Chat paste a prompt that contains the public test card number 4111 1111 1111 1111. Capture the real block message. If nothing is blocked, drop this scene and say so."
+    narration: >
+      Does it really block? As Alex, we paste a test card number into Copilot Chat. If the policy is enforcing, the
+      prompt gets no answer, and a message says the organisation has blocked it. This prompt control was in preview in
+      Microsoft's documentation when we recorded, so check your tenant before you promise it.
+
+  - id: licence
+    type: bullets
+    heading: "What needs a Copilot licence"
+    bullets:
+      - "Copilot interaction data in DSPM: licensed users"
+      - "Restricted Content Discovery: Copilot licence and SharePoint Advanced Management"
+      - "Item-level EEEU report: SharePoint Advanced Management"
+      - "Not in this lab: no Copilot licence"
+    narration: >
+      Be clear on licences, because a lot of this lives behind them. D S P M shows Microsoft 365 Copilot activity only
+      for users who hold the Copilot licence. Restricted Content Discovery needs a Copilot licence and SharePoint
+      Advanced Management. So does the item level report on Everyone except external users. The lab has none of these.
+      That is why our own scan reads the sharing links through Microsoft Graph.
+
+  - id: retention
+    type: bullets
+    heading: "Proof: audit and retention"
+    bullets:
+      - "Prompts and responses live in a hidden mailbox folder"
+      - "Retention has its own Copilot and AI apps location"
+      - "A one day delete can take up to sixteen days"
+      - "Episode 2 reads the audit records"
+    narration: >
+      Last layer, proof. Prompts and responses are stored in a hidden folder of the user's mailbox, and retention
+      policies now have their own location for Copilot and A I apps. Deletion is slower than the number suggests: Learn
+      shows a one day delete taking up to sixteen days. Episode two reads the audit records with code.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The collector, the checks and the policy script are on GitHub. Next time, Azure A I Foundry Agent Service, with
+      more than one model behind the same agent. See you there.

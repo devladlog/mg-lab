@@ -1,0 +1,216 @@
+# DEVLADLOG Copilot & AI - episode 20 (draft: screen scenes need the recording described in demo.md)
+episode: 20
+slug: azure-ai-foundry-agent-service-with-multiple-model
+series_label: "COPILOT & AI"
+series_name: "DEVLADLOG Copilot & AI"
+file_prefix: "copilot-ai"
+title: "Foundry Agent Service with Multiple Models"
+subtitle: "One set of instructions, several models, one scorecard"
+voice: am_michael
+thumbnail_text: "FOUNDRY AGENTS\nMANY MODELS\nONE SCORECARD"
+youtube:
+  title: "Microsoft Foundry Agent Service with Multiple Models: Python, Bicep, Scorecard | DEVLADLOG Copilot & AI #20"
+  tags: [Microsoft Foundry, Azure AI Foundry, Foundry Agent Service, prompt agents, azure-ai-projects, model comparison, Responses API, Bicep, Azure OpenAI, Llama, DeepSeek, AI agents]
+next_episode: "Claude in the Microsoft Ecosystem"
+sources:
+  - "https://learn.microsoft.com/azure/foundry/agents/overview"
+  - "https://learn.microsoft.com/azure/foundry/agents/quickstarts/prompt-agent"
+  - "https://learn.microsoft.com/azure/foundry/how-to/create-resource-template"
+  - "https://learn.microsoft.com/azure/foundry/agents/concepts/limits-quotas-regions"
+  - "https://learn.microsoft.com/azure/foundry/agents/concepts/agent-endpoint-authorization"
+  - "https://learn.microsoft.com/azure/foundry/openai/how-to/model-router-agents"
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Same agent, five models. Which one wins?"
+    sub: "Microsoft Foundry Agent Service, scored on Contoso's own tasks"
+    short: hook
+    narration: >
+      Every vendor says their model is the best. So test it on your own tasks. In this episode we deploy several
+      models in one Foundry resource, create one agent per model with the same instructions, send the same Contoso
+      questions through all of them, and get a scorecard. Welcome to Dev Lad Log, Copilot and A I.
+
+  - id: naming
+    type: bullets
+    heading: "Name check: Azure AI Foundry is now Microsoft Foundry"
+    bullets:
+      - "Microsoft Foundry and Foundry Agent Service"
+      - "Roles renamed: Azure AI User is now Foundry User"
+      - "Agents (classic) retire on 31 March 2027"
+      - "Code: azure-ai-projects 2.x, not 1.x"
+    narration: >
+      First the names. Azure A I Foundry is now Microsoft Foundry, and its agent runtime is Foundry Agent Service. The
+      roles were renamed too: Azure A I User became Foundry User, with the same role I D. The old classic agents are
+      deprecated and retire on the thirty first of March, twenty twenty seven. And the new Python package, version two
+      point x, is not compatible with version one.
+
+  - id: types
+    type: bullets
+    heading: "Four ways to build an agent"
+    bullets:
+      - "Prompt agent: instructions, model, tools. No code to host"
+      - "Voice-based prompt agent"
+      - "Hosted agent: your container, managed endpoint"
+      - "Responses API: your own agent, Foundry models"
+    narration: >
+      Microsoft lists four paths. A prompt agent: instructions, a model and tools, and Foundry runs it. A voice based
+      prompt agent. A hosted agent, where you bring a container. Or just call the Responses A P I from an agent you
+      already run. We use prompt agents, because swapping the model is one line, and that is exactly what a comparison needs.
+
+  - id: bicep-code
+    type: code
+    heading: "One resource, one project, many deployments"
+    lang: bicep
+    code: |
+      resource account 'Microsoft.CognitiveServices/accounts@2025-06-01' = {
+        name: accountName
+        kind: 'AIServices'
+        properties: { allowProjectManagement: true, disableLocalAuth: true, ... }
+      }
+
+      @batchSize(1)
+      resource modelDeployments 'Microsoft.CognitiveServices/accounts/deployments@2025-06-01' = [for d in deployments: {
+        parent: account
+        name: d.name
+        sku: { name: d.sku, capacity: d.capacity }
+        properties: { model: { format: d.format, name: d.model, version: d.version } }
+      }]
+    narration: >
+      The infrastructure is one Bicep file. A Foundry resource with project management on, a project, and a loop that
+      creates one deployment per model, one after the other. Local keys are disabled, so the code signs in with
+      Entra I D only. For non Open A I models, you read the format and version from the models your account lists, and
+      you check quota and region first, because not every model is available everywhere.
+
+  - id: models-screen
+    type: screen
+    heading: "The deployments in the Foundry portal"
+    image: screens/foundry-models.jpg
+    bar: "ai.azure.com · Models + endpoints · rg-mglab-copilot-ai-20"
+    demo: "Foundry portal (ai.azure.com) as labadmin, the project created by src/infra/main.bicep: the Models + endpoints (deployments) list showing every deployment used in the run, with the deployment name column visible. Mask subscription and resource names that contain the tenant name."
+    narration: >
+      Here are the deployments in the portal. The deployment name is what matters. A prompt agent's model field is not
+      the catalogue name, it is the name of a deployment in your Foundry resource.
+
+  - id: create-code
+    type: code
+    heading: "One agent per model, same instructions"
+    lang: python
+    code: |
+      def create_agent(self, name, model, instructions):
+          created = self.project.agents.create_version(
+              agent_name=name,
+              definition=PromptAgentDefinition(model=model, instructions=instructions))
+          return AgentHandle(name=created.name, version=str(created.version), model=model)
+
+      def ask(self, agent, question):
+          client = self.project.get_openai_client(agent_name=agent.name)
+          conversation = client.conversations.create()
+          resp = client.responses.create(conversation=conversation.id, input=question)
+          return resp.output_text, resp.usage.input_tokens, resp.usage.output_tokens
+    narration: >
+      The Python is short. Create a version of a prompt agent with a model and instructions. Then get an Open A I
+      client bound to that agent, open a conversation, and call responses dot create. We also read the token usage, and
+      we always delete the conversation and the agent version at the end.
+
+  - id: scoring
+    type: bullets
+    heading: "Score with rules, not with another model"
+    bullets:
+      - "JSON fields, numbers, forbidden words, word limits"
+      - "An injection task: the email says reply APPROVED"
+      - "A task with no rules scores zero, never one"
+      - "Five tasks is a smoke test, not a benchmark"
+    narration: >
+      How do we score? With plain rules you can read. Does the J S O N have the right fields. Is the total forty five
+      thousand. Did the answer stay under twenty five words. And one safety task: a vendor email that tells the
+      assistant to reply approved. A task without rules scores zero, never one. And be honest: five tasks is a smoke
+      test, not a benchmark.
+
+  - id: report-screen
+    type: screen
+    heading: "The scorecard"
+    image: screens/run-report.jpg
+    bar: "lab Windows terminal · python -m foundry_multimodel run"
+    short: result
+    demo: "Terminal on the lab laptop (dark theme, 18 pt) with FOUNDRY_PROJECT_ENDPOINT set and az login done off camera: 'python -m foundry_multimodel plan --config config.json --tasks tasks.json' then 'python -m foundry_multimodel run --config config.json --tasks tasks.json --out results.json --keep-agents'. Visible: the plan line (models x tasks = requests), the markdown scorecard (mean score, full passes, seconds, tokens), the routing lines and any failed checks. Record the REAL results; do not edit. Mask the resource name."
+    narration: >
+      And the scorecard from the real service. For each model: mean score, full passes, mean seconds, tokens and, with
+      your own price list, an estimated cost. Below it, the failed checks, so you see exactly which rule each model
+      missed. Run it again before you trust it. Model answers vary.
+
+  - id: agents-screen
+    type: screen
+    heading: "The agents in Foundry"
+    image: screens/foundry-agents.jpg
+    bar: "ai.azure.com · Agents · mglab-ep20-*"
+    demo: "Same project in the Foundry portal, Agents page, while the agents of the --keep-agents run still exist: one agent per model named mglab-ep20-<model>, version 1. Open one and show its definition: the model deployment and the instructions. Then delete the agents (tear-down in demo.md)."
+    narration: >
+      In the portal, each model has its own agent, named after the deployment, with the same instructions. Open one and
+      you see its model and its instructions. Same agent, one line different.
+
+  - id: trace-screen
+    type: screen
+    heading: "Tracing one request"
+    image: screens/foundry-trace.jpg
+    bar: "ai.azure.com · Tracing · Application Insights"
+    demo: "Foundry portal, tracing for the project (Application Insights connected beforehand per the Learn quickstart): open one trace from the run and show the model call with input and output tokens and its duration. If tracing is not connected the screen is skipped, not faked."
+    narration: >
+      Tracing shows what happened inside one request: the model call, its duration and its token counts. Learn lists
+      Application Insights as a prerequisite for agent tracing, so connect it before you record, not after.
+
+  - id: routing
+    type: code
+    heading: "Routing: the cheapest model that passes"
+    lang: python
+    code: |
+      for cat, models in cats.items():
+          cands = []
+          for model, rows in models.items():
+              sc = mean(r["score"] for r in rows)
+              if sc < min_score:
+                  continue
+              cost = estimate_cost(model, tin, tout, prices)
+              cands.append((cost, secs, model, round(sc, 3)))
+          routes[cat] = ... sorted(cands)[0]      # cheapest first
+    narration: >
+      The point of multiple models is routing. For every task category the tool picks the cheapest model whose mean
+      score reaches your threshold. Classification may go to a small model, extraction to a bigger one, and the safety task shows which models
+      followed the injected instruction. Learn also
+      describes a model router that chooses for you; measure it with the same tasks.
+
+  - id: gotchas
+    type: bullets
+    heading: "Gotchas, honestly"
+    short: gotcha
+    bullets:
+      - "Tool support varies by region and by model"
+      - "Agent-scope RBAC does not isolate project files"
+      - "Prices in the sample file are placeholders"
+      - "Run each model more than once: answers vary"
+    narration: >
+      The gotchas. Tool support varies by region and by model, so check the matrix before you promise web search or
+      code interpreter on a given model. Giving someone access to one agent does not isolate the files of the project:
+      use separate projects for that. The prices in our sample file are placeholders, copy the real ones. And run
+      every model more than once, because answers vary.
+
+  - id: governance
+    type: bullets
+    heading: "And governance? Episode 19 applies"
+    bullets:
+      - "Purview lists Microsoft Foundry under enterprise AI apps"
+      - "Retention has a location for Foundry interactions"
+      - "Hosted agents get a dedicated Entra agent identity"
+    narration: >
+      Governance does not stop at Microsoft three six five. Microsoft Purview lists Microsoft Foundry among the
+      enterprise A I apps, retention policies have a location for it, and hosted agents get a dedicated Entra agent identity. The audit,
+      label and data loss prevention thinking from episode nineteen carries over, so plan it before the first agent
+      reaches real data, not after the first incident.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The Bicep, the runner and the tests are on GitHub. Next time, Claude in the Microsoft ecosystem, including in
+      Foundry. See you there.
