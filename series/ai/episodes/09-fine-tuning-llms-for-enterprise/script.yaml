@@ -1,0 +1,231 @@
+# DEVLADLOG AI — episode 09. Code scenes are real excerpts from src/ and tests/.
+# Screen scenes: capture per demo.md. Narration describes what must be on screen without quoting live numbers;
+# after recording, adjust the sentences marked TODO to the real outcome (including "do not promote", if that happened).
+episode: 9
+slug: fine-tuning-llms-for-enterprise
+series_label: "AI"
+series_name: "DEVLADLOG AI"
+file_prefix: "ai"
+title: "Fine-tuning LLMs for the enterprise"
+subtitle: "Train a small model on your own labels, then prove it's worth shipping"
+voice: am_michael
+thumbnail_text: "FINE-TUNE IT\nTHEN PROVE\nIT WORKS"
+youtube:
+  title: "Fine-Tuning LLMs on Azure OpenAI: Data Checks, Training, Evaluation Gate, Cost | DEVLADLOG AI #9"
+  tags: [fine-tuning, Azure OpenAI, gpt-4.1-mini, supervised fine-tuning, Microsoft Foundry, LLM evaluation, enterprise AI, data leakage, Python, Bicep]
+sources:
+  - https://www.devladlog.com/articles/ai/2026-04-01-fine-tuning-llms-complete-guide-2026/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Fine-tuning is the easy part"
+    sub: "Proving it was worth it is the work"
+    short: hook
+    narration: >
+      Fine tuning is a button. Anyone can click it. The hard part is knowing, with evidence, that the new model is
+      no worse than the prompt you had, cheaper, and safe to ship. Today the HR bot's triage step gets fine tuned
+      on Azure, with a gate that can say no. Welcome to DEVLADLOG AI.
+
+  - id: when
+    type: bullets
+    heading: "When fine-tuning earns its keep"
+    bullets:
+      - "A stable task with clear labels"
+      - "A long prompt you pay for on every call"
+      - "Labelled data you own and may use"
+      - "Not for facts that change: that is retrieval"
+    narration: >
+      The HR bot classifies every message into a category, an urgency, and whether a person must step in. Today that
+      takes a long prompt with house rules and worked examples, sent on every call. Learn is clear that benefits
+      are not guaranteed, that training adds cost, and that fine tuning does not replace retrieval for current
+      facts. This task is stable, the labels are ours, and the prompt is long. A fair candidate.
+
+  - id: pipeline
+    type: diagram
+    heading: "Train it like you'd ship it"
+    nodes: ["Data", "Preflight", "Train", "Evaluate", "Gate"]
+    labels: ["150 labelled", "blocks bad files", "gpt-4.1-mini", "held-out items", "exit 0 or 1"]
+    narration: >
+      The pipeline has five steps. Labelled data, a pre flight check that blocks bad files before upload, the
+      training job, an evaluation on items the model never saw, and a gate with an exit code. Everything is Python on
+      the plain OpenAI client, keyless, in a Sweden Central resource deployed from one Bicep file.
+
+  - id: data
+    type: code
+    heading: "Teach it the answer, not the prompt"
+    lang: python
+    code: |
+      SHORT_SYSTEM = (
+          "Triage a message sent to the Contoso HR team (English or Portuguese). "
+          'Reply with JSON only: {"category", "urgency", "needs_human"}.'
+      )
+
+      def to_chat(e: Example, system: str) -> dict:
+          """One training example: system + user message + the exact answer we want."""
+          if e.label is None:
+              raise ValueError(f"{e.id} has no full label; it can't be a training example")
+          return {"messages": [{"role": "system", "content": system},
+                               {"role": "user", "content": e.text},
+                               {"role": "assistant", "content": e.label.to_json()}]}
+    narration: >
+      Each training example is a chat. A one sentence system message, the employee's message, and the exact answer
+      we want back. That one sentence replaces a prompt of about six hundred and seventy tokens, and Learn is
+      explicit: the system message at inference must be the same one used in training. So it is a constant, shared
+      by the training file and the evaluation.
+
+  - id: preflight-run
+    type: screen
+    heading: "Preflight before a byte leaves"
+    image: screens/prepare.jpg
+    bar: "Terminal · python -m fttriage prepare"
+    demo: "Terminal: PYTHONPATH=src python -m fttriage prepare --out build --price-per-million <rate from the pricing page>. Output: 'split: 100 train / 21 validation / 29 test + 16 golden (episode 8)', the languages line, the training tokens line with baseline 672 vs short 34 tokens, the estimated training cost line, and 'PREFLIGHT OK'. Do not show the price page."
+    narration: >
+      The pre flight, on one hundred and fifty fictional messages in English and Portuguese. One hundred to train,
+      twenty one to validate, twenty nine held back for the test, plus the sixteen question golden set from episode
+      eight. It checks the chat format, one system message, duplicates, conflicting labels, personal data and
+      leakage. Then it counts tokens and prices the training with the rate you pass in.
+    # TODO after recording: read the estimated training cost as printed.
+
+  - id: job
+    type: code
+    heading: "The training job"
+    lang: python
+    code: |
+      job = client.fine_tuning.jobs.create(
+          model=model, training_file=training_file, validation_file=validation_file, suffix=suffix, seed=seed,
+          method={"type": "supervised",
+                  "supervised": {"hyperparameters": {"batch_size": batch_size,
+                                                      "learning_rate_multiplier": learning_rate_multiplier,
+                                                      "n_epochs": n_epochs}}},
+          extra_body={"trainingType": training_type},
+      )
+    narration: >
+      The job is one call. Supervised method, a validation file, the service chooses the hyper parameters, and the
+      training type is explicit. Standard trains in the resource's region, so the data stays in Sweden Central.
+      Global is cheaper but copies data to another region, and Learn says the data zone type is United States only.
+      A queued job is normal, so the script waits instead of resubmitting.
+
+  - id: job-screen
+    type: screen
+    heading: "The finished job in Foundry"
+    image: screens/job.jpg
+    bar: "Microsoft Foundry · Fine-tuning"
+    demo: "Foundry portal (resource rg-mglab-ai-09 > Fine-tuning), the job created by 'python -m fttriage submit' showing status Succeeded, base model gpt-4.1-mini, training type Standard, and the metrics view with training loss and full validation loss/accuracy. Also show the terminal line 'fine-tuned model: ...ft-...' (mask the id suffix)."
+    narration: >
+      This is the job the script created, seen in Foundry. Training loss going down is the least interesting line.
+      Learn says to look at validation: if training loss falls while validation loss rises, inspect the failures
+      before anything else. The script reads the same metrics file and prints a warning for exactly that pattern.
+    # TODO after recording: say what the validation curve really did, including if there was a warning.
+
+  - id: deploy
+    type: code
+    heading: "Deploy for testing, without the meter"
+    lang: python
+    code: |
+      body = {"sku": {"name": sku, "capacity": capacity},
+              "properties": {"model": {"format": "OpenAI", "name": model_id, "version": "1"}}}
+      r = http.put(url, params={"api-version": API_VERSION}, headers=_headers(token), json=body, timeout=60)
+    narration: >
+      The fine tuned model name only exists after training, so deployment is a script, not Bicep. It is the management
+      A P I call from Learn. We use a Developer deployment: no hourly hosting fee, a fixed life of twenty four hours,
+      and no S L A or residency guarantee, so it is for evaluation only. A Standard deployment bills hosting every hour
+      even when nobody calls it.
+
+  - id: deployment-screen
+    type: screen
+    heading: "Two deployments, one resource"
+    image: screens/deployments.jpg
+    bar: "Microsoft Foundry · Models + endpoints"
+    demo: "Foundry portal > Models + endpoints (or Azure portal > the Azure OpenAI resource > Deployments): 'base' (gpt-4.1-mini 2025-04-14, Standard) and 'triage-ft' (the fine-tuned model, deployment type Developer, state Succeeded). Resource name and model-id suffix masked."
+    narration: >
+      The resource now holds two deployments. The base model with the long prompt, and our fine tuned model with the
+      one sentence prompt. Same Entra login, no keys.
+
+  - id: evaluate-run
+    type: screen
+    heading: "Same 45 items, both models"
+    image: screens/evaluate.jpg
+    bar: "Terminal · python -m fttriage evaluate"
+    demo: "Terminal: PYTHONPATH=src python -m fttriage evaluate --endpoint $AOAI --out build ; echo exit=$?  — the comparison table (valid JSON answers, category accuracy with 95% interval, urgency, needs_human accuracy and recall, all three right, input tokens per call, mean latency), the sign-test line, four PASS/FAIL gate lines, PROMOTE or DO NOT PROMOTE, and the exit code."
+    narration: >
+      Now the evaluation. Forty five held out messages, the same for both models, graded on valid output, category,
+      urgency, and whether it escalated what a person must see. Look at the input tokens column first: the tuned model
+      sends a tiny fraction of the prompt. Then look at accuracy, with its interval, and the sign test that says
+      whether the difference is more than luck.
+    # TODO after recording: read the real accuracies, the interval overlap and the verdict. If it said DO NOT PROMOTE, say which gate failed and keep the scene.
+
+  - id: gate
+    type: code
+    heading: "A gate that can say no"
+    lang: python
+    code: |
+      verdicts = {
+          "format": t.format_ok >= gates["min_format_ok"],
+          "category: not worse than the baseline": t.category_acc >= b.category_acc,
+          "needs_human recall": (t.needs_human_recall is None) or t.needs_human_recall >= gates["min_needs_human_recall"],
+          "prompt tokens saved": saving >= gates["min_prompt_saving"],
+      }
+      return Comparison(b, t, only_b, only_t, sign_test(only_b, only_t), saving, verdicts)
+    short: gate
+    narration: >
+      Four gates. Valid output, accuracy no worse than the baseline, a recall floor on the messages that need a human,
+      and at least half the input tokens saved. A test proves the interesting case: a model with the same accuracy that
+      never escalates a sensitive message is blocked. Cheaper and equal is not enough when the miss is a harassment
+      complaint.
+
+  - id: gotcha
+    type: code
+    heading: "The gotcha: forty five items"
+    lang: python
+    code: |
+      def test_wilson_interval_is_honest_about_small_samples():
+          lo, hi = evaluate.wilson(27, 30)
+          assert lo == pytest.approx(0.744, abs=0.005) and hi == pytest.approx(0.965, abs=0.005)
+
+      def test_sign_test_exact():
+          assert evaluate.sign_test(0, 5) == pytest.approx(2 / 32)
+          assert evaluate.sign_test(5, 5) == 1.0
+    short: gotcha
+    narration: >
+      The honest gotcha. Twenty seven right out of thirty sounds like ninety percent. The real range is about seventy
+      four to ninety six. One wrong answer moves forty five items by two points, so two good models can't be told
+      apart with this little data. That is why the gate says not worse, and why more labelled examples are the best
+      investment.
+
+  - id: money
+    type: bullets
+    heading: "Where the money goes"
+    bullets:
+      - "Training: tokens x epochs x price, cents here"
+      - "Hosting: an hourly fee, even when idle"
+      - "Idle for 15 days: the deployment is deleted"
+      - "Break-even: python -m fttriage cost"
+    narration: >
+      The training bill is tokens times epochs times a price, and for a dataset this size it is small. The meter that
+      matters is hosting. A deployed fine tuned model has an hourly fee whether or not it is called, and an
+      unused deployment is deleted after fifteen days. So the cost command takes your real prices from the pricing
+      page and tells you how many calls a month it takes before the shorter prompt pays for the hosting.
+
+  - id: recap
+    type: bullets
+    heading: "Five rules for fine-tuning"
+    bullets:
+      - "Validate and de-identify the data before upload"
+      - "Keep validation and test data out of training"
+      - "Same system message in training and in production"
+      - "Gate on held-out accuracy, not on loss"
+      - "Know the hosting bill, and clean up"
+    narration: >
+      Five rules. Validate and de identify the data before it leaves. Keep validation and test data out of training,
+      mechanically. Use the same system message in training and in production. Gate on held out results, not on loss.
+      And know the hosting bill before you deploy, then clean up.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The dataset, the pre flight checks, the job, the evaluation gate and the Bicep are on GitHub, and the complete
+      guide with four deeper articles is on devladlog dot com. Links are in the description. Next time: multi modal
+      A I models, when the input is a screenshot. This was DEVLADLOG AI, by Momento Galático.
