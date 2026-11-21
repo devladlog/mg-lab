@@ -1,0 +1,246 @@
+# DEVLADLOG AI — episode 08. Code scenes are real excerpts from infra/, src/ and tests/.
+# Screen scenes: capture per demo.md. Narration describes what must be on screen without quoting live numbers;
+# after recording, adjust the sentences marked TODO to the real outcome (including "no drift", if that happened).
+episode: 8
+slug: ai-model-monitoring-drift
+series_label: "AI"
+series_name: "DEVLADLOG AI"
+file_prefix: "ai"
+title: "Model monitoring and drift"
+subtitle: "Telemetry, drift metrics, a golden set and an alert for the HR bot after go-live"
+voice: am_michael
+thumbnail_text: "THE MODEL\nDIDN'T CHANGE.\nYOUR USERS DID"
+youtube:
+  title: "LLM Monitoring and Drift: PSI, Golden Sets, Application Insights Alerts | DEVLADLOG AI #8"
+  tags: [model monitoring, data drift, prediction drift, LLM monitoring, Application Insights, OpenTelemetry, Azure Monitor, Log Analytics, Azure OpenAI, PSI, MLOps, Python]
+sources:
+  - https://www.devladlog.com/articles/ai/2025-06-08-model-monitoring-complete-guide-2025/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "The model didn't change"
+    sub: "Your users did"
+    short: hook
+    narration: >
+      The HR bot passed every test before release. Then Contoso launched a hybrid work allowance and opened an
+      office in Porto. Same model, same prompt, different questions. Today we build the monitoring that notices,
+      before the users do. Welcome to DEVLADLOG AI.
+
+  - id: four
+    type: bullets
+    heading: "Four things people call drift"
+    bullets:
+      - "Input drift: who asks, and how"
+      - "Prediction drift: what the bot answers"
+      - "Quality: whether the answers are still right"
+      - "Model version: which model actually answered"
+    narration: >
+      Drift is four different problems. The inputs change: new topics, another language. The predictions change:
+      different categories. The quality changes: answers get worse. And the model itself can change under you. Each
+      one needs its own signal, and you need all four. An LLM app has no feature table, so we build these signals
+      ourselves from the bot's own telemetry.
+
+  - id: pipeline
+    type: diagram
+    heading: "From one call to one alert"
+    nodes: ["Triage", "Telemetry", "Log Analytics", "Monitor", "Alert"]
+    labels: ["gpt-5-mini", "OpenTelemetry", "AppTraces", "PSI + golden set", "Azure Monitor"]
+    narration: >
+      Every triage call writes one structured record through OpenTelemetry to Application Insights. A monitor reads
+      two windows back from Log Analytics, computes drift and quality, and writes a report record. An Azure Monitor
+      alert rule watches for that report. Everything is keyless and deployed from one Bicep file, so the whole lab
+      goes away with one command at the end.
+
+  - id: record
+    type: code
+    heading: "One record per call, no question text"
+    lang: python
+    code: |
+      for q in questions:
+          feats = input_features(q["question"])
+          try:
+              t = triage(client, deployment, q["question"])
+          except Exception as e:
+              failures += 1
+              sink("triage_error", telemetry.attributes(window, error=type(e).__name__, **feats))
+              continue
+          sink("triage", telemetry.attributes(
+              window, **feats, category=t.category, urgency=t.urgency, needs_human=t.needs_human, model=t.model,
+              latency_ms=t.latency_ms, prompt_tokens=t.prompt_tokens, completion_tokens=t.completion_tokens))
+    narration: >
+      Here's the record. Input features are computed locally: a language hint and a length bucket. Then the model's
+      answer, the model version that actually served the call, latency and tokens. What's missing on purpose is the
+      question itself. These are employees writing to HR. Monitoring doesn't need their words.
+
+  - id: keyless
+    type: code
+    heading: "Keyless telemetry"
+    lang: python
+    code: |
+      # infra/main.bicep:  Microsoft.Insights/components  DisableLocalAuth: true
+      from microsoft.opentelemetry import use_microsoft_opentelemetry
+
+      use_microsoft_opentelemetry(
+          enable_azure_monitor=True,
+          azure_monitor_connection_string=connection_string,
+          azure_monitor_exporter_credential=credential,
+          azure_monitor_enable_live_metrics=False,
+          logger_name=LOGGER_NAME,
+          enable_sensitive_data=False,
+      )
+    narration: >
+      Application Insights has local authentication off, so nothing gets in without an Entra token. We use the
+      Microsoft OpenTelemetry Distro, which Learn recommends for new Python apps, pass a credential with the
+      Monitoring Metrics Publisher role, collect only our own logger, and keep message content out of the traces.
+
+  - id: traffic
+    type: screen
+    heading: "Two windows through the real model"
+    image: screens/traffic.jpg
+    bar: "Terminal · python -m hrmon.traffic"
+    demo: "Terminal: PYTHONPATH=src python -m hrmon.traffic --data data/baseline.jsonl --window baseline --aoai-endpoint $AOAI --appinsights \"$APPINSIGHTS\" --golden data/golden.jsonl, then the same with data/current.jsonl --window current. Both print 'window ...: 40 triaged, 0 failed' and a golden accuracy line."
+    narration: >
+      Now the real deployment. In production a window is a week. For the demo we replay two labelled windows back to
+      back: October's questions as the baseline, and the weeks after the hybrid allowance launch as current. Each
+      window also re runs a small labelled golden set.
+    # TODO after recording: read out both golden accuracy values as printed.
+
+  - id: kql
+    type: screen
+    heading: "The records in Log Analytics"
+    image: screens/kql.jpg
+    bar: "Azure portal · Log Analytics · Logs"
+    demo: "Azure portal, the workspace in rg-mglab-ai-08 > Logs, KQL: AppTraces | where Message == \"triage\" | summarize n=count() by window=tostring(Properties[\"hr_window\"]), lang=tostring(Properties[\"hr_lang\"]) | order by window — results table (and optionally the column chart) showing English and Portuguese counts per window. Resource names masked."
+    narration: >
+      A few minutes later the records are in the AppTraces table, with our attributes in Properties. One query
+      already tells the story: count by window and language, and the Portuguese share grows in the current window.
+    # TODO after recording: if the language counts barely moved, say so; the monitor will report it the same way.
+
+  - id: psi
+    type: code
+    heading: "Population Stability Index, in ten lines"
+    lang: python
+    code: |
+      def psi(expected: list[float], actual: list[float]) -> float:
+          """PSI = sum((actual - expected) * ln(actual / expected)); 0 when identical, grows with the shift."""
+          return sum((a - e) * math.log(a / e) for e, a in zip(expected, actual))
+
+      cats = sorted(set(b) | set(c))
+      p, q = distribution(b, cats), distribution(c, cats)
+      result.psi, result.js = psi(p, q), js_distance(p, q)
+      result.status = ("significant" if result.psi >= PSI_SIGNIFICANT
+                       else "moderate" if result.psi >= PSI_MODERATE else "ok")
+    short: psi
+    narration: >
+      Population stability index and Jensen Shannon distance are two of the drift metrics Azure Machine Learning's
+      model monitoring uses. PSI compares the share of each value in the two windows. Zero means identical. Learn's
+      guidance: below point one, no significant change. Point two or more, significant. Jensen Shannon distance is
+      the symmetric cousin, always between zero and one, and we report it next to PSI.
+
+  - id: monitor-run
+    type: screen
+    heading: "The drift report, from the real workspace"
+    image: screens/monitor.jpg
+    bar: "Terminal · python -m hrmon.monitor"
+    demo: "Terminal: PYTHONPATH=src python -m hrmon.monitor --workspace-id $WS --baseline baseline --current current --appinsights \"$APPINSIGHTS\" ; echo exit=$?  — the table (lang, length, category, urgency, needs_human with n, PSI, JS, status, biggest shift), the model versions line, the golden accuracy line, 'ALERT: YES' or 'ALERT: no', and the exit code."
+    narration: >
+      Here's the monitor against the lab workspace. Input features first, then the predictions, each with its PSI,
+      its status and the biggest shift. Then the model versions that served each window, the golden accuracy, and
+      the verdict. The exit code is the contract: zero means carry on, one means a person should look, so a
+      scheduler or a pipeline can act on it without parsing the table.
+    # TODO after recording: name the features marked significant and the exit code. If nothing drifted, say so.
+
+  - id: worse
+    type: code
+    heading: "Different is not the same as worse"
+    lang: python
+    code: |
+      @property
+      def model_changed(self) -> bool:
+          b, c = (set(v) for v in self.models.values()) if len(self.models) == 2 else (set(), set())
+          return bool(b and c and b != c)
+
+      @property
+      def quality_dropped(self) -> bool:
+          vals = list(self.quality.values())
+          return len(vals) == 2 and vals[0] - vals[1] > QUALITY_DROP
+
+      @property
+      def alert(self) -> bool:
+          return any(f.drifted for f in self.features) or self.quality_dropped or self.model_changed
+    narration: >
+      Drift says different, not worse. New topics are real, and the bot may handle them fine. Only the golden set
+      says whether answers got worse. And the reverse happens too: one test swaps the model version behind the same
+      inputs. No drift at all, but accuracy drops. That's why the alert looks at all three.
+
+  - id: gotcha
+    type: code
+    heading: "The gotcha: zeros and small samples"
+    lang: python
+    code: |
+      EPSILON = 1e-4          # a value never seen in the baseline would make PSI infinite
+      MIN_COUNT = 30          # fewer records than this in either window -> "insufficient"
+
+      def test_same_population_split_in_two_is_not_zero_but_below_threshold():
+          population = rng.choices(["leave", "payroll", "benefits", "equipment"], weights=[4, 3, 2, 1], k=400)
+          r = drift.compare("category", population[:200], population[200:])
+          assert 0 < r.psi < drift.PSI_MODERATE
+    short: gotcha
+    narration: >
+      Two honest gotchas. A language the baseline never saw makes PSI infinite, because you divide by zero, so empty
+      bins get a tiny epsilon. And two samples of the same population never match exactly. With forty records per
+      window, treat PSI as a smoke alarm, not a measurement, and below thirty, don't compute it at all.
+
+  - id: alert
+    type: screen
+    heading: "Azure Monitor raises the alert"
+    image: screens/alert.jpg
+    bar: "Azure portal · Monitor · Alerts"
+    demo: "Azure portal > Monitor > Alerts (filtered to rg-mglab-ai-08): the fired alert 'mglab-mon-drift-alert' (severity 2) opened, showing the condition (query on AppTraces drift_report, Count > 0) and the fired time. Subscription and names masked."
+    narration: >
+      The monitor also wrote a drift report record. The log search alert rule, deployed in Bicep, checks every five
+      minutes for a report with PSI at or above point two, and here it fires. From here you'd route it to the HR bot
+      team's action group.
+    # TODO after recording: if the alert took longer than the window to fire, say how long it took.
+
+  - id: tests
+    type: code
+    heading: "36 tests, no cloud needed"
+    lang: text
+    code: |
+      $ python -m pytest tests -q
+      ....................................                 [100%]
+      36 passed
+
+      test_drift_and_features.py         PSI formula, smoothing, bands, small samples, language hint
+      test_triage_traffic_telemetry.py   real openai SDK; no question text; real OpenTelemetry log records
+      test_logs_and_monitor.py           real LogsQueryClient; KQL injection refused; model swap without drift
+      test_bicep.py                      local auth off, pinned model, alert rule, three roles
+    narration: >
+      Thirty six tests run locally with the real OpenAI, Azure Monitor query and OpenTelemetry libraries against
+      local doubles. They check that no question text reaches telemetry, that a window label can't inject KQL, and
+      that a model swap alerts even when nothing drifts.
+
+  - id: recap
+    type: bullets
+    heading: "Five rules for monitoring an LLM app"
+    bullets:
+      - "Log features and answers, not people's words"
+      - "Watch inputs, predictions, quality and model version"
+      - "Use PSI with a threshold and a minimum sample"
+      - "Keep a golden set and re-run it every window"
+      - "Pin the model and alert when it changes"
+    narration: >
+      Five rules. Log features and answers, not people's words. Watch inputs, predictions, quality and the model
+      version. Use PSI with a threshold and a minimum sample. Keep a golden set and re run it every window. And pin
+      the model, then alert if it changes anyway.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The telemetry, the drift monitor and the alert are on GitHub, and the complete guide with four deeper articles
+      is on devladlog dot com. Links are in the description. Next time: fine tuning L L Ms for the enterprise. This
+      was DEVLADLOG AI, by Momento Galático.

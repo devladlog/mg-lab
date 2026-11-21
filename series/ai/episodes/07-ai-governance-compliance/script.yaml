@@ -1,0 +1,257 @@
+# DEVLADLOG AI — episode 07. Code scenes are real excerpts from governance/, infra/, src/ and tests/.
+# Screen scenes: capture per demo.md. Their narration describes what must be on screen without quoting live results;
+# after recording, adjust the sentences marked TODO to what really happened.
+episode: 7
+slug: ai-governance-compliance
+series_label: "AI"
+series_name: "DEVLADLOG AI"
+file_prefix: "ai"
+title: "AI governance as code"
+subtitle: "A register, Azure Policy guardrails and evidence a compliance officer can use"
+voice: am_michael
+thumbnail_text: "WHAT AI\nDO WE\nRUN?"
+youtube:
+  title: "AI Governance as Code: Register, Azure Policy, Evidence for Compliance Manager | DEVLADLOG AI #7"
+  tags: [AI governance, AI compliance, Azure Policy, Microsoft Purview, Compliance Manager, EU AI Act, Azure OpenAI, Microsoft Foundry, model governance, shadow AI, Python, Bicep]
+sources:
+  - https://www.devladlog.com/articles/ai/2025-07-09-ai-governance-complete-guide-2025/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "What AI do we run?"
+    sub: "And can you prove the controls are on?"
+    short: hook
+    narration: >
+      Your compliance officer asks three questions. What AI do we run? Who owns it? And can you prove the controls
+      are on? If the answer is a spreadsheet someone updated in March, you don't have governance. Today we build it
+      as code. Welcome to DEVLADLOG AI.
+
+  - id: questions
+    type: bullets
+    heading: "Three questions, three layers"
+    bullets:
+      - "What do we run? A register in the repo"
+      - "What must never happen? Azure Policy says no"
+      - "Is it really configured? Code checks the live state"
+      - "Where does it go? Purview Compliance Manager"
+    narration: >
+      Contoso now has four AI systems from the last six episodes. We answer the officer with three layers that
+      check each other. A register in the repository. Azure Policy for the things that must never happen. And code
+      that compares the register with what Azure actually runs, and produces evidence for Compliance Manager.
+
+  - id: layers
+    type: diagram
+    heading: "Promise, guardrail, proof"
+    nodes: ["Register", "Policy", "Live state", "Controls", "Evidence"]
+    labels: ["owner, tier, models", "deny before deploy", "read-only ARM", "pass or fail", "report + exit code"]
+    narration: >
+      The register is the promise. Policy is the guardrail that stops mistakes before they're deployed. The evidence
+      pack reads the live state, runs eleven controls, and ends with a report and an exit code you can put in a
+      pipeline. None of the three layers trusts the others, and that's the point: each one catches what the other
+      two miss.
+
+  - id: register
+    type: code
+    heading: "The register: one entry per AI system"
+    lang: yaml
+    code: |
+      - id: hr-bot
+        name: Contoso HR assistant
+        owner: Alex Demo
+        tier: high
+        uses_retrieval: true
+        data_residency: eu
+        approved_models:
+          - {name: gpt-5-mini, version: "2025-08-07"}
+          - {name: text-embedding-3-small, version: "1"}
+        human_oversight: >-
+          HR triage only suggests; a person in HR handles every needs_human message.
+        rai_gate:
+          date: 2026-11-20
+          verdict: PASS
+        next_review: 2027-02-28
+    narration: >
+      Here's the HR bot's entry. A named owner. An internal impact tier, agreed with legal: this code doesn't
+      classify anything under any law. Approved models with pinned versions. How a human stays in control. And the
+      date and verdict of the responsible AI gate from episode six. Changes go through pull requests.
+
+  - id: policy
+    type: code
+    heading: "Azure Policy: only approved models"
+    lang: bicep
+    code: |
+      resource approvedModelsAssignment 'Microsoft.Authorization/policyAssignments@2024-04-01' = {
+        name: 'ai-approved-models-deny'
+        properties: {
+          policyDefinitionId: tenantResourceId('Microsoft.Authorization/policyDefinitions', builtIn.approvedModels)
+          parameters: {
+            effect: { value: 'Deny' }
+            allowedPublishers: { value: [] } // empty: approval by exact asset ID only
+            allowedAssetIds: { value: allowedAssetIds }
+          }
+          nonComplianceMessages: [
+            { message: 'Contoso AI governance: this model is not in the approved list. Ask the AI governance board.' }
+          ]
+        }
+      }
+    narration: >
+      Three built in policies are assigned on the resource group, in Bicep. Keyless only, with deny. Diagnostic logs
+      required, as an audit. And this one: Foundry model deployments may only use approved models. The publisher
+      list is empty on purpose, so only the exact model versions we list can be deployed.
+
+  - id: deny-keys
+    type: screen
+    heading: "Policy says no: a resource with keys"
+    image: screens/deny-keys.jpg
+    bar: "Terminal · az cognitiveservices account create"
+    demo: "Terminal: az cognitiveservices account create -g rg-mglab-ai-07 -n <test name> -l swedencentral --kind OpenAI --sku S0 --custom-domain <test name> --yes  — the command fails with RequestDisallowedByPolicy, naming the assignment 'ai-keyless-deny' and showing the message 'Contoso AI governance: create Azure AI resources with disableLocalAuth=true'."
+    narration: >
+      Now the real subscription. Someone creates an Azure OpenAI resource the quick way, with keys enabled. Azure
+      Policy refuses it before it exists, and the error tells them exactly what to change.
+    # TODO after recording: if the error text differs (e.g. message not shown), describe what the CLI really printed.
+
+  - id: deny-model
+    type: screen
+    heading: "Policy says no: an unapproved model"
+    image: screens/deny-model.jpg
+    bar: "Terminal · az cognitiveservices account deployment create"
+    demo: "Terminal: az cognitiveservices account deployment create -g rg-mglab-ai-07 -n $AOAI_NAME --deployment-name nano --model-name gpt-4.1-nano --model-version 2025-04-14 --model-format OpenAI --sku-name GlobalStandard --sku-capacity 1  — the command fails with a policy violation naming 'ai-approved-models-deny' and the non-compliance message."
+    short: deny
+    narration: >
+      Next, a developer tries to deploy a model nobody approved, a small model on a global deployment. The approved
+      models policy denies it. No ticket, no meeting, no shadow deployment. If you need that model, you change the
+      register and the policy in one pull request, and someone reviews it.
+    # TODO after recording: if the deployment was NOT denied, say so honestly and show the evidence pack catching it (MOD-01 FAIL).
+
+  - id: controls
+    type: code
+    heading: "Controls compare the promise with reality"
+    lang: python
+    code: |
+      out.append(_f("SEC-01", account.disable_local_auth, f"disableLocalAuth={account.disable_local_auth}"))
+      approved = set(system.approved_models)
+      deployed = [(d.name, (d.model, d.version)) for d in account.deployments]
+      rogue = [f"{n}={m}:{v}" for n, (m, v) in deployed if (m, v) not in approved]
+      out.append(_f("MOD-01", not rogue, "unapproved: " + ", ".join(rogue) if rogue
+                    else f"{len(deployed)} deployment(s), all approved"))
+      floating = [d.name for d in account.deployments if d.upgrade != "NoAutoUpgrade"]
+      out.append(_f("MOD-02", not floating, "auto-upgrade on: " + ", ".join(floating) if floating
+                    else "all deployments NoAutoUpgrade"))
+      if applies("MOD-03"):
+          if system.data_residency == "eu":
+              outside = [f"{d.name}={d.sku}" for d in account.deployments if d.sku not in EU_SKUS]
+    narration: >
+      Policy blocks mistakes at deploy time. Controls check what's running now. Each control returns pass, fail or
+      not applicable, always with the evidence that decided it. Is key auth off? Are only approved model versions
+      deployed? Is the version pinned, so the model can't change under you? And for an EU system, no global
+      deployments, because Learn says global may process prompts in any geography.
+
+  - id: shadow
+    type: code
+    heading: "The resource nobody registered"
+    lang: python
+    code: |
+      for acc in snap.accounts:
+          sys_ = systems.get(acc.system_id)
+          if sys_ is None:
+              shadow[acc.name] = controls.unregistered(acc)
+              continue
+          r = results.setdefault(sys_.id, SystemResult(sys_.id, sys_.name, sys_.owner, sys_.tier))
+          r.accounts[acc.name] = controls.check_account(sys_, acc, today)
+
+      def unregistered(account: Account) -> Finding:
+          """An AI resource nobody registered (untagged or unknown id): shadow AI, always a FAIL."""
+          why = "no ai-system-id tag" if not account.system_id else f"ai-system-id '{account.system_id}' not in register"
+          return Finding("GOV-01", "FAIL", why)
+    narration: >
+      Every Azure resource points back to the register with a tag. A resource without one, or with an id the
+      register doesn't know, is shadow AI, and that's always a fail. Our lab has one on purpose: keyless, so policy
+      let it through, but nobody owns it.
+
+  - id: evidence-run
+    type: screen
+    heading: "The evidence pack, against the real subscription"
+    image: screens/evidence-run.jpg
+    bar: "Terminal · python -m aigov.evidence"
+    demo: "Terminal: PYTHONPATH=src python -m aigov.evidence --register governance/register.yaml --subscription $SUB --resource-group rg-mglab-ai-07 --save-snapshot reports/snapshot.json ; echo exit=$?  — the hr-bot block with 11 control lines, the UNREGISTERED line for the shadow account, the two (info) lines, 'RESULT: FAIL' and exit=1."
+    narration: >
+      Here it runs against the lab. The HR bot's account goes through all eleven controls. The shadow account shows
+      up as unregistered, and the Azure Policy logs audit flags it too. The result is fail, with exit code one, so a
+      pipeline would stop here.
+    # TODO after recording: read out any hr-bot control that did not PASS (e.g. POL-01 before the compliance scan finished).
+
+  - id: gotcha
+    type: code
+    heading: "The gotcha: 'contains' is not 'equals'"
+    lang: text
+    code: |
+      Built-in rule:  model.assetId  contains  allowedAssetId
+      Learn: ".../models/gpt-5" also matches GPT-5.2 and GPT-5.4
+
+      too broad:  azureml://registries/azure-openai/models/gpt-5
+      one model:  azureml://registries/azure-openai/models/gpt-5/
+      one version: azureml://registries/azure-openai/models/gpt-5-mini/versions/2025-08-07
+
+      allowedPublishers: ["OpenAI"]  ->  every OpenAI model passes
+      Policy needs ~15 minutes after assignment; compliance scans can take up to 24 hours
+    short: gotcha
+    narration: >
+      Here's the honest gotcha. The approved models policy matches asset IDs with contains, not equals. Learn's own
+      example: allow G P T five without a trailing slash and you've also allowed five point two and five point four.
+      Pin the full version. Leave publishers empty, or you approve a whole vendor. And give a new assignment fifteen
+      minutes before you test it.
+
+  - id: compliance-manager
+    type: screen
+    heading: "Where the compliance officer works"
+    image: screens/compliance-manager.jpg
+    bar: "Microsoft Purview · Compliance Manager"
+    demo: "Purview portal (lab tenant, masked): Compliance Manager > Regulations, 'Premium AI templates' header visible with EU Artificial Intelligence Act; then the new assessment 'HR assistant: EU AI Act' > an improvement action > Evidence tab > Add evidence > Document, uploading reports/evidence-hr-bot.txt, which then appears in the evidence list."
+    narration: >
+      The compliance officer doesn't read our terminal. They work in Purview Compliance Manager, which has premium
+      templates for the E U A I Act, ISO forty two thousand and one and the NIST A I risk framework. We create the
+      assessment and attach our report as evidence on an improvement action. One gotcha: the evidence tab takes
+      text files, not markdown, so the report is saved as dot t x t.
+    # TODO after recording: name the improvement action the report was attached to.
+
+  - id: tests
+    type: code
+    heading: "30 tests, no cloud needed"
+    lang: text
+    code: |
+      $ python -m pytest tests -q
+      ..............................                       [100%]
+      30 passed
+
+      test_register.py             every register problem reported at once
+      test_arm_inventory.py        real azure-core pipeline: token scope, api-versions, paging
+      test_controls_and_evidence.py  each control fails on its own violation; shadow AI; CLI exit codes
+      test_bicep.py                built-in policy IDs, effects, exact-version asset IDs
+    narration: >
+      Thirty tests run locally. Every control is proven to fail on its own violation, from a key left on to a stale
+      responsible AI gate. The ARM calls go through the real Azure core pipeline against canned responses, so
+      tokens, A P I versions and paging are tested without a subscription.
+
+  - id: recap
+    type: bullets
+    heading: "Five rules for AI governance"
+    bullets:
+      - "Register every AI system, in the repo"
+      - "Deny what must never happen, with Azure Policy"
+      - "Pin model versions and approve them by exact ID"
+      - "Hunt for unregistered AI resources"
+      - "Ship evidence, not slides"
+    narration: >
+      Five rules. Register every AI system, in the repo. Deny what must never happen with Azure Policy. Pin model
+      versions and approve them by exact ID. Hunt for AI resources nobody registered. And ship evidence, not
+      slides. When the auditor asks, you run one command and hand over the report.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The register, the policies and the evidence pack are on GitHub, and the complete guide with four deeper
+      articles is on devladlog dot com. Links are in the description. Next time: model monitoring and drift. This
+      was DEVLADLOG AI, by Momento Galático.

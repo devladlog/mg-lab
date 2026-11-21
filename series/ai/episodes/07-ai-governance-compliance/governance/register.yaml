@@ -1,0 +1,59 @@
+# Contoso AI system register (fictional). One entry per AI system, reviewed like code.
+# Azure resources point back to an entry with the tag  ai-system-id: <id>.
+#
+# tier is Contoso's INTERNAL impact tier, agreed with legal/compliance. This repo does not classify systems under
+# any law; the Compliance Manager assessment (EU AI Act template) is where that work is tracked.
+#   low    : internal productivity, no decisions about people
+#   medium : customer- or employee-facing, advisory only
+#   high   : touches decisions about people (employment, money, access) - needs named human oversight
+version: 1
+systems:
+  - id: hr-bot
+    name: Contoso HR assistant
+    owner: Alex Demo                     # accountable owner (fictional)
+    purpose: Answers employee HR questions from the handbook and triages messages to the HR team.
+    tier: high
+    uses_retrieval: true                 # episode 3: answers from retrieved handbook chunks
+    personal_data: true
+    data_residency: eu                   # EU data zone deployments only (episode 2)
+    approved_models:
+      - {name: gpt-5-mini, version: "2025-08-07"}
+      - {name: text-embedding-3-small, version: "1"}
+    human_oversight: >-
+      HR triage only suggests; a person in HR handles every needs_human message. Distress messages are escalated
+      to the wellbeing team (episode 6 guard).
+    rai_gate:                            # last responsible-AI release gate (episode 6)
+      date: 2026-11-20                   # TODO after recording episode 6: date of the recorded gate run
+      verdict: PASS                      # TODO after recording episode 6: PASS or FAIL as recorded
+      evidence: series/ai/episodes/06-responsible-ai-ethics (reports/rai-report.md of the recorded run)
+    next_review: 2027-02-28
+
+  - id: ap-agent
+    name: Accounts-payable assistant
+    owner: Sam Demo
+    purpose: Works the invoice review queue; every approval is confirmed by a person (episode 5).
+    tier: medium
+    uses_retrieval: false
+    personal_data: false
+    data_residency: eu
+    approved_models:
+      - {name: gpt-5-mini, version: "2025-08-07"}
+    human_oversight: approve_invoice requires a person's confirmation; policy limits enforced in code.
+    rai_gate:
+      date: 2026-10-30
+      verdict: PASS
+      evidence: series/ai/episodes/05-ai-agents-orchestration (audit trail of the recorded run)
+    next_review: 2027-01-31
+
+  - id: helpdesk-triage
+    name: IT helpdesk ticket triage
+    owner: Jordan Demo
+    purpose: Suggests category and priority for IT tickets (episode 1); agents can override.
+    tier: low
+    uses_retrieval: false
+    personal_data: false
+    data_residency: any
+    approved_models:
+      - {name: gpt-5-mini, version: "2025-08-07"}
+    human_oversight: ""
+    next_review: 2027-03-31
