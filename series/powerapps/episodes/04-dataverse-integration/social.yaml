@@ -1,0 +1,82 @@
+episode: 4
+series: DEVLADLOG Power Apps
+status: draft-hold-for-review
+ai_label: true
+youtube_url: '{YOUTUBE_URL}'
+linkedin_company:
+  text: |
+    A nightly import from an asset register quietly marks every lent laptop as available again. The cause is not a bug in your code, it is how upsert works.
+
+    Episode 4 of DEVLADLOG Power Apps connects an external system to Dataverse with a small C# console app built on the SDK for .NET, using a fictional Contoso equipment table.
+
+    - An alternate key on the asset tag, so the register never needs Dataverse IDs
+    - Upserts sent through ExecuteMultiple, so one bad row costs one row
+    - Local validation that rejects a malformed tag, a bad date and a duplicate before any round trip
+    - Change tracking for the way back, with the token saved only after the last page is written
+    - 47 tests against a fake that follows the documented behaviour
+
+    The gotcha: upsert has no "only on create". Send a status on every row and every lent device resets overnight.
+
+    Watch the episode: {YOUTUBE_URL}
+    Code and tests: {REPO_URL}
+    Written guide: {BLOG_URL}
+
+    Narration uses an AI voice.
+    #Dataverse #PowerApps #DotNet #PowerPlatform
+linkedin_personal:
+  text: |
+    The obvious way to import devices is to send a status of Available on every row, because new rows need one. But upsert writes every attribute on update too, so every night every lent laptop would flip back to Available. Upsert has no "only on create".
+
+    In the fourth DEVLADLOG Power Apps episode the register sends a status only for repair and retirement, and a second pass sets Available just for the rows the upsert created. A test pins it. The lesson: before you map a field in an upsert, ask what it does on update.
+
+    {YOUTUBE_URL}
+
+    #Dataverse #DotNet
+    Narration uses an AI voice.
+facebook:
+  text: |
+    Two systems, one truth about every laptop. The apps know who borrowed it, the asset register knows what it is. Connect them naively and a nightly import can mark every lent laptop as available again.
+
+    In this DEVLADLOG Power Apps episode we connect a fictional Contoso asset register to Dataverse with alternate keys, upserts and change tracking in C#, and show the trap that causes the reset.
+
+    Watch it here: {YOUTUBE_URL}
+
+    #Dataverse #PowerApps
+    Narration uses an AI voice.
+shorts:
+- id: hook
+  youtube_short_title: 'Your nightly import marks every lent laptop available #Shorts'
+  instagram_reel:
+    caption: |
+      Your apps know who borrowed the laptop. The asset register knows what the laptop is. Integrate them naively and every night the import quietly marks every lent laptop as available again. In this episode an external system is connected to Dataverse with alternate keys, upserts and change tracking, in C#.
+
+      Full episode: link in bio
+
+      #Dataverse #PowerApps #DotNet
+    cover_text: THE NIGHTLY RESET
+  tiktok:
+    caption: 'A naive nightly import marks every lent laptop as available again. Alternate keys, upserts and change tracking in C# fix it. Full episode on YouTube. #Dataverse #PowerApps #DotNet'
+- id: gotcha
+  youtube_short_title: 'Dataverse upsert has no only-on-create option #Shorts'
+  instagram_reel:
+    caption: |
+      New devices need a status, so the obvious move is to send Available on every row. But upsert writes every attribute on update too, so every night every lent laptop becomes available again. Upsert has no only on create. The fix: send status only for repair and retirement, then a second pass sets Available just for rows the upsert created.
+
+      Full episode: link in bio
+
+      #Dataverse #PowerApps #DotNet
+    cover_text: UPSERT HAS NO ONLY-CREATE
+  tiktok:
+    caption: 'Upsert writes every attribute on update, so sending Available on every row resets lent devices nightly. Send status only when needed, set defaults in a second pass for created rows. #Dataverse #PowerApps #DotNet'
+- id: deletes
+  youtube_short_title: 'Dataverse change tracking: a deleted row is just an id #Shorts'
+  instagram_reel:
+    caption: |
+      With change tracking, a deleted row comes back as a reference with an ID, not the row. The register knows tags, not Dataverse IDs. So the exporter remembers which tag each ID had from earlier runs. A device created and deleted between two runs still shows up as deleted, so it is counted instead of sent with a blank tag.
+
+      Full episode: link in bio
+
+      #Dataverse #PowerApps #DotNet
+    cover_text: DELETES ARE JUST IDS
+  tiktok:
+    caption: 'Dataverse change tracking returns a deleted row as an id only. Remember the tag for each id from earlier runs, and count rows created and deleted between runs. #Dataverse #PowerApps #DotNet'

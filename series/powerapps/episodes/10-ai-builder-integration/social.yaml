@@ -1,0 +1,82 @@
+episode: 10
+series: DEVLADLOG Power Apps
+status: draft-hold-for-review
+ai_label: true
+youtube_url: '{YOUTUBE_URL}'
+linkedin_company:
+  text: |
+    A laptop comes back with the note "crack across the corner of the screen, still works". An AI Builder prompt can suggest what happens next. The interesting part is everything around the prompt, because the app should not take its answer on faith.
+
+    Episode 10 of DEVLADLOG Power Apps adds an AI Builder prompt to a fictional Contoso equipment desk app. The prompt suggests. The person at the desk decides.
+
+    - A prompt that returns bare JSON with three keys: a condition from a closed list of four, a confidence and a summary
+    - The app parses the answer, checks the condition against an allow list and ignores anything below 0.7 confidence
+    - Short notes are never sent and long ones are capped, to protect the credit budget
+    - If the call fails, the desk carries on by hand
+    - 119 tests on the open source Power Fx interpreter, using a stand-in for the prompt
+
+    The gotcha: a missing confidence is blank, not zero. Min of 1 and blank is 1, so a missing value walked straight through the gate until a test caught it.
+
+    Watch the episode: {YOUTUBE_URL}
+    Code and tests: {REPO_URL}
+    Written guide: {BLOG_URL}
+
+    Narration uses an AI voice.
+    #AIBuilder #PowerApps #PowerFx #PowerPlatform
+linkedin_personal:
+  text: |
+    My first confidence check for an AI Builder prompt was Max(0, Min(1, Value(...))). A test sent an answer with no confidence and the result was 1. Blank is not zero. Min of 1 and blank is 1, so a missing confidence walked straight through my 0.7 gate.
+
+    The fix checks for blank first, and every forgot-a-field case is a test now. The tests use a stand-in for the prompt, so they cannot tell you whether the model is right, only that the rules around it hold. The lesson: treat model output as untrusted text and test the missing-field cases.
+
+    {YOUTUBE_URL}
+
+    #PowerFx #AIBuilder
+    Narration uses an AI voice.
+facebook:
+  text: |
+    A laptop comes back to the equipment desk with a note: crack across the corner of the screen, still works. In this DEVLADLOG Power Apps episode an AI Builder prompt reads the note and suggests what to do with the device. Suggests. The person at the desk decides.
+
+    We build the rules around the prompt for a fictional Contoso app: parse, allow list, confidence gate and a manual fallback.
+
+    Watch it here: {YOUTUBE_URL}
+
+    #AIBuilder #PowerApps
+    Narration uses an AI voice.
+shorts:
+- id: hook
+  youtube_short_title: 'An AI Builder prompt reads the note: cracked screen #Shorts'
+  instagram_reel:
+    caption: |
+      A laptop comes back to the Equipment Desk with a note. Crack across the corner of the screen, still works. In this episode an AI Builder prompt reads that note and suggests what happens to the device. Suggests. The person at the desk decides, and the app never writes the answer to Dataverse on its own.
+
+      Full episode: link in bio
+
+      #AIBuilder #PowerApps #PowerPlatform
+    cover_text: AI SUGGESTS, YOU DECIDE
+  tiktok:
+    caption: 'An AI Builder prompt reads a laptop return note and suggests what happens to the device. It only suggests. The person at the desk decides. Full episode on YouTube. #AIBuilder #PowerApps #PowerPlatform'
+- id: parse
+  youtube_short_title: 'Treat AI Builder output as untrusted text #Shorts'
+  instagram_reel:
+    caption: |
+      The prompt answers with a small piece of JSON, and the app reads it as untrusted text. Parse it. The condition must be on the allow list, so even a model that says retired becomes unclear. The confidence must reach 0.7. A missing confidence counts as zero. The picker only offers two statuses, so the app can never retire a device.
+
+      Full episode: link in bio
+
+      #AIBuilder #PowerFx #PowerApps
+    cover_text: ALLOW-LIST THE ANSWER
+  tiktok:
+    caption: 'Treat model output as untrusted: parse the JSON, allow-list the condition, gate on confidence 0.7, and let the picker offer only safe statuses. #AIBuilder #PowerFx #PowerApps'
+- id: gotcha
+  youtube_short_title: 'Power Fx: blank is not zero, Min(1, blank) is 1 #Shorts'
+  instagram_reel:
+    caption: |
+      My first confidence formula was a Min and a Max. A test sent an answer with no confidence, and got 1. Blank is not zero. Min of 1 and blank is 1, so a missing confidence walked straight through the gate. The fix checks for blank first, and every forgot-a-field case is a test now.
+
+      Full episode: link in bio
+
+      #PowerFx #PowerApps #AIBuilder
+    cover_text: BLANK IS NOT ZERO
+  tiktok:
+    caption: 'Power Fx: Min(1, blank) is 1, not 0. A missing confidence walked through my gate until a test caught it. Check IsBlank first. #PowerFx #PowerApps #AIBuilder'

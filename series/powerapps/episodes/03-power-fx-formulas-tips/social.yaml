@@ -1,0 +1,83 @@
+episode: 3
+series: DEVLADLOG Power Apps
+status: draft-hold-for-review
+ai_label: true
+youtube_url: '{YOUTUBE_URL}'
+linkedin_company:
+  text: |
+    Weekday(d) <= 5 reads like Monday to Friday. In Power Fx it means Sunday to Thursday.
+
+    Episode 3 of DEVLADLOG Power Apps moves the business rules of a canvas app into user-defined functions, so every screen calls the same code and the rules run in tests.
+
+    - Typed functions in App.Formulas: working day, working days between two dates, loan state and colour
+    - Switch(true, ...) instead of nested If
+    - String interpolation, and the language tag on Text so a user running the app in Portuguese does not get Portuguese dates in an English message
+    - 39 test methods on Microsoft's open source Power Fx interpreter, with a fixed clock
+
+    The gotcha: wrapping a Filter in With looks tidier, but With creates a collection internally. Collections cannot be delegated, and you get no warning. Use With for values, never for tables.
+
+    Watch the episode: {YOUTUBE_URL}
+    Code and tests: {REPO_URL}
+    Written guide: {BLOG_URL}
+
+    Narration uses an AI voice.
+    #PowerFx #PowerApps #CanvasApps #PowerPlatform
+linkedin_personal:
+  text: |
+    Two Power Fx traps from the latest DEVLADLOG Power Apps episode. First, Weekday starts the week on Sunday by default, so Weekday(d) <= 5 means Sunday to Thursday. Pass StartOfWeek.Monday.
+
+    Second, a tidy-looking With around a Filter. Microsoft's docs say With creates a collection internally, collections cannot be delegated, and there is no delegation warning. A unit test cannot see it either, because in memory both versions return the same rows.
+
+    So the working day rules live in tested functions, and the delegation trap gets a lint instead. The lesson: use With for values, never for tables.
+
+    {YOUTUBE_URL}
+
+    #PowerFx #PowerApps
+    Narration uses an AI voice.
+facebook:
+  text: |
+    Copying the same formula into ten controls works until one copy is wrong.
+
+    In this DEVLADLOG Power Apps episode we move the rules of a small canvas app for a fictional Contoso team into user-defined functions, call them from every screen and test them. We also look at a weekday trap and a tidy formula that quietly breaks delegation.
+
+    Watch it here: {YOUTUBE_URL}
+
+    #PowerFx #PowerApps
+    Narration uses an AI voice.
+shorts:
+- id: hook
+  youtube_short_title: 'Power Fx written like real code: functions you can test #Shorts'
+  instagram_reel:
+    caption: |
+      Copying the same formula into ten controls works until one copy is wrong. In this episode the business rules of a canvas app move into user-defined functions, every screen calls them, and they run in tests. Along the way: a weekday trap, and a tidy-looking formula that silently breaks delegation.
+
+      Full episode: link in bio
+
+      #PowerFx #PowerApps #PowerPlatform
+    cover_text: POWER FX AS CODE
+  tiktok:
+    caption: 'Same formula pasted into ten controls? Move the rules into user-defined functions in App.Formulas and test them. Full episode on YouTube. #PowerFx #PowerApps #PowerPlatform'
+- id: weekday
+  youtube_short_title: 'Power Fx Weekday trap: Monday to Friday is not <= 5 #Shorts'
+  instagram_reel:
+    caption: |
+      Weekday starts the week on Sunday by default, so Sunday is 1 and Friday is 6. That makes Weekday(d) <= 5 mean Sunday to Thursday, even though it reads like Monday to Friday. Always pass StartOfWeek.Monday. In the episode a test keeps both versions, so nobody quietly simplifies it back.
+
+      Full episode: link in bio
+
+      #PowerFx #PowerApps #PowerPlatform
+    cover_text: THE WEEKDAY TRAP
+  tiktok:
+    caption: 'Weekday(d) <= 5 is Sunday to Thursday in Power Fx, because the week starts on Sunday. Pass StartOfWeek.Monday. #PowerFx #PowerApps #PowerPlatform'
+- id: gotcha
+  youtube_short_title: 'A tidy Power Fx formula that silently breaks delegation #Shorts'
+  instagram_reel:
+    caption: |
+      Naming the open loans with With looks cleaner. But Microsoft's docs say With creates a collection internally, collections cannot be delegated, and you get no warning. With more than 500 loans, rows just go missing. A unit test cannot see it, so the episode uses a lint instead. Use With for values, never for tables.
+
+      Full episode: link in bio
+
+      #PowerFx #PowerApps #Dataverse
+    cover_text: WITH BREAKS DELEGATION
+  tiktok:
+    caption: 'With around a Filter creates a collection internally. Collections cannot be delegated, and there is no warning. Use With for values, never for tables. #PowerFx #PowerApps #Dataverse'

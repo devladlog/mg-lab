@@ -1,0 +1,82 @@
+episode: 6
+series: DEVLADLOG Power Apps
+status: draft-hold-for-review
+ai_label: true
+youtube_url: '{YOUTUBE_URL}'
+linkedin_company:
+  text: |
+    Most Power Apps that call a flow pass the email address, the subject and the body text. Microsoft's own docs warn that those arguments travel as network traffic and can be intercepted and changed.
+
+    Episode 6 of DEVLADLOG Power Apps turns a copy-reminder button into a cloud flow where the app sends exactly one thing: a loan id.
+
+    - Power Apps (V2) trigger with a single typed input
+    - The flow reads the loan from Dataverse and decides whether a reminder is allowed: not returned, overdue, a contoso.com address
+    - Every path ends in a Respond to a Power App action with the same outputs
+    - Both connections set to provided by the run-only user, so the flow only reads what the person who tapped can read
+    - The flow kept as code and deployed into the solution, with 44 tests
+
+    The gotcha: "overdue" needs a time zone. Late in the evening UTC, Lisbon is already on the next day.
+
+    Watch the episode: {YOUTUBE_URL}
+    Code and tests: {REPO_URL}
+    Written guide: {BLOG_URL}
+
+    Narration uses an AI voice.
+    #PowerAutomate #PowerApps #Dataverse #PowerPlatform
+linkedin_personal:
+  text: |
+    A flow that checks "is this loan overdue" with utcNow() is wrong for part of every day. At half past eleven at night in July, Lisbon is already on the next day, so a loan due that day is overdue there but not in UTC. Convert from UTC to the office time zone before you compare dates.
+
+    That is one of the checks in the sixth DEVLADLOG Power Apps episode, where the app sends the flow only a loan id and the flow decides everything else. A test named for exactly this boundary keeps it fixed. The lesson: never let the app choose who gets the email, and never trust UTC for a business date.
+
+    {YOUTUBE_URL}
+
+    #PowerAutomate #PowerApps
+    Narration uses an AI voice.
+facebook:
+  text: |
+    Should your app tell a flow who to email? In this DEVLADLOG Power Apps episode the phone app sends only a loan id. The flow reads the loan from Dataverse, refuses anything that should not get a reminder, sends the email and answers back to the app.
+
+    We also cover whose connection runs the flow and a time zone boundary that makes "overdue" wrong for a few hours a day. Fictional Contoso data throughout.
+
+    Watch it here: {YOUTUBE_URL}
+
+    #PowerAutomate #PowerApps
+    Narration uses an AI voice.
+shorts:
+- id: hook
+  youtube_short_title: 'Never let the app choose who gets the email #Shorts'
+  instagram_reel:
+    caption: |
+      Most Power Apps that call a flow pass the email address, the subject and the text. Microsoft's own docs warn that those arguments travel as network traffic and can be intercepted and changed. In this episode the phone app sends the flow one thing, a loan id. The flow reads the rest, checks it, sends the reminder and answers back.
+
+      Full episode: link in bio
+
+      #PowerAutomate #PowerApps #PowerPlatform
+    cover_text: SEND ONLY THE ID
+  tiktok:
+    caption: 'Do not pass the email address from the app to the flow. Send one loan id, and let the flow read the loan, check it and send the email. Full episode on YouTube. #PowerAutomate #PowerApps #PowerPlatform'
+- id: timezone
+  youtube_short_title: 'Power Automate overdue check: UTC gives the wrong day #Shorts'
+  instagram_reel:
+    caption: |
+      UTC now is UTC. At half past eleven at night in July, Lisbon is already on the next day, so a loan due that day is overdue there and not in UTC. The flow uses convertFromUtc to the office time zone before comparing dates. A test named for exactly this boundary keeps it fixed.
+
+      Full episode: link in bio
+
+      #PowerAutomate #PowerPlatform #PowerApps
+    cover_text: OVERDUE IN WHICH ZONE?
+  tiktok:
+    caption: 'utcNow() is wrong for a business date. At 23:30 UTC in July, Lisbon is already tomorrow. Use convertFromUtc to the office time zone before comparing. #PowerAutomate #PowerPlatform #PowerApps'
+- id: connections
+  youtube_short_title: 'Whose connection runs your Power Automate flow? #Shorts'
+  instagram_reel:
+    caption: |
+      When an app runs a flow, whose connection does it use? An embedded connection runs as its owner, and Microsoft's docs warn it might reach data the app user cannot. Provided by run only user means the person who tapped. Both connections here use that, so the flow can only read loans you can read, and the email comes from you.
+
+      Full episode: link in bio
+
+      #PowerAutomate #PowerApps #PowerPlatform
+    cover_text: WHOSE CONNECTION?
+  tiktok:
+    caption: 'An embedded connection runs the flow as its owner and might reach data the app user cannot. Use provided by run only user instead. #PowerAutomate #PowerApps #PowerPlatform'
