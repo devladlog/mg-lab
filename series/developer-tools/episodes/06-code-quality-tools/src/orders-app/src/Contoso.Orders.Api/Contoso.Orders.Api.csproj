@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>Contoso.Orders.Api</RootNamespace>
+    <!-- Used by "dotnet publish /t:PublishContainer" (the no-Dockerfile alternative). -->
+    <ContainerRepository>contoso/orders-api</ContainerRepository>
+    <ContainerFamily>noble-chiseled-extra</ContainerFamily>
+    <!-- The Dockerfile restores with -a $TARGETARCH. Listing the RIDs puts a section for each in packages.lock.json;
+         without it a locked restore inside docker build fails with NU1004 ("runtime identifiers have changed"). -->
+    <RuntimeIdentifiers>linux-x64;linux-arm64</RuntimeIdentifiers>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.15" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="10.0.15" />
+  </ItemGroup>
+
+</Project>

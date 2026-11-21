@@ -1,0 +1,184 @@
+# Contoso orders API: one workflow from pull request to production.
+#
+#   pull request ─► guardrails ┐
+#                   build-test ┼─► e2e                                    (checks only)
+#   push to main ─► guardrails ┘     └─► publish (GHCR + attestation) ─► deploy (environment: production)
+#
+# Episode 1's guardrails run first; episode 4's image and compose.yaml are what we test and ship.
+name: ci-cd
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# Least privilege by default; jobs that need more ask for it themselves.
+permissions:
+  contents: read
+
+# A new push to a PR cancels its outdated run. On main nothing is cancelled: a deploy runs to the end.
+concurrency:
+  group: ci-cd-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  DOTNET_NOLOGO: "true"
+  DOTNET_CLI_TELEMETRY_OPTOUT: "true"
+  IMAGE: ghcr.io/${{ github.repository }}
+
+jobs:
+  guardrails:
+    name: guardrails
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: python3 tools/repo_guard/cli.py scan-tree
+      - run: python3 tools/container_lint.py
+      - name: Conventional Commit PR title
+        if: github.event_name == 'pull_request'
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: python3 tools/repo_guard/cli.py title "$PR_TITLE"
+
+  build-test:
+    name: build-test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
+        with:
+          global-json-file: global.json
+          cache: true                                   # NuGet packages, keyed on the lock files
+          cache-dependency-path: "**/packages.lock.json"
+      - run: dotnet restore --locked-mode                 # the committed graph, or fail
+      - run: dotnet build --no-restore -c Release
+      - run: dotnet test --no-build -c Release --logger "trx;LogFileName=unit.trx" --results-directory TestResults
+      - name: Test summary
+        if: ${{ !cancelled() }}
+        run: python3 tools/trx_check.py TestResults/unit.trx
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: ${{ !cancelled() }}
+        with:
+          name: test-results-unit
+          path: TestResults/
+          retention-days: 14
+          if-no-files-found: ignore
+
+  e2e:
+    name: e2e
+    needs: build-test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
+        with:
+          global-json-file: global.json
+          cache: true
+          cache-dependency-path: "**/packages.lock.json"
+      - run: dotnet restore --locked-mode
+      # The real image (Dockerfile) next to a real SQL Server (compose.yaml), then tests and a smoke test.
+      - run: scripts/e2e.sh
+        env:
+          APP_VERSION: ${{ github.sha }}
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: ${{ !cancelled() }}
+        with:
+          name: test-results-sqlserver
+          path: TestResults/
+          retention-days: 14
+          if-no-files-found: ignore
+
+  publish:
+    name: publish
+    needs: [guardrails, build-test, e2e]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write          # push to ghcr.io with GITHUB_TOKEN
+      id-token: write          # sign the attestation (Sigstore)
+      attestations: write      # store it
+    outputs:
+      image: ${{ env.IMAGE }}:sha-${{ github.sha }}
+      digest: ${{ steps.build.outputs.digest }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=sha,format=long
+            type=raw,value=main
+      - id: build
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: APP_VERSION=${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-name: ${{ env.IMAGE }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
+      - name: Summary
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+          SHA: ${{ github.sha }}
+        run: |
+          {
+            echo "### Image"
+            echo "- \`$IMAGE:sha-$SHA\`"
+            echo "- digest \`$DIGEST\`"
+            echo "- verify: \`gh attestation verify oci://$IMAGE@$DIGEST -R $GITHUB_REPOSITORY\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  deploy:
+    name: deploy
+    needs: publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # Required reviewer + main only are set on the environment in GitHub, not here. Its secrets
+    # (AZURE_CLIENT_ID, AZURE_TENANT_ID, AZURE_SUBSCRIPTION_ID) are released only after approval.
+    environment:
+      name: production
+      url: ${{ steps.deploy.outputs.webapp-url }}
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      id-token: write          # OIDC token for azure/login: no Azure secret stored anywhere
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - id: deploy
+        uses: azure/webapps-deploy@02a81bead70021f5284939794bcec79c271ab383 # v3.0.8
+        with:
+          app-name: ${{ vars.AZURE_WEBAPP_NAME }}
+          resource-group-name: ${{ vars.AZURE_RESOURCE_GROUP }}
+          images: ${{ needs.publish.outputs.image }}
+      # "Deployment succeeded" means the setting changed. Done is when the app answers with this commit.
+      - name: Smoke test production
+        env:
+          URL: ${{ steps.deploy.outputs.webapp-url }}
+          VERSION: ${{ github.sha }}
+        run: python3 tools/smoke.py "$URL" --database Sqlite --version "$VERSION" --read-only --timeout 600 --interval 10

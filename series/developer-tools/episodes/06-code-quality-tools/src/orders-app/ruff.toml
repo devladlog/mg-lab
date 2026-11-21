@@ -1,0 +1,17 @@
+# Python quality for tools/ (repo_guard, container_lint, smoke, trx_check, coverage_gate...).
+# One tool for lint and format; the same version in CI (.github/workflows/ci-cd.yml) and in VS Code.
+line-length = 120
+target-version = "py310"
+
+[lint]
+# E/W pycodestyle, F pyflakes, I import order, B bugbear, UP pyupgrade, SIM simplify, S bandit-style security checks
+select = ["E", "W", "F", "I", "B", "UP", "SIM", "S"]
+ignore = [
+  "S603", "S607",   # subprocess with a list and a PATH lookup: the tools call git/dotnet on purpose
+]
+
+[lint.per-file-ignores]
+"tools/smoke.py" = ["S310"]   # urlopen of a URL given on the command line is the point of a smoke test
+# TRX and Cobertura files are written by our own `dotnet test` earlier in the same job, not by strangers.
+"tools/trx_check.py" = ["S314"]
+"tools/coverage_gate.py" = ["S314"]

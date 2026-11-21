@@ -1,0 +1,19 @@
+<Project>
+  <!-- Applies to every project in the repo. -->
+  <PropertyGroup>
+    <!-- Episode 5: packages.lock.json per project, restored in locked mode in CI. -->
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+
+    <!-- Episode 6: code quality on every build, on every machine. -->
+    <!-- The "recommended" rule set of .NET 10, locked: a newer SDK fixes bugs in these rules but doesn't add
+         new warnings until we change this value on purpose. -->
+    <AnalysisLevel>10.0-recommended</AnalysisLevel>
+    <!-- IDE (code style) rules are off in command-line builds unless this is set; .editorconfig picks them. -->
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <!-- IDE0005 (unnecessary using) only runs on build with XML documentation enabled (Microsoft Learn).
+         We don't ship XML docs for an API, so the "missing XML comment" warning is switched off. -->
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+  </PropertyGroup>
+</Project>

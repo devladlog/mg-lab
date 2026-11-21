@@ -1,0 +1,311 @@
+# DEVLADLOG Dev Tools — episode 05. Code excerpts and test output are real (src/orders-app, tests/, run on the
+# build machine on 21 Nov 2026). The four `screen` scenes are recorded later on the Windows recording laptop
+# (browser on GitHub and the Azure portal, Windows Terminal): see demo.md.
+episode: 5
+slug: ci-cd-pipeline-setup
+series_label: "DEV TOOLS"
+series_name: "DEVLADLOG Dev Tools"
+file_prefix: "developer-tools"
+title: "CI/CD pipeline setup: from pull request to production, proven"
+subtitle: "GitHub Actions, a real SQL Server, GHCR, OIDC to Azure App Service"
+voice: am_michael
+thumbnail_text: "GREEN BUILD.\nWHICH COMMIT\nIS LIVE?"
+youtube:
+  title: "GitHub Actions CI/CD for .NET: SQL Server Tests, GHCR, OIDC Deploy to Azure | DEVLADLOG Dev Tools #5"
+  tags: [GitHub Actions, CI/CD, .NET 10, Docker, GHCR, OpenID Connect, Azure App Service, workload identity federation, NuGet lock file, DevTools]
+sources:
+  - https://www.devladlog.com/articles/developer-tools/2025-12-06-cicd-pipeline-setup-complete-guide-2025/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "The pipeline is green. Which commit is live?"
+    sub: "A pipeline that proves the deploy, not just the build"
+    short: hook
+    narration: >
+      The pipeline is green, the deploy step says succeeded. So which commit is running in production right now? If
+      you can't answer that from the pipeline itself, the pipeline isn't finished. Today we build one that can, from
+      pull request to production, with GitHub Actions. Welcome to DEVLADLOG Dev Tools.
+
+  - id: plan
+    type: bullets
+    heading: "One workflow, five jobs"
+    bullets:
+      - "guardrails: episode 1's checks"
+      - "build-test: locked restore, tests, a readable summary"
+      - "e2e: the real image next to a real SQL Server"
+      - "publish: one image in GHCR, with an attestation"
+      - "deploy: approval, OIDC to Azure, smoke test by version"
+    narration: >
+      Our orders API from last episode gets one workflow with five jobs. Episode one's guardrails. Build and test.
+      An end to end job with the real image and a real SQL Server. On main only, publish one image, and deploy it
+      after an approval, with no secret stored anywhere.
+
+  - id: buildtest
+    type: code
+    heading: "build-test: the graph you committed, nothing else"
+    lang: yaml
+    code: |
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
+        with:
+          global-json-file: global.json
+          cache: true                                   # NuGet packages, keyed on the lock files
+          cache-dependency-path: "**/packages.lock.json"
+      - run: dotnet restore --locked-mode                 # the committed graph, or fail
+      - run: dotnet build --no-restore -c Release
+      - run: dotnet test --no-build -c Release --logger "trx;LogFileName=unit.trx" --results-directory TestResults
+      - name: Test summary
+        if: ${{ !cancelled() }}
+        run: python3 tools/trx_check.py TestResults/unit.trx
+    narration: >
+      The build job. Every action is pinned to a commit, and Dependabot bumps the pins. Setup dot net reads the S D K
+      from global dot json and caches NuGet packages, keyed on lock files. Restore in locked mode means CI uses
+      exactly the package graph you committed, or fails. Test results become a table on the run page, even when a
+      test fails.
+
+  - id: lockfile
+    type: code
+    heading: "The lock file meets the Dockerfile"
+    lang: text
+    code: |
+      $ dotnet restore src/Contoso.Orders.Api/Contoso.Orders.Api.csproj -a x64 --locked-mode
+      error NU1004: The project's runtime identifiers have changed from. Project's runtime
+        identifiers: linux-x64, lock file's runtime identifiers .
+
+      <!-- Contoso.Orders.Api.csproj -->
+      <RuntimeIdentifiers>linux-x64;linux-arm64</RuntimeIdentifiers>
+
+      $ dotnet restore ... -a x64 --locked-mode     # Restored
+      $ dotnet restore ... -a arm64 --locked-mode   # Restored
+    narration: >
+      Lock files have a catch. Our Dockerfile restores for the target architecture, and locked mode refused: the
+      runtime identifiers changed. Listing both Linux runtimes in the project gives the lock file a section for each,
+      and now both restore. The tests also prove that removing a package without updating the lock file fails.
+
+  - id: e2e
+    type: code
+    heading: "e2e: episode 4's stack, in CI"
+    lang: bash
+    code: |
+      password="$(head -c 16 /dev/urandom | od -An -tx1 | tr -d ' \n')-Aa1"
+      if [[ "${GITHUB_ACTIONS:-}" == "true" ]]; then
+        echo "::add-mask::${password}"            # before anything else can print it
+      fi
+      umask 077
+      printf 'MSSQL_SA_PASSWORD=%s\n' "$password" > .env
+      trap cleanup EXIT                              # logs on failure, then docker compose down -v
+
+      "$DOCKER" compose up --build --wait --wait-timeout 240
+      ORDERS_SQLSERVER_TESTS="Server=127.0.0.1,1433;...;Password=${password};TrustServerCertificate=True" \
+        "$DOTNET" test --filter "Category=SqlServer" --logger "trx;LogFileName=sqlserver.trx" \
+          --results-directory TestResults
+      "$PYTHON" tools/trx_check.py TestResults/sqlserver.trx --min-passed 4 --no-skipped
+      "$PYTHON" tools/smoke.py http://127.0.0.1:8080 --database SqlServer --version "$APP_VERSION" ...
+    narration: >
+      The end to end job runs one script, the same one you run on a laptop. A fresh password per run, masked in the
+      log before anything can print it. Episode four's compose file builds the image and waits until SQL Server is
+      healthy. Then the integration tests against the real database, and a smoke test of the container.
+
+  - id: skipped
+    type: code
+    heading: "Skipped is not passed"
+    lang: text
+    code: |
+      $ dotnet test --filter "Category=SqlServer"
+      Skipped! - Failed: 0, Passed: 0, Skipped: 4, Total: 4
+      dotnet test exit code: 0
+
+      # the .trx file: every test outcome="NotExecuted", yet
+      <Counters total="4" executed="0" passed="0" failed="0" ... notExecuted="0" />
+
+      $ python3 tools/trx_check.py TestResults/sqlserver.trx --min-passed 4 --no-skipped
+      | sqlserver.trx | 0 | 0 | 4 |
+      ✗ only 0 passed, expected at least 4
+      ✗ 4 test(s) skipped, expected all to run
+      exit code: 1
+    short: skipped
+    narration: >
+      Here's a trap. When there's no database, those tests skip, and dotnet test exits with zero. Green. Even the
+      test report's counters say zero not executed. So the job counts total minus executed, and demands four tests
+      that actually ran. A test that didn't run is not a passing test.
+
+  - id: prchecks
+    type: screen
+    heading: "A pull request, four checks"
+    image: screens/prchecks.jpg
+    bar: "Browser · GitHub · pull request checks"
+    demo: >
+      Throwaway repo contoso-style name (e.g. orders-app-ci-demo). Open a PR "feat(orders): report the build version"
+      (any small change). Capture the PR Checks list: guardrails, build-test, e2e passing (publish and deploy skipped
+      for PRs). Second capture: the e2e job log expanded at "docker compose up" showing db Healthy, then the
+      smoke test lines ending "7 passed, 0 failed". Third: the run Summary page with the Tests table and Smoke test list.
+    narration: >
+      On GitHub, a pull request runs guardrails, build and test, and end to end. Publish and deploy are skipped. In
+      the end to end log, SQL Server turns healthy, the integration tests run, and the smoke test passes against
+      the container. The summary page shows it all without opening a log.
+
+  - id: publish
+    type: code
+    heading: "publish: build once, attest what you built"
+    lang: yaml
+    code: |
+      permissions:
+        contents: read
+        packages: write          # push to ghcr.io with GITHUB_TOKEN
+        id-token: write          # sign the attestation (Sigstore)
+        attestations: write      # store it
+      # ... checkout, buildx, login to ghcr.io, metadata (tags: type=sha,format=long + main)
+      - id: build
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          push: true
+          build-args: APP_VERSION=${{ github.sha }}
+          cache-from: type=gha
+      - uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-name: ${{ env.IMAGE }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+    narration: >
+      Publish runs on main only and is the one job allowed to write packages. It builds the image once, tags it with
+      the full commit, bakes that commit into the image as its version, and pushes to the GitHub Container Registry.
+      Then it signs a build provenance attestation for the exact digest it pushed.
+
+  - id: package
+    type: screen
+    heading: "The image, and proof of where it came from"
+    image: screens/package.jpg
+    bar: "Browser · GitHub Packages · Windows Terminal"
+    demo: >
+      Repo → Packages → the orders-app-ci-demo container: tags sha-<commit> and main, digest visible. Then Windows
+      Terminal on the laptop: `gh attestation verify oci://ghcr.io/<owner>/orders-app-ci-demo@<digest> -R
+      <owner>/orders-app-ci-demo` showing the verification succeeded and the workflow ci-cd.yml as the signer.
+      Mask the owner name if it isn't the public devladlog account.
+    narration: >
+      The package shows the commit tag and the digest. And anyone can check where it came from: g h attestation
+      verify confirms this image was built by our workflow, in our repository.
+
+  - id: identity
+    type: code
+    heading: "Azure: an identity that trusts one GitHub environment"
+    lang: bicep
+    code: |
+      resource github 'Microsoft.ManagedIdentity/userAssignedIdentities/federatedIdentityCredentials@2023-01-31' = {
+        parent: deployer
+        name: 'github-production'
+        properties: {
+          issuer: 'https://token.actions.githubusercontent.com'
+          subject: githubSubject              // matched exactly and case-sensitively, no wildcards
+          audiences: ['api://AzureADTokenExchange']
+        }
+      }
+
+      resource deployerCanDeploy 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+        properties: {
+          roleDefinitionId: websiteContributor     // de139f84-... Website Contributor, scope: this resource group
+          principalId: deployer.properties.principalId
+        }
+      }
+    narration: >
+      On the Azure side, one Bicep file. A Linux App Service for the container, and a user assigned managed identity
+      with a federated credential: it trusts tokens from GitHub, for one subject only. Its role is Website
+      Contributor on this resource group. It can deploy the site, it can't touch anything else or assign roles.
+
+  - id: gotcha
+    type: code
+    heading: "Gotcha: the subject changed format in 2026"
+    lang: text
+    code: |
+      # repositories created, renamed or transferred after 15 July 2026:
+      repo:contoso@123456/orders-app-ci-demo@456789:environment:production
+      # older repositories:
+      repo:contoso/orders-app-ci-demo:environment:production
+
+      $ gh api repos/<owner>/<repo> | python3 tools/oidc_subject.py --environment production
+
+      # wrong subject? created without error, fails at login:
+      AADSTS700213: No matching federated identity record found for presented
+      assertion subject '<the subject GitHub sent>'
+    short: oidc
+    narration: >
+      An honest gotcha. Most guides show the subject as repo, owner slash name, colon environment. Repositories
+      created after the fifteenth of July twenty twenty six get a new format with the numeric owner and repo I Ds.
+      A wrong subject is accepted when you create it, and only fails at login. The good news: the error message
+      prints the subject GitHub actually sent.
+
+  - id: deploy
+    type: code
+    heading: "deploy: approval, OIDC, then proof"
+    lang: yaml
+    code: |
+      environment:
+        name: production
+        url: ${{ steps.deploy.outputs.webapp-url }}
+      steps:
+        - uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+          with:
+            client-id: ${{ secrets.AZURE_CLIENT_ID }}
+            tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+            subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+        - id: deploy
+          uses: azure/webapps-deploy@02a81bead70021f5284939794bcec79c271ab383 # v3.0.8
+          with:
+            app-name: ${{ vars.AZURE_WEBAPP_NAME }}
+            images: ${{ needs.publish.outputs.image }}
+        # smoke step: env URL = webapp-url, VERSION = github.sha
+        - run: python3 tools/smoke.py "$URL" --database Sqlite --version "$VERSION" --read-only --timeout 600 --interval 10
+    narration: >
+      The deploy job targets the production environment. Its rules, a required reviewer and main only, live in
+      GitHub, and its secrets are released only after approval. Azure login exchanges the job's token, no password.
+      Then the image from publish goes to App Service, and the smoke test waits until health z reports this commit.
+
+  - id: approval
+    type: screen
+    heading: "Waiting for a human"
+    image: screens/approval.jpg
+    bar: "Browser · GitHub Actions · Review deployments"
+    demo: >
+      Merge the PR (squash). Actions → the ci-cd run on main: graph with guardrails, build-test, e2e, publish green
+      and deploy "Waiting". Click "Review deployments", tick production, add a comment, "Approve and deploy".
+      Capture the graph before and after approval.
+    narration: >
+      Merge, and main runs the whole chain. Publish finishes, and deploy waits for a reviewer. Approve, and only now
+      does the job get its secrets and its token for Azure.
+
+  - id: live
+    type: screen
+    heading: "Done means: the app says this commit"
+    image: screens/live.jpg
+    bar: "Browser · GitHub Actions log · App Service"
+    demo: >
+      Deploy job log: azure/login "Login successful" (federated token), webapps-deploy, then the smoke step showing
+      "/healthz ok and version <sha>" and "4 passed, 0 failed" (read-only run: health, database, paging, validation). Then the environment URL opened in the
+      browser at /healthz: JSON with "version" equal to the merge commit SHA shown on GitHub, "database":"Sqlite",
+      "user":"app". Place the GitHub commit SHA and the JSON side by side.
+    narration: >
+      Login with the federated token, deploy, and the smoke test keeps polling while App Service swaps the
+      container. Then it passes, because health z now reports the merge commit. Same S H A on GitHub and in
+      production. That's the answer to our first question.
+
+  - id: recap
+    type: bullets
+    heading: "Five habits"
+    bullets:
+      - "Lock the package graph, restore it locked"
+      - "Test the real image against the real database"
+      - "Skipped is not passed: count what ran"
+      - "Build once, tag by commit, attest the digest"
+      - "No secrets: OIDC to one environment, done = live version"
+    narration: >
+      Five habits. Lock the package graph and restore it locked. Test the real image against a real database.
+      Count tests that ran, not tests that didn't fail. Build once, tag by commit, attest the digest. And deploy
+      with OIDC to one protected environment, done when the live app reports your commit. Ninety one tests check the
+      workflow, the scripts and the Bicep before any of this reaches GitHub.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The workflow, the scripts, the Bicep and every test are on GitHub, and the complete guide is on devladlog dot
+      com. Next time we add code quality gates to this pipeline. Subscribe so you don't miss it. This was DEVLADLOG
+      Dev Tools, by Momento Galático.

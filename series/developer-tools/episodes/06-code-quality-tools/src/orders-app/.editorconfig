@@ -1,0 +1,42 @@
+# Editor basics from episode 2, plus the C# rules this repo enforces on build (episode 6).
+# Severity "warning" + EnforceCodeStyleInBuild + TreatWarningsAsErrors = the build fails, locally and in CI.
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 2
+
+[*.{cs,py}]
+indent_size = 4
+
+[*.cs]
+# --- code style (IDE rules), enforced on build -------------------------------------------------
+# IDE0005: unnecessary using directives (on build only with GenerateDocumentationFile, see Directory.Build.props)
+dotnet_diagnostic.IDE0005.severity = warning
+# IDE0055: formatting (indentation, spacing, new lines) - the same rules `dotnet format` applies
+dotnet_diagnostic.IDE0055.severity = warning
+# IDE0161: file-scoped namespaces
+csharp_style_namespace_declarations = file_scoped:warning
+# IDE0040: accessibility modifiers on everything except interface members
+dotnet_style_require_accessibility_modifiers = for_non_interface_members:warning
+# IDE0051 / IDE0052: private members that are never used / never read
+dotnet_diagnostic.IDE0051.severity = warning
+dotnet_diagnostic.IDE0052.severity = warning
+# IDE0060: unused parameters
+dotnet_code_quality_unused_parameters = non_public:warning
+# IDE0059: a value assigned and never read
+csharp_style_unused_value_assignment_preference = discard_variable:warning
+
+# --- quality rules (CA) beyond AnalysisLevel 10.0-recommended ----------------------------------
+# CA2016: forward the CancellationToken to methods that take one
+dotnet_diagnostic.CA2016.severity = warning
+# CA1305: culture-sensitive formatting must say which culture
+dotnet_diagnostic.CA1305.severity = warning
+
+[tests/**.cs]
+# xUnit test names read as sentences: Post_creates_an_order_that_can_be_read_back
+dotnet_diagnostic.CA1707.severity = none

@@ -1,0 +1,283 @@
+# DEVLADLOG Dev Tools — episode 06. Code excerpts and tool output are real (src/orders-app, tests/, run on the
+# build machine on 21 Nov 2026; long diagnostic lines are shortened). The four `screen` scenes are recorded later:
+# GitHub in the browser, VS Code and Windows Terminal on the recording laptop. See demo.md.
+episode: 6
+slug: code-quality-tools
+series_label: "DEV TOOLS"
+series_name: "DEVLADLOG Dev Tools"
+file_prefix: "developer-tools"
+title: "Code quality tools: stop arguing about style in code review"
+subtitle: ".NET analyzers, dotnet format, Ruff and a coverage gate on the lines you changed"
+voice: am_michael
+thumbnail_text: "CODE REVIEW\nSHOULDN'T BE\nA LINTER"
+youtube:
+  title: ".NET Analyzers, dotnet format, Ruff and Diff Coverage in GitHub Actions | DEVLADLOG Dev Tools #6"
+  tags: [code quality, .NET analyzers, EditorConfig, dotnet format, Ruff, code coverage, diff coverage, GitHub Actions, .NET 10, DevTools]
+sources:
+  - https://www.devladlog.com/articles/developer-tools/2025-12-09-code-quality-tools-complete-guide-2025/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Code review shouldn't be a linter"
+    sub: "Quality rules that fail the build, not the reviewer"
+    short: hook
+    narration: >
+      If a human reviewer is the one telling you about an unused import, a missing cancellation token or a wrong
+      indent, your quality bar depends on someone's mood. Today we move those rules into the build and the pipeline,
+      on the orders API from the last two episodes, so the review can be about design. Welcome to DEVLADLOG Dev Tools.
+
+  - id: plan
+    type: bullets
+    heading: "One rule set, three places"
+    bullets:
+      - "Editor: the same rules as the build"
+      - "Build: .NET analyzers fail it"
+      - "Auto-fix: dotnet format and Ruff"
+      - "Pull request: a quality job and annotations"
+      - "Coverage gate on the changed lines"
+    narration: >
+      One rule set, enforced in three places. In the editor, so you see it while typing. In the build, so it can't
+      be ignored. And in the pull request, with annotations on the exact line. Where a tool can fix the problem, it
+      does. And a coverage gate looks only at the lines you changed.
+
+  - id: props
+    type: code
+    heading: "Directory.Build.props: switched on once"
+    lang: xml
+    code: |
+      <PropertyGroup>
+        <!-- the "recommended" rule set of .NET 10, locked -->
+        <AnalysisLevel>10.0-recommended</AnalysisLevel>
+        <!-- IDE (code style) rules are off in command-line builds unless this is set -->
+        <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+        <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+        <!-- IDE0005 (unnecessary using) only runs on build with XML documentation on -->
+        <GenerateDocumentationFile>true</GenerateDocumentationFile>
+        <NoWarn>$(NoWarn);CS1591</NoWarn>
+      </PropertyGroup>
+    narration: >
+      Four properties in one file for every project. Analysis level ten point zero recommended pins the rule set to
+      dot net ten, so a newer S D K doesn't surprise you with new warnings. Enforce code style in build makes the
+      style rules run on the command line, and warnings as errors makes any finding fail the build.
+
+  - id: editorconfig
+    type: code
+    heading: ".editorconfig: the rules themselves"
+    lang: ini
+    code: |
+      [*.cs]
+      dotnet_diagnostic.IDE0005.severity = warning
+      dotnet_diagnostic.IDE0055.severity = warning
+      csharp_style_namespace_declarations = file_scoped:warning
+      dotnet_style_require_accessibility_modifiers = for_non_interface_members:warning
+      dotnet_diagnostic.CA2016.severity = warning
+      dotnet_diagnostic.CA1305.severity = warning
+
+      [tests/**.cs]
+      # xUnit test names read as sentences
+      dotnet_diagnostic.CA1707.severity = none
+    narration: >
+      The rules live in dot editorconfig, which Visual Studio, VS Code and the command line all read. Each rule gets
+      a severity. Unused usings, formatting, file scoped namespaces, forwarding the cancellation token, and
+      culture-aware formatting. Test names with underscores are allowed, but only in the tests folder.
+
+  - id: badpr
+    type: code
+    heading: "One bad file, eight findings"
+    lang: text
+    code: |
+      $ dotnet build                                         (shortened)
+      OrderExport.cs(2,1):   error IDE0005: Using directive is unnecessary.
+      OrderExport.cs(5,11):  error IDE0161: Convert to file-scoped namespace
+      OrderExport.cs(9,20):  error IDE0040: Accessibility modifiers required
+      OrderExport.cs(9,20):  error IDE0051: Private member 'OrderExport.exported' is unused
+      OrderExport.cs(14,37): error CA2016: Forward the 'cancellationToken' parameter to 'ToListAsync'
+      OrderExport.cs(16,17): error IDE0055: Fix formatting
+      OrderExport.cs(16,52): error CA1305: 'decimal.ToString(string)' could vary based on the
+                                           current user's locale settings
+    narration: >
+      Here is a pull request with one careless file. The build fails with eight findings, each with the rule, the
+      line and a link to its documentation. Style rules and quality rules, in the same output, as errors.
+
+  - id: autofix
+    type: code
+    heading: "dotnet format fixes seven of the eight"
+    lang: text
+    code: |
+      $ dotnet format --verify-no-changes       # CI: report only, exit code 2
+      error WHITESPACE: Fix whitespace formatting. Delete 2 characters.
+      error IDE0161: Convert to file-scoped namespace
+      ...
+      $ dotnet format                           # locally: fix
+      Unable to fix CA1305. No associated code fix found.
+
+      $ dotnet build
+      OrderExport.cs(13,46): error CA1305: The behavior of 'decimal.ToString(string)'
+        could vary based on the current user's locale settings.
+      # the human fix: o.Total.ToString("N2", CultureInfo.InvariantCulture)
+    short: autofix
+    narration: >
+      Dot net format has two modes. In the pipeline, verify no changes only reports, and exits non-zero. On your
+      machine, plain dot net format fixes. It repaired the namespace, the using, the unused field, the token and the
+      indent. One rule has no automatic fix, because only you know which culture you mean. So it stays an error,
+      and you fix that one yourself.
+
+  - id: ci-fails
+    type: screen
+    heading: "The pull request says exactly where"
+    image: screens/ci-fails.jpg
+    bar: "Browser · GitHub · pull request checks"
+    demo: >
+      Throwaway repo orders-app-quality-demo. PR "feat(orders): export orders as csv" with the bad C# file and its
+      test, a bad Python tool and an untested discount method (see demo.md). Capture the Checks list with quality and build-test red, then the Files
+      changed tab with the annotations on the lines (C# rule IDs from the build, ruff rule codes). Mask the account menu.
+    narration: >
+      On GitHub the same findings show up where you review. The quality job and the build job are red, and the
+      files changed tab carries an annotation on every offending line, with the rule that broke.
+
+  - id: ruff
+    type: code
+    heading: "Python tools: Ruff, one config"
+    lang: text
+    code: |
+      # ruff.toml
+      line-length = 120
+      [lint]
+      select = ["E", "W", "F", "I", "B", "UP", "SIM", "S"]
+
+      $ ruff check --fix .
+      Found 12 errors (6 fixed, 6 remaining).
+      No fixes available (4 hidden fixes can be enabled with the `--unsafe-fixes` option).
+
+      $ ruff format .
+      1 file reformatted, 9 files left unchanged
+    narration: >
+      The tools folder is Python, and it gets Ruff, one tool for linting and formatting, with one config file.
+      Twelve findings in one demo file. Check with fix repairs six: imports, outdated typing, unused names. The other
+      six need a decision. A hard-coded password, a mutable default, a file that is never closed. Ruff leaves those
+      to you, on purpose.
+
+  - id: local
+    type: screen
+    heading: "The editor shows the same findings"
+    image: screens/local.jpg
+    bar: "VS Code · Windows Terminal"
+    demo: >
+      VS Code on the cloned repo with the recommended extensions (the Ruff extension and the C# extension). Open the
+      bad C# file, then the bad Python file: squiggles and Problems panel show rule IDs. Save with format on save:
+      the Python file reformats. In Windows Terminal run dotnet format, ruff check --fix and ruff format, then show
+      the few findings that remain.
+    narration: >
+      In VS Code the squiggles come from the same config. Save the file and the formatting is applied. In the
+      terminal, dotnet format and Ruff fix what they can, and what remains is short enough to fix by hand.
+
+  - id: quality-job
+    type: code
+    heading: "The quality job: report, never fix"
+    lang: yaml
+    code: |
+      quality:
+        - run: dotnet restore --locked-mode
+        # The same .editorconfig as the build; only reports (no fix), exits non-zero on any difference.
+        - run: dotnet format --verify-no-changes --no-restore
+        # Every finding in one run: the Python steps still run when the formatting check above failed.
+        - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+          if: ${{ !cancelled() }}
+          with:
+            python-version: "3.12"
+        - run: python -m pip install ruff==0.16.9         # pinned: a new ruff can add rules
+          if: ${{ !cancelled() }}
+        - run: ruff check --output-format github .         # findings become annotations on the PR
+          if: ${{ !cancelled() }}
+        - run: ruff format --check .
+          if: ${{ !cancelled() }}
+    narration: >
+      The quality job restores the locked packages, verifies formatting, and runs Ruff in check mode. The Python
+      steps run even when the formatting check fails, so one run shows every finding. Ruff is pinned to an exact
+      version, because a new release can add rules and turn a green pipeline red overnight. The job only reports,
+      and publish needs it.
+
+  - id: diffcov
+    type: code
+    heading: "Coverage of the lines you changed"
+    lang: text
+    code: |
+      $ python3 tools/coverage_gate.py TestResults --include src/ --min-line 90 \
+          --diff-base main --min-diff 80
+      | Coverage      | Lines | %    |
+      | product code  | 85/93 | 91.4 |
+      | changed lines | 5/13  | 38.5 |
+
+      Not covered, changed in this PR: src/Contoso.Orders.Api/Discounts.cs lines 7, 9, 12-17
+      - diff coverage 38.5% (5/13 changed lines) is below 80%      # exit code 1
+    short: diffcov
+    narration: >
+      Coverage is where totals lie. This pull request adds a tested C S V export and a discount method with no test.
+      The total is ninety one percent, so a total-only gate passes. But only five of the thirteen changed lines ran
+      in a test, and the gate fails. Same command in the pipeline, with the pull request base.
+
+  - id: coverage
+    type: screen
+    heading: "Uncovered lines, on the diff"
+    image: screens/coverage.jpg
+    bar: "Browser · GitHub · run summary · Files changed"
+    demo: >
+      The failing build-test job: the Coverage gate step output, then the run Summary page with the Coverage table
+      and the "Not covered, changed in this PR" line. Then the PR Files changed tab with the warning annotations
+      "Changed line not executed by any test" on Discounts.cs.
+    narration: >
+      The run summary shows both numbers, and the files changed tab marks each changed line that no test executed.
+      You don't hunt through a coverage report, you add the test the pull request is missing.
+
+  - id: gotcha
+    type: code
+    heading: "Gotcha: one rule needs a hidden switch"
+    lang: text
+    code: |
+      # Directory.Build.props: <GenerateDocumentationFile>false</GenerateDocumentationFile>
+      $ dotnet build
+      CSC : error EnableGenerateDocumentationFile: Set MSBuild property
+        'GenerateDocumentationFile' to 'true' in project file to enable IDE0005
+        (Remove unnecessary usings/imports) on build
+    narration: >
+      A gotcha. The unused using rule only runs on build when XML documentation is switched on. Learn documents
+      it, and if you forget, the compiler stops with exactly this error. The side effect is a warning for every
+      public member without a doc comment, so we turn that one warning off.
+
+  - id: green
+    type: screen
+    heading: "Fix, push, green"
+    image: screens/green.jpg
+    bar: "Browser · GitHub · pull request"
+    demo: >
+      After the fix commits (formatted code, the culture argument, Ruff fixes, a unit test for Discounts) push the
+      branch. Capture the Checks list: guardrails, quality, build-test, e2e green, and the run Summary with the
+      Coverage table showing changed lines 13/13, 100.0.
+    narration: >
+      Fix the culture argument, add the missing test, push. Quality, build and test, and the end to end job are
+      green, and the summary shows every changed line covered.
+
+  - id: recap
+    type: bullets
+    heading: "Five habits"
+    bullets:
+      - "Rules in .editorconfig, severity as a decision"
+      - "Warnings as errors, rule set pinned"
+      - "Auto-fix locally, report only in CI"
+      - "Pin the linter version"
+      - "Gate on the lines you changed"
+    narration: >
+      Five habits. Put the rules in dot editorconfig and give each a severity. Make warnings errors and pin the rule
+      set. Fix automatically on your machine, only report in the pipeline. Pin the linter version. And measure
+      coverage on the lines you changed. A hundred and thirty three tests check all of this against real builds, a real git
+      repository and real Ruff.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The config, the tools and every test are on GitHub, and the complete guide is on devladlog dot com. Next time
+      we look at code review itself, now that the machines have done their part. Subscribe so you don't miss it.
+      This was DEVLADLOG Dev Tools, by Momento Galático.
