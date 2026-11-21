@@ -17,7 +17,8 @@ $episodes = Get-ChildItem (Join-Path $Root 'series\*\episodes\*\record.json') | 
 $done = 0; $failed = @()
 foreach ($ep in $episodes) {
     $def = Get-Content (Join-Path $ep.FullName 'record.json') -Raw | ConvertFrom-Json
-    $pending = @($def.screens | Where-Object { $Redo -or -not (Test-Path (Join-Path $ep.FullName "screens\$($_.name).mp4")) })
+    # terminal screens only: browser/app screens are performed live by hand while Record-Window.ps1 (MG R4) records
+    $pending = @($def.screens | Where-Object { (-not $_.kind -or $_.kind -eq 'terminal') -and ($Redo -or -not (Test-Path (Join-Path $ep.FullName "screens\$($_.name).mp4"))) })
     if (-not $pending) { continue }
     Write-Host "`n=== $($ep.Parent.Parent.Name)/$($ep.Name): $($pending.Count) screen(s) ===" -ForegroundColor Cyan
     try {
