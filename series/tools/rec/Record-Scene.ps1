@@ -72,6 +72,9 @@ New-Item -ItemType File -Force -Path (Join-Path $markers 'stop') | Out-Null
 if (-not $p.WaitForExit(20000)) { try { $p.Kill($true) } catch {} }
 
 & $ffmpeg -loglevel error -y -sseof -0.5 -i $mp4 -frames:v 1 -update 1 $jpg
+# keep the text of what ran on camera next to the clip, so the narration can be checked against the real output
+$log = Join-Path $markers 'scene.log'
+if (Test-Path $log) { Copy-Item $log ([IO.Path]::ChangeExtension($mp4, '.log')) -Force }
 Write-Host "Saved $mp4 and poster $jpg" -ForegroundColor Green
 Add-RecordingLog -Root $Root -Entry ([ordered]@{ episode = (Resolve-Path $epDir).Path.Substring($Root.Length + 1); screen = $Screen; file = $mp4; at = (Get-Date -Format s) })
 Remove-Item -Recurse -Force $markers -ErrorAction SilentlyContinue
