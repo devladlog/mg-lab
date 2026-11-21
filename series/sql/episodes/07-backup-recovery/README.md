@@ -70,7 +70,7 @@ What runs where (Docker isn't available in the build container, so there is no S
 
 ```powershell
 # a login that is sysadmin on the lab VM (BACKUP/RESTORE, CREATE DATABASE, msdb history); see demo.md
-$env:SQL_CONNECTION_STRING = "Server=10.20.0.30,1433;Database=master;UID=lab_demo;PWD=<password>;Encrypt=yes;TrustServerCertificate=yes"
+$env:SQL_CONNECTION_STRING = "Server=10.50.0.30,1433;Database=master;UID=lab_demo;PWD=<password>;Encrypt=yes;TrustServerCertificate=yes"
 py src/backup_lab.py --engine sqlserver --setup
 # expect: "7/7 steps behaved as expected on sqlserver" and "planner picked: ...Full.bak -> ...Diff.bak -> ...Log1.trn -> ...Log2.trn"
 py src/backup_lab.py --engine sqlserver --plan           # the planner's RESTORE statements for the lab's incident

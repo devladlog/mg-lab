@@ -58,7 +58,7 @@ What runs where (Docker isn't available in the build container, so there is no S
 
 ```powershell
 # a login that can create the database and read server state; see demo.md (GRANT VIEW SERVER PERFORMANCE STATE)
-$env:SQL_CONNECTION_STRING = "Server=10.20.0.30,1433;Database=master;UID=lab_demo;PWD=<password>;Encrypt=yes;TrustServerCertificate=yes"
+$env:SQL_CONNECTION_STRING = "Server=10.50.0.30,1433;Database=master;UID=lab_demo;PWD=<password>;Encrypt=yes;TrustServerCertificate=yes"
 py src/perf_lab.py --engine sqlserver --setup
 # expect: "3/3 steps behaved as expected on sqlserver"  (the blocking step takes about 10-15 seconds: the writer holds the lock for 3 s)
 py src/perf_lab.py --engine sqlserver --step t03-blocking     # only the incident

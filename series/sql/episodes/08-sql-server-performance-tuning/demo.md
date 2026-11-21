@@ -9,8 +9,8 @@ licence, cost 0. The only server-level change is a permission for the demo login
 
 | Machine | What | Notes |
 |---|---|---|
-| **CON-SQL01** (existing, `series/LAB.md`) | Windows Server 2025 Datacenter Eval, Server Core, SQL Server 2022 Developer, default instance, TCP 1433, mixed auth, 10.20.0.30, 2 vCPU / 2–6 GB | ~100 MB for the data. With 2 vCPUs, parallelism waits will be rare: that is expected |
-| **Recording laptop** (host, 10.20.0.1) | SSMS (any current version), Python 3.10+, Windows Terminal (dark theme) | `py -m pip install -r requirements.txt` in this folder |
+| **CON-SQL01** (existing, `series/LAB.md`) | Windows Server 2025 Datacenter Eval, Server Core, SQL Server 2022 Developer, default instance, TCP 1433, mixed auth, 10.50.0.30, 2 vCPU / 2–6 GB | ~100 MB for the data. With 2 vCPUs, parallelism waits will be rare: that is expected |
+| **Recording laptop** (host, 10.50.0.1) | SSMS (any current version), Python 3.10+, Windows Terminal (dark theme) | `py -m pip install -r requirements.txt` in this folder |
 
 Login: `lab_demo`, the SQL login from episode 3's demo.md. This episode needs more than episodes 3-4:
 `CREATE DATABASE` for `--setup` if the database does not exist (or run `--setup` as the lab Administrator), and **server-state
@@ -57,11 +57,11 @@ If SQL Server disagrees with an expected row, **don't edit `expected/` to make i
 
 ## Setup (once, before recording)
 
-1. Start the lab (`lab/hyperv/Start-MGLab.ps1`); check CON-SQL01 answers on 10.20.0.30:1433. Grant `lab_demo` the permission above.
+1. Start the lab (`lab/hyperv/Start-MGLab.ps1`); check CON-SQL01 answers on 10.50.0.30:1433. Grant `lab_demo` the permission above.
 2. Terminal on the laptop, in this folder (password typed off-screen):
    ```powershell
    py -m pip install -r requirements.txt
-   $env:SQL_CONNECTION_STRING = "Server=10.20.0.30,1433;Database=master;UID=lab_demo;PWD=<password>;Encrypt=yes;TrustServerCertificate=yes"
+   $env:SQL_CONNECTION_STRING = "Server=10.50.0.30,1433;Database=master;UID=lab_demo;PWD=<password>;Encrypt=yes;TrustServerCertificate=yes"
    py src/perf_lab.py --engine sqlserver --setup
    ```
    Expected: the setup line, three steps ending `=> OK` (the first prints the config table, the second prints `ran w01-workload`
@@ -93,7 +93,7 @@ To confirm the whole thing end to end once more before recording: `--reset-only`
 ## Masking
 
 - Never show the password or `$env:SQL_CONNECTION_STRING`.
-- Blur `10.20.0.30` and the login name in SSMS (title bar, status bar, Object Explorer), or connect through a hosts-file alias so it reads `CON-SQL01`.
+- Blur `10.50.0.30` and the login name in SSMS (title bar, status bar, Object Explorer), or connect through a hosts-file alias so it reads `CON-SQL01`.
 - Session numbers and `wait_resource` in the diagnosis grid are not secret but change every run: mask them so the screen does not
   contradict the narration.
 - All names (`Contoso Bikes`, `Customer 123`, `@contoso.com`) are fictional.

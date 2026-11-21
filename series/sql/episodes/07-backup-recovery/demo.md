@@ -9,8 +9,8 @@ is restored over.
 
 | Machine | What | Notes |
 |---|---|---|
-| **CON-SQL01** (existing, `series/LAB.md`) | Windows Server 2025 Datacenter Eval, Server Core, SQL Server 2022 Developer, default instance, TCP 1433, mixed auth, 10.20.0.30, 2 vCPU / 2–6 GB | Needs ~100 MB free on the system drive (data files + backups). Backup compression is available in Developer edition |
-| **Recording laptop** (host, 10.20.0.1) | SSMS (any current version), Python 3.10+, Windows Terminal (dark theme) | `py -m pip install -r requirements.txt` in this folder |
+| **CON-SQL01** (existing, `series/LAB.md`) | Windows Server 2025 Datacenter Eval, Server Core, SQL Server 2022 Developer, default instance, TCP 1433, mixed auth, 10.50.0.30, 2 vCPU / 2–6 GB | Needs ~100 MB free on the system drive (data files + backups). Backup compression is available in Developer edition |
+| **Recording laptop** (host, 10.50.0.1) | SSMS (any current version), Python 3.10+, Windows Terminal (dark theme) | `py -m pip install -r requirements.txt` in this folder |
 
 Login: `lab_demo`, the SQL login from episode 3's demo.md (create it as described there if it doesn't exist). This
 episode needs **server-level** rights: `CREATE DATABASE`, `BACKUP`, `RESTORE` and the msdb history procedure.
@@ -37,11 +37,11 @@ and `ContosoBikesBackup_log` (`RESTORE FILELISTONLY FROM DISK = '<full backup>'`
 
 ## Setup (once, before recording)
 
-1. Start the lab (`lab/hyperv/Start-MGLab.ps1`); check CON-SQL01 answers on 10.20.0.30:1433.
+1. Start the lab (`lab/hyperv/Start-MGLab.ps1`); check CON-SQL01 answers on 10.50.0.30:1433.
 2. Terminal on the laptop, in this folder (password typed off-screen):
    ```powershell
    py -m pip install -r requirements.txt
-   $env:SQL_CONNECTION_STRING = "Server=10.20.0.30,1433;Database=master;UID=lab_demo;PWD=<password>;Encrypt=yes;TrustServerCertificate=yes"
+   $env:SQL_CONNECTION_STRING = "Server=10.50.0.30,1433;Database=master;UID=lab_demo;PWD=<password>;Encrypt=yes;TrustServerCertificate=yes"
    py src/backup_lab.py --engine sqlserver --setup
    ```
    Expected: the setup line, `ran d01-orders-after-full.sql` before `b03`, `ran d02-order-after-diff.sql` before `b04`,
@@ -74,7 +74,7 @@ To confirm the whole thing end to end once more before recording: `--setup` agai
 ## Masking
 
 - Never show the password or `$env:SQL_CONNECTION_STRING`.
-- Blur `10.20.0.30` and the login name in SSMS (title bar, status bar, Object Explorer), or connect through a
+- Blur `10.50.0.30` and the login name in SSMS (title bar, status bar, Object Explorer), or connect through a
   hosts-file alias so it reads `CON-SQL01`.
 - The messages from BACKUP and RESTORE show the full path of the backup folder on the VM (default instance folder
   under `C:\Program Files\Microsoft SQL Server\...`): that is the lab VM, not a client path, but blur it if you prefer.
