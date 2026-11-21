@@ -1,0 +1,93 @@
+{
+  "note": "Live-session recording of the screen scenes (series/tools/rec). prepare/teardown run on the laptop, not recorded; commands are typed and run for real. The promote screen is an app screen: CON-FOREST01 is a standalone VM, so PowerShell Direct with the lab CONTOSO credential cannot sign in; the owner signs in at the VMConnect console with the local Administrator.",
+  "prepare": [
+    "$dc = New-PSSession -VMName CON-DC01 -Credential $cred",
+    "Invoke-Command -Session $dc { New-Item -ItemType Directory -Force C:\\lab | Out-Null; Remove-Item C:\\lab\\ep02 -Recurse -Force -ErrorAction SilentlyContinue }",
+    "Copy-Item -ToSession $dc -Path (Get-Location).Path -Destination C:\\lab\\ep02 -Recurse -Force",
+    "$v = $PSVersionTable.PSVersion.ToString(); $msi = Join-Path $env:TEMP \"PowerShell-$v-win-x64.msi\"",
+    "if (-not (Invoke-Command -Session $dc { Test-Path \"C:\\Program Files\\PowerShell\\7\\pwsh.exe\" })) { if (-not (Test-Path $msi)) { Invoke-WebRequest \"https://github.com/PowerShell/PowerShell/releases/download/v$v/PowerShell-$v-win-x64.msi\" -OutFile $msi }; Copy-Item -ToSession $dc -Path $msi -Destination C:\\lab\\pwsh.msi -Force; Invoke-Command -Session $dc { Start-Process msiexec.exe \"/i C:\\lab\\pwsh.msi /quiet ADD_PATH=1 ENABLE_PSREMOTING=1\" -Wait } }",
+    "if (-not (Invoke-Command -Session $dc { Test-Path C:\\lab\\ep02-pw.xml })) { $pw = Read-Host -AsSecureString \"Lab-only initial password for the demo users (owner types, never shown)\"; Invoke-Command -Session $dc -ArgumentList $pw { param($p) $p | Export-Clixml C:\\lab\\ep02-pw.xml } }",
+    "Remove-PSSession $dc",
+    "# CON-FOREST01 (throwaway, not domain-joined, private switch MGLab-Isolated) is created by the owner from the lab base image: see needs vm:CON-FOREST01",
+    "if (Get-VM -Name CON-FOREST01 -ErrorAction SilentlyContinue) { $fc = [pscredential]::new(\"Administrator\", (Read-Host -AsSecureString \"CON-FOREST01 local Administrator password (owner types, never shown)\")); $f = New-PSSession -VMName CON-FOREST01 -Credential $fc; Invoke-Command -Session $f { New-Item -ItemType Directory -Force C:\\lab | Out-Null; Remove-Item C:\\lab\\ep02 -Recurse -Force -ErrorAction SilentlyContinue }; Copy-Item -ToSession $f -Path (Get-Location).Path -Destination C:\\lab\\ep02 -Recurse -Force; Invoke-Command -Session $f { Install-WindowsFeature AD-Domain-Services -IncludeManagementTools | Out-Null }; Remove-PSSession $f }"
+  ],
+  "screens": [
+    {
+      "name": "promote",
+      "kind": "app",
+      "app": "VMConnect: CON-FOREST01 console (Server Core, isolated switch MGLab-Isolated, never CON-DC01)",
+      "steps": [
+        "Open the console of CON-FOREST01 in VMConnect; the owner signs in as the local Administrator (typed off camera)",
+        "In the console run: powershell",
+        "cd C:\\lab\\ep02",
+        ".\\setup\\New-LabForest.ps1 -DomainName lab.contoso.com -NetbiosName CONTOSO -WhatIf",
+        "Pause on the line \"ForestMode values accepted here: ...\" and on the Test-ADDSForestInstallation result (Status Success); say whether Win2025 is in the list",
+        ".\\setup\\New-LabForest.ps1 -DomainName lab.contoso.com -NetbiosName CONTOSO",
+        "Directory Services Restore Mode password is typed off camera (never shown); show the restart prompt and the restart as B-roll",
+        "Optional B-roll on this throwaway VM only: Enable-ADOptionalFeature -Identity \"Recycle Bin Feature\" -Scope ForestOrConfigurationSet -Target lab.contoso.com and show the irreversible-change confirmation only"
+      ],
+      "mask": [
+        "VMConnect title bar (\"<VM> on <laptop name>\") and the laptop taskbar",
+        "any password prompt (DSRM password) while it is typed"
+      ]
+    },
+    {
+      "name": "provision",
+      "kind": "terminal",
+      "target": "CON-DC01",
+      "configurationName": "PowerShell.7",
+      "workdir": "C:\\lab\\ep02",
+      "prompt": "PS C:\\lab\\ep02> ",
+      "commands": [
+        "Import-Module .\\src\\AdLab\\AdLab.psd1",
+        "$pw = Import-Clixml C:\\lab\\ep02-pw.xml",
+        "Invoke-AdLabProvisioning -CsvPath .\\src\\users.csv -DomainDn 'DC=lab,DC=contoso,DC=com' -UpnSuffix lab.contoso.com -InitialPassword $pw | Group-Object Action, Type | Format-Table Count, Name",
+        "Invoke-AdLabProvisioning -CsvPath .\\src\\users.csv -DomainDn 'DC=lab,DC=contoso,DC=com' -UpnSuffix lab.contoso.com -InitialPassword $pw | Group-Object Action, Type | Format-Table Count, Name",
+        "#pause 4"
+      ]
+    },
+    {
+      "name": "report",
+      "kind": "terminal",
+      "target": "CON-DC01",
+      "configurationName": "PowerShell.7",
+      "workdir": "C:\\lab\\ep02",
+      "prompt": "PS C:\\lab\\ep02> ",
+      "prepare": [
+        "Invoke-Command -VMName CON-DC01 -Credential $cred { $pw = Import-Clixml C:\\lab\\ep02-pw.xml; $ou = \"OU=IT,OU=Users,OU=Contoso,$((Get-ADDomain).DistinguishedName)\"; if (-not (Get-ADUser -Filter \"SamAccountName -eq 'adm-alex'\")) { New-ADUser -Name adm-alex -SamAccountName adm-alex -Path $ou -AccountPassword $pw -Enabled $true }; Add-ADGroupMember -Identity \"Domain Admins\" -Members adm-alex, iferreira }",
+        "# SDProp is started by hand instead of waiting 60 minutes; iferreira then keeps adminCount=1 after leaving Domain Admins",
+        "Invoke-Command -VMName CON-DC01 -Credential $cred { $r = [ADSI]\"LDAP://CON-DC01/RootDSE\"; $r.Put(\"runProtectAdminGroupsTask\", 1); $r.SetInfo(); Start-Sleep -Seconds 20; (Get-ADUser iferreira -Properties adminCount).adminCount; Remove-ADGroupMember -Identity \"Domain Admins\" -Members iferreira -Confirm:$false }"
+      ],
+      "commands": [
+        ".\\src\\Invoke-AdHygieneReport.ps1 -SnapshotFile .\\lab-snapshot.json -OutFile .\\ad-report.md",
+        "#pause 6"
+      ]
+    },
+    {
+      "name": "lastlogon",
+      "kind": "terminal",
+      "target": "CON-DC01",
+      "configurationName": "PowerShell.7",
+      "workdir": "C:\\lab\\ep02",
+      "prompt": "PS C:\\lab\\ep02> ",
+      "prepare": [
+        "# owner signs in: at the VMConnect console of CON-SRV02 sign in as CONTOSO\\jgoncalves (first sign-in forces the password change), sign out; wait about 5 minutes; sign in again; sign out",
+        "Read-Host 'Press Enter when both sign-ins are done' | Out-Null"
+      ],
+      "commands": [
+        "Get-ADUser jgoncalves -Properties lastLogon, lastLogonTimestamp | Select-Object Name, @{ n = 'lastLogon (this DC)'; e = { [datetime]::FromFileTimeUtc($_.lastLogon) } }, @{ n = 'lastLogonTimestamp (repl)'; e = { [datetime]::FromFileTimeUtc($_.lastLogonTimestamp) } } | Format-List",
+        "#pause 6"
+      ]
+    }
+  ],
+  "teardown": [
+    "Invoke-Command -VMName CON-DC01 -Credential $cred { Remove-ADGroupMember -Identity \"Domain Admins\" -Members adm-alex -Confirm:$false -ErrorAction SilentlyContinue; $ou = \"OU=Contoso,$((Get-ADDomain).DistinguishedName)\"; if (Get-ADOrganizationalUnit -Filter \"DistinguishedName -eq '$ou'\") { Get-ADOrganizationalUnit -SearchBase $ou -Filter * | Set-ADObject -ProtectedFromAccidentalDeletion $false; Remove-ADOrganizationalUnit -Identity $ou -Recursive -Confirm:$false }; Remove-Item C:\\lab\\ep02, C:\\lab\\ep02-pw.xml -Recurse -Force -ErrorAction SilentlyContinue }",
+    "Invoke-Command -VMName CON-SRV02 -Credential $cred { Get-CimInstance Win32_UserProfile | Where-Object LocalPath -like \"*jgoncalves*\" | Remove-CimInstance -ErrorAction SilentlyContinue }",
+    "$vm = Get-VM -Name CON-FOREST01 -ErrorAction SilentlyContinue; if ($vm) { $disks = @($vm | Get-VMHardDiskDrive | ForEach-Object Path | Where-Object { (Split-Path $_ -Leaf) -like \"CON-FOREST01*\" }); Stop-VM -VM $vm -TurnOff -Force -ErrorAction SilentlyContinue; Remove-VM -VM $vm -Force; foreach ($d in $disks) { Get-ChildItem (Split-Path $d) -File -Filter \"CON-FOREST01*\" -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue } }",
+    "Get-VMSwitch -Name MGLab-Isolated -ErrorAction SilentlyContinue | Remove-VMSwitch -Force"
+  ],
+  "needs": [
+    "lab-vms",
+    "vm:CON-FOREST01"
+  ]
+}

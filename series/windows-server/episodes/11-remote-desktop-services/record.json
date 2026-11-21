@@ -1,0 +1,96 @@
+{
+  "note": "Live-session recording of the screen scenes (series/tools/rec). prepare/teardown run on the laptop, not recorded; commands are typed and run for real. CON-RDS01 is a throwaway Desktop Experience VM (Server Core has no RD Session Host). If New-RDSessionDeployment restarts the server during the apply screen, the PowerShell Direct session ends: sign in again and re-run the same Apply command (the plan is rebuilt from the facts). The RDP session for the sessions screen is made by the owner on CON-SRV02 (mstsc).",
+  "prepare": [
+    "# owner creates CON-RDS01 (Windows Server 2025 Datacenter Evaluation, Desktop Experience, 10.50.0.44, domain-joined): see needs vm:CON-RDS01",
+    "$r = New-PSSession -VMName CON-RDS01 -Credential $cred",
+    "Invoke-Command -Session $r { New-Item -ItemType Directory -Force C:\\lab | Out-Null; Remove-Item C:\\lab\\ep11 -Recurse -Force -ErrorAction SilentlyContinue }",
+    "Copy-Item -ToSession $r -Path (Get-Location).Path -Destination C:\\lab\\ep11 -Recurse -Force",
+    "Remove-PSSession $r",
+    "$pw = Read-Host -AsSecureString \"Password for alex.demo (owner types, never shown)\"",
+    "Invoke-Command -VMName CON-DC01 -Credential $cred -ArgumentList $pw { param($p) if (-not (Get-ADUser -Filter \"SamAccountName -eq 'alex.demo'\")) { New-ADUser -Name \"Alex Demo\" -SamAccountName alex.demo -UserPrincipalName alex.demo@lab.contoso.com -AccountPassword $p -Enabled $true } else { Set-ADAccountPassword -Identity alex.demo -Reset -NewPassword $p; Enable-ADAccount -Identity alex.demo }; if (-not (Get-ADUser -Filter \"SamAccountName -eq 'sam.demo'\")) { New-ADUser -Name \"Sam Demo\" -SamAccountName sam.demo -UserPrincipalName sam.demo@lab.contoso.com -Enabled $false } }",
+    "Invoke-Command -VMName CON-DC01 -Credential $cred -FilePath .\\setup\\New-RdsDemoGroup.ps1",
+    "Invoke-Command -VMName CON-RDS01 -Credential $cred { Test-WSMan con-rds01.lab.contoso.com | Out-Null }"
+  ],
+  "screens": [
+    {
+      "name": "check-before",
+      "kind": "terminal",
+      "target": "CON-RDS01",
+      "workdir": "C:\\lab\\ep11\\src",
+      "prompt": "PS> ",
+      "commands": [
+        ".\\Invoke-RdsCheck.ps1 -FactsFile .\\facts-before.json -OutFile .\\check-before.md -PlanOnly",
+        "#pause 8"
+      ]
+    },
+    {
+      "name": "apply",
+      "kind": "terminal",
+      "target": "CON-RDS01",
+      "workdir": "C:\\lab\\ep11\\src",
+      "prompt": "PS> ",
+      "commands": [
+        ".\\Deploy-RdsLab.ps1 -Step Apply -WhatIf",
+        "#pause 5",
+        ".\\Deploy-RdsLab.ps1 -Step Apply -AllowDeployment",
+        "#pause 5",
+        ".\\Deploy-RdsLab.ps1 -Step Apply -AllowDeployment",
+        "#pause 5"
+      ]
+    },
+    {
+      "name": "check-after",
+      "kind": "terminal",
+      "target": "CON-RDS01",
+      "workdir": "C:\\lab\\ep11\\src",
+      "prompt": "PS> ",
+      "commands": [
+        ".\\Invoke-RdsCheck.ps1 -OutFile .\\check-after.md",
+        "#pause 6",
+        "Get-RDCertificate | Format-Table Role, Level, ExpiresOn",
+        "#pause 6"
+      ]
+    },
+    {
+      "name": "sessions",
+      "kind": "terminal",
+      "target": "CON-RDS01",
+      "workdir": "C:\\lab\\ep11\\src",
+      "prompt": "PS> ",
+      "prepare": [
+        "# owner signs in: on CON-SRV02 run mstsc /v:con-rds01.lab.contoso.com, sign in as CONTOSO\\alex.demo (typed off camera), open Notepad, then close the RDP window with the X (disconnect, not log off)",
+        "Read-Host 'Press Enter when alex.demo is disconnected' | Out-Null"
+      ],
+      "commands": [
+        ".\\Invoke-RdsCheck.ps1 -OutFile .\\check-sessions.md",
+        "#pause 5",
+        "Get-RDUserSession | Format-Table UserName, HostServer, SessionState, UnifiedSessionId",
+        "#pause 5"
+      ]
+    },
+    {
+      "name": "logoff",
+      "kind": "terminal",
+      "target": "CON-RDS01",
+      "workdir": "C:\\lab\\ep11\\src",
+      "prompt": "PS> ",
+      "commands": [
+        ".\\Deploy-RdsLab.ps1 -Step Logoff -UserName alex.demo -WhatIf",
+        "#pause 4",
+        ".\\Deploy-RdsLab.ps1 -Step Logoff -UserName alex.demo",
+        "#pause 3",
+        "Get-RDUserSession",
+        "#pause 5"
+      ]
+    }
+  ],
+  "teardown": [
+    "Invoke-Command -VMName CON-RDS01 -Credential $cred { Remove-RDSessionCollection -CollectionName \"MG Lab Desktops\" -Force -ErrorAction SilentlyContinue; Remove-Item C:\\lab\\ep11 -Recurse -Force -ErrorAction SilentlyContinue }",
+    "$vm = Get-VM -Name CON-RDS01 -ErrorAction SilentlyContinue; if ($vm) { $disks = @($vm | Get-VMHardDiskDrive | ForEach-Object Path | Where-Object { (Split-Path $_ -Leaf) -like \"CON-RDS01*\" }); Stop-VM -VM $vm -TurnOff -Force -ErrorAction SilentlyContinue; Remove-VM -VM $vm -Force; foreach ($d in $disks) { Get-ChildItem (Split-Path $d) -File -Filter \"CON-RDS01*\" -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue } }",
+    "Invoke-Command -VMName CON-DC01 -Credential $cred { Remove-ADComputer CON-RDS01 -Confirm:$false -ErrorAction SilentlyContinue; Remove-ADGroup \"RDS Demo Users\" -Confirm:$false -ErrorAction SilentlyContinue; Remove-ADUser alex.demo -Confirm:$false -ErrorAction SilentlyContinue; Remove-ADUser sam.demo -Confirm:$false -ErrorAction SilentlyContinue }"
+  ],
+  "needs": [
+    "lab-vms",
+    "vm:CON-RDS01"
+  ]
+}

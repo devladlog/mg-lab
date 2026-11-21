@@ -1,0 +1,98 @@
+{
+  "note": "Live-session recording of the screen scenes (series/tools/rec). prepare/teardown run on the laptop, not recorded; commands are typed and run for real. Windows PowerShell 5.1 on CON-SRV02. The gotcha screen is an app screen because the user policy is read in a real sign-in as CONTOSO\\jgoncalves at the VMConnect console.",
+  "prepare": [
+    "$dc = New-PSSession -VMName CON-DC01 -Credential $cred",
+    "$s2 = New-PSSession -VMName CON-SRV02 -Credential $cred",
+    "Invoke-Command -Session $s2 { New-Item -ItemType Directory -Force C:\\lab | Out-Null; Remove-Item C:\\lab\\ep03 -Recurse -Force -ErrorAction SilentlyContinue }",
+    "Copy-Item -ToSession $s2 -Path (Get-Location).Path -Destination C:\\lab\\ep03 -Recurse -Force",
+    "Invoke-Command -Session $s2 { Get-ChildItem C:\\lab\\ep03 -Recurse | Unblock-File; Install-WindowsFeature GPMC, RSAT-AD-PowerShell | Out-Null }",
+    "$v = $PSVersionTable.PSVersion.ToString(); $msi = Join-Path $env:TEMP \"PowerShell-$v-win-x64.msi\"",
+    "if (-not (Invoke-Command -Session $dc { Test-Path \"C:\\Program Files\\PowerShell\\7\\pwsh.exe\" })) { if (-not (Test-Path $msi)) { Invoke-WebRequest \"https://github.com/PowerShell/PowerShell/releases/download/v$v/PowerShell-$v-win-x64.msi\" -OutFile $msi }; Copy-Item -ToSession $dc -Path $msi -Destination C:\\lab\\pwsh.msi -Force; Invoke-Command -Session $dc { Start-Process msiexec.exe \"/i C:\\lab\\pwsh.msi /quiet ADD_PATH=1 ENABLE_PSREMOTING=1\" -Wait } }",
+    "if (-not (Invoke-Command -Session $dc { Test-Path C:\\lab\\ep03-pw.xml })) { $pw = Read-Host -AsSecureString \"Lab-only initial password for the demo users (owner types, never shown)\"; Invoke-Command -Session $dc -ArgumentList $pw { param($p) New-Item -ItemType Directory -Force C:\\lab | Out-Null; $p | Export-Clixml C:\\lab\\ep03-pw.xml } }",
+    "# episode 2 data is needed (OU tree, GG-Dept-Finance, jgoncalves): provisioned here from the episode 2 module when OU=Contoso is missing",
+    "Invoke-Command -Session $dc { Remove-Item C:\\lab\\ep03-ad -Recurse -Force -ErrorAction SilentlyContinue }",
+    "Copy-Item -ToSession $dc -Path (Join-Path (Split-Path (Get-Location).Path) \"02-active-directory-domain-services\") -Destination C:\\lab\\ep03-ad -Recurse -Force",
+    "Invoke-Command -Session $dc { if (-not (Get-ADOrganizationalUnit -Filter \"Name -eq 'Contoso'\")) { & \"C:\\Program Files\\PowerShell\\7\\pwsh.exe\" -NoProfile -Command \"Import-Module C:\\lab\\ep03-ad\\src\\AdLab\\AdLab.psd1; Invoke-AdLabProvisioning -CsvPath C:\\lab\\ep03-ad\\src\\users.csv -DomainDn 'DC=lab,DC=contoso,DC=com' -UpnSuffix lab.contoso.com -InitialPassword (Import-Clixml C:\\lab\\ep03-pw.xml) | Out-Null\" } }",
+    "Invoke-Command -Session $s2 { foreach ($n in \"CON-SRV01\", \"CON-SRV02\") { Get-ADComputer -Identity $n | Move-ADObject -TargetPath \"OU=Servers,OU=Contoso,DC=lab,DC=contoso,DC=com\" } }",
+    "Remove-PSSession $dc, $s2",
+    "# owner signs in: at the VMConnect console of CON-SRV02 sign in once as CONTOSO\\jgoncalves (first sign-in forces the password change), then sign out",
+    "Read-Host 'Press Enter when jgoncalves has signed in once and out again' | Out-Null"
+  ],
+  "screens": [
+    {
+      "name": "deploy",
+      "kind": "terminal",
+      "target": "CON-SRV02",
+      "workdir": "C:\\lab\\ep03\\src",
+      "prompt": "PS> ",
+      "commands": [
+        "Import-Module .\\GpoLab\\GpoLab.psd1",
+        "Invoke-GpoLabDeployment -DefinitionPath .\\gpo-definitions.json -WhatIf | Format-Table Gpo, Action, Target, Result -AutoSize",
+        "#pause 3",
+        "Invoke-GpoLabDeployment -DefinitionPath .\\gpo-definitions.json | Format-Table Gpo, Action, Target, Result -AutoSize",
+        "#pause 3",
+        "Invoke-GpoLabDeployment -DefinitionPath .\\gpo-definitions.json | Format-Table Gpo, Action, Target, Result -AutoSize",
+        "#pause 4"
+      ]
+    },
+    {
+      "name": "applied",
+      "kind": "terminal",
+      "target": "CON-SRV02",
+      "workdir": "C:\\lab\\ep03\\src",
+      "prompt": "PS> ",
+      "commands": [
+        "Invoke-Command -ComputerName CON-SRV01 { gpupdate /force | Out-Null; gpresult /r /scope computer }",
+        "#pause 4",
+        "Invoke-Command -ComputerName CON-SRV01 { Get-ItemProperty 'HKLM:\\Software\\Policies\\Microsoft\\Windows\\PowerShell\\ScriptBlockLogging' }",
+        "#pause 3",
+        "Invoke-Command -ComputerName CON-SRV01 { Get-WinEvent -LogName 'Microsoft-Windows-PowerShell/Operational' -FilterXPath '*[System[EventID=4104]]' -MaxEvents 3 | Format-Table TimeCreated, Id, @{ n = 'ScriptBlock'; e = { $_.Message.Substring(0, [Math]::Min(80, $_.Message.Length)) } } -AutoSize }",
+        "#pause 4"
+      ]
+    },
+    {
+      "name": "ms16072",
+      "kind": "app",
+      "app": "VMConnect: CON-SRV02 console (Windows PowerShell as lab Administrator, then a sign-in as CONTOSO\\jgoncalves)",
+      "steps": [
+        "As lab Administrator in Windows PowerShell 5.1: cd C:\\lab\\ep03\\src; Import-Module .\\GpoLab\\GpoLab.psd1",
+        "Set-GPPermission -Name CON-Finance-ScreenLock -TargetName 'Authenticated Users' -TargetType Group -PermissionLevel None -Replace",
+        "Get-GPPermission -Name CON-Finance-ScreenLock -All | Format-Table Trustee, Permission",
+        "Sign out; sign in to the CON-SRV02 console as CONTOSO\\jgoncalves (password typed off camera); open a command prompt",
+        "gpresult /r /scope user   (capture exactly what it says about CON-Finance-ScreenLock; if /r only omits the GPO, run gpresult /h %TEMP%\\gp.html and open it)",
+        "Sign out; sign in again as the lab Administrator",
+        "Invoke-GpoLabDeployment -DefinitionPath .\\gpo-definitions.json | Where-Object Result -ne 'NoChange' | Format-Table",
+        "Show the row Permission Authenticated Users=GpoRead Done",
+        "Sign out, sign in as CONTOSO\\jgoncalves, open a command prompt: gpresult /r /scope user (GPO now applied) and reg query \"HKCU\\Software\\Policies\\Microsoft\\Windows\\Control Panel\\Desktop\" (ScreenSaverIsSecure 1, ScreenSaveTimeOut 900)",
+        "Split screen: broken gpresult left, fixed right. Do not claim that the screen locks (no screen saver is configured on the server)"
+      ],
+      "mask": [
+        "VMConnect title bar (\"<VM> on <laptop name>\") and the laptop taskbar",
+        "password prompts at the sign-in screen"
+      ]
+    },
+    {
+      "name": "report",
+      "kind": "terminal",
+      "target": "CON-SRV02",
+      "workdir": "C:\\lab\\ep03\\src",
+      "prompt": "PS> ",
+      "prepare": [
+        "Invoke-Command -VMName CON-SRV02 -Credential $cred { if (-not (Get-GPO -Name CON-Test-Empty -ErrorAction SilentlyContinue)) { New-GPO -Name CON-Test-Empty -Comment \"Planted for the episode 3 report\" | Out-Null }; if (-not (Get-GPO -Name CON-Sales-Legacy -ErrorAction SilentlyContinue)) { New-GPO -Name CON-Sales-Legacy | Set-GPRegistryValue -Key \"HKCU\\Software\\Policies\\Microsoft\\Windows\\Control Panel\\Desktop\" -ValueName ScreenSaveTimeOut -Type String -Value \"600\" | Out-Null; New-GPLink -Name CON-Sales-Legacy -Target \"OU=Sales,OU=Users,OU=Contoso,DC=lab,DC=contoso,DC=com\" | Out-Null }; (Get-GPO -Name CON-Sales-Legacy).GpoStatus = \"UserSettingsDisabled\" }"
+      ],
+      "commands": [
+        ".\\Invoke-GpoHygieneReport.ps1 -SnapshotFile .\\gpo-snapshot.json -OutFile .\\gpo-report.md",
+        "#pause 5",
+        "Get-Content .\\gpo-report.md",
+        "#pause 5"
+      ]
+    }
+  ],
+  "teardown": [
+    "Invoke-Command -VMName CON-SRV02 -Credential $cred { foreach ($g in \"CON-Test-Empty\", \"CON-Sales-Legacy\", \"CON-Servers-Baseline\", \"CON-Finance-ScreenLock\") { Remove-GPO -Name $g -ErrorAction SilentlyContinue }; foreach ($n in \"CON-SRV01\", \"CON-SRV02\") { Get-ADComputer -Identity $n | Move-ADObject -TargetPath \"CN=Computers,DC=lab,DC=contoso,DC=com\" }; Get-CimInstance Win32_UserProfile | Where-Object LocalPath -like \"*jgoncalves*\" | Remove-CimInstance -ErrorAction SilentlyContinue; Remove-Item C:\\lab\\ep03 -Recurse -Force -ErrorAction SilentlyContinue }",
+    "Invoke-Command -VMName CON-DC01 -Credential $cred { $ou = \"OU=Contoso,DC=lab,DC=contoso,DC=com\"; if (Get-ADOrganizationalUnit -Filter \"DistinguishedName -eq '$ou'\") { Get-ADOrganizationalUnit -SearchBase $ou -Filter * | Set-ADObject -ProtectedFromAccidentalDeletion $false; Remove-ADOrganizationalUnit -Identity $ou -Recursive -Confirm:$false }; Remove-Item C:\\lab\\ep03-ad, C:\\lab\\ep03-pw.xml -Recurse -Force -ErrorAction SilentlyContinue }"
+  ],
+  "needs": [
+    "lab-vms"
+  ]
+}

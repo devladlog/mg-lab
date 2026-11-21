@@ -1,0 +1,100 @@
+{
+  "note": "Live-session recording of the screen scenes (series/tools/rec). prepare/teardown run on the laptop, not recorded; commands are typed and run for real. Record in the array order: the state the check sees depends on it. The two templates that need certtmpl.msc (LabWebServer, LabShortLived) are made by the owner (the AD CS cmdlets cannot duplicate a template). Tear-down restores the pre-ep09 checkpoints and deletes CON-CA01.",
+  "prepare": [
+    "foreach ($v in 'CON-DC01', 'CON-SRV01', 'CON-SRV02', 'CON-SQL01') { if (-not (Get-VMSnapshot -VMName $v -Name pre-ep09 -ErrorAction SilentlyContinue)) { Checkpoint-VM -Name $v -SnapshotName pre-ep09 } }",
+    "$s = New-PSSession -VMName CON-SRV02 -Credential $cred",
+    "Invoke-Command -Session $s { New-Item -ItemType Directory -Force C:\\lab | Out-Null; Remove-Item C:\\lab\\ep09 -Recurse -Force -ErrorAction SilentlyContinue }",
+    "Copy-Item -ToSession $s -Path (Get-Location).Path -Destination C:\\lab\\ep09 -Recurse -Force",
+    "Invoke-Command -Session $s { Install-WindowsFeature RSAT-ADCS -IncludeAllSubFeature | Out-Null }",
+    "Remove-PSSession $s",
+    "# CON-CA01 (Server Core, domain-joined, 10.50.0.43) is created by the owner like the other lab VMs: see needs vm:CON-CA01",
+    "if (-not (Get-VMSnapshot -VMName CON-CA01 -Name pre-ep09 -ErrorAction SilentlyContinue)) { Checkpoint-VM -Name CON-CA01 -SnapshotName pre-ep09 }",
+    "Invoke-Command -VMName CON-SRV02 -Credential $cred { Invoke-Command -ComputerName CON-CA01 { hostname } }"
+  ],
+  "screens": [
+    {
+      "name": "ca-build",
+      "kind": "terminal",
+      "target": "CON-SRV02",
+      "workdir": "C:\\lab\\ep09\\src",
+      "prompt": "PS> ",
+      "commands": [
+        ".\\Deploy-CertLab.ps1 -Step Ca -WhatIf",
+        "#pause 6",
+        ".\\Deploy-CertLab.ps1 -Step Ca -AllowCaInstall",
+        "#pause 4",
+        "Invoke-Command -ComputerName CON-CA01 { Get-Service CertSvc; certutil -CAInfo name }",
+        "#pause 5"
+      ]
+    },
+    {
+      "name": "check-before",
+      "kind": "terminal",
+      "target": "CON-SRV02",
+      "workdir": "C:\\lab\\ep09\\src",
+      "prompt": "PS> ",
+      "prepare": [
+        "# owner: on CON-SRV02 open certtmpl.msc and duplicate Web Server as LabWebServer (Subject Name: Supply in the request; Extensions > Application Policies: add Client Authentication; Security: Domain Computers Enroll)",
+        "# owner: duplicate Computer as LabShortLived (validity 10 days, renewal 2 days, Domain Computers Enroll, autoenroll off)",
+        "Read-Host 'Press Enter when both templates exist' | Out-Null",
+        "Invoke-Command -VMName CON-CA01 -Credential $cred { Add-CATemplate -Name LabWebServer -Force; Add-CATemplate -Name LabShortLived -Force }",
+        "Invoke-Command -VMName CON-SRV01 -Credential $cred { Get-Certificate -Template LabShortLived -CertStoreLocation Cert:\\LocalMachine\\My | Out-Null }",
+        "Invoke-Command -VMName CON-SRV02 -Credential $cred { New-SelfSignedCertificate -Subject \"CN=Lab Test Portal\" -DnsName portal.lab.contoso.com -CertStoreLocation Cert:\\LocalMachine\\My -NotAfter (Get-Date).AddDays(9) | Out-Null }",
+        "Invoke-Command -VMName CON-SQL01 -Credential $cred { New-SelfSignedCertificate -Subject \"CN=CON-SQL01 legacy\" -KeyLength 1024 -HashAlgorithm SHA1 -NotBefore (Get-Date).AddDays(-400) -NotAfter (Get-Date).AddDays(-1) -CertStoreLocation Cert:\\LocalMachine\\My | Out-Null }",
+        "Invoke-Command -VMName CON-DC01 -Credential $cred { certutil -pulse | Out-Null }",
+        "Start-Sleep -Seconds 120"
+      ],
+      "commands": [
+        ".\\Invoke-CertCheck.ps1 -FactsFile .\\facts-before.json -OutFile .\\check-before.md -PlanOnly",
+        "#pause 8"
+      ]
+    },
+    {
+      "name": "cdp-http",
+      "kind": "terminal",
+      "target": "CON-SRV02",
+      "workdir": "C:\\lab\\ep09\\src",
+      "prompt": "PS> ",
+      "commands": [
+        ".\\Deploy-CertLab.ps1 -Step Http -WhatIf",
+        "#pause 4",
+        ".\\Deploy-CertLab.ps1 -Step Http",
+        "#pause 3",
+        "Invoke-Command -ComputerName CON-SRV01 { $c = Get-Certificate -Template Machine -CertStoreLocation Cert:\\LocalMachine\\My; Export-Certificate -Cert $c.Certificate -FilePath C:\\Windows\\Temp\\srv01.cer | Out-Null }",
+        "$srv01 = New-PSSession -ComputerName CON-SRV01",
+        "Copy-Item -FromSession $srv01 -Path C:\\Windows\\Temp\\srv01.cer -Destination .\\srv01.cer",
+        "certutil -verify -urlfetch .\\srv01.cer",
+        "#pause 8",
+        "Remove-PSSession $srv01"
+      ]
+    },
+    {
+      "name": "renew",
+      "kind": "terminal",
+      "target": "CON-SRV02",
+      "workdir": "C:\\lab\\ep09\\src",
+      "prompt": "PS> ",
+      "prepare": [
+        "# owner: in certtmpl.msc set LabWebServer back to \"Build from this Active Directory information\" and remove Client Authentication, so the High finding disappears at the re-check",
+        "Read-Host 'Press Enter when the LabWebServer template is fixed' | Out-Null"
+      ],
+      "commands": [
+        ".\\Deploy-CertLab.ps1 -Step Renew -WhatIf",
+        "#pause 5",
+        ".\\Deploy-CertLab.ps1 -Step Renew",
+        "#pause 4",
+        ".\\Invoke-CertCheck.ps1 -OutFile .\\check-after.md",
+        "#pause 8"
+      ]
+    }
+  ],
+  "teardown": [
+    "foreach ($v in 'CON-DC01', 'CON-SRV01', 'CON-SRV02', 'CON-SQL01') { Restore-VMSnapshot -VMName $v -Name pre-ep09 -Confirm:$false; Remove-VMSnapshot -VMName $v -Name pre-ep09 }",
+    "Get-VM 'CON-DC01', 'CON-SRV01', 'CON-SRV02', 'CON-SQL01' | Where-Object State -eq 'Off' | Start-VM",
+    "$vm = Get-VM -Name CON-CA01 -ErrorAction SilentlyContinue; if ($vm) { $disks = @($vm | Get-VMHardDiskDrive | ForEach-Object Path | Where-Object { (Split-Path $_ -Leaf) -like \"CON-CA01*\" }); Stop-VM -VM $vm -TurnOff -Force -ErrorAction SilentlyContinue; Remove-VM -VM $vm -Force; foreach ($d in $disks) { Get-ChildItem (Split-Path $d) -File -Filter \"CON-CA01*\" -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue } }"
+  ],
+  "needs": [
+    "lab-vms",
+    "vm:CON-CA01"
+  ]
+}

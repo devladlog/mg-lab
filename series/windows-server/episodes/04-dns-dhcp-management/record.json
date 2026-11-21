@@ -1,0 +1,108 @@
+{
+  "note": "Live-session recording of the screen scenes (series/tools/rec). prepare/teardown run on the laptop, not recorded; commands are typed and run for real. Windows PowerShell 5.1 on CON-SRV02. The DHCP test network (Private switch MGLab-DHCPTest and the DHCPTest NICs) is built by the episode setup script on the host and removed again in teardown.",
+  "prepare": [
+    "$s2 = New-PSSession -VMName CON-SRV02 -Credential $cred",
+    "Invoke-Command -Session $s2 { New-Item -ItemType Directory -Force C:\\lab | Out-Null; Remove-Item C:\\lab\\ep04 -Recurse -Force -ErrorAction SilentlyContinue }",
+    "Copy-Item -ToSession $s2 -Path (Get-Location).Path -Destination C:\\lab\\ep04 -Recurse -Force",
+    "Invoke-Command -Session $s2 { Install-WindowsFeature RSAT-DNS-Server | Out-Null }",
+    "Remove-PSSession $s2",
+    ".\\setup\\New-DhcpTestNetwork.ps1 -Credential $cred",
+    "foreach ($vm in 'CON-SRV01', 'CON-SRV02') { Invoke-Command -VMName $vm -Credential $cred -FilePath .\\setup\\Install-DhcpRole.ps1 }",
+    "Start-VM -Name CON-CLI01 -ErrorAction SilentlyContinue"
+  ],
+  "screens": [
+    {
+      "name": "dns",
+      "kind": "terminal",
+      "target": "CON-SRV02",
+      "workdir": "C:\\lab\\ep04\\src",
+      "prompt": "PS> ",
+      "commands": [
+        "Import-Module .\\NetLab\\NetLab.psd1",
+        "Invoke-NetLabDnsDeployment -DefinitionPath .\\network.json | Format-Table Server, Action, Target, Result -AutoSize",
+        "#pause 3",
+        "Invoke-NetLabDnsDeployment -DefinitionPath .\\network.json | Format-Table Server, Action, Target, Result -AutoSize",
+        "#pause 3",
+        "Invoke-Command -ComputerName CON-SRV01 { ipconfig /registerdns }",
+        "#pause 60",
+        "Resolve-DnsName 10.50.0.21 -Server CON-DC01",
+        "Resolve-DnsName printer01.lab.contoso.com -Server CON-DC01; Resolve-DnsName 10.50.0.60 -Server CON-DC01",
+        "#pause 4"
+      ]
+    },
+    {
+      "name": "dhcp",
+      "kind": "terminal",
+      "target": "CON-SRV02",
+      "workdir": "C:\\lab\\ep04\\src",
+      "prompt": "PS> ",
+      "commands": [
+        "Import-Module .\\NetLab\\NetLab.psd1",
+        "Invoke-NetLabDhcpDeployment -DefinitionPath .\\network.json | Format-Table Server, Action, Target, Result -AutoSize",
+        "#pause 3",
+        "Get-DhcpServerv4Failover -ComputerName CON-SRV01 | Format-List Name, PartnerServer, Mode, LoadBalancePercent, State, ScopeId",
+        "Get-DhcpServerv4Failover -ComputerName CON-SRV02 | Format-List Name, PartnerServer, Mode, LoadBalancePercent, State, ScopeId",
+        "Get-DhcpServerv4Scope -ComputerName CON-SRV02",
+        "#pause 4"
+      ]
+    },
+    {
+      "name": "lease",
+      "kind": "terminal",
+      "target": "CON-SRV02",
+      "workdir": "C:\\lab\\ep04\\src",
+      "prompt": "PS> ",
+      "commands": [
+        "Invoke-Command -ComputerName CON-CLI01 { ipconfig /renew DHCPTest | Out-Null; ipconfig /all }",
+        "#pause 4",
+        "Get-DhcpServerv4Lease -ComputerName CON-SRV01 -ScopeId 172.16.50.0",
+        "Get-DhcpServerv4Lease -ComputerName CON-SRV02 -ScopeId 172.16.50.0",
+        "#pause 4"
+      ]
+    },
+    {
+      "name": "failover-drift",
+      "kind": "terminal",
+      "target": "CON-SRV02",
+      "workdir": "C:\\lab\\ep04\\src",
+      "prompt": "PS> ",
+      "commands": [
+        "Import-Module .\\NetLab\\NetLab.psd1",
+        "Add-DhcpServerv4Reservation -ComputerName CON-SRV01 -ScopeId 172.16.50.0 -IPAddress 172.16.50.42 -ClientId 00-15-5d-14-00-42 -Name labprinter",
+        "Get-DhcpServerv4Reservation -ComputerName CON-SRV01 -ScopeId 172.16.50.0 | Format-Table IPAddress, ClientId, Name",
+        "Get-DhcpServerv4Reservation -ComputerName CON-SRV02 -ScopeId 172.16.50.0 | Format-Table IPAddress, ClientId, Name",
+        "#pause 3",
+        ".\\Invoke-NetLabReport.ps1 -SnapshotFile .\\net-snapshot.json | Out-String -Stream | Select-String 'FailoverDrift', 'finding'",
+        "#pause 3",
+        "Invoke-DhcpServerv4FailoverReplication -ComputerName CON-SRV01 -ScopeId 172.16.50.0 -Force",
+        "Get-DhcpServerv4Reservation -ComputerName CON-SRV02 -ScopeId 172.16.50.0 | Format-Table IPAddress, ClientId, Name",
+        "#pause 4"
+      ]
+    },
+    {
+      "name": "report",
+      "kind": "terminal",
+      "target": "CON-SRV02",
+      "workdir": "C:\\lab\\ep04\\src",
+      "prompt": "PS> ",
+      "prepare": [
+        "Invoke-Command -VMName CON-DC01 -Credential $cred { if (-not (Get-DnsServerResourceRecord -ZoneName lab.contoso.com -Name camera01 -ErrorAction SilentlyContinue)) { Add-DnsServerResourceRecordA -ZoneName lab.contoso.com -Name camera01 -IPv4Address 172.16.50.30 } }"
+      ],
+      "commands": [
+        ".\\Invoke-NetLabReport.ps1 -SnapshotFile .\\net-snapshot.json -OutFile .\\net-report.md",
+        "#pause 5",
+        "Get-Content .\\net-report.md",
+        "#pause 5"
+      ]
+    }
+  ],
+  "teardown": [
+    "Invoke-Command -VMName CON-SRV02 -Credential $cred { Remove-DnsServerResourceRecord -ComputerName CON-DC01 -ZoneName lab.contoso.com -Name camera01 -RRType A -Force -ErrorAction SilentlyContinue; Remove-DhcpServerv4Failover -ComputerName CON-SRV01 -Name CON-SRV01-CON-SRV02 -Confirm:$false -ErrorAction SilentlyContinue; Remove-DhcpServerInDC -DnsName con-srv01.lab.contoso.com -IPAddress 10.50.0.21 -ErrorAction SilentlyContinue; Remove-DhcpServerInDC -DnsName con-srv02.lab.contoso.com -IPAddress 10.50.0.22 -ErrorAction SilentlyContinue }",
+    "foreach ($vm in 'CON-SRV01', 'CON-SRV02') { Invoke-Command -VMName $vm -Credential $cred { Uninstall-WindowsFeature DHCP -IncludeManagementTools | Out-Null } }",
+    ".\\setup\\New-DhcpTestNetwork.ps1 -Credential $cred -Remove",
+    "Invoke-Command -VMName CON-SRV02 -Credential $cred { Remove-Item C:\\lab\\ep04 -Recurse -Force -ErrorAction SilentlyContinue }"
+  ],
+  "needs": [
+    "lab-vms"
+  ]
+}

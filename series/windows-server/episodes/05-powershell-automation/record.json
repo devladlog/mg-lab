@@ -1,0 +1,112 @@
+{
+  "note": "Live-session recording of the screen scenes (series/tools/rec). prepare/teardown run on the laptop, not recorded; commands are typed and run for real. alex.demo is an AD user of the lab domain; its password is typed by the owner in prepare and stored only as a protected Clixml on CON-CLI01, deleted in teardown. The Enter-PSSession demo is played with New-PSSession plus Invoke-Command because the recorder runs each command non-interactively.",
+  "prepare": [
+    "foreach ($vm in 'CON-DC01', 'CON-SRV01', 'CON-SRV02') { $s = New-PSSession -VMName $vm -Credential $cred; Invoke-Command -Session $s { New-Item -ItemType Directory -Force C:\\lab | Out-Null; Remove-Item C:\\lab\\ep05 -Recurse -Force -ErrorAction SilentlyContinue }; Copy-Item -ToSession $s -Path (Get-Location).Path -Destination C:\\lab\\ep05 -Recurse -Force; Remove-PSSession $s }",
+    "$cli = New-PSSession -VMName CON-CLI01 -Credential $cred",
+    "Invoke-Command -Session $cli { New-Item -ItemType Directory -Force C:\\lab | Out-Null }",
+    "$v = $PSVersionTable.PSVersion.ToString(); $msi = Join-Path $env:TEMP \"PowerShell-$v-win-x64.msi\"",
+    "if (-not (Invoke-Command -Session $cli { Test-Path \"C:\\Program Files\\PowerShell\\7\\pwsh.exe\" })) { if (-not (Test-Path $msi)) { Invoke-WebRequest \"https://github.com/PowerShell/PowerShell/releases/download/v$v/PowerShell-$v-win-x64.msi\" -OutFile $msi }; Copy-Item -ToSession $cli -Path $msi -Destination C:\\lab\\pwsh.msi -Force; Invoke-Command -Session $cli { Start-Process msiexec.exe \"/i C:\\lab\\pwsh.msi /quiet ADD_PATH=1 ENABLE_PSREMOTING=1\" -Wait } }",
+    "Remove-PSSession $cli",
+    "$alexPw = Read-Host -AsSecureString \"Password for alex.demo (owner types, never shown)\"",
+    "Invoke-Command -VMName CON-DC01 -Credential $cred -ArgumentList $alexPw { param($pw) if (-not (Get-ADUser -Filter \"SamAccountName -eq 'alex.demo'\")) { New-ADUser -Name \"Alex Demo\" -SamAccountName alex.demo -UserPrincipalName alex.demo@lab.contoso.com -AccountPassword $pw -Enabled $true } else { Set-ADAccountPassword -Identity alex.demo -Reset -NewPassword $pw; Enable-ADAccount -Identity alex.demo }; & C:\\lab\\ep05\\setup\\New-OpsJobIdentity.ps1 -HelpdeskUser alex.demo -CreateLabKdsRootKey }",
+    "Invoke-Command -VMName CON-CLI01 -Credential $cred -ArgumentList $alexPw { param($pw) [pscredential]::new(\"CONTOSO\\alex.demo\", $pw) | Export-Clixml C:\\lab\\alex.xml }",
+    "Invoke-Command -VMName CON-SRV01 -Credential $cred { if (-not (Get-WindowsFeature Web-Server).Installed) { Install-WindowsFeature Web-Server | Out-Null }; $dir = \"C:\\inetpub\\logs\\LogFiles\\W3SVC1\"; New-Item -ItemType Directory $dir -Force | Out-Null; 1..30 | ForEach-Object { $f = Join-Path $dir (\"u_ex2610{0:00}.log\" -f $_); if (-not (Test-Path $f)) { [IO.File]::WriteAllBytes($f, (New-Object byte[] (2MB))) }; (Get-Item $f).LastWriteTime = (Get-Date).AddDays(-20 - $_) } }"
+  ],
+  "screens": [
+    {
+      "name": "register",
+      "kind": "terminal",
+      "target": "CON-SRV01",
+      "workdir": "C:\\lab\\ep05\\src",
+      "prompt": "PS> ",
+      "commands": [
+        "Import-Module C:\\lab\\ep05\\src\\OpsLab\\OpsLab.psd1",
+        "$r = Install-OpsEndpoint -DefinitionPath C:\\lab\\ep05\\src\\jea-definition.json -FunctionsModulePath C:\\lab\\ep05\\src\\ContosoOps\\ContosoOps.psm1 -Confirm:$false",
+        "$r.Steps; $r.Findings | Format-Table Severity, Check -AutoSize",
+        "#pause 3",
+        "Get-PSSessionConfiguration -Name Contoso.AppOps | Format-List Name, PSVersion, Permission",
+        "#pause 4"
+      ]
+    },
+    {
+      "name": "helpdesk",
+      "kind": "terminal",
+      "target": "CON-CLI01",
+      "configurationName": "PowerShell.7",
+      "workdir": "C:\\lab",
+      "prompt": "PS> ",
+      "commands": [
+        "$alex = Import-Clixml C:\\lab\\alex.xml",
+        "$s = New-PSSession -ComputerName CON-SRV01 -ConfigurationName Contoso.AppOps -Credential $alex",
+        "Invoke-Command -Session $s { Get-Command }",
+        "#pause 3",
+        "Invoke-Command -Session $s { Get-OpsHealth }",
+        "#pause 3",
+        "Invoke-Command -Session $s { Restart-Service W3SVC }",
+        "#pause 4",
+        "Remove-PSSession $s",
+        "Invoke-Command -ComputerName CON-SRV01 { Get-PSSessionCapability -ConfigurationName Contoso.AppOps -Username CONTOSO\\alex.demo }",
+        "#pause 4"
+      ]
+    },
+    {
+      "name": "task",
+      "kind": "app",
+      "app": "Task Scheduler on the CON-SRV02 console (VMConnect), then a PowerShell window",
+      "prepare": [
+        "Invoke-Command -VMName CON-SRV01 -Credential $cred { Start-Service W3SVC -ErrorAction SilentlyContinue; Stop-Service W3SVC }",
+        "Invoke-Command -VMName CON-SRV02 -Credential $cred { Set-Location C:\\lab\\ep05\\setup; .\\Register-OpsJobTask.ps1 }"
+      ],
+      "steps": [
+        "Before the shot (done in prepare): W3SVC is stopped on CON-SRV01 and the 60 MB of old IIS logs exist",
+        "VMConnect to CON-SRV02, signed in as the lab Administrator; open Task Scheduler (taskschd.msc)",
+        "Task Scheduler Library > Contoso > select OpsJob",
+        "General tab: show \"When running the task, use the following user account: CONTOSO\\gmsa-opsjob$\"",
+        "Right-click OpsJob > Run; wait about a minute; press F5 to refresh",
+        "Show Last Run Result: The operation completed successfully. (0x0)",
+        "Open Windows PowerShell and run: Get-Content C:\\OpsJob\\logs\\ops-*.jsonl -Tail 6",
+        "Show Health (W3SVC=Stopped, LogFolderMB about 60), Action RestartService W3SVC Succeeded, Action ClearLogs (\"30 file(s), 60 MB freed\") and RunEnd ExitCode 0; if the result is 0x1 keep it and show the Alert / Error lines"
+      ],
+      "mask": [
+        "VMConnect title bar (\"<VM> on <laptop name>\") and the laptop taskbar",
+        "the Windows user name in any window title"
+      ]
+    },
+    {
+      "name": "transcript",
+      "kind": "terminal",
+      "target": "CON-SRV01",
+      "prompt": "PS> ",
+      "commands": [
+        "$t = Get-ChildItem C:\\ProgramData\\JEAConfiguration\\Transcripts -Recurse -File | Sort-Object LastWriteTime | Select-Object -Last 1",
+        "Get-Content $t.FullName | Select-String 'Username:|RunAs User:|Restart-Service|Clear-OpsLogFolder'",
+        "#pause 6"
+      ]
+    },
+    {
+      "name": "nolanguage",
+      "kind": "terminal",
+      "target": "CON-CLI01",
+      "configurationName": "PowerShell.7",
+      "workdir": "C:\\lab",
+      "prompt": "PS> ",
+      "commands": [
+        "$alex = Import-Clixml C:\\lab\\alex.xml",
+        "Invoke-Command -ComputerName CON-SRV01 -ConfigurationName Contoso.AppOps -Credential $alex -ScriptBlock { $svc = 'W3SVC'; Get-Service -Name $svc }",
+        "#pause 4",
+        "Invoke-Command -ComputerName CON-SRV01 -ConfigurationName Contoso.AppOps -Credential $alex -ScriptBlock { Get-Service -Name W3SVC }",
+        "#pause 4"
+      ]
+    }
+  ],
+  "teardown": [
+    "Invoke-Command -VMName CON-SRV02 -Credential $cred { C:\\lab\\ep05\\setup\\Register-OpsJobTask.ps1 -Remove; Remove-Item C:\\lab\\ep05 -Recurse -Force -ErrorAction SilentlyContinue }",
+    "Invoke-Command -VMName CON-SRV01 -Credential $cred { Unregister-PSSessionConfiguration -Name Contoso.AppOps -Force -ErrorAction SilentlyContinue; Remove-Item \"C:\\Program Files\\WindowsPowerShell\\Modules\\ContosoOps\" -Recurse -Force -ErrorAction SilentlyContinue; Remove-Item C:\\ProgramData\\JEAConfiguration -Recurse -Force -ErrorAction SilentlyContinue; Remove-Item C:\\inetpub\\logs\\LogFiles\\W3SVC1\\u_ex2610*.log -Force -ErrorAction SilentlyContinue; Uninstall-WindowsFeature Web-Server | Out-Null; Remove-Item C:\\lab\\ep05 -Recurse -Force -ErrorAction SilentlyContinue }",
+    "Invoke-Command -VMName CON-DC01 -Credential $cred { & C:\\lab\\ep05\\setup\\New-OpsJobIdentity.ps1 -Remove; Remove-ADUser alex.demo -Confirm:$false -ErrorAction SilentlyContinue; Remove-Item C:\\lab\\ep05 -Recurse -Force -ErrorAction SilentlyContinue }",
+    "Invoke-Command -VMName CON-CLI01 -Credential $cred { Remove-Item C:\\lab\\alex.xml -Force -ErrorAction SilentlyContinue }",
+    "# the KDS root key stays on purpose (forest-wide, reused by later episodes); restart CON-SRV01 if Uninstall-WindowsFeature asked for it"
+  ],
+  "needs": [
+    "lab-vms"
+  ]
+}

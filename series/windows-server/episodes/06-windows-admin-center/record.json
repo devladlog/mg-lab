@@ -1,0 +1,124 @@
+{
+  "note": "Live-session recording of the screen scenes (series/tools/rec). prepare/teardown run on the laptop, not recorded; commands are typed and run for real. Windows Admin Center runs as a gateway on CON-SRV02; the browser is Microsoft Edge inside the CON-SRV02 VMConnect window. Mixed PowerShell + Edge screens are app screens with the typed commands listed in steps.",
+  "prepare": [
+    "Set-VMMemory -VMName CON-SRV02 -MaximumBytes 4GB",
+    "Stop-VM -Name CON-SQL01 -ErrorAction SilentlyContinue",
+    "if (-not (Test-Path \"$HOME\\Downloads\\WindowsAdminCenter.exe\")) { Invoke-WebRequest \"https://aka.ms/WACdownload\" -OutFile \"$HOME\\Downloads\\WindowsAdminCenter.exe\" }",
+    "$s = New-PSSession -VMName CON-SRV02 -Credential $cred",
+    "Invoke-Command -Session $s { New-Item -ItemType Directory -Force C:\\lab | Out-Null; Remove-Item C:\\lab\\ep06 -Recurse -Force -ErrorAction SilentlyContinue }",
+    "Copy-Item -ToSession $s -Path (Get-Location).Path -Destination C:\\lab\\ep06 -Recurse -Force",
+    "Copy-Item -ToSession $s -Path \"$HOME\\Downloads\\WindowsAdminCenter.exe\" -Destination C:\\lab\\WindowsAdminCenter.exe -Force",
+    "Invoke-Command -Session $s { Install-WindowsFeature RSAT-AD-PowerShell | Out-Null }",
+    "Invoke-Command -Session $s -ArgumentList $cred { param($c) $c | Export-Clixml C:\\lab\\ep06-admin.xml }",
+    "Remove-PSSession $s",
+    "$pw = Read-Host -AsSecureString \"Password for alex.demo (owner types, never shown)\"",
+    "Invoke-Command -VMName CON-DC01 -Credential $cred -ArgumentList $pw { param($p) if (-not (Get-ADUser -Filter \"SamAccountName -eq 'alex.demo'\")) { New-ADUser -Name \"Alex Demo\" -SamAccountName alex.demo -UserPrincipalName alex.demo@lab.contoso.com -AccountPassword $p -Enabled $true } else { Set-ADAccountPassword -Identity alex.demo -Reset -NewPassword $p; Enable-ADAccount -Identity alex.demo } }"
+  ],
+  "screens": [
+    {
+      "name": "installed",
+      "kind": "app",
+      "app": "VMConnect: CON-SRV02 console, Windows PowerShell (left) and Microsoft Edge (right)",
+      "steps": [
+        "In Windows PowerShell (Admin) as lab Administrator: cd C:\\lab\\ep06\\src; function prompt { \"PS> \" }",
+        ".\\Invoke-WacPreflight.ps1 -FactsFile .\\gateway-facts.json -OutFile .\\preflight.md",
+        "Show the findings table and the last line \"CON-SRV02: 5 node(s), N finding(s), 0 high.\"",
+        ".\\Deploy-WacLab.ps1 -Step Install -InstallerPath C:\\lab\\WindowsAdminCenter.exe",
+        "Show the returned Url https://con-srv02.lab.contoso.com",
+        "In Edge open https://con-srv02.lab.contoso.com (continue past the self-signed certificate warning off camera), sign in as the lab Administrator (typed off camera)",
+        "Show the All connections page next to the PowerShell window; note the version under Settings > About"
+      ],
+      "mask": [
+        "VMConnect title bar (\"<VM> on <laptop name>\") and the laptop taskbar",
+        "the WAC access key (Settings > Advanced) and any credential dialog",
+        "any update banner or account detail from Settings > Azure"
+      ]
+    },
+    {
+      "name": "imported",
+      "kind": "browser",
+      "url": "https://con-srv02.lab.contoso.com",
+      "account": "lab Administrator (CONTOSO\\Administrator)",
+      "prepare": [
+        "# owner signs in: copy the access key in Edge (Settings > Advanced); it is typed below, never shown or stored in a file",
+        "$k = Read-Host -AsSecureString \"WAC access key (owner types, never shown)\"",
+        "Invoke-Command -VMName CON-SRV02 -Credential $cred -ArgumentList $k { param($x) Set-Location C:\\lab\\ep06\\src; .\\Deploy-WacLab.ps1 -Step Connections -AccessKey $x -Credential (Import-Clixml C:\\lab\\ep06-admin.xml) }"
+      ],
+      "steps": [
+        "Open All connections (already signed in)",
+        "Show the five con-*.lab.contoso.com connections with their tags",
+        "Filter by tag \"core\": only the four Server Core machines remain (CON-SQL01 is listed even if it is switched off)"
+      ],
+      "mask": [
+        "VMConnect title bar (\"<VM> on <laptop name>\") and the laptop taskbar",
+        "the WAC access key (Settings > Advanced) and any credential dialog",
+        "any update banner or account detail from Settings > Azure"
+      ]
+    },
+    {
+      "name": "rbac-endpoint",
+      "kind": "app",
+      "app": "Microsoft Edge on CON-SRV02 (WAC) and the CON-SRV01 console in VMConnect",
+      "steps": [
+        "Edge: connect to con-srv01 > Settings > Role-based access control > Apply (up to 10 minutes, restarts WinRM on CON-SRV01); refresh until the status is Applied; capture that page",
+        "CON-SRV02 PowerShell (Admin), cd C:\\lab\\ep06\\src: .\\Deploy-WacLab.ps1 -Step Rbac   (adds CONTOSO\\alex.demo to Windows Admin Center Readers; expect \"RBAC matches wac-lab.json.\")",
+        "VMConnect to CON-SRV01, sign in as the lab Administrator, sconfig option 15 for PowerShell",
+        "Get-PSSessionConfiguration -Name Microsoft.Sme.PowerShell | Format-List Name, PSVersion, Permission",
+        "Get-LocalGroup 'Windows Admin Center*'",
+        "Get-PSSessionCapability -ConfigurationName Microsoft.Sme.PowerShell -Username CONTOSO\\alex.demo | Measure-Object",
+        "Capture the endpoint, the three local groups and the command count"
+      ],
+      "mask": [
+        "VMConnect title bar (\"<VM> on <laptop name>\") and the laptop taskbar",
+        "the WAC access key (Settings > Advanced) and any credential dialog",
+        "any update banner or account detail from Settings > Azure"
+      ]
+    },
+    {
+      "name": "readers",
+      "kind": "browser",
+      "url": "https://con-srv02.lab.contoso.com",
+      "account": "CONTOSO\\alex.demo (Manage as, typed off camera)",
+      "steps": [
+        "All connections > select con-srv01 > Manage as > use another account > CONTOSO\\alex.demo (credentials typed off camera) > Connect",
+        "Show the limited-access indication and the Overview loading",
+        "Open Services: the list of services is shown; if a Restart button is visible, click it on Spooler and capture the result (expected: denied or not offered)",
+        "Show that the PowerShell and Remote Desktop tools are not in the tool list",
+        "If Manage as is refused, capture the message and record the same screen by signing in to the gateway as alex.demo instead"
+      ],
+      "mask": [
+        "VMConnect title bar (\"<VM> on <laptop name>\") and the laptop taskbar",
+        "the WAC access key (Settings > Advanced) and any credential dialog",
+        "any update banner or account detail from Settings > Azure"
+      ]
+    },
+    {
+      "name": "showscript",
+      "kind": "browser",
+      "url": "https://con-srv02.lab.contoso.com",
+      "account": "lab Administrator (CONTOSO\\Administrator)",
+      "steps": [
+        "All connections > con-srv01 > Services",
+        "Click the PowerShell icon in the application bar",
+        "Pick a command in the dropdown (for example the one that lists services)",
+        "Show the script text and zoom on it"
+      ],
+      "mask": [
+        "VMConnect title bar (\"<VM> on <laptop name>\") and the laptop taskbar",
+        "the WAC access key (Settings > Advanced) and any credential dialog",
+        "any update banner or account detail from Settings > Azure"
+      ]
+    }
+  ],
+  "teardown": [
+    "Invoke-Command -VMName CON-SRV02 -Credential $cred { Set-Location C:\\lab\\ep06\\src; .\\Deploy-WacLab.ps1 -Step Sso -Remove }",
+    "Invoke-Command -VMName CON-SRV01 -Credential $cred { Unregister-PSSessionConfiguration -Name Microsoft.Sme.PowerShell -Force -ErrorAction SilentlyContinue; \"Windows Admin Center Administrators\", \"Windows Admin Center Hyper-V Administrators\", \"Windows Admin Center Readers\" | ForEach-Object { Remove-LocalGroup -Name $_ -ErrorAction SilentlyContinue }; Get-ChildItem \"C:\\Program Files\\WindowsPowerShell\\Modules\" -Directory -Filter \"Microsoft.Sme*\" | Remove-Item -Recurse -Force }",
+    "Invoke-Command -VMName CON-SRV02 -Credential $cred { $u = (Get-ItemProperty \"HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*\" | Where-Object DisplayName -eq \"Windows Admin Center\").PSChildName; if ($u) { Start-Process msiexec.exe \"/x $u /quiet /norestart\" -Wait }; Remove-Item C:\\lab -Recurse -Force -ErrorAction SilentlyContinue }",
+    "Set-VMMemory -VMName CON-SRV02 -MaximumBytes 3GB",
+    "Invoke-Command -VMName CON-DC01 -Credential $cred { Remove-ADUser alex.demo -Confirm:$false -ErrorAction SilentlyContinue }"
+  ],
+  "needs": [
+    "lab-vms",
+    "installer:windows-admin-center"
+  ]
+}

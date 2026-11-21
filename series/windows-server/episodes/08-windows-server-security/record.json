@@ -1,0 +1,80 @@
+{
+  "note": "Live-session recording of the screen scenes (series/tools/rec). prepare/teardown run on the laptop, not recorded; commands are typed and run for real. Windows PowerShell 5.1 on CON-SRV02. The LAPS schema extension is irreversible (acceptable in the disposable lab) and is not undone in teardown.",
+  "prepare": [
+    "$s = New-PSSession -VMName CON-SRV02 -Credential $cred",
+    "Invoke-Command -Session $s { New-Item -ItemType Directory -Force C:\\lab | Out-Null; Remove-Item C:\\lab\\ep08 -Recurse -Force -ErrorAction SilentlyContinue }",
+    "Copy-Item -ToSession $s -Path (Get-Location).Path -Destination C:\\lab\\ep08 -Recurse -Force",
+    "Invoke-Command -Session $s { Install-WindowsFeature RSAT-AD-PowerShell, GPMC | Out-Null }",
+    "Remove-PSSession $s",
+    "Invoke-Command -VMName CON-DC01 -Credential $cred { $dn = (Get-ADDomain).DistinguishedName; if (-not (Get-ADOrganizationalUnit -Filter \"Name -eq 'LabServers'\")) { New-ADOrganizationalUnit -Name LabServers -Path $dn }; foreach ($n in \"CON-SRV01\", \"CON-SQL01\", \"CON-CLI01\") { Get-ADComputer $n | Move-ADObject -TargetPath \"OU=LabServers,$dn\" } }",
+    "if ((Get-VM -Name CON-SQL01).State -ne 'Running') { Start-VM -Name CON-SQL01; Start-Sleep -Seconds 90 }"
+  ],
+  "screens": [
+    {
+      "name": "check-before",
+      "kind": "terminal",
+      "target": "CON-SRV02",
+      "workdir": "C:\\lab\\ep08\\src",
+      "prompt": "PS> ",
+      "commands": [
+        ".\\Invoke-SecCheck.ps1 -FactsFile .\\facts-before.json -OutFile .\\check-before.md -PlanOnly",
+        "#pause 8"
+      ]
+    },
+    {
+      "name": "harden",
+      "kind": "terminal",
+      "target": "CON-SRV02",
+      "workdir": "C:\\lab\\ep08\\src",
+      "prompt": "PS> ",
+      "commands": [
+        ".\\Deploy-SecLab.ps1 -Step Harden -RollbackFile .\\rollback.json -WhatIf",
+        "#pause 5",
+        ".\\Deploy-SecLab.ps1 -Step Harden -RollbackFile .\\rollback.json",
+        "#pause 4",
+        ".\\Invoke-SecCheck.ps1 -OutFile .\\check-after.md",
+        "#pause 6",
+        "Invoke-Command -ComputerName CON-SRV01 { hostname }",
+        "#pause 3"
+      ]
+    },
+    {
+      "name": "laps-plan",
+      "kind": "terminal",
+      "target": "CON-SRV02",
+      "workdir": "C:\\lab\\ep08\\src",
+      "prompt": "PS> ",
+      "commands": [
+        ".\\Deploy-SecLab.ps1 -Step Laps -WhatIf",
+        "#pause 6",
+        ".\\Deploy-SecLab.ps1 -Step Laps -AllowSchemaUpdate",
+        "#pause 5"
+      ]
+    },
+    {
+      "name": "laps-result",
+      "kind": "terminal",
+      "target": "CON-SRV02",
+      "workdir": "C:\\lab\\ep08\\src",
+      "prompt": "PS> ",
+      "commands": [
+        "Invoke-Command -ComputerName CON-SRV01 { gpupdate.exe /target:computer /force; Invoke-LapsPolicyProcessing }",
+        "Invoke-Command -ComputerName CON-SRV01 { Get-WinEvent -LogName 'Microsoft-Windows-LAPS/Operational' -MaxEvents 5 | Format-Table TimeCreated, Id, Message -Wrap }",
+        "#pause 4",
+        "Get-LapsADPassword -Identity CON-SRV01",
+        "#pause 4",
+        "Invoke-Command -ComputerName CON-SQL01 { gpupdate.exe /target:computer /force; Invoke-LapsPolicyProcessing }",
+        "Get-LapsADPassword -Identity CON-SQL01",
+        "#pause 5"
+      ]
+    }
+  ],
+  "teardown": [
+    "Invoke-Command -VMName CON-SRV02 -Credential $cred { Set-Location C:\\lab\\ep08\\src; .\\Deploy-SecLab.ps1 -Step Rollback -RollbackFile .\\rollback.json }",
+    "Invoke-Command -VMName CON-SRV02 -Credential $cred { $dn = (Get-ADDomain).DistinguishedName; Remove-GPLink -Name \"MGLab - Windows LAPS\" -Target \"OU=LabServers,$dn\" -ErrorAction SilentlyContinue; Remove-GPO -Name \"MGLab - Windows LAPS\" -ErrorAction SilentlyContinue; foreach ($n in \"CON-SRV01\", \"CON-SQL01\", \"CON-CLI01\") { Get-ADComputer $n | Move-ADObject -TargetPath \"CN=Computers,$dn\" }; Get-ADOrganizationalUnit -Identity \"OU=LabServers,$dn\" | Set-ADObject -ProtectedFromAccidentalDeletion $false; Remove-ADOrganizationalUnit -Identity \"OU=LabServers,$dn\" -Recursive -Confirm:$false; Remove-Item C:\\lab\\ep08 -Recurse -Force -ErrorAction SilentlyContinue }",
+    "# the LAPS schema extension stays (irreversible); a rebuilt lab with Start-MGLab.ps1 starts clean. Passwords written by LAPS stay on the computer objects until the lab is rebuilt (lab-only data)"
+  ],
+  "needs": [
+    "lab-vms"
+  ]
+}

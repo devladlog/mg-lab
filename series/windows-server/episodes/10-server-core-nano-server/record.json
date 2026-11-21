@@ -1,0 +1,85 @@
+{
+  "note": "Live-session recording of the screen scenes (series/tools/rec). prepare/teardown run on the laptop, not recorded; commands are typed and run for real. Windows PowerShell 5.1 on CON-SRV02. The App Compatibility FOD needs Windows Update from CON-SRV01 (or the Languages and Optional Features ISO and Setup.FodSourcePath). The Nano Server part has no recording (shown as code in the video). Tear-down restores the pre-ep10 checkpoints.",
+  "prepare": [
+    "foreach ($v in 'CON-SRV01', 'CON-SQL01', 'CON-CLI01') { if (-not (Get-VMSnapshot -VMName $v -Name pre-ep10 -ErrorAction SilentlyContinue)) { Checkpoint-VM -Name $v -SnapshotName pre-ep10 } }",
+    "$s = New-PSSession -VMName CON-SRV02 -Credential $cred",
+    "Invoke-Command -Session $s { New-Item -ItemType Directory -Force C:\\lab | Out-Null; Remove-Item C:\\lab\\ep10 -Recurse -Force -ErrorAction SilentlyContinue }",
+    "Copy-Item -ToSession $s -Path (Get-Location).Path -Destination C:\\lab\\ep10 -Recurse -Force",
+    "Remove-PSSession $s",
+    "if ((Get-VM -Name CON-SQL01).State -ne 'Running') { Start-VM -Name CON-SQL01; Start-Sleep -Seconds 90 }"
+  ],
+  "screens": [
+    {
+      "name": "sconfig",
+      "kind": "app",
+      "app": "VMConnect: CON-SRV01 console (Server Core, SConfig)",
+      "steps": [
+        "Open the console of CON-SRV01 in VMConnect, signed in as the lab Administrator (typed off camera); SConfig is already on screen",
+        "Show the main menu with the server name and the domain in view",
+        "Type 4 (Configure remote management) and show the page behind it; do not change anything; go back",
+        "Type 15 for the PowerShell prompt; optionally show: Get-WindowsCapability -Online | Where-Object Name -like \"ServerCore.AppCompatibility*\"",
+        "Type exit to return to SConfig"
+      ],
+      "mask": [
+        "VMConnect title bar (\"<VM> on <laptop name>\") and the laptop taskbar"
+      ]
+    },
+    {
+      "name": "check-before",
+      "kind": "terminal",
+      "target": "CON-SRV02",
+      "workdir": "C:\\lab\\ep10\\src",
+      "prompt": "PS> ",
+      "prepare": [
+        "# CON-CLI01 is switched off for one screen: \"off\" and \"WinRM broken\" both read as no answer",
+        "Stop-VM -Name CON-CLI01 -TurnOff"
+      ],
+      "commands": [
+        ".\\Invoke-CoreCheck.ps1 -FactsFile .\\facts-before.json -OutFile .\\check-before.md -PlanOnly",
+        "#pause 8"
+      ]
+    },
+    {
+      "name": "setup",
+      "kind": "terminal",
+      "target": "CON-SRV02",
+      "workdir": "C:\\lab\\ep10\\src",
+      "prompt": "PS> ",
+      "commands": [
+        ".\\Deploy-CoreLab.ps1 -WhatIf",
+        "#pause 5",
+        ".\\Deploy-CoreLab.ps1",
+        "#pause 5",
+        ".\\Deploy-CoreLab.ps1 -AllowRestart",
+        "#pause 5"
+      ]
+    },
+    {
+      "name": "check-after",
+      "kind": "terminal",
+      "target": "CON-SRV02",
+      "workdir": "C:\\lab\\ep10\\src",
+      "prompt": "PS> ",
+      "prepare": [
+        "Start-VM -Name CON-CLI01",
+        "do { Start-Sleep -Seconds 10; $ok = try { Invoke-Command -VMName CON-SRV01 -Credential $cred { $true } -ErrorAction Stop } catch { $false } } until ($ok)",
+        "do { Start-Sleep -Seconds 10; $ok = try { Invoke-Command -VMName CON-CLI01 -Credential $cred { $true } -ErrorAction Stop } catch { $false } } until ($ok)"
+      ],
+      "commands": [
+        ".\\Invoke-CoreCheck.ps1 -OutFile .\\check-after.md",
+        "#pause 6",
+        "Get-Content .\\check-after.md | Select-String -Pattern 'Footprint' -Context 0,8",
+        "#pause 8"
+      ]
+    }
+  ],
+  "teardown": [
+    "foreach ($v in 'CON-SRV01', 'CON-SQL01', 'CON-CLI01') { Restore-VMSnapshot -VMName $v -Name pre-ep10 -Confirm:$false }",
+    "Get-VM 'CON-SRV01', 'CON-SQL01', 'CON-CLI01' | Where-Object State -eq 'Off' | Start-VM",
+    "foreach ($v in 'CON-SRV01', 'CON-SQL01', 'CON-CLI01') { Remove-VMSnapshot -VMName $v -Name pre-ep10 }",
+    "Invoke-Command -VMName CON-SRV02 -Credential $cred { Remove-Item C:\\lab\\ep10 -Recurse -Force -ErrorAction SilentlyContinue }"
+  ],
+  "needs": [
+    "lab-vms"
+  ]
+}

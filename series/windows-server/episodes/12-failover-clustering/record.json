@@ -1,0 +1,90 @@
+{
+  "note": "Live-session recording of the screen scenes (series/tools/rec). prepare/teardown run on the laptop, not recorded; commands are typed and run for real. CON-NODE01 and CON-NODE02 are throwaway Server Core VMs; the build runs on CON-NODE01 (New-Cluster cannot run remotely without CredSSP). If installing the feature asks for a restart, restart the node, reopen the scene and re-run the same Build command (the plan is rebuilt from the facts). The drain and crash screens are app screens: two windows are recorded side by side.",
+  "prepare": [
+    "# owner creates CON-NODE01 (10.50.0.51) and CON-NODE02 (10.50.0.52): Server Core, domain-joined, checkpoint pre-ep12: see needs vm:CON-NODE01, vm:CON-NODE02",
+    "if ((Test-Connection 10.50.0.60 -Count 1 -Quiet) -or (Test-Connection 10.50.0.61 -Count 1 -Quiet)) { throw \"10.50.0.60 or 10.50.0.61 already answers: choose free clustered addresses first\" }",
+    "$n1 = New-PSSession -VMName CON-NODE01 -Credential $cred",
+    "$s2 = New-PSSession -VMName CON-SRV02 -Credential $cred",
+    "Invoke-Command -Session $n1 { New-Item -ItemType Directory -Force C:\\lab | Out-Null; Remove-Item C:\\lab\\ep12 -Recurse -Force -ErrorAction SilentlyContinue }",
+    "Copy-Item -ToSession $n1 -Path (Get-Location).Path -Destination C:\\lab\\ep12 -Recurse -Force",
+    "Invoke-Command -Session $s2 { New-Item -ItemType Directory -Force C:\\lab | Out-Null; Remove-Item C:\\lab\\ep12 -Recurse -Force -ErrorAction SilentlyContinue }",
+    "Copy-Item -ToSession $s2 -Path (Get-Location).Path -Destination C:\\lab\\ep12 -Recurse -Force",
+    "Remove-PSSession $n1, $s2",
+    "Invoke-Command -VMName CON-NODE01 -Credential $cred { Test-WSMan CON-NODE02 | Out-Null; Test-WSMan CON-SRV01 | Out-Null }"
+  ],
+  "screens": [
+    {
+      "name": "ready-before",
+      "kind": "terminal",
+      "target": "CON-NODE01",
+      "workdir": "C:\\lab\\ep12\\src",
+      "prompt": "PS> ",
+      "commands": [
+        ".\\Invoke-ClusterReadiness.ps1 -FactsFile .\\facts-before.json -OutFile .\\ready-before.md -PlanOnly",
+        "#pause 8"
+      ]
+    },
+    {
+      "name": "build",
+      "kind": "terminal",
+      "target": "CON-NODE01",
+      "workdir": "C:\\lab\\ep12\\src",
+      "prompt": "PS> ",
+      "commands": [
+        ".\\Deploy-ClusterLab.ps1 -Step Build -WhatIf",
+        "#pause 6",
+        ".\\Deploy-ClusterLab.ps1 -Step Build",
+        "#pause 5",
+        "Get-ClusterNode",
+        "Get-ClusterGroup",
+        "Get-ClusterQuorum",
+        "#pause 6"
+      ]
+    },
+    {
+      "name": "drain",
+      "kind": "app",
+      "app": "VMConnect: CON-SRV02 (prober) and CON-NODE01 (drain), side by side",
+      "steps": [
+        "CON-SRV02, Windows PowerShell, cd C:\\lab\\ep12\\src: .\\Watch-ClusterRole.ps1 -Url http://10.50.0.61/ -DurationSec 90 -OutFile .\\drain.jsonl",
+        "About 15 seconds later, on the CON-NODE01 console (powershell, cd C:\\lab\\ep12\\src): .\\Deploy-ClusterLab.ps1 -Step Drain -WhatIf",
+        ".\\Deploy-ClusterLab.ps1 -Step Drain",
+        "Show the From / To row on CON-NODE01 and, in the prober window, the \"Served by\" line changing from one node to the other",
+        "Wait for the prober to finish and show the outage table at the end (the probe has a 2 s timeout, so an outage is measured to about two seconds)"
+      ],
+      "mask": [
+        "VMConnect title bar (\"<VM> on <laptop name>\") and the laptop taskbar"
+      ]
+    },
+    {
+      "name": "crash",
+      "kind": "app",
+      "app": "Hyper-V host PowerShell and the CON-SRV02 prober window (optional screen)",
+      "steps": [
+        "CON-SRV02: .\\Watch-ClusterRole.ps1 -Url http://10.50.0.61/ -DurationSec 120 -OutFile .\\crash.jsonl",
+        "Find the owner node on the surviving node first: Get-ClusterGroup CON-WEB",
+        "On the Hyper-V host, elevated PowerShell: Stop-VM -Name <the owning node> -TurnOff",
+        "Show the role come online on the other node and the longer outage in the prober summary",
+        "Afterwards: Start-VM -Name <the owning node> and wait for the node to rejoin the cluster before tear-down"
+      ],
+      "mask": [
+        "VMConnect title bar (\"<VM> on <laptop name>\") and the laptop taskbar",
+        "the host computer name in the host prompt or window title"
+      ]
+    }
+  ],
+  "teardown": [
+    "Get-VM CON-NODE01, CON-NODE02 | Where-Object State -ne 'Running' | Start-VM",
+    "do { Start-Sleep -Seconds 10; $ok = try { Invoke-Command -VMName CON-NODE01 -Credential $cred { $true } -ErrorAction Stop } catch { $false } } until ($ok)",
+    "Invoke-Command -VMName CON-NODE01 -Credential $cred { Set-Location C:\\lab\\ep12\\src; .\\Deploy-ClusterLab.ps1 -Step Remove }",
+    "Invoke-Command -VMName CON-SRV02 -Credential $cred { Remove-Item C:\\lab\\ep12 -Recurse -Force -ErrorAction SilentlyContinue }",
+    "$vm = Get-VM -Name CON-NODE01 -ErrorAction SilentlyContinue; if ($vm) { $disks = @($vm | Get-VMHardDiskDrive | ForEach-Object Path | Where-Object { (Split-Path $_ -Leaf) -like \"CON-NODE01*\" }); Stop-VM -VM $vm -TurnOff -Force -ErrorAction SilentlyContinue; Remove-VM -VM $vm -Force; foreach ($d in $disks) { Get-ChildItem (Split-Path $d) -File -Filter \"CON-NODE01*\" -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue } }",
+    "$vm = Get-VM -Name CON-NODE02 -ErrorAction SilentlyContinue; if ($vm) { $disks = @($vm | Get-VMHardDiskDrive | ForEach-Object Path | Where-Object { (Split-Path $_ -Leaf) -like \"CON-NODE02*\" }); Stop-VM -VM $vm -TurnOff -Force -ErrorAction SilentlyContinue; Remove-VM -VM $vm -Force; foreach ($d in $disks) { Get-ChildItem (Split-Path $d) -File -Filter \"CON-NODE02*\" -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue } }",
+    "Invoke-Command -VMName CON-DC01 -Credential $cred { Remove-ADComputer CON-NODE01 -Confirm:$false -ErrorAction SilentlyContinue; Remove-ADComputer CON-NODE02 -Confirm:$false -ErrorAction SilentlyContinue; Get-ADComputer -Filter \"Name -like 'CON-CL01' -or Name -like 'CON-WEB'\" }"
+  ],
+  "needs": [
+    "lab-vms",
+    "vm:CON-NODE01",
+    "vm:CON-NODE02"
+  ]
+}

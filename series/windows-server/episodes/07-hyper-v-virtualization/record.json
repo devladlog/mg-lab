@@ -1,0 +1,70 @@
+{
+  "note": "Live-session recording of the screen scenes (series/tools/rec). prepare/teardown run on the laptop, not recorded; commands are typed and run for real. All screens run in an elevated PowerShell on the Hyper-V host (the laptop). Only CON-HVT01 is created, changed and removed; the five lab VMs are only read. The first audit line shows the real computer name: crop it.",
+  "prepare": [
+    "if (Get-VM -Name CON-HVT01 -ErrorAction SilentlyContinue) { .\\src\\Deploy-HvLab.ps1 -Step Remove }",
+    "Remove-Item .\\src\\host-facts.json, .\\src\\audit.md -ErrorAction SilentlyContinue"
+  ],
+  "screens": [
+    {
+      "name": "audit",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\windows-server\\episodes\\07-hyper-v-virtualization\\src",
+      "prompt": "PS> ",
+      "commands": [
+        ".\\Invoke-HvAudit.ps1 -FactsFile .\\host-facts.json -OutFile .\\audit.md",
+        "#pause 6"
+      ]
+    },
+    {
+      "name": "create",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\windows-server\\episodes\\07-hyper-v-virtualization\\src",
+      "prompt": "PS> ",
+      "commands": [
+        ".\\Deploy-HvLab.ps1 -Step Create -WhatIf",
+        "#pause 3",
+        ".\\Deploy-HvLab.ps1 -Step Create",
+        "#pause 2",
+        "Get-VM CON-HVT01 | Format-List Name, Generation, Version, ProcessorCount, DynamicMemoryEnabled, CheckpointType, State",
+        "Get-VMFirmware CON-HVT01 | Format-List SecureBoot",
+        "Get-VMSecurity CON-HVT01 | Format-List TpmEnabled",
+        "#pause 4"
+      ]
+    },
+    {
+      "name": "chain",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\windows-server\\episodes\\07-hyper-v-virtualization\\src",
+      "prompt": "PS> ",
+      "commands": [
+        ".\\Deploy-HvLab.ps1 -Step Checkpoints",
+        "#pause 4",
+        "Get-VMHardDiskDrive CON-HVT01 | ForEach-Object { Get-VHD $_.Path } | Format-List Path, VhdType, ParentPath",
+        "#pause 5"
+      ]
+    },
+    {
+      "name": "cleanup",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\windows-server\\episodes\\07-hyper-v-virtualization\\src",
+      "prompt": "PS> ",
+      "commands": [
+        ".\\Deploy-HvLab.ps1 -Step Cleanup -WhatIf",
+        "#pause 4",
+        ".\\Deploy-HvLab.ps1 -Step Cleanup",
+        "#pause 5"
+      ]
+    }
+  ],
+  "teardown": [
+    ".\\src\\Deploy-HvLab.ps1 -Step Remove",
+    "Remove-Item .\\src\\host-facts.json, .\\src\\audit.md -ErrorAction SilentlyContinue"
+  ],
+  "needs": [
+    "lab-vms"
+  ]
+}
