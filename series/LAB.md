@@ -28,6 +28,8 @@ All demos are recorded for real. Use these shared resources before asking for ne
 - AI credits: AI Builder trials are discontinued and seeded credits ended 1 Nov 2026. Running AI prompts in an app
   or flow needs Copilot Credits via a pay-as-you-go plan (not set; needs the owner, and a production/sandbox
   environment, not a Developer one). Testing inside the prompt builder is free.
+- Copilot in Fabric/Power BI: per Learn, the Fabric trial capacity does not support Copilot; a paid F2+ (or P1) capacity
+  is needed for those screens (owner's decision, cost stated in the episode).
 - Teams: the Workflows app is already allowed for everyone (Teams admin center, checked 21 Nov 2026).
 
 ## Dev services
