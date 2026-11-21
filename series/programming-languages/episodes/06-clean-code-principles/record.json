@@ -1,0 +1,50 @@
+{
+  "note": "Live-session recording of the screen scenes (series/tools/rec). prepare/teardown run on the laptop, not recorded; commands are typed and run for real. The episode is copied to a neutral folder C:\\lab\\plNN so no user name shows in paths.",
+  "prepare": [
+    "New-Item -ItemType Directory -Force C:\\lab | Out-Null",
+    "Remove-Item C:\\lab\\pl06 -Recurse -Force -ErrorAction SilentlyContinue",
+    "Copy-Item -Path (Get-Location).Path -Destination C:\\lab\\pl06 -Recurse -Force",
+    "dotnet build C:\\lab\\pl06\\src\\Contoso.Requests.Cli -m:1 -v q"
+  ],
+  "screens": [
+    {
+      "name": "gates",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "C:\\lab\\pl06",
+      "prompt": "> ",
+      "commands": [
+        "dotnet build src\\Contoso.Requests.Legacy -m:1 --no-incremental -v q -p:EnforceCleanCode=true",
+        "#pause 5",
+        "dotnet build src\\Contoso.Requests.Clean -m:1 --no-incremental -v q",
+        "#pause 4"
+      ]
+    },
+    {
+      "name": "compare",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "C:\\lab\\pl06",
+      "prompt": "> ",
+      "commands": [
+        "dotnet run --no-build --project src\\Contoso.Requests.Cli -- compare samples\\requests.csv",
+        "#pause 7"
+      ]
+    },
+    {
+      "name": "rounding",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "C:\\lab\\pl06",
+      "prompt": "> ",
+      "commands": [
+        "dotnet run --no-build --project src\\Contoso.Requests.Cli -- compare samples\\requests.csv --rounding AwayFromZero",
+        "#pause 7"
+      ]
+    }
+  ],
+  "teardown": [
+    "Remove-Item C:\\lab\\pl06 -Recurse -Force -ErrorAction SilentlyContinue"
+  ],
+  "needs": []
+}

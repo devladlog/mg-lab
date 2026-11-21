@@ -1,0 +1,80 @@
+{
+  "note": "Live-session recording of the screen scenes (series/tools/rec). prepare/teardown run on the laptop, not recorded; commands are typed and run for real. The episode is copied to a neutral folder C:\\lab\\plNN so no user name shows in paths.",
+  "prepare": [
+    "New-Item -ItemType Directory -Force C:\\lab | Out-Null",
+    "Remove-Item C:\\lab\\pl10 -Recurse -Force -ErrorAction SilentlyContinue",
+    "Copy-Item -Path (Get-Location).Path -Destination C:\\lab\\pl10 -Recurse -Force"
+  ],
+  "screens": [
+    {
+      "name": "onerun",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "C:\\lab\\pl10",
+      "prompt": "> ",
+      "commands": [
+        "node demo/one-run-benchmark.js",
+        "#pause 5"
+      ],
+      "note": "Timings depend on a quiet machine: close other heavy applications. Check the spread on screen matches the narration (see demo.md)."
+    },
+    {
+      "name": "profile",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "C:\\lab\\pl10",
+      "prompt": "> ",
+      "commands": [
+        "node src/cli.js profile slow --rows 3000",
+        "#pause 8"
+      ]
+    },
+    {
+      "name": "vscode-profile",
+      "kind": "app",
+      "app": "VS Code",
+      "steps": [
+        "Open the folder C:\\lab\\pl10, dark theme, font size 18 or larger",
+        "Open profiles/slow.cpuprofile from the Explorer (written by the previous screen's command)",
+        "Frame the profile viewer: functions with their time, buildReportSlow at the top; if the built-in viewer does not appear, say so and drop this screen (Chrome DevTools > Performance can load the same file)",
+        "Open the integrated terminal and run: node --cpu-prof --cpu-prof-dir=cpuprof src/run-report.js slow 3000",
+        "Run: dir cpuprof  (file CPU.<date>.<time>.<pid>.0.001.cpuprofile)",
+        "Run: node src/cli.js top (Get-ChildItem cpuprof\\*.cpuprofile).FullName"
+      ],
+      "mask": [
+        "window title and Explorer root if they show a user name"
+      ],
+      "prepare": [
+        "Push-Location C:\\lab\\pl10; node src/cli.js profile slow --rows 3000 | Out-Null; Pop-Location"
+      ]
+    },
+    {
+      "name": "after",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "C:\\lab\\pl10",
+      "prompt": "> ",
+      "commands": [
+        "node src/cli.js bench --rows 2000 --runs 7",
+        "node src/cli.js lag slow --rows 3000",
+        "node src/cli.js lag fast --rows 3000",
+        "#pause 6"
+      ]
+    },
+    {
+      "name": "memory",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "C:\\lab\\pl10",
+      "prompt": "> ",
+      "commands": [
+        "node --expose-gc src/cli.js memory",
+        "#pause 6"
+      ]
+    }
+  ],
+  "teardown": [
+    "Remove-Item C:\\lab\\pl10 -Recurse -Force -ErrorAction SilentlyContinue"
+  ],
+  "needs": []
+}

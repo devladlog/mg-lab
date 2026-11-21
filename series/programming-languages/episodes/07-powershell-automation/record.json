@@ -1,0 +1,88 @@
+{
+  "note": "Live-session recording of the screen scenes (series/tools/rec). prepare/teardown run on the laptop, not recorded; commands are typed and run for real. The episode is copied to a neutral folder C:\\lab\\plNN so no user name shows in paths.",
+  "prepare": [
+    "New-Item -ItemType Directory -Force C:\\lab | Out-Null",
+    "Remove-Item C:\\lab\\pl07 -Recurse -Force -ErrorAction SilentlyContinue",
+    "Copy-Item -Path (Get-Location).Path -Destination C:\\lab\\pl07 -Recurse -Force",
+    "foreach ($m in 'Pester', 'PSScriptAnalyzer') { if (-not (Get-Module $m -ListAvailable | Where-Object { $_.Version.Major -ge ($m -eq 'Pester' ? 5 : 1) })) { Install-PSResource -Name $m -Scope CurrentUser -TrustRepository } }"
+  ],
+  "screens": [
+    {
+      "name": "analyzer",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "C:\\lab\\pl07",
+      "prompt": "> ",
+      "commands": [
+        "Invoke-ScriptAnalyzer .\\demo\\bad-script.ps1 -Settings .\\PSScriptAnalyzerSettings.psd1 | Sort-Object Line | Format-Table RuleName, Severity, Line -AutoSize",
+        "#pause 5",
+        "(Invoke-ScriptAnalyzer .\\src -Recurse -Settings .\\PSScriptAnalyzerSettings.psd1).Count",
+        "#pause 3"
+      ]
+    },
+    {
+      "name": "pipeline",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "C:\\lab\\pl07",
+      "prompt": "> ",
+      "commands": [
+        "Import-Module .\\src\\ContosoRequests\\ContosoRequests.psd1 -Force",
+        "$requests = Import-ContosoRequest .\\samples\\requests.csv -ErrorVariable rejected -ErrorAction SilentlyContinue",
+        "\"$($requests.Count) valid, $($rejected.Count) rejected\"",
+        "$requests | Format-Table Code, Title, Department, Budget, Priority",
+        "#pause 3",
+        "$rejected | ForEach-Object { $_.FullyQualifiedErrorId.Split(',')[0] + '  ' + $_.ErrorDetails.Message }",
+        "#pause 5"
+      ]
+    },
+    {
+      "name": "whatif",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "C:\\lab\\pl07",
+      "prompt": "> ",
+      "commands": [
+        "Import-Module .\\src\\ContosoRequests\\ContosoRequests.psd1 -Force",
+        "$requests = Import-ContosoRequest .\\samples\\requests.csv -ErrorVariable rejected -ErrorAction SilentlyContinue",
+        "$routes = $requests | Get-ContosoApprovalRoute -ApproverPath .\\samples\\approvers.json -ErrorVariable unrouted -ErrorAction SilentlyContinue",
+        "$routes | Export-ContosoApprovalPack -Destination .\\out -WhatIf",
+        "#pause 3",
+        "Test-Path .\\out",
+        "$routes | Export-ContosoApprovalPack -Destination .\\out -PassThru | Format-Table Code, Priority, Approvers",
+        "Get-Content .\\out\\IT\\PR-2026-0304.json",
+        "#pause 3",
+        "$routes | Export-ContosoApprovalPack -Destination .\\out",
+        "#pause 3",
+        "$unrouted[0].Exception.Message",
+        "#pause 3"
+      ]
+    },
+    {
+      "name": "gotchas",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "C:\\lab\\pl07",
+      "prompt": "> ",
+      "commands": [
+        "pwsh -NoProfile -File .\\demo\\gotchas.ps1",
+        "#pause 8"
+      ]
+    },
+    {
+      "name": "build",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "C:\\lab\\pl07",
+      "prompt": "> ",
+      "commands": [
+        "pwsh -NoProfile -File .\\build.ps1",
+        "#pause 5"
+      ]
+    }
+  ],
+  "teardown": [
+    "Remove-Item C:\\lab\\pl07 -Recurse -Force -ErrorAction SilentlyContinue"
+  ],
+  "needs": []
+}

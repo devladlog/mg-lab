@@ -1,0 +1,66 @@
+{
+  "note": "Live-session recording of the screen scenes (series/tools/rec). prepare/teardown run on the laptop, not recorded; commands are typed and run for real. The episode is copied to a neutral folder C:\\lab\\plNN so no user name shows in paths.",
+  "prepare": [
+    "New-Item -ItemType Directory -Force C:\\lab | Out-Null",
+    "Remove-Item C:\\lab\\pl01 -Recurse -Force -ErrorAction SilentlyContinue",
+    "Copy-Item -Path (Get-Location).Path -Destination C:\\lab\\pl01 -Recurse -Force",
+    "npm ci --no-audit --no-fund --prefix C:\\lab\\pl01"
+  ],
+  "screens": [
+    {
+      "name": "demo-errors",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "C:\\lab\\pl01",
+      "prompt": "> ",
+      "commands": [
+        "npm run -s demo:errors",
+        "#pause 5"
+      ]
+    },
+    {
+      "name": "editor-never",
+      "kind": "app",
+      "app": "VS Code",
+      "steps": [
+        "Open the folder C:\\lab\\pl01 (code C:\\lab\\pl01), dark theme, font size 18 or larger",
+        "Run 'TypeScript: Select TypeScript Version' > 'Use Workspace Version' (6.0.x from node_modules/typescript)",
+        "Open demo/unsafe.ts and scroll to the badge function (lines 22 to 33)",
+        "Open the Problems panel (Ctrl+Shift+M) so the other errors are listed",
+        "Hover assertNever(state) on line 31 until the tooltip shows: Argument of type '{ readonly kind: \"rejected\"; ... }' is not assignable to parameter of type 'never'",
+        "Hold the frame for about 5 seconds"
+      ],
+      "mask": [
+        "window title bar and Explorer root if they show a user name or a full path"
+      ]
+    },
+    {
+      "name": "lint",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "C:\\lab\\pl01",
+      "prompt": "> ",
+      "commands": [
+        "npm run -s demo:lint",
+        "#pause 5"
+      ]
+    },
+    {
+      "name": "ci",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "C:\\lab\\pl01",
+      "prompt": "> ",
+      "commands": [
+        "npm run ci",
+        "#pause 3",
+        "npm run -s intake -- samples/requests.json",
+        "#pause 5"
+      ]
+    }
+  ],
+  "teardown": [
+    "Remove-Item C:\\lab\\pl01 -Recurse -Force -ErrorAction SilentlyContinue"
+  ],
+  "needs": []
+}

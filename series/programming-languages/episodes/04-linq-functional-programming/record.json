@@ -1,0 +1,61 @@
+{
+  "note": "Live-session recording of the screen scenes (series/tools/rec). prepare/teardown run on the laptop, not recorded; commands are typed and run for real. The episode is copied to a neutral folder C:\\lab\\plNN so no user name shows in paths.",
+  "prepare": [
+    "New-Item -ItemType Directory -Force C:\\lab | Out-Null",
+    "Remove-Item C:\\lab\\pl04 -Recurse -Force -ErrorAction SilentlyContinue",
+    "Copy-Item -Path (Get-Location).Path -Destination C:\\lab\\pl04 -Recurse -Force",
+    "dotnet build C:\\lab\\pl04\\LinqFunctional.slnx -m:1 -v q"
+  ],
+  "screens": [
+    {
+      "name": "report",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "C:\\lab\\pl04",
+      "prompt": "> ",
+      "commands": [
+        "dotnet run --no-build --project src\\Contoso.Portfolio.Cli -- report",
+        "#pause 6"
+      ]
+    },
+    {
+      "name": "import",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "C:\\lab\\pl04",
+      "prompt": "> ",
+      "commands": [
+        "dotnet run --no-build --project src\\Contoso.Portfolio.Cli -- import samples\\requests.csv",
+        "#pause 5"
+      ]
+    },
+    {
+      "name": "deferred",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "C:\\lab\\pl04",
+      "prompt": "> ",
+      "commands": [
+        "dotnet build demo\\Analyzers -m:1 --no-incremental -v q",
+        "#pause 4",
+        "dotnet run --no-build --project src\\Contoso.Portfolio.Cli -- deferred",
+        "#pause 5"
+      ]
+    },
+    {
+      "name": "sql",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "C:\\lab\\pl04",
+      "prompt": "> ",
+      "commands": [
+        "dotnet run --no-build --project src\\Contoso.Portfolio.Cli -- sql",
+        "#pause 8"
+      ]
+    }
+  ],
+  "teardown": [
+    "Remove-Item C:\\lab\\pl04 -Recurse -Force -ErrorAction SilentlyContinue"
+  ],
+  "needs": []
+}

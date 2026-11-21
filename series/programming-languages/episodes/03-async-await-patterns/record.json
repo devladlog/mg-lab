@@ -1,0 +1,90 @@
+{
+  "note": "Live-session recording of the screen scenes (series/tools/rec). prepare/teardown run on the laptop, not recorded; commands are typed and run for real. The episode is copied to a neutral folder C:\\lab\\plNN so no user name shows in paths.",
+  "prepare": [
+    "New-Item -ItemType Directory -Force C:\\lab | Out-Null",
+    "Remove-Item C:\\lab\\pl03 -Recurse -Force -ErrorAction SilentlyContinue",
+    "Copy-Item -Path (Get-Location).Path -Destination C:\\lab\\pl03 -Recurse -Force",
+    "dotnet build C:\\lab\\pl03\\AsyncPatterns.slnx -m:1 -v q"
+  ],
+  "screens": [
+    {
+      "name": "sequential",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "C:\\lab\\pl03",
+      "prompt": "> ",
+      "commands": [
+        "dotnet run --no-build --project src\\Contoso.Approvals.Cli -- sequential",
+        "#pause 2",
+        "Get-Content ./api.log -Tail 6",
+        "#pause 5"
+      ],
+      "prepare": [
+        "if (Test-Path C:\\lab\\pl03\\api.pid) { Stop-Process -Id (Get-Content C:\\lab\\pl03\\api.pid) -Force -ErrorAction SilentlyContinue; Remove-Item C:\\lab\\pl03\\api.pid }",
+        "Remove-Item C:\\lab\\pl03\\api.log, C:\\lab\\pl03\\api.err -ErrorAction SilentlyContinue",
+        "$bin = 'C:\\lab\\pl03\\src\\Contoso.Approvals.Api\\bin\\Debug\\net10.0'; $p = Start-Process dotnet -ArgumentList \"$bin\\Contoso.Approvals.Api.dll\", '--urls', 'http://localhost:5080' -WorkingDirectory $bin -RedirectStandardOutput C:\\lab\\pl03\\api.log -RedirectStandardError C:\\lab\\pl03\\api.err -WindowStyle Hidden -PassThru; $p.Id | Set-Content C:\\lab\\pl03\\api.pid; Start-Sleep -Seconds 4"
+      ],
+      "note": "The Finance API runs as a hidden background process of the laptop (not the left pane of the split terminal); its real log is shown with Get-Content api.log. For the split-pane look, record in Windows Terminal with the API in the left pane instead."
+    },
+    {
+      "name": "bounded",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "C:\\lab\\pl03",
+      "prompt": "> ",
+      "commands": [
+        "dotnet run --no-build --project src\\Contoso.Approvals.Cli -- unbounded",
+        "#pause 3",
+        "dotnet run --no-build --project src\\Contoso.Approvals.Cli -- bounded",
+        "#pause 3",
+        "Select-String 'in flight 24' ./api.log | Select-Object -First 1",
+        "#pause 4"
+      ],
+      "prepare": [
+        "if (Test-Path C:\\lab\\pl03\\api.pid) { Stop-Process -Id (Get-Content C:\\lab\\pl03\\api.pid) -Force -ErrorAction SilentlyContinue; Remove-Item C:\\lab\\pl03\\api.pid }",
+        "Remove-Item C:\\lab\\pl03\\api.log, C:\\lab\\pl03\\api.err -ErrorAction SilentlyContinue",
+        "$bin = 'C:\\lab\\pl03\\src\\Contoso.Approvals.Api\\bin\\Debug\\net10.0'; $p = Start-Process dotnet -ArgumentList \"$bin\\Contoso.Approvals.Api.dll\", '--urls', 'http://localhost:5080' -WorkingDirectory $bin -RedirectStandardOutput C:\\lab\\pl03\\api.log -RedirectStandardError C:\\lab\\pl03\\api.err -WindowStyle Hidden -PassThru; $p.Id | Set-Content C:\\lab\\pl03\\api.pid; Start-Sleep -Seconds 4"
+      ]
+    },
+    {
+      "name": "cancel",
+      "kind": "app",
+      "app": "Windows Terminal (two panes)",
+      "steps": [
+        "Left pane: cd C:\\lab\\pl03; Clear-Host; dotnet run --project src\\Contoso.Approvals.Api (or the built dll with --urls http://localhost:5080) and wait for 'Now listening on: http://localhost:5080'",
+        "Right pane: cd C:\\lab\\pl03; dotnet run --no-build --project src\\Contoso.Approvals.Cli -- timeout --timeout-ms 150  (expect TimeoutException after ~158 ms, Aborted = 1)",
+        "Right pane: dotnet run --no-build --project src\\Contoso.Approvals.Cli -- waitasync --timeout-ms 150  (TimeoutException, Aborted = 0; left pane shows start + done 300 ms)",
+        "Right pane: dotnet run --no-build --project src\\Contoso.Approvals.Cli -- sequential and press Ctrl+C after about 1.5 s (expect 'Ctrl+C: cancelling...' and 'Cancelled after ...'; left pane shows two 'ABORTED by the client' lines)",
+        "Frame both panes; stop the API with Ctrl+C in the left pane afterwards"
+      ],
+      "mask": [
+        "window and tab titles: set $Host.UI.RawUI.WindowTitle to 'api' and 'client'; short prompt function prompt { '> ' } in both panes"
+      ],
+      "prepare": [
+        "if (Test-Path C:\\lab\\pl03\\api.pid) { Stop-Process -Id (Get-Content C:\\lab\\pl03\\api.pid) -Force -ErrorAction SilentlyContinue; Remove-Item C:\\lab\\pl03\\api.pid }"
+      ],
+      "note": "Ctrl+C has to be pressed by a person at the right moment, so this screen is a guided capture, not a played terminal."
+    },
+    {
+      "name": "deadlock",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "C:\\lab\\pl03",
+      "prompt": "> ",
+      "commands": [
+        "dotnet build demo\\Analyzers -m:1 --no-incremental -v q",
+        "#pause 5",
+        "dotnet run --no-build --project src\\Contoso.Approvals.Cli -- deadlock",
+        "#pause 5"
+      ],
+      "prepare": [
+        "if (Test-Path C:\\lab\\pl03\\api.pid) { Stop-Process -Id (Get-Content C:\\lab\\pl03\\api.pid) -Force -ErrorAction SilentlyContinue; Remove-Item C:\\lab\\pl03\\api.pid }"
+      ]
+    }
+  ],
+  "teardown": [
+    "if (Test-Path C:\\lab\\pl03\\api.pid) { Stop-Process -Id (Get-Content C:\\lab\\pl03\\api.pid) -Force -ErrorAction SilentlyContinue; Remove-Item C:\\lab\\pl03\\api.pid }",
+    "Remove-Item C:\\lab\\pl03 -Recurse -Force -ErrorAction SilentlyContinue"
+  ],
+  "needs": []
+}

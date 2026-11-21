@@ -1,0 +1,54 @@
+{
+  "note": "Live-session recording of the screen scenes (series/tools/rec). prepare/teardown run on the laptop, not recorded; commands are typed and run for real. The episode is copied to a neutral folder C:\\lab\\plNN so no user name shows in paths.",
+  "prepare": [
+    "New-Item -ItemType Directory -Force C:\\lab | Out-Null",
+    "Remove-Item C:\\lab\\pl02 -Recurse -Force -ErrorAction SilentlyContinue",
+    "Copy-Item -Path (Get-Location).Path -Destination C:\\lab\\pl02 -Recurse -Force",
+    "[IO.File]::WriteAllText('C:\\lab\\pl02\\demo\\expect-errors.sh', ((Get-Content -Raw 'C:\\lab\\pl02\\demo\\expect-errors.sh') -replace \"`r`n\", \"`n\"))",
+    "dotnet build C:\\lab\\pl02\\AdvancedCSharp.slnx -m:1 -v q"
+  ],
+  "screens": [
+    {
+      "name": "editor-extension",
+      "kind": "app",
+      "app": "VS Code (C# Dev Kit)",
+      "steps": [
+        "Open the folder C:\\lab\\pl02, dark theme, font size 18 or larger; wait for the C# Dev Kit to load AdvancedCSharp.slnx",
+        "Open src/Contoso.Requests.Demo/Program.cs",
+        "On the requests.TotalBudget line delete 'TotalBudget' and type 'requests.' again (or press Ctrl+Space)",
+        "Frame the completion list: TotalBudget and HighPriority with the property icon",
+        "Press Escape and undo (Ctrl+Z) so the file is unchanged",
+        "Optional second frame: hover clock.Today to show it comes from TimeProviderExtensions"
+      ],
+      "mask": [
+        "window title and Explorer root if they show a user name"
+      ]
+    },
+    {
+      "name": "demo-run",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "C:\\lab\\pl02",
+      "prompt": "> ",
+      "commands": [
+        "dotnet run --project src/Contoso.Requests.Demo",
+        "#pause 6"
+      ]
+    },
+    {
+      "name": "gotchas",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "C:\\lab\\pl02",
+      "prompt": "> ",
+      "commands": [
+        "& 'C:\\Program Files\\Git\\bin\\bash.exe' ./demo/expect-errors.sh",
+        "#pause 6"
+      ]
+    }
+  ],
+  "teardown": [
+    "Remove-Item C:\\lab\\pl02 -Recurse -Force -ErrorAction SilentlyContinue"
+  ],
+  "needs": []
+}

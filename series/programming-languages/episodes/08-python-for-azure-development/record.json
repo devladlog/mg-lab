@@ -1,0 +1,116 @@
+{
+  "note": "Live-session recording of the screen scenes (series/tools/rec). prepare/teardown run on the laptop, not recorded; commands are typed and run for real. The episode is copied to a neutral folder C:\\lab\\plNN so no user name shows in paths.",
+  "prepare": [
+    "New-Item -ItemType Directory -Force C:\\lab | Out-Null",
+    "Remove-Item C:\\lab\\pl08 -Recurse -Force -ErrorAction SilentlyContinue",
+    "Copy-Item -Path (Get-Location).Path -Destination C:\\lab\\pl08 -Recurse -Force",
+    "if (-not (py -3.13 --version 2>$null)) { winget install --id Python.Python.3.13 -e --silent --accept-package-agreements --accept-source-agreements }",
+    "py -3.13 -m venv C:\\lab\\pl08\\.venv",
+    "& C:\\lab\\pl08\\.venv\\Scripts\\python.exe -m pip install -q -e 'C:\\lab\\pl08[dev]'",
+    "# owner signs in: az login (interactive) and selects the lab subscription (az account set); never typed on camera",
+    "az login",
+    "az group create -n rg-mglab-code-08 -l westeurope -o none",
+    "$me = az ad signed-in-user show --query id -o tsv",
+    "$sa = az storage account list -g rg-mglab-code-08 --query \"[0].name\" -o tsv; if (-not $sa) { $sa = 'stcontosomglab' + (Get-Random -Minimum 1000 -Maximum 9999) }",
+    "az deployment group create -g rg-mglab-code-08 -f C:\\lab\\pl08\\infra\\main.bicep -p storageAccountName=$sa principalId=$me assignRole=false -o none",
+    "Set-Content C:\\lab\\pl08\\.account-url \"https://$sa.blob.core.windows.net\" -NoNewline"
+  ],
+  "screens": [
+    {
+      "name": "denied",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "C:\\lab\\pl08",
+      "prompt": "> ",
+      "commands": [
+        ".\\.venv\\Scripts\\Activate.ps1",
+        "$env:CONTOSO_STORAGE_ACCOUNT_URL = Get-Content .\\.account-url",
+        "contoso-azure seed samples\\requests.csv",
+        "#pause 6"
+      ],
+      "prepare": [
+        "$me = az ad signed-in-user show --query id -o tsv",
+        "$sa = az storage account list -g rg-mglab-code-08 --query \"[0].name\" -o tsv",
+        "$scope = az storage account show -n $sa -g rg-mglab-code-08 --query id -o tsv",
+        "az role assignment delete --assignee $me --scope $scope"
+      ],
+      "mask": [
+        "storage account name and subscription name or id in every frame",
+        "signed-in user e-mail",
+        "never run az account show or az storage account keys list"
+      ],
+      "note": "Needs the first deployment with assignRole=false (the per-screen prepare also removes any role left from an earlier take). The friendly 403 text only appears for AuthorizationPermissionMismatch; not verified against the real service yet."
+    },
+    {
+      "name": "run",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "C:\\lab\\pl08",
+      "prompt": "> ",
+      "commands": [
+        ".\\.venv\\Scripts\\Activate.ps1",
+        "$env:CONTOSO_STORAGE_ACCOUNT_URL = Get-Content .\\.account-url",
+        "contoso-azure seed samples\\requests.csv",
+        "contoso-azure process",
+        "contoso-azure list",
+        "#pause 6"
+      ],
+      "prepare": [
+        "$me = az ad signed-in-user show --query id -o tsv",
+        "$sa = az storage account list -g rg-mglab-code-08 --query \"[0].name\" -o tsv",
+        "$scope = az storage account show -n $sa -g rg-mglab-code-08 --query id -o tsv",
+        "az deployment group create -g rg-mglab-code-08 -f C:\\lab\\pl08\\infra\\main.bicep -p storageAccountName=$sa principalId=$me assignRole=true -o none",
+        "$env:CONTOSO_STORAGE_ACCOUNT_URL = \"https://$sa.blob.core.windows.net\"; for ($i = 0; $i -lt 40; $i++) { & C:\\lab\\pl08\\.venv\\Scripts\\contoso-azure.exe list *> $null; if ($LASTEXITCODE -eq 0) { break }; Start-Sleep -Seconds 20 }"
+      ],
+      "mask": [
+        "storage account name and subscription name or id in every frame",
+        "signed-in user e-mail",
+        "never run az account show or az storage account keys list"
+      ],
+      "note": "Role changes can take up to 10 minutes; the prepare waits until 'list' works. Portal follow-up (browser, account labadmin): storage account > Data storage > Containers > packs, authentication method 'Microsoft Entra user account', storage account name masked."
+    },
+    {
+      "name": "rerun",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "C:\\lab\\pl08",
+      "prompt": "> ",
+      "commands": [
+        ".\\.venv\\Scripts\\Activate.ps1",
+        "$env:CONTOSO_STORAGE_ACCOUNT_URL = Get-Content .\\.account-url",
+        "contoso-azure process",
+        "contoso-azure process --use-async --concurrency 4 --overwrite",
+        "#pause 6"
+      ],
+      "mask": [
+        "storage account name and subscription name or id in every frame",
+        "signed-in user e-mail",
+        "never run az account show or az storage account keys list"
+      ],
+      "note": "Portal follow-up (browser, account labadmin): open IT/PR-2026-0304.json in the packs container and frame the three approvers (Alex, Sam, Taylor Demo); account name masked."
+    },
+    {
+      "name": "gotchas",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "C:\\lab\\pl08",
+      "prompt": "> ",
+      "commands": [
+        ".\\.venv\\Scripts\\Activate.ps1",
+        "python demo\\gotchas.py",
+        "#pause 8"
+      ],
+      "note": "No tenant needed: pure Python 3.13 on the laptop (except* needs 3.11 or newer; the laptop's default python is 3.10, so the venv uses py -3.13)."
+    }
+  ],
+  "teardown": [
+    "az group delete -n rg-mglab-code-08 --yes --no-wait",
+    "az group exists -n rg-mglab-code-08",
+    "Remove-Item C:\\lab\\pl08 -Recurse -Force -ErrorAction SilentlyContinue"
+  ],
+  "needs": [
+    "tenant",
+    "azure",
+    "python:3.13"
+  ]
+}

@@ -1,0 +1,85 @@
+{
+  "note": "Live-session recording of the screen scenes (series/tools/rec). prepare/teardown run on the laptop, not recorded; commands are typed and run for real. The episode is copied to a neutral folder C:\\lab\\plNN so no user name shows in paths.",
+  "prepare": [
+    "New-Item -ItemType Directory -Force C:\\lab | Out-Null",
+    "Remove-Item C:\\lab\\pl09 -Recurse -Force -ErrorAction SilentlyContinue",
+    "Copy-Item -Path (Get-Location).Path -Destination C:\\lab\\pl09 -Recurse -Force",
+    "# owner allows the Windows firewall prompt for node.exe (127.0.0.1) once, off camera: run 'node src/cli.js serve' briefly in the copy if needed"
+  ],
+  "screens": [
+    {
+      "name": "timings",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "C:\\lab\\pl09",
+      "prompt": "> ",
+      "commands": [
+        "node src/cli.js intake samples/requests.csv --concurrency 1 --no-cache",
+        "node src/cli.js intake samples/requests.csv --concurrency 5 --no-cache",
+        "node src/cli.js intake samples/requests.csv --concurrency 5",
+        "#pause 2",
+        "Get-Content ./api.log | Select-Object -First 6",
+        "#pause 5"
+      ],
+      "prepare": [
+        "if (Test-Path C:\\lab\\pl09\\server.pid) { Stop-Process -Id (Get-Content C:\\lab\\pl09\\server.pid) -Force -ErrorAction SilentlyContinue; Remove-Item C:\\lab\\pl09\\server.pid }",
+        "Remove-Item C:\\lab\\pl09\\api.log, C:\\lab\\pl09\\api.err -ErrorAction SilentlyContinue",
+        "$p = Start-Process node -ArgumentList 'src/cli.js', 'serve', '--port', '5090', '--latency', '300', '--fail-first', 'operations' -WorkingDirectory C:\\lab\\pl09 -RedirectStandardOutput C:\\lab\\pl09\\api.log -RedirectStandardError C:\\lab\\pl09\\api.err -WindowStyle Hidden -PassThru; $p.Id | Set-Content C:\\lab\\pl09\\server.pid; Start-Sleep -Seconds 2"
+      ],
+      "note": "The approvals service runs as a hidden background process (node src/cli.js serve --port 5090 --latency 300 --fail-first operations); its real log is shown with Get-Content api.log instead of a left pane."
+    },
+    {
+      "name": "ctrlc",
+      "kind": "app",
+      "app": "Windows Terminal (two panes)",
+      "steps": [
+        "Left pane: cd C:\\lab\\pl09; node src/cli.js serve --port 5090 --latency 1000 --fail-first operations",
+        "Right pane: cd C:\\lab\\pl09; node src/cli.js intake samples/requests.csv --concurrency 5 --no-cache",
+        "Press Ctrl+C in the right pane after about half a second",
+        "Right pane: type $LASTEXITCODE (expect 130 and 'stopped: interrupted (Ctrl+C)')",
+        "Frame both panes: five 'ABORTED by the client' lines on the left; stop the server with Ctrl+C"
+      ],
+      "mask": [
+        "window and tab titles; short prompt: function prompt { '> ' } in both panes"
+      ],
+      "prepare": [
+        "if (Test-Path C:\\lab\\pl09\\server.pid) { Stop-Process -Id (Get-Content C:\\lab\\pl09\\server.pid) -Force -ErrorAction SilentlyContinue; Remove-Item C:\\lab\\pl09\\server.pid }"
+      ],
+      "note": "Ctrl+C has to be pressed by a person at the right moment, so this screen is a guided capture."
+    },
+    {
+      "name": "gotchas",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "C:\\lab\\pl09",
+      "prompt": "> ",
+      "commands": [
+        "npm run -s gotchas",
+        "#pause 6"
+      ],
+      "prepare": [
+        "if (Test-Path C:\\lab\\pl09\\server.pid) { Stop-Process -Id (Get-Content C:\\lab\\pl09\\server.pid) -Force -ErrorAction SilentlyContinue; Remove-Item C:\\lab\\pl09\\server.pid }"
+      ]
+    },
+    {
+      "name": "tests",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "C:\\lab\\pl09",
+      "prompt": "> ",
+      "commands": [
+        "npm test",
+        "#pause 5"
+      ],
+      "prepare": [
+        "if (Test-Path C:\\lab\\pl09\\server.pid) { Stop-Process -Id (Get-Content C:\\lab\\pl09\\server.pid) -Force -ErrorAction SilentlyContinue; Remove-Item C:\\lab\\pl09\\server.pid }"
+      ],
+      "note": "Follow-up capture in VS Code: open tests/client.test.js at the test 'a caller abort is passed through untouched and never retried' (dark theme, font 18 or larger; mask the Explorer root and window title)."
+    }
+  ],
+  "teardown": [
+    "if (Test-Path C:\\lab\\pl09\\server.pid) { Stop-Process -Id (Get-Content C:\\lab\\pl09\\server.pid) -Force -ErrorAction SilentlyContinue; Remove-Item C:\\lab\\pl09\\server.pid }",
+    "Remove-Item C:\\lab\\pl09 -Recurse -Force -ErrorAction SilentlyContinue"
+  ],
+  "needs": []
+}

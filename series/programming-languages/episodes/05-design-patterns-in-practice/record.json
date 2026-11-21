@@ -1,0 +1,62 @@
+{
+  "note": "Live-session recording of the screen scenes (series/tools/rec). prepare/teardown run on the laptop, not recorded; commands are typed and run for real. The episode is copied to a neutral folder C:\\lab\\plNN so no user name shows in paths.",
+  "prepare": [
+    "New-Item -ItemType Directory -Force C:\\lab | Out-Null",
+    "Remove-Item C:\\lab\\pl05 -Recurse -Force -ErrorAction SilentlyContinue",
+    "Copy-Item -Path (Get-Location).Path -Destination C:\\lab\\pl05 -Recurse -Force",
+    "dotnet build C:\\lab\\pl05\\src\\Contoso.Approvals.Patterns.Cli -m:1 -v q",
+    "Remove-Item Env:DOTNET_ENVIRONMENT -ErrorAction SilentlyContinue"
+  ],
+  "screens": [
+    {
+      "name": "run",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "C:\\lab\\pl05",
+      "prompt": "> ",
+      "commands": [
+        "dotnet run --no-build --project src\\Contoso.Approvals.Patterns.Cli",
+        "#pause 8"
+      ]
+    },
+    {
+      "name": "options",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "C:\\lab\\pl05",
+      "prompt": "> ",
+      "commands": [
+        "dotnet run --no-build --project src\\Contoso.Approvals.Patterns.Cli -- --Policy:BoardThreshold=10000",
+        "$LASTEXITCODE",
+        "#pause 6"
+      ]
+    },
+    {
+      "name": "captive-prod",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "C:\\lab\\pl05",
+      "prompt": "> ",
+      "commands": [
+        "dotnet run --no-build --project src\\Contoso.Approvals.Patterns.Cli -- --Demo:CaptiveAudit=true",
+        "$LASTEXITCODE",
+        "#pause 6"
+      ]
+    },
+    {
+      "name": "captive-dev",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "C:\\lab\\pl05",
+      "prompt": "> ",
+      "commands": [
+        "dotnet run --no-build --project src\\Contoso.Approvals.Patterns.Cli -- --Demo:CaptiveAudit=true --environment Development",
+        "#pause 6"
+      ]
+    }
+  ],
+  "teardown": [
+    "Remove-Item C:\\lab\\pl05 -Recurse -Force -ErrorAction SilentlyContinue"
+  ],
+  "needs": []
+}

@@ -1,0 +1,75 @@
+{
+  "note": "Live-session recording of the screen scenes (series/tools/rec). prepare/teardown run on the laptop, not recorded; commands are typed and run for real. The episode is copied to a neutral folder C:\\lab\\plNN so no user name shows in paths.",
+  "prepare": [
+    "New-Item -ItemType Directory -Force C:\\lab | Out-Null",
+    "Remove-Item C:\\lab\\pl11 -Recurse -Force -ErrorAction SilentlyContinue",
+    "Copy-Item -Path (Get-Location).Path -Destination C:\\lab\\pl11 -Recurse -Force",
+    "npm install --no-audit --no-fund --prefix C:\\lab\\pl11",
+    "if (-not (py -3.13 --version 2>$null)) { winget install --id Python.Python.3.13 -e --silent --accept-package-agreements --accept-source-agreements }",
+    "py -3.13 -m venv C:\\lab\\pl11\\.venv",
+    "dotnet build C:\\lab\\pl11\\ModernFeatures.slnx -m:1 -v q",
+    "dotnet run C:\\lab\\pl11\\src\\cs\\digest.cs -- C:\\lab\\pl11\\samples\\requests.json | Out-Null"
+  ],
+  "screens": [
+    {
+      "name": "node-ts",
+      "kind": "app",
+      "app": "VS Code",
+      "steps": [
+        "Open the folder C:\\lab\\pl11, dark theme, font size 18 or larger",
+        "Open src/ts/digest.ts and scroll to the Map.groupBy block",
+        "Open the integrated terminal below the editor (prompt shortened: function prompt { '> ' })",
+        "Run: node src/ts/main.ts samples/requests.json  (the full digest, three batches)",
+        "Run: npx tsc -p tsconfig.json  (no output), then $LASTEXITCODE (0)",
+        "Frame the code and the digest together"
+      ],
+      "mask": [
+        "Explorer root and window title"
+      ]
+    },
+    {
+      "name": "csharp-file-app",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "C:\\lab\\pl11",
+      "prompt": "> ",
+      "commands": [
+        "dotnet --version",
+        "dotnet run src/cs/digest.cs -- samples/requests.json",
+        "#pause 6"
+      ],
+      "note": "The file-based app is warmed in prepare so no build output shows. Optional extra capture: code src/cs/digest.cs showing #:project and #:property PublishAot=false."
+    },
+    {
+      "name": "conformance",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "C:\\lab\\pl11",
+      "prompt": "> ",
+      "commands": [
+        "pwsh demo/conformance.ps1 -Python .\\.venv\\Scripts\\python.exe",
+        "#pause 6"
+      ],
+      "note": "Takes about 20 to 40 seconds the first time; the run is recorded, the wait is trimmed in editing."
+    },
+    {
+      "name": "gotchas",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "C:\\lab\\pl11",
+      "prompt": "> ",
+      "commands": [
+        "pwsh demo/gotchas.ps1 -Python .\\.venv\\Scripts\\python.exe",
+        "#pause 8"
+      ],
+      "note": "The Python DeprecationWarning line shows an absolute path under C:\\lab\\pl11 (neutral)."
+    }
+  ],
+  "teardown": [
+    "dotnet clean C:\\lab\\pl11\\src\\cs\\digest.cs",
+    "Remove-Item C:\\lab\\pl11 -Recurse -Force -ErrorAction SilentlyContinue"
+  ],
+  "needs": [
+    "python:3.13"
+  ]
+}
