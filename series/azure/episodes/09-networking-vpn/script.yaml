@@ -1,0 +1,240 @@
+# DEVLADLOG Azure — episode 09. Draft script: code scenes are real excerpts from src/ and infra/ (tests/test_script.py
+# checks that every line exists in the folder); screen scenes are captured by the recorder following demo.md.
+episode: 9
+slug: networking-vpn
+series_label: "AZURE"
+series_name: "DEVLADLOG Azure"
+file_prefix: "azure"
+title: "Networking & VPN"
+subtitle: "Hub and spoke, a point-to-site gateway, and a VM with no public IP"
+voice: am_michael
+thumbnail_text: "AZURE VPN\nHUB + SPOKE\nNO PUBLIC IP"
+youtube:
+  title: "Azure Hub and Spoke with Point-to-Site VPN: Gateway Transit, NSG, Bicep | DEVLADLOG Azure #9"
+  tags: [Azure VPN Gateway, point-to-site VPN, hub and spoke, VNet peering, gateway transit, NSG, Network Watcher, Bicep, OpenSSL, Azure networking, Azure]
+sources:
+  - https://www.devladlog.com/articles/azure/2026-01-30-networking-vpn-complete-guide-2026/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "A server with no public address, reached from my laptop"
+    sub: "Hub and spoke with a point-to-site V P N"
+    short: hook
+    narration: >
+      The contoso orders service has an internal side that must never face the internet. No public address, no open
+      port, nothing for a scanner to find. Today we reach it from a laptop anyway, through a V P N gateway, on a real
+      Azure subscription, and we find out which settings make that work and which one silently breaks it. Welcome to
+      DEVLADLOG Azure.
+
+  - id: shape
+    type: bullets
+    heading: "What we build"
+    bullets:
+      - "Hub network with the V P N gateway, spoke network with the workload"
+      - "Peering with gateway transit, in both directions"
+      - "A VM with a private address only, locked down by an N S G"
+      - "Certificates from OpenSSL, laptop connects point to site"
+      - "Address plan checked before anything is deployed"
+    narration: >
+      The shape is hub and spoke. The hub holds only the gateway. The spoke holds one small Linux VM with a private
+      address and nothing else. Peering joins them, with gateway transit so the spoke can use the hub's gateway. The
+      laptop connects point to site with a certificate we make with OpenSSL. And before any of it, a script checks
+      the address plan.
+
+  - id: plan
+    type: code
+    heading: "The address plan is code"
+    lang: python
+    code: |
+      RESERVED_PER_SUBNET = 5
+      # Required name -> longest allowed prefix length (smallest allowed size) for platform subnets.
+      DEDICATED_SUBNETS = {"GatewaySubnet": 27, "AzureFirewallSubnet": 26, "AzureBastionSubnet": 26}
+
+      for i, (a_name, a) in enumerate(named):
+          for b_name, b in named[i + 1:]:
+              if a.overlaps(b):
+    narration: >
+      Overlapping address ranges are the oldest way to break a hybrid network, so the plan is a file and a checker
+      uses the rules from Learn. Azure keeps five addresses in every subnet. The gateway subnet must be named exactly
+      that and be a slash twenty seven or larger. And no two networks that connect may overlap, including the lab
+      network at home and the pool of addresses handed to V P N clients.
+
+  - id: plan_screen
+    type: screen
+    heading: "The checker, good plan and bad plan"
+    image: screens/netplan.jpg
+    bar: "Terminal · src/netplan/netplan.py"
+    demo: >
+      Terminal in the episode folder. First python3 src/netplan/netplan.py check src/netplan/plan.json: one OK line
+      with usable addresses and the VM address 10.61.0.4. Then the same command on plan-overlap.json: three ERROR
+      lines (gateway subnet too small, hub overlaps the lab network 10.50.0.0/24, client pool overlaps the spoke).
+      Nothing to mask.
+    narration: >
+      The good plan passes, and tells us the VM will get the first usable address, dot four. The second plan is
+      the mistake everyone makes once: a hub that reuses the lab's range, a gateway subnet that is too small, and a
+      client pool inside the spoke. Three errors, found in a second, before an hour long gateway deployment.
+
+  - id: gateway
+    type: code
+    heading: "The gateway in Bicep"
+    lang: bicep
+    code: |
+      sku: { name: 'VpnGw1AZ', tier: 'VpnGw1AZ' } // new gateways must use an AZ SKU and a Standard public IP
+      vpnClientConfiguration: {
+        vpnClientAddressPool: { addressPrefixes: [p2sPoolPrefix] }
+        vpnClientProtocols: ['IkeV2', 'OpenVPN']
+        vpnAuthenticationTypes: ['Certificate']
+        vpnClientRootCertificates: [
+          {
+            name: 'contoso-p2s-root'
+            properties: { publicCertData: p2sRootCertData }
+          }
+        ]
+      }
+    narration: >
+      Learn says not to create new gateways on the old V P N G W one to five S K Us, so we use the zone redundant
+      one, with a Standard public address. Clients may use I K E version two or OpenVPN. We left S S T P out, a
+      protocol Learn is retiring. Authentication is by certificate, and the gateway only needs the public half of
+      our root.
+
+  - id: certs
+    type: code
+    heading: "Certificates with OpenSSL"
+    lang: bash
+    code: |
+      openssl genrsa -out rootKey.pem 2048 2>/dev/null
+      openssl req -x509 -new -nodes -key rootKey.pem -sha256 -days "$DAYS" -subj "/CN=Contoso Lab P2S Root" \
+        -addext "basicConstraints=critical,CA:TRUE" -addext "keyUsage=critical,keyCertSign,cRLSign" -out rootCert.pem
+      openssl verify -CAfile rootCert.pem "${CLIENT}Cert.pem"
+      openssl x509 -in rootCert.pem -outform der | base64 -w0 > rootCert.b64
+    narration: >
+      The root is an R S A two thousand forty eight key, because Learn says point to site certificate login supports
+      R S A and not elliptic curves. The client certificate is signed by it, verified, and a test checks it carries
+      the client authentication usage. The gateway wants the root as base sixty four on one line, which the last
+      command writes. The private keys never leave the laptop.
+
+  - id: deploy_screen
+    type: screen
+    heading: "Deploy: what-if, then the gateway"
+    image: screens/deploy.jpg
+    bar: "Terminal and Azure portal · infra/deploy.sh"
+    demo: >
+      Terminal, infra/deploy.sh rg-mglab-azure-09 westeurope: the address plan OK line, the what-if table (nine
+      resources to create) and the start of the deployment. Cut the 45 minute wait in the edit (show the clock honestly
+      in a caption). Then the portal: the resource group with the gateway, public IP, two virtual networks and the VM,
+      and the gateway's Point-to-site configuration page (pool, tunnel type, root certificate name). Mask: subscription
+      ID, gateway public IP, tenant name.
+    narration: >
+      Deploy runs the plan check, makes the certificates, shows what-if, then deploys. Learn says a gateway can take
+      forty five minutes or more, and ours did, so the video cuts that wait. In the portal, one resource group,
+      two networks, a VM with no public address, and a gateway with our pool, both tunnel types, and the root.
+
+  - id: peering
+    type: code
+    heading: "Peering: transit on one side, remote gateway on the other"
+    lang: bicep
+    short: peering
+    code: |
+      resource hubToSpoke 'Microsoft.Network/virtualNetworks/virtualNetworkPeerings@2024-05-01' = {
+        parent: hub
+        name: 'hub-to-orders'
+        properties: {
+          remoteVirtualNetwork: { id: spoke.id }
+          allowGatewayTransit: true
+          useRemoteGateways: false
+
+          allowGatewayTransit: false
+          useRemoteGateways: true
+    narration: >
+      Peering is directional, so each direction is its own resource. The hub allows gateway transit. The spoke says
+      to use the remote gateway. Miss either half and the spoke simply has no route to your clients. Learn also says
+      gateway transit does not work with the Basic gateway S K U, and the spoke must not have a gateway of its own.
+
+  - id: nsg
+    type: code
+    heading: "The N S G: one allow rule, then deny"
+    lang: bicep
+    code: |
+      name: 'allow-orders-from-vpn-pool'
+      properties: {
+        priority: 100
+        direction: 'Inbound'
+        access: 'Allow'
+        protocol: 'Tcp'
+        sourceAddressPrefix: p2sPoolPrefix
+        destinationAddressPrefix: workloadVmIp
+        destinationPortRange: '8080'
+      }
+    narration: >
+      The network security group has one allow rule. Port eight zero eight zero, from the V P N client pool, to that
+      one address. After it, an explicit deny for everything else. There is no public address on the VM, and no N S G
+      on the gateway subnet, because Learn says that can stop the gateway from working. A test checks both.
+
+  - id: connect_screen
+    type: screen
+    heading: "Connect, then reach the private address"
+    image: screens/connect.jpg
+    bar: "Azure VPN Client and terminal · infra/probe.py"
+    demo: >
+      Left: the Azure VPN Client on the laptop showing the profile Connected. Right: terminal, python3
+      infra/probe.py 10.61.0.4 printing one JSON line with reachable true, status 200, service
+      contoso-orders-internal and a client address from 172.16.201.0/24. Before connecting, show the same command
+      failing with --expect closed exiting zero. Mask: gateway host name, certificate password.
+    narration: >
+      Disconnected, the private address does not answer. Connected, it does. The probe also prints the source address
+      the service saw. If our rule is right, that is an address from the client pool, and we read it out on screen,
+      whatever it turns out to be. That is the whole point, a private service reached through a tunnel you can
+      switch off.
+
+  - id: diagnose_screen
+    type: screen
+    heading: "Which rule decided? Ask Network Watcher"
+    image: screens/diagnose.jpg
+    bar: "Terminal · infra/diagnose.sh"
+    demo: >
+      Terminal, infra/diagnose.sh rg-mglab-azure-09 <client address from the probe>: IP flow verify inbound from the
+      VPN client shows access Allow with the rule allow-orders-from-vpn-pool; from the lab server 10.50.0.22 shows
+      Deny with deny-all-inbound; then the two next hop tables. Show exactly what comes back, even if a next hop
+      type differs from the comments in the script. Mask: subscription ID.
+    narration: >
+      When it does not work, ask Network Watcher instead of guessing. I P flow verify names the rule. From the
+      V P N pool, allow. From a lab server that is not on the tunnel, deny. Next hop shows where Azure would send the
+      reply, and for the lab range, where nothing connects it yet, the answer is none. We record what comes back.
+
+  - id: gotcha
+    type: bullets
+    heading: "Gotcha: change the peering, redownload the client"
+    short: gotcha
+    bullets:
+      - "Peering changed after the client was installed? Windows has old routes"
+      - "Download the V P N client package again, install it again"
+      - "Learn documents this; the symptom is a missing route, not an error"
+      - "We did not connect the lab network: no site to site here"
+    narration: >
+      Here is the honest gotcha. Learn says that after you create or change peering, Windows clients must download and
+      install the V P N client package again, or they keep the old routes. The symptom is a silent timeout, not an
+      error. Our script regenerates the package for that reason. And a limit: this episode is point to site only.
+      We did not build a site to site tunnel to the lab, we only kept its range free.
+
+  - id: cost
+    type: bullets
+    heading: "What it costs, and tear-down"
+    bullets:
+      - "Gateway V P N G W one A Z bills by the hour, idle or not"
+      - "List price in West Europe: about nineteen cents an hour"
+      - "The whole recording stays well under two euros"
+      - "Teardown deletes the resource group and local keys"
+    narration: >
+      The gateway bills every hour it exists, connected or not. At the West Europe list price we checked, that is
+      about nineteen euro cents an hour, so a few hours of recording stays under two euros, but left running for a
+      month it would eat the whole budget. Teardown deletes the resource group, and the script removes the local keys
+      too.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The plan checker, the Bicep, the certificate script and the tests are in the repository, and the five networking
+      articles are on devladlog.com. Next time, Azure A I services. Thanks for watching.

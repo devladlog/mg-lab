@@ -1,0 +1,223 @@
+# DEVLADLOG Azure — episode 10. Draft script: code scenes are real excerpts from src/ and infra/ (tests/infra/test_script.py
+# checks that every line exists in the folder); screen scenes are captured by the recorder following demo.md.
+episode: 10
+slug: azure-ai-cognitive-services
+series_label: "AZURE"
+series_name: "DEVLADLOG Azure"
+file_prefix: "azure"
+title: "Azure AI & Cognitive Services"
+subtitle: "Triage support tickets with Azure AI Language: no keys, free tier"
+voice: am_michael
+thumbnail_text: "AZURE AI\nLANGUAGE\nNO KEYS"
+youtube:
+  title: "Azure AI Language in .NET: PII Redaction, Entra ID Instead of Keys, Free Tier | DEVLADLOG Azure #10"
+  tags: [Azure AI Language, Azure AI services, Cognitive Services, PII detection, sentiment analysis, Microsoft Entra ID, managed identity, Azure RBAC, free tier, Bicep, .NET 10, Azure]
+sources:
+  - https://www.devladlog.com/articles/azure/2026-01-12-azure-ai-cognitive-services-complete-guide-2026/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "A customer pasted a card number into a ticket"
+    sub: "Azure AI Language, with no keys"
+    short: hook
+    narration: >
+      Seven support tickets arrive. One of them has a full card number in plain text, another is furious, and three
+      are not even in English. Today a small dot net app reads them with Azure A I Language on a real subscription:
+      it redacts personal data first, scores the mood on the redacted text, and routes each ticket. And the service
+      has no keys at all. Welcome to DEVLADLOG Azure.
+
+  - id: scope
+    type: bullets
+    heading: "A narrow service, used on purpose"
+    bullets:
+      - "Language: detection, personal data redaction, sentiment"
+      - "Learn now calls these services Foundry Tools"
+      - "Single service resource: one capability, its own endpoint"
+      - "Free tier F zero: five thousand text records a month"
+      - "Entra I D only: key access switched off"
+    narration: >
+      Azure's A I services come in two shapes. A multi service resource gives one key and endpoint for many services.
+      A single service resource, like ours, gives just one. We use the Language service, because the job is narrow:
+      language, personal data and sentiment. It has a free tier with five thousand text records a month, and we
+      turn key access off, so the only way in is an Entra I D identity.
+
+  - id: order
+    type: code
+    heading: "Order matters: redact first"
+    lang: csharp
+    code: |
+      foreach (var chunk in Limits.Chunk(ok.Where(w => w.Problem is null), Limits.PiiMaxDocuments))
+      {
+          var inputs = chunk.Select(w => new TextDocumentInput(w.Ticket.Id, w.Ticket.Text) { Language = w.LanguageIso });
+          var response = await client.RecognizePiiEntitiesBatchAsync(inputs, cancellationToken: ct);
+          w.Redacted = r.Entities.RedactedText;
+      // 3. sentiment (10 documents per request) on the redacted text only
+          var inputs = chunk.Select(w => new TextDocumentInput(w.Ticket.Id, w.Redacted!) { Language = w.LanguageIso });
+    narration: >
+      The pipeline detects the language, then redacts personal data, and only then scores sentiment, on the redacted
+      text. So the raw card number goes to exactly one call, and nothing downstream, no log and no later service,
+      ever sees it. The detected language is passed along with each document, which Learn's transparency note
+      recommends when you are not sure what language you will receive. A test checks that the sentiment requests
+      contain no raw email or card.
+
+  - id: limits
+    type: code
+    heading: "The limits are constants, with tests"
+    lang: csharp
+    code: |
+      public const int LanguageDetectionMaxDocuments = 1000;
+      public const int PiiMaxDocuments = 5;
+      public const int SentimentMaxDocuments = 10;
+      public const int MaxCharactersPerDocument = 5120;
+      public const int CharactersPerTextRecord = 1000;
+      public const int FreeTierTextRecordsPerMonth = 5000;
+    narration: >
+      These numbers come from Learn, not from memory. Personal data detection takes five documents per request,
+      sentiment ten, language detection a thousand. A document may have five thousand one hundred twenty characters,
+      counted as text elements, not as U T F sixteen units. And the free tier counts text records of one thousand
+      characters, so we meter them. A document over the limit is reported, never silently cut.
+
+  - id: bicep
+    type: code
+    heading: "The resource: F0, no keys, a subdomain"
+    lang: bicep
+    code: |
+      kind: 'TextAnalytics'
+      sku: { name: 'F0' } // free tier: 5,000 text records a month, one F0 Language resource per subscription
+      properties: {
+        customSubDomainName: accountName
+        disableLocalAuth: true // no keys: Entra ID only
+        publicNetworkAccess: 'Enabled'
+      }
+    narration: >
+      In Bicep, the kind is text analytics, the S K U is F zero, and disable local auth is true. Learn says Entra
+      authentication always needs the custom subdomain, because regional endpoints do not support it, so the account
+      name doubles as the subdomain. Learn also says you get one free Language resource per subscription, so the
+      deploy script checks for another one first.
+
+  - id: deploy_screen
+    type: screen
+    heading: "Deploy: free tier, keys off, nobody allowed yet"
+    image: screens/deploy.jpg
+    bar: "Terminal and Azure portal · infra/deploy.sh"
+    demo: >
+      Terminal, infra/deploy.sh rg-mglab-azure-10 westeurope: what-if table (one Create), deployment outputs
+      (account name and endpoint). Then the portal: the Language resource Overview (pricing tier Free F0, region West
+      Europe, endpoint) and Access control (IAM) showing no role for the lab user on this resource. Mask: subscription
+      ID, the account name and endpoint host.
+    narration: >
+      The first deployment creates only the resource. Free tier, West Europe, a custom endpoint. In the portal,
+      access control shows that nobody has been given a role on it yet, not even the person who created it, because
+      owning a resource is not the same as being allowed to call its data plane.
+
+  - id: denied_screen
+    type: screen
+    heading: "The first call fails, on purpose"
+    image: screens/denied.jpg
+    bar: "Terminal · infra/run.sh"
+    demo: >
+      Terminal, infra/run.sh: record exactly what comes back, expected a failure with an HTTP 401 or 403 line and the
+      hint about the role, exit code 3. Show the exit code. Mask: endpoint host in the error if it appears.
+    narration: >
+      Now we run the app. It fails, and our code turns the error into a hint: is the right role assigned on this
+      resource? That is the common first stumble with keyless access, and it is a feature, because nothing was given
+      away by accident.
+
+  - id: role
+    type: code
+    heading: "One role, the narrowest that fits"
+    lang: bicep
+    code: |
+      var languageReaderRoleId = '7628b7b8-a8b2-4cdc-b46f-e9b35248918e'
+      roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', languageReaderRoleId)
+      principalId: principalId
+      principalType: principalType
+    narration: >
+      The fix is one role assignment: Cognitive Services Language Reader. Learn lists its data actions, and they
+      include analyze text, which is the call we make. It cannot read keys or change the resource. Learn also warns
+      that role assignments can take up to five minutes to propagate, so a failure right after is not proof the
+      assignment is wrong.
+
+  - id: run_screen
+    type: screen
+    heading: "Seven tickets, triaged"
+    image: screens/run.jpg
+    bar: "Terminal · infra/run.sh"
+    demo: >
+      Terminal, infra/deploy.sh rg-mglab-azure-10 westeurope --role, wait until it works, then infra/run.sh: seven JSON
+      lines (id, language, sentiment, piiCategories, redactedText, route) and the last line "text records (billed this
+      run): ..." on standard error. Point out the card ticket routed to security-review and the redacted text.
+      Read the actual routes aloud, whatever the real service decided. Mask: nothing personal is real, but blur the
+      endpoint host if shown.
+    narration: >
+      With the role in place, the same command works. Each ticket gets a language, a sentiment, the personal data
+      categories found, the redacted text and a route. The ticket with the card should go to security review. And the last
+      line tells us how many text records this run used, so we know how many runs the free tier allows.
+
+  - id: router
+    type: code
+    heading: "Routing is plain code"
+    lang: csharp
+    short: router
+    code: |
+      if (piiCategories.Any(Sensitive.Contains))
+          return "security-review";
+      if (string.Equals(sentiment, "negative", StringComparison.OrdinalIgnoreCase) && negativeScore >= EscalateWhenNegativeAtLeast)
+          return "escalate";
+    narration: >
+      The service gives us signals, our code makes the decision. A card or bank number always wins, then strong
+      negative sentiment escalates, then the language picks the queue. It is a pure function with unit tests, so
+      the model can change without the rules becoming a mystery.
+
+  - id: rest_screen
+    type: screen
+    heading: "On the wire: a token works, a key is refused"
+    image: screens/rest.jpg
+    bar: "Terminal · infra/rest-check.sh"
+    demo: >
+      Terminal, infra/rest-check.sh: first call with a bearer token from the Azure CLI returns HTTP 200 with the
+      detected language of a Portuguese sentence; second call with a made-up key header returns an HTTP error. Record
+      the exact status and message that come back for the key call (expected 401 or 403, not verified). Mask: endpoint
+      host.
+    narration: >
+      Without the S D K, the same service. A bearer token from the Azure command line gets an answer. A key
+      header, even a well formed one, is refused, because key access is off. We record whatever status and message
+      come back, instead of guessing.
+
+  - id: gotcha
+    type: bullets
+    heading: "Gotcha: deleting is not the end"
+    short: gotcha
+    bullets:
+      - "Deleted resources are soft deleted, the name stays reserved 48 hours"
+      - "Purge it, or the free tier slot and the subdomain stay taken"
+      - "Purge needs Contributor at subscription level"
+      - "Role assignments can take up to five minutes"
+    narration: >
+      The gotcha is after the demo. Learn says that once you delete one of these resources you cannot create another
+      with the same name for forty eight hours, unless you purge it, and that purging with the Contributor role needs
+      that role at subscription level. Since the free tier allows one per subscription, a forgotten soft deleted
+      resource can block your next demo. Our teardown script deletes the group, then purges.
+
+  - id: cost
+    type: bullets
+    heading: "What it costs, and what we did not cover"
+    bullets:
+      - "Free tier: zero euros, up to five thousand text records"
+      - "Each feature call counts: three features, three records per ticket"
+      - "Not covered: Azure OpenAI, Document Intelligence, custom models"
+      - "Not tested: private endpoints, the Standard tier"
+    narration: >
+      The free tier costs nothing, and the meter shows that seven tickets through three features is twenty one
+      records, so more than two hundred runs a month. We did not build anything with Azure Open A I, document analysis or
+      custom models, and we did not try private endpoints or the paid tier. This episode is the narrow, secure start,
+      not the whole catalogue.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The triage app, the Bicep, the scripts and the tests are in the repository, and the five A I articles are on
+      devladlog.com. Thanks for watching, and see you in the next series.
