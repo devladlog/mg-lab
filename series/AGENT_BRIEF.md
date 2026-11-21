@@ -85,3 +85,4 @@ when done. Don't start long-running containers. If a build gets OOM-killed, retr
 - Pester 5+: a function defined in a `Describe` body is not visible inside `It`; define helpers in the top-level `BeforeAll`.
 - Mocks of PnP.PowerShell cmdlets need a real `PnPConnection` instance (`RuntimeHelpers.GetUninitializedObject`) and pipe-bind types (read `$Site.Url`).
 - .NET: xUnit v3 on Microsoft.Testing.Platform needs `dotnet test --project <csproj>` (`-m:1` is rejected there). The MAUI XAML source generator runs on Linux without the maui workload (plain net10.0 + Microsoft.Maui.Controls PackageReference, no UseMaui).
+- Pester: mocks cannot fill `-ResponseHeadersVariable` in the caller's scope; mock the wrapper one level up.

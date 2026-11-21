@@ -1,0 +1,263 @@
+# DEVLADLOG Microsoft 365 — episode 15 (draft: code and tests are real; screen scenes still need the lab recording)
+episode: 15
+slug: planner-to-do-task-management
+series_label: "MICROSOFT 365"
+series_name: "DEVLADLOG Microsoft 365"
+file_prefix: "microsoft-365"
+title: "Planner & To Do Task Management"
+subtitle: "A plan from one file, an audit, and a personal focus list"
+voice: am_michael
+thumbnail_text: "PLANNER\nAS\nCODE"
+youtube:
+  title: "Planner and To Do as Code with Microsoft Graph (Real Demo) | DEVLADLOG Microsoft 365 #15"
+  tags: [Microsoft Planner, Microsoft To Do, Microsoft Graph, Planner API, task management, Microsoft 365, PowerShell, Pester, M365 admin, Teams]
+sources:
+  - https://www.devladlog.com/articles/office-365/2025-05-07-planner-todo-complete-guide-2025/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "A plan that builds itself"
+    sub: "Planner and To Do, driven by Microsoft Graph"
+    short: hook
+    narration: >
+      Every project starts the same way. Someone creates a plan, adds the same buckets, types the same tasks, and
+      forgets to assign half of them. In this episode the plan is one file. A script builds it in Planner, an audit
+      finds the tasks that are overdue or that nobody owns, and a second script puts what matters this week into
+      your personal To Do list.
+
+  - id: which
+    type: bullets
+    heading: "Planner or To Do?"
+    bullets:
+      - "Planner: shared plans owned by a group"
+      - "To Do: your own lists, delegated access only"
+      - "Tasks assigned in Planner show up in your Assigned to me"
+      - "Premium plans are not in the Planner API in Graph"
+      - "Planner is in Office 365 E3 and E5; premium needs Plan 1 or Plan 3"
+    narration: >
+      A quick map first. Planner is for shared work, and every plan lives in a container, usually a Microsoft 365
+      group. To Do is personal. Tasks assigned to you in Planner already show up in your Assigned to me view. Two
+      things from Microsoft Learn to keep in mind: the Planner API in Graph only covers basic plans, not premium
+      ones, and Planner itself is included in Office 365 E3 and E5.
+
+  - id: config
+    type: code
+    heading: "One file for the whole plan"
+    lang: json
+    code: |
+      {
+        "plan": { "title": "Project Falcon - Launch Readiness",
+                  "groupId": "00000000-0000-0000-0000-000000000101",
+                  "labels": ["Customer facing", "Needs legal review", "Blocked"] },
+        "buckets": ["Plan", "Build", "Launch"],
+        "tasks": [ { "title": "Confirm launch date with sponsors",
+                     "bucket": "Plan", "assignees": ["alex.demo@contoso.com"],
+                     "dueInDays": 2, "priority": "urgent", "labels": ["Customer facing"],
+                     "checklist": ["Ask sponsor for two candidate dates", "..."] } ]
+      }
+    narration: >
+      Here is the file. The same Project Falcon team from episode two gets a launch readiness plan, with three
+      labels, three buckets, and eight tasks. Each task has a bucket, assignees, a due date relative to today, a
+      priority by name, labels, and a checklist. The loader checks it against the documented limits before it
+      touches the tenant.
+
+  - id: limits
+    type: bullets
+    heading: "The limits we enforce"
+    bullets:
+      - "20 checklist items and 20 assignees per task"
+      - "6 labels on a task, 25 labels in a plan"
+      - "200 buckets, 9,000 tasks, 3,000 active tasks per plan"
+      - "Start date after due date: the API answers 400"
+    narration: >
+      The limits come from the Planner limits page. Twenty checklist items and twenty assignees on a task. Six
+      labels on a task out of twenty five in the plan. Two hundred buckets, nine thousand tasks, and three thousand
+      active tasks in a plan. And a start date after the due date is rejected with a bad request, so the loader
+      checks that too.
+
+  - id: body
+    type: code
+    heading: "How Planner wants an assignment"
+    lang: powershell
+    code: |
+      $assign = [ordered]@{}
+      foreach ($upn in $Task.assignees) {
+          $id = $UserIds[$upn.ToLowerInvariant()]
+          # the user id is the property name; @odata.type and orderHint are required
+          $assign[$id] = [ordered]@{
+              '@odata.type' = '#microsoft.graph.plannerAssignment'
+              orderHint     = ' !'
+          }
+      }
+      $body.assignments = $assign
+      $body.priority    = $PriorityValue[$Task.priority]   # urgent 1, important 3, medium 5, low 9
+      $body.appliedCategories = @{ category1 = $true }     # label = position in plan.labels
+    narration: >
+      Planner's API has a few surprises. An assignment is an open type: the user's object ID is the property name,
+      and you must send the odata type and an order hint, or you get a bad request. Priority is a number, where
+      one means urgent and nine means low. And labels are category one to twenty five, defined once in the plan
+      details.
+
+  - id: apply-screen
+    type: screen
+    heading: "WhatIf, then build the plan"
+    image: screens/apply.jpg
+    bar: "PowerShell · Invoke-PlannerTodo -ApplyPlan (lab tenant, masked)"
+    demo: >
+      Lab tenant, signed in as labadmin (a member of the Project Falcon group). Run
+      ./Invoke-PlannerTodo.ps1 -PlanFile ./plan.lab.json -ApplyPlan -WhatIf, then without -WhatIf. Capture the
+      Step / Target / Result table (CreatePlan, SetLabels, 3 CreateBucket, 8 CreateTask, all Created). Then the
+      plan in Planner for the web: board view with the three buckets, a task card showing labels, assignee and
+      checklist. Mask the group ID and the tenant name.
+    narration: >
+      In the lab, what if lists every object the script would create. Run it for real, and the plan appears in
+      Planner: three buckets, eight tasks, assignees, labels and checklists. Run it again, and it says there is
+      nothing to do, because it only creates what is missing. People edit plans by hand, so the script never
+      touches an existing task.
+
+  - id: etag
+    type: code
+    heading: "The gotcha: every change needs an etag"
+    lang: powershell
+    short: gotcha
+    code: |
+      while ($true) {
+          $current = Invoke-MgGraphRequest -Method GET -Uri $Uri -OutputType PSObject
+          $etag = $current.'@odata.etag'
+          try {
+              return Invoke-MgGraphRequest -Method PATCH -Uri $Uri -Body ($Body | ConvertTo-Json -Depth 10) `
+                  -ContentType 'application/json' -Headers @{ 'If-Match' = $etag; Prefer = 'return=representation' } `
+                  -OutputType PSObject
+          }
+          catch {
+              $code = Get-PLHttpStatus $_
+              if ($code -in 409, 412 -and $attempt -lt $MaxRetries) { $attempt++; continue }
+              throw
+          }
+      }
+    narration: >
+      Here is the gotcha. Every Planner update needs an if match header with the last etag you know. If someone
+      changed the task in the meantime, you get a four twelve or a four oh nine. So the patch function reads the
+      current etag, sends the change, and on a conflict reads again and retries. Task details, like checklists and
+      descriptions, always go through this path.
+
+  - id: audit
+    type: code
+    heading: "Which tasks are a risk?"
+    lang: powershell
+    code: |
+      if ($due -and $due -lt $Now) {
+          $sev = if ($prio -le 1) { 'High' } else { 'Medium' }
+          ConvertTo-PLFinding $sev $t.title 'Overdue' "Due $($due.ToString('yyyy-MM-dd')), $days day(s) ago. Assigned to $who2."
+      }
+      if ($assignees.Count -eq 0) {
+          ConvertTo-PLFinding 'Medium' $t.title 'Unassigned' 'Appears in nobody''s My Tasks or To Do.'
+      }
+      if (-not $due) {
+          ConvertTo-PLFinding 'Low' $t.title 'NoDueDate' 'It can never be overdue.'
+      }
+    narration: >
+      The audit reads the plan back from Graph and asks the boring questions. Overdue, and high if the task is
+      urgent. Unassigned, which means it appears in nobody's task list. No due date, which means it can never be
+      late. It also flags completed tasks with open checklist items, overloaded people, empty buckets, and plans
+      close to the Planner limits.
+
+  - id: audit-screen
+    type: screen
+    heading: "The audit, live"
+    image: screens/audit.jpg
+    bar: "PowerShell · Invoke-PlannerTodo -Audit (lab tenant, masked)"
+    demo: >
+      After the manual edits listed in demo.md (one urgent task given a past due date, one task completed with an
+      open checklist item, the unassigned task left alone). Run ./Invoke-PlannerTodo.ps1 -PlanFile ./plan.lab.json
+      -Audit -OutFile ./planner-audit.md. Capture the findings table: at least Overdue High, Unassigned, NoDueDate,
+      CompletedWithOpenChecklist. Then the Markdown report open in the editor. Rewrite the narration numbers to
+      match the screen. Mask user principal names and IDs.
+    narration: >
+      Against the lab plan, after a few edits by hand, the audit finds the urgent task that is now overdue, with the
+      name of the person who owns it. It finds the task nobody owns, and the one marked complete with a checklist
+      item still open. The same table is written to a Markdown file that fits in a ticket.
+
+  - id: todo-code
+    type: code
+    heading: "From the plan to your To Do list"
+    lang: powershell
+    code: |
+      $body = [ordered]@{
+          title      = $PlannerTask.title
+          importance = ConvertTo-TodoImportance $PlannerTask.priority   # 1-4 high, 5-7 normal, 8+ low
+          dueDateTime = @{ dateTime = $due.UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss.0000000"); timeZone = 'UTC' }
+          linkedResources = @(@{ applicationName = 'Microsoft Planner'; displayName = $PlanTitle
+                                 externalId = $PlannerTask.id; webUrl = 'https://planner.cloud.microsoft/' })
+      }
+      Invoke-MgGraphRequest -Method POST -Uri "/v1.0/me/todo/lists/$listId/tasks" -Body ($body | ConvertTo-Json -Depth 6)
+    narration: >
+      Now the personal side. The focus script reads the tasks assigned to you, keeps the overdue ones, the ones due
+      this week and the urgent ones, and creates them in one To Do list. Each task carries a linked resource, with
+      the Planner task ID as the external ID, so the next run recognises it. When the Planner task is finished, the
+      To Do task is completed.
+
+  - id: todo-screen
+    type: screen
+    heading: "Your week, in To Do"
+    image: screens/todo.jpg
+    bar: "PowerShell + Microsoft To Do (lab tenant, signed in as alex.demo, masked)"
+    short: todo
+    demo: >
+      Signed in as alex.demo (delegated sign-in, To Do tasks do not support application permissions). Run
+      ./Invoke-PlannerTodo.ps1 -PlanFile ./plan.lab.json -FocusList -WhatIf, then without -WhatIf. Capture the
+      Step / Target / Result table (CreateList, CreateTodoTask rows). Then Microsoft To Do on the web: the list
+      "Falcon focus" with the tasks, importance and due dates, and one task opened to show the linked resource
+      pointing to Microsoft Planner. Then mark one task complete in Planner and run the script again: the To Do task
+      is completed. Mask the tenant name.
+    narration: >
+      Signed in as Alex, the script builds a list called Falcon focus. The urgent task, the overdue one and the
+      ones due this week are there, with importance and due dates, and each one links back to Planner. Finish a
+      task in Planner, run it again, and it is checked off in To Do. To Do tasks need a signed in user, because
+      the create task API doesn't support application permissions.
+
+  - id: tests
+    type: code
+    heading: "Fifty-five tests, no tenant"
+    lang: text
+    code: |
+      $ Invoke-Pester ./tests
+      Describing Config file
+        [+] rejects more than 20 checklist items
+        [+] rejects a start date after the due date
+      Describing Request bodies
+        [+] assignments: user id is the property name, with @odata.type and orderHint
+        [+] encodes reference URLs the way Learn describes
+      Describing Etags: Invoke-PlannerPatch
+        [+] on 412 reads the new etag and retries once
+      Describing Set-PlannerPlan (mocked Graph)
+        [+] new plan: creates plan, labels, buckets in order, tasks with details
+      Tests Passed: 55, Failed: 0, Skipped: 0
+    narration: >
+      Fifty five Pester tests run without a tenant. They cover the config limits, the request bodies, the etag
+      retry, the plan diff, every audit finding, and the To Do sync, all against a mocked Graph. Two of them check
+      our calls against the real Microsoft Graph PowerShell modules.
+
+  - id: recap
+    type: bullets
+    heading: "Five rules for Planner and To Do"
+    bullets:
+      - "Keep the plan in a file, create only what is missing"
+      - "Never overwrite what people edited by hand"
+      - "Always send the etag, and retry on 412"
+      - "Audit overdue, unassigned and undated tasks"
+      - "Use To Do for the personal view, signed in as the user"
+    narration: >
+      Five rules. Keep the plan in a file, and create only what is missing. Never overwrite what people edited by
+      hand. Always send the etag, and retry on a conflict. Audit for overdue, unassigned and undated tasks. And use
+      To Do for the personal view, signed in as the user.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The module, the plan file and the tests are on GitHub, and the complete guide is on dev lad log dot com.
+      Links are in the description. Next in this series: the Viva platform, with Connections, Engage and Insights.
+      Subscribe so you don't miss it.
