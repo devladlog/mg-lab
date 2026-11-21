@@ -20,7 +20,9 @@ New-Item -ItemType Directory -Force -Path (Split-Path $out) | Out-Null
 $win = Wait-WindowByTitle -Title $cfg.title -TimeoutSeconds 10
 $title = $win.Title
 # same framing as the terminal scenes: top-most so nothing covers it, fixed size (window.json width/height override)
-$w = if ($cfg.width) { [int]$cfg.width } else { 1600 }; $h = if ($cfg.height) { [int]$cfg.height } else { 900 }
+# physical pixels throughout (size, position, capture region): an exact 1920x1080 needs no scaling in the edit
+[void][MgRec.Win3]::SetThreadDpiAwarenessContext([IntPtr]::new(-4))
+$w = if ($cfg.width) { [int]$cfg.width } else { 1920 }; $h = if ($cfg.height) { [int]$cfg.height } else { 1080 }
 $x = if ($null -ne $cfg.x) { [int]$cfg.x } else { 40 }; $y = if ($null -ne $cfg.y) { [int]$cfg.y } else { 40 }
 Set-RecordingWindow -Handle $win.Handle -Width $w -Height $h -X $x -Y $y
 Start-Sleep -Milliseconds 800
