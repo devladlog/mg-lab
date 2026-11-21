@@ -33,7 +33,9 @@ function Get-FormatJson([string]$File) {
 }
 
 if ($PSCmdlet.ParameterSetName -eq 'Apply' -and -not $SkipLint) {
-    $python = (Get-Command python3, python -ErrorAction SilentlyContinue | Select-Object -First 1).Source
+    # On Windows, python3 is often the Microsoft Store stub; prefer the real interpreter there.
+    $candidates = if ($IsWindows) { 'python', 'py', 'python3' } else { 'python3', 'python' }
+    $python = (Get-Command $candidates -CommandType Application -ErrorAction SilentlyContinue | Where-Object Source -notmatch 'WindowsApps' | Select-Object -First 1).Source
     if (-not $python) { throw 'python3 not found: install it, or use -SkipLint.' }
     Push-Location $PSScriptRoot
     try { & $python -m formatlint lint $MapPath | Out-Host; $lintExit = $LASTEXITCODE } finally { Pop-Location }

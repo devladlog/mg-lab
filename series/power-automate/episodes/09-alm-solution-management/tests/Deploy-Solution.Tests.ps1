@@ -5,18 +5,17 @@ BeforeAll {
     $script:Script = Join-Path $Root 'src/scripts/Deploy-Solution.ps1'
     $script:Solution = Join-Path $Root 'src/solution'
     $script:Log = Join-Path $TestDrive 'pac.log'
-    $script:FakePac = Join-Path $TestDrive 'pac'
+    # A stand-in pac written in PowerShell, so the same test runs on Windows and Linux.
+    $script:FakePac = Join-Path $TestDrive 'pac.ps1'
     @'
-#!/bin/bash
-printf '%s\n' "$*" >> "$FAKE_PAC_LOG"
-cmd="$1 $2"
-if [ "$cmd" = "solution pack" ]; then
-  while [ $# -gt 0 ]; do [ "$1" = "--zipfile" ] && : > "$2"; shift; done
-fi
-if [ -n "$FAKE_PAC_FAIL" ] && [ "$cmd" = "$FAKE_PAC_FAIL" ]; then echo "boom" >&2; exit 3; fi
+Add-Content -LiteralPath $env:FAKE_PAC_LOG -Value ($args -join ' ')
+$cmd = "$($args[0]) $($args[1])"
+if ($cmd -eq 'solution pack') {
+    for ($i = 0; $i -lt $args.Count - 1; $i++) { if ($args[$i] -eq '--zipfile') { New-Item -ItemType File -Force -Path $args[$i + 1] | Out-Null } }
+}
+if ($env:FAKE_PAC_FAIL -and $cmd -eq $env:FAKE_PAC_FAIL) { [Console]::Error.WriteLine('boom'); exit 3 }
 exit 0
-'@ | Set-Content -LiteralPath $FakePac -NoNewline
-    chmod +x $FakePac
+'@ | Set-Content -LiteralPath $FakePac
     $script:Good = Join-Path $TestDrive 'settings.json'
     '{ "EnvironmentVariables": [], "ConnectionReferences": [] }' | Set-Content $Good
     $env:FAKE_PAC_LOG = $Log
