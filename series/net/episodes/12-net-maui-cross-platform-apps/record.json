@@ -1,0 +1,114 @@
+{
+  "note": "Live-session recording of the screen scenes (series/tools/rec). prepare/teardown run on the laptop, not recorded; commands are typed and run for real. Servers are started hidden by prepare (helper %TEMP%\\mgnet\\svc.ps1) and their logs are shown with Get-Content/Select-String. Uses the episode 11 services (built and started from ..\\11-microservices-with-net) as backend. The MAUI workload and the Android SDK with an x64 emulator image are not on the laptop yet (LAB.md): install them before this recording. The emulator reaches the backend as http://10.0.2.2:5311.",
+  "prepare": [
+    "New-Item -ItemType Directory -Force (Join-Path $env:TEMP 'mgnet') | Out-Null; $env:MG_LOGS = Join-Path $env:TEMP 'mgnet'; $env:MG_SVC = Join-Path $env:MG_LOGS 'svc.ps1'; Set-Content -LiteralPath $env:MG_SVC -Value @'\nparam([Parameter(Mandatory)][ValidateSet('start','ensure','stop')][string]$Action, [Parameter(Mandatory)][string]$Name, [string]$Project, [string]$Urls, [int]$Port, [string[]]$AppArgs = @(), [string[]]$DeleteFiles = @())\n$d = Join-Path $env:TEMP 'mgnet'; New-Item -ItemType Directory -Force $d | Out-Null\n$pf = Join-Path $d \"$Name.pid\"\nfunction Test-Port([int]$p) { try { [Net.Sockets.TcpClient]::new('localhost', $p).Dispose(); $true } catch { $false } }\nfunction Stop-Svc { if (Test-Path $pf) { taskkill /PID (Get-Content $pf) /T /F 2>&1 | Out-Null; Remove-Item $pf -ErrorAction SilentlyContinue } }\nif ($Action -eq 'stop') { Stop-Svc; return }\nif ($Action -eq 'ensure' -and $Port -and (Test-Port $Port)) { return }\nStop-Svc\nforeach ($f in $DeleteFiles) { Remove-Item (Join-Path $Project $f) -Force -ErrorAction SilentlyContinue }\n$env:ASPNETCORE_ENVIRONMENT = 'Development'\n$a = @('run', '--no-build', '--no-launch-profile')\nif ($Urls) { $a += '--urls', $Urls }\nif ($AppArgs) { $a += '--'; $a += $AppArgs }\n$p = Start-Process dotnet -ArgumentList $a -WorkingDirectory $Project -WindowStyle Hidden -RedirectStandardOutput (Join-Path $d \"$Name.log\") -RedirectStandardError (Join-Path $d \"$Name.err\") -PassThru\n$p.Id | Set-Content $pf\nif ($Port) { for ($i = 0; $i -lt 120; $i++) { if (Test-Port $Port) { break }; Start-Sleep -Milliseconds 500 } }\n'@",
+    "if (-not ((dotnet workload list) -match 'maui')) { dotnet workload install maui }  # needs an elevated shell, once",
+    "dotnet build src\\Contoso.Mobile -f net10.0-windows10.0.19041.0 -v q --nologo",
+    "dotnet build src\\Contoso.Mobile -f net10.0-android -v q --nologo",
+    "dotnet build ..\\11-microservices-with-net\\Contoso.Microservices.slnx -v q --nologo",
+    "Remove-Item ..\\11-microservices-with-net\\src\\Contoso.Requests.Service\\requests.db* -Force -ErrorAction SilentlyContinue",
+    "& $env:MG_SVC ensure -Name ep12-budget -Project (Resolve-Path '..\\11-microservices-with-net\\src\\Contoso.Budget.Service').Path -Urls http://localhost:5313 -Port 5313",
+    "& $env:MG_SVC ensure -Name ep12-requests -Project (Resolve-Path '..\\11-microservices-with-net\\src\\Contoso.Requests.Service').Path -Urls http://localhost:5312 -Port 5312",
+    "& $env:MG_SVC ensure -Name ep12-gateway -Project (Resolve-Path '..\\11-microservices-with-net\\src\\Contoso.Gateway').Path -Urls http://localhost:5311 -Port 5311",
+    "$sdk = if ($env:ANDROID_HOME) { $env:ANDROID_HOME } else { Join-Path $env:LOCALAPPDATA 'Android\\Sdk' }; $emu = Join-Path $sdk 'emulator\\emulator.exe'; if (-not (Test-Path $emu)) { throw 'Android SDK emulator not found: install the Android SDK and an x64 AVD first' }; $adb = Join-Path $sdk 'platform-tools\\adb.exe'; if (-not (& $adb devices | Select-String 'emulator-\\d+\\s+device')) { $avd = (& $emu -list-avds | Select-Object -First 1); if (-not $avd) { throw 'No Android Virtual Device (x64 image) found' }; Start-Process $emu -ArgumentList '-avd', $avd, '-no-snapshot-save'; & $adb wait-for-device; do { Start-Sleep 3 } until ((& $adb shell getprop sys.boot_completed) -match '1') }"
+  ],
+  "screens": [
+    {
+      "name": "request-list",
+      "kind": "app",
+      "app": "Contoso Requests (MAUI app on Windows) next to a PowerShell window",
+      "steps": [
+        "Make sure the Episode 11 services are up (prepare did it); POST one request first: Invoke-WebRequest http://localhost:5311/api/requests -Method Post -ContentType 'application/json' -Body (@{ title='Laptops for the lab'; departmentCode='IT'; amount=9000; requestedBy='alex.demo@contoso.com' } | ConvertTo-Json)",
+        "Start the app: dotnet build src/Contoso.Mobile -f net10.0-windows10.0.19041.0 -t:Run",
+        "Show the request list with its budget states (IT 9,000 Reserved)",
+        "Pull to refresh (or the refresh button); the list reloads"
+      ],
+      "mask": [],
+      "prepare": [
+        "New-Item -ItemType Directory -Force (Join-Path $env:TEMP 'mgnet') | Out-Null; $env:MG_LOGS = Join-Path $env:TEMP 'mgnet'; $env:MG_SVC = Join-Path $env:MG_LOGS 'svc.ps1'; Set-Content -LiteralPath $env:MG_SVC -Value @'\nparam([Parameter(Mandatory)][ValidateSet('start','ensure','stop')][string]$Action, [Parameter(Mandatory)][string]$Name, [string]$Project, [string]$Urls, [int]$Port, [string[]]$AppArgs = @(), [string[]]$DeleteFiles = @())\n$d = Join-Path $env:TEMP 'mgnet'; New-Item -ItemType Directory -Force $d | Out-Null\n$pf = Join-Path $d \"$Name.pid\"\nfunction Test-Port([int]$p) { try { [Net.Sockets.TcpClient]::new('localhost', $p).Dispose(); $true } catch { $false } }\nfunction Stop-Svc { if (Test-Path $pf) { taskkill /PID (Get-Content $pf) /T /F 2>&1 | Out-Null; Remove-Item $pf -ErrorAction SilentlyContinue } }\nif ($Action -eq 'stop') { Stop-Svc; return }\nif ($Action -eq 'ensure' -and $Port -and (Test-Port $Port)) { return }\nStop-Svc\nforeach ($f in $DeleteFiles) { Remove-Item (Join-Path $Project $f) -Force -ErrorAction SilentlyContinue }\n$env:ASPNETCORE_ENVIRONMENT = 'Development'\n$a = @('run', '--no-build', '--no-launch-profile')\nif ($Urls) { $a += '--urls', $Urls }\nif ($AppArgs) { $a += '--'; $a += $AppArgs }\n$p = Start-Process dotnet -ArgumentList $a -WorkingDirectory $Project -WindowStyle Hidden -RedirectStandardOutput (Join-Path $d \"$Name.log\") -RedirectStandardError (Join-Path $d \"$Name.err\") -PassThru\n$p.Id | Set-Content $pf\nif ($Port) { for ($i = 0; $i -lt 120; $i++) { if (Test-Port $Port) { break }; Start-Sleep -Milliseconds 500 } }\n'@",
+        "dotnet build ..\\11-microservices-with-net\\Contoso.Microservices.slnx -v q --nologo",
+        "Remove-Item ..\\11-microservices-with-net\\src\\Contoso.Requests.Service\\requests.db* -Force -ErrorAction SilentlyContinue",
+        "& $env:MG_SVC ensure -Name ep12-budget -Project (Resolve-Path '..\\11-microservices-with-net\\src\\Contoso.Budget.Service').Path -Urls http://localhost:5313 -Port 5313",
+        "& $env:MG_SVC ensure -Name ep12-requests -Project (Resolve-Path '..\\11-microservices-with-net\\src\\Contoso.Requests.Service').Path -Urls http://localhost:5312 -Port 5312",
+        "& $env:MG_SVC ensure -Name ep12-gateway -Project (Resolve-Path '..\\11-microservices-with-net\\src\\Contoso.Gateway').Path -Urls http://localhost:5311 -Port 5311"
+      ]
+    },
+    {
+      "name": "offline-submit",
+      "kind": "app",
+      "app": "Android Emulator (x64 AVD) running Contoso Requests",
+      "steps": [
+        "Prepare started the emulator and the three services; deploy and start the app: dotnet build src/Contoso.Mobile -f net10.0-android -t:Run",
+        "Clear the app data first (Settings > Apps > Contoso Requests > Storage) so the outbox is empty; Do Not Disturb on",
+        "Turn on airplane mode (quick settings, or: adb shell cmd connectivity airplane-mode enable)",
+        "Open the form: Title 'Standing desks', Department FIN, Budget 12000, Requested by alex.demo@contoso.com; tap Submit",
+        "The result line says: 'Saved on this device. It will be sent when you are back online.'"
+      ],
+      "mask": [],
+      "prepare": [
+        "New-Item -ItemType Directory -Force (Join-Path $env:TEMP 'mgnet') | Out-Null; $env:MG_LOGS = Join-Path $env:TEMP 'mgnet'; $env:MG_SVC = Join-Path $env:MG_LOGS 'svc.ps1'; Set-Content -LiteralPath $env:MG_SVC -Value @'\nparam([Parameter(Mandatory)][ValidateSet('start','ensure','stop')][string]$Action, [Parameter(Mandatory)][string]$Name, [string]$Project, [string]$Urls, [int]$Port, [string[]]$AppArgs = @(), [string[]]$DeleteFiles = @())\n$d = Join-Path $env:TEMP 'mgnet'; New-Item -ItemType Directory -Force $d | Out-Null\n$pf = Join-Path $d \"$Name.pid\"\nfunction Test-Port([int]$p) { try { [Net.Sockets.TcpClient]::new('localhost', $p).Dispose(); $true } catch { $false } }\nfunction Stop-Svc { if (Test-Path $pf) { taskkill /PID (Get-Content $pf) /T /F 2>&1 | Out-Null; Remove-Item $pf -ErrorAction SilentlyContinue } }\nif ($Action -eq 'stop') { Stop-Svc; return }\nif ($Action -eq 'ensure' -and $Port -and (Test-Port $Port)) { return }\nStop-Svc\nforeach ($f in $DeleteFiles) { Remove-Item (Join-Path $Project $f) -Force -ErrorAction SilentlyContinue }\n$env:ASPNETCORE_ENVIRONMENT = 'Development'\n$a = @('run', '--no-build', '--no-launch-profile')\nif ($Urls) { $a += '--urls', $Urls }\nif ($AppArgs) { $a += '--'; $a += $AppArgs }\n$p = Start-Process dotnet -ArgumentList $a -WorkingDirectory $Project -WindowStyle Hidden -RedirectStandardOutput (Join-Path $d \"$Name.log\") -RedirectStandardError (Join-Path $d \"$Name.err\") -PassThru\n$p.Id | Set-Content $pf\nif ($Port) { for ($i = 0; $i -lt 120; $i++) { if (Test-Port $Port) { break }; Start-Sleep -Milliseconds 500 } }\n'@",
+        "dotnet build ..\\11-microservices-with-net\\Contoso.Microservices.slnx -v q --nologo",
+        "Remove-Item ..\\11-microservices-with-net\\src\\Contoso.Requests.Service\\requests.db* -Force -ErrorAction SilentlyContinue",
+        "& $env:MG_SVC ensure -Name ep12-budget -Project (Resolve-Path '..\\11-microservices-with-net\\src\\Contoso.Budget.Service').Path -Urls http://localhost:5313 -Port 5313",
+        "& $env:MG_SVC ensure -Name ep12-requests -Project (Resolve-Path '..\\11-microservices-with-net\\src\\Contoso.Requests.Service').Path -Urls http://localhost:5312 -Port 5312",
+        "& $env:MG_SVC ensure -Name ep12-gateway -Project (Resolve-Path '..\\11-microservices-with-net\\src\\Contoso.Gateway').Path -Urls http://localhost:5311 -Port 5311",
+        "$sdk = if ($env:ANDROID_HOME) { $env:ANDROID_HOME } else { Join-Path $env:LOCALAPPDATA 'Android\\Sdk' }; $emu = Join-Path $sdk 'emulator\\emulator.exe'; if (-not (Test-Path $emu)) { throw 'Android SDK emulator not found: install the Android SDK and an x64 AVD first' }; $adb = Join-Path $sdk 'platform-tools\\adb.exe'; if (-not (& $adb devices | Select-String 'emulator-\\d+\\s+device')) { $avd = (& $emu -list-avds | Select-Object -First 1); if (-not $avd) { throw 'No Android Virtual Device (x64 image) found' }; Start-Process $emu -ArgumentList '-avd', $avd, '-no-snapshot-save'; & $adb wait-for-device; do { Start-Sleep 3 } until ((& $adb shell getprop sys.boot_completed) -match '1') }"
+      ]
+    },
+    {
+      "name": "back-online",
+      "kind": "app",
+      "app": "Android Emulator running Contoso Requests, plus a PowerShell window",
+      "steps": [
+        "Optional first: stop the Budget service to see the row stay Pending, then start it again",
+        "Turn airplane mode off (adb shell cmd connectivity airplane-mode disable)",
+        "The list refreshes by itself and the 'Standing desks' request appears as Reserved",
+        "In the terminal: Invoke-RestMethod http://localhost:5311/api/budgets/FIN -> reserved 12000, once"
+      ],
+      "mask": [],
+      "prepare": [
+        "New-Item -ItemType Directory -Force (Join-Path $env:TEMP 'mgnet') | Out-Null; $env:MG_LOGS = Join-Path $env:TEMP 'mgnet'; $env:MG_SVC = Join-Path $env:MG_LOGS 'svc.ps1'; Set-Content -LiteralPath $env:MG_SVC -Value @'\nparam([Parameter(Mandatory)][ValidateSet('start','ensure','stop')][string]$Action, [Parameter(Mandatory)][string]$Name, [string]$Project, [string]$Urls, [int]$Port, [string[]]$AppArgs = @(), [string[]]$DeleteFiles = @())\n$d = Join-Path $env:TEMP 'mgnet'; New-Item -ItemType Directory -Force $d | Out-Null\n$pf = Join-Path $d \"$Name.pid\"\nfunction Test-Port([int]$p) { try { [Net.Sockets.TcpClient]::new('localhost', $p).Dispose(); $true } catch { $false } }\nfunction Stop-Svc { if (Test-Path $pf) { taskkill /PID (Get-Content $pf) /T /F 2>&1 | Out-Null; Remove-Item $pf -ErrorAction SilentlyContinue } }\nif ($Action -eq 'stop') { Stop-Svc; return }\nif ($Action -eq 'ensure' -and $Port -and (Test-Port $Port)) { return }\nStop-Svc\nforeach ($f in $DeleteFiles) { Remove-Item (Join-Path $Project $f) -Force -ErrorAction SilentlyContinue }\n$env:ASPNETCORE_ENVIRONMENT = 'Development'\n$a = @('run', '--no-build', '--no-launch-profile')\nif ($Urls) { $a += '--urls', $Urls }\nif ($AppArgs) { $a += '--'; $a += $AppArgs }\n$p = Start-Process dotnet -ArgumentList $a -WorkingDirectory $Project -WindowStyle Hidden -RedirectStandardOutput (Join-Path $d \"$Name.log\") -RedirectStandardError (Join-Path $d \"$Name.err\") -PassThru\n$p.Id | Set-Content $pf\nif ($Port) { for ($i = 0; $i -lt 120; $i++) { if (Test-Port $Port) { break }; Start-Sleep -Milliseconds 500 } }\n'@",
+        "dotnet build ..\\11-microservices-with-net\\Contoso.Microservices.slnx -v q --nologo",
+        "Remove-Item ..\\11-microservices-with-net\\src\\Contoso.Requests.Service\\requests.db* -Force -ErrorAction SilentlyContinue",
+        "& $env:MG_SVC ensure -Name ep12-budget -Project (Resolve-Path '..\\11-microservices-with-net\\src\\Contoso.Budget.Service').Path -Urls http://localhost:5313 -Port 5313",
+        "& $env:MG_SVC ensure -Name ep12-requests -Project (Resolve-Path '..\\11-microservices-with-net\\src\\Contoso.Requests.Service').Path -Urls http://localhost:5312 -Port 5312",
+        "& $env:MG_SVC ensure -Name ep12-gateway -Project (Resolve-Path '..\\11-microservices-with-net\\src\\Contoso.Gateway').Path -Urls http://localhost:5311 -Port 5311",
+        "$sdk = if ($env:ANDROID_HOME) { $env:ANDROID_HOME } else { Join-Path $env:LOCALAPPDATA 'Android\\Sdk' }; $emu = Join-Path $sdk 'emulator\\emulator.exe'; if (-not (Test-Path $emu)) { throw 'Android SDK emulator not found: install the Android SDK and an x64 AVD first' }; $adb = Join-Path $sdk 'platform-tools\\adb.exe'; if (-not (& $adb devices | Select-String 'emulator-\\d+\\s+device')) { $avd = (& $emu -list-avds | Select-Object -First 1); if (-not $avd) { throw 'No Android Virtual Device (x64 image) found' }; Start-Process $emu -ArgumentList '-avd', $avd, '-no-snapshot-save'; & $adb wait-for-device; do { Start-Sleep 3 } until ((& $adb shell getprop sys.boot_completed) -match '1') }"
+      ]
+    },
+    {
+      "name": "tests",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\net\\episodes\\12-net-maui-cross-platform-apps",
+      "prompt": "PS> ",
+      "commands": [
+        "dotnet test --project tests/Contoso.Mobile.Tests",
+        "#pause 5"
+      ],
+      "prepare": [
+        "New-Item -ItemType Directory -Force (Join-Path $env:TEMP 'mgnet') | Out-Null; $env:MG_LOGS = Join-Path $env:TEMP 'mgnet'; $env:MG_SVC = Join-Path $env:MG_LOGS 'svc.ps1'; Set-Content -LiteralPath $env:MG_SVC -Value @'\nparam([Parameter(Mandatory)][ValidateSet('start','ensure','stop')][string]$Action, [Parameter(Mandatory)][string]$Name, [string]$Project, [string]$Urls, [int]$Port, [string[]]$AppArgs = @(), [string[]]$DeleteFiles = @())\n$d = Join-Path $env:TEMP 'mgnet'; New-Item -ItemType Directory -Force $d | Out-Null\n$pf = Join-Path $d \"$Name.pid\"\nfunction Test-Port([int]$p) { try { [Net.Sockets.TcpClient]::new('localhost', $p).Dispose(); $true } catch { $false } }\nfunction Stop-Svc { if (Test-Path $pf) { taskkill /PID (Get-Content $pf) /T /F 2>&1 | Out-Null; Remove-Item $pf -ErrorAction SilentlyContinue } }\nif ($Action -eq 'stop') { Stop-Svc; return }\nif ($Action -eq 'ensure' -and $Port -and (Test-Port $Port)) { return }\nStop-Svc\nforeach ($f in $DeleteFiles) { Remove-Item (Join-Path $Project $f) -Force -ErrorAction SilentlyContinue }\n$env:ASPNETCORE_ENVIRONMENT = 'Development'\n$a = @('run', '--no-build', '--no-launch-profile')\nif ($Urls) { $a += '--urls', $Urls }\nif ($AppArgs) { $a += '--'; $a += $AppArgs }\n$p = Start-Process dotnet -ArgumentList $a -WorkingDirectory $Project -WindowStyle Hidden -RedirectStandardOutput (Join-Path $d \"$Name.log\") -RedirectStandardError (Join-Path $d \"$Name.err\") -PassThru\n$p.Id | Set-Content $pf\nif ($Port) { for ($i = 0; $i -lt 120; $i++) { if (Test-Port $Port) { break }; Start-Sleep -Milliseconds 500 } }\n'@",
+        "& $env:MG_SVC stop -Name ep12-budget",
+        "& $env:MG_SVC stop -Name ep12-requests",
+        "& $env:MG_SVC stop -Name ep12-gateway"
+      ],
+      "maxMinutes": 10
+    }
+  ],
+  "teardown": [
+    "& $env:MG_SVC stop -Name ep12-budget",
+    "& $env:MG_SVC stop -Name ep12-requests",
+    "& $env:MG_SVC stop -Name ep12-gateway",
+    "$sdk = if ($env:ANDROID_HOME) { $env:ANDROID_HOME } else { Join-Path $env:LOCALAPPDATA 'Android\\Sdk' }; $adb = Join-Path $sdk 'platform-tools\\adb.exe'; if (Test-Path $adb) { & $adb emu kill }",
+    "Remove-Item ..\\11-microservices-with-net\\src\\Contoso.Requests.Service\\requests.db* -Force -ErrorAction SilentlyContinue",
+    "Get-ChildItem src, tests -Recurse -Directory -Include bin,obj | Remove-Item -Recurse -Force",
+    "Remove-Item (Join-Path $env:TEMP 'mgnet\\ep12-*') -Force -ErrorAction SilentlyContinue"
+  ],
+  "needs": [
+    "maui-workload (dotnet workload install maui, not installed yet)",
+    "android-sdk",
+    "android-emulator-x64 (Hyper-V/WHPX accelerated AVD)",
+    "episode-11 services (started from ..\\11-microservices-with-net)",
+    "ports 5311, 5312 and 5313 free"
+  ]
+}

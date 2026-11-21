@@ -1,0 +1,115 @@
+{
+  "note": "Live-session recording of the screen scenes (series/tools/rec). prepare/teardown run on the laptop, not recorded; commands are typed and run for real. Servers are started hidden by prepare (helper %TEMP%\\mgnet\\svc.ps1) and their logs are shown with Get-Content/Select-String. No servers here. The SQL screen needs the owner to type the test login's password (Read-Host) and never prints the connection string. If a test fails on SQL Server, report the error; do not re-record with the tests disabled.",
+  "prepare": [
+    "dotnet tool restore",
+    "dotnet build ProjectRequests.slnx -v q --nologo",
+    "Copy-Item src\\ProjectRequests.Api\\Requests\\PriorityRules.cs (Join-Path $env:TEMP 'PriorityRules.cs.mgbak') -Force"
+  ],
+  "screens": [
+    {
+      "name": "test-explorer",
+      "kind": "app",
+      "app": "Visual Studio Code",
+      "steps": [
+        "Open the episode folder in VS Code (C# Dev Kit); the dotnet build in prepare makes the tests appear",
+        "Open the Testing view (beaker icon); expand ProjectRequests.Tests.NUnit and ProjectRequests.Tests.Xunit one or two levels",
+        "Click Run Tests at the top: green ticks, two skipped (the SQL Server tests)",
+        "In the integrated terminal (pwsh) run: ./deploy/Invoke-Tests.ps1  -> 'Test run summary: Passed!', total: 69, succeeded: 67, skipped: 2"
+      ],
+      "mask": [],
+      "prepare": [
+        "dotnet build ProjectRequests.slnx -v q --nologo"
+      ]
+    },
+    {
+      "name": "two-failures",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\net\\episodes\\05-testing-with-xunit-nunit",
+      "prompt": "PS> ",
+      "commands": [
+        "Select-String -Path src\\ProjectRequests.Api\\Requests\\PriorityRules.cs -Pattern 'HighThreshold =' -SimpleMatch",
+        "(Get-Content src\\ProjectRequests.Api\\Requests\\PriorityRules.cs -Raw).Replace('HighThreshold = 50_000m', 'HighThreshold = 49_000m') | Set-Content -NoNewline src\\ProjectRequests.Api\\Requests\\PriorityRules.cs",
+        "Select-String -Path src\\ProjectRequests.Api\\Requests\\PriorityRules.cs -Pattern 'HighThreshold =' -SimpleMatch",
+        "./deploy/Invoke-Tests.ps1 -Mode Unit",
+        "#pause 6",
+        "git checkout -- src/ProjectRequests.Api/Requests/PriorityRules.cs",
+        "./deploy/Invoke-Tests.ps1 -Mode Unit",
+        "#pause 4"
+      ],
+      "prepare": [
+        "Copy-Item src\\ProjectRequests.Api\\Requests\\PriorityRules.cs (Join-Path $env:TEMP 'PriorityRules.cs.mgbak') -Force"
+      ],
+      "maxMinutes": 10,
+      "mask": [
+        "--dotnet-test-pipe path in the command line (crop)"
+      ]
+    },
+    {
+      "name": "filter-gotcha",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\net\\episodes\\05-testing-with-xunit-nunit",
+      "prompt": "PS> ",
+      "commands": [
+        "./deploy/Invoke-Tests.ps1 -Mode FilterGotcha",
+        "#pause 6",
+        "#clear",
+        "./deploy/Invoke-Tests.ps1 -Mode Unit",
+        "#pause 4"
+      ],
+      "maxMinutes": 10,
+      "mask": [
+        "--dotnet-test-pipe path in the command line (crop)"
+      ]
+    },
+    {
+      "name": "coverage-report",
+      "kind": "browser",
+      "url": "file:///D:/momento_galatico_kit/mg-lab-series/series/net/episodes/05-testing-with-xunit-nunit/coverage-report/index.html",
+      "account": "none",
+      "steps": [
+        "Open the page prepared by ./deploy/Invoke-Tests.ps1 -Mode Coverage (local file, nothing to sign in to)",
+        "Show 'Parser: MultiReport (2x Cobertura)', line coverage about 93 %, branch coverage about 89 %",
+        "Scroll to the class list: PriorityRules at 50 %",
+        "Click PriorityRules: the two const decimal lines in red, both methods green"
+      ],
+      "mask": [],
+      "prepare": [
+        "./deploy/Invoke-Tests.ps1 -Mode Coverage"
+      ]
+    },
+    {
+      "name": "sqlserver-lab",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\net\\episodes\\05-testing-with-xunit-nunit",
+      "prompt": "PS> ",
+      "commands": [
+        "./deploy/Invoke-Tests.ps1 -Mode SqlServer",
+        "#pause 6"
+      ],
+      "prepare": [
+        "if ((Get-VM CON-SQL01).State -ne 'Running') { Start-VM CON-SQL01; Start-Sleep -Seconds 60 }",
+        "if (-not (Test-NetConnection 10.50.0.30 -Port 1433 -WarningAction SilentlyContinue).TcpTestSucceeded) { throw 'CON-SQL01 (10.50.0.30:1433) is not reachable: start the lab with Start-MGLab.ps1' }",
+        "$has = Invoke-Command -VMName CON-SQL01 -Credential $cred { sqlcmd -S localhost -E -h -1 -W -Q \"SET NOCOUNT ON; SELECT COUNT(*) FROM sys.server_principals WHERE name = 'requests_tests'\" }; if (\"$has\".Trim() -ne '1') { throw 'SQL login requests_tests is missing on CON-SQL01: create it first (demo.md, dbcreator role, password typed by the recorder)' }",
+        "$sec = Read-Host 'Password of the SQL login requests_tests (typed by the recorder, never stored)' -AsSecureString; $b = [System.Data.Common.DbConnectionStringBuilder]::new(); $b['Server'] = '10.50.0.30'; $b['User ID'] = 'requests_tests'; $b['Password'] = (ConvertFrom-SecureString $sec -AsPlainText); $b['TrustServerCertificate'] = 'True'; $env:REQUESTS_TEST_SQLSERVER = $b.ConnectionString"
+      ],
+      "maxMinutes": 10,
+      "mask": [
+        "the connection string must never be printed (the commands never echo it)"
+      ]
+    }
+  ],
+  "teardown": [
+    "Remove-Item Env:REQUESTS_TEST_SQLSERVER -ErrorAction SilentlyContinue",
+    "Remove-Item -Recurse -Force TestResults, coverage-report -ErrorAction SilentlyContinue",
+    "$bak = Join-Path $env:TEMP 'PriorityRules.cs.mgbak'; if (Test-Path $bak) { Copy-Item $bak src\\ProjectRequests.Api\\Requests\\PriorityRules.cs -Force; Remove-Item $bak -Force }",
+    "Invoke-Command -VMName CON-SQL01 -Credential $cred { sqlcmd -S localhost -E -Q \"SELECT name FROM sys.databases WHERE name LIKE 'ProjectRequests[_]%'; IF EXISTS (SELECT 1 FROM sys.server_principals WHERE name = 'requests_tests') DROP LOGIN requests_tests\" }"
+  ],
+  "needs": [
+    "lab-vms",
+    "vm:CON-SQL01",
+    "sql-login:requests_tests (created by the owner on CON-SQL01, password typed at recording time)"
+  ]
+}

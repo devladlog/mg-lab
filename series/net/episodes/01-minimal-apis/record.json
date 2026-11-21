@@ -1,0 +1,126 @@
+{
+  "note": "Live-session recording of the screen scenes (series/tools/rec). prepare/teardown run on the laptop, not recorded; commands are typed and run for real. Servers are started hidden by prepare (helper %TEMP%\\mgnet\\svc.ps1) and their logs are shown with Get-Content/Select-String. Azure screens need the owner's az login (labadmin). The App Service host name shows in the live-smoke and restart-empty output: mask it in post (everything except .azurewebsites.net).",
+  "prepare": [
+    "New-Item -ItemType Directory -Force (Join-Path $env:TEMP 'mgnet') | Out-Null; $env:MG_LOGS = Join-Path $env:TEMP 'mgnet'; $env:MG_SVC = Join-Path $env:MG_LOGS 'svc.ps1'; Set-Content -LiteralPath $env:MG_SVC -Value @'\nparam([Parameter(Mandatory)][ValidateSet('start','ensure','stop')][string]$Action, [Parameter(Mandatory)][string]$Name, [string]$Project, [string]$Urls, [int]$Port, [string[]]$AppArgs = @(), [string[]]$DeleteFiles = @())\n$d = Join-Path $env:TEMP 'mgnet'; New-Item -ItemType Directory -Force $d | Out-Null\n$pf = Join-Path $d \"$Name.pid\"\nfunction Test-Port([int]$p) { try { [Net.Sockets.TcpClient]::new('localhost', $p).Dispose(); $true } catch { $false } }\nfunction Stop-Svc { if (Test-Path $pf) { taskkill /PID (Get-Content $pf) /T /F 2>&1 | Out-Null; Remove-Item $pf -ErrorAction SilentlyContinue } }\nif ($Action -eq 'stop') { Stop-Svc; return }\nif ($Action -eq 'ensure' -and $Port -and (Test-Port $Port)) { return }\nStop-Svc\nforeach ($f in $DeleteFiles) { Remove-Item (Join-Path $Project $f) -Force -ErrorAction SilentlyContinue }\n$env:ASPNETCORE_ENVIRONMENT = 'Development'\n$a = @('run', '--no-build', '--no-launch-profile')\nif ($Urls) { $a += '--urls', $Urls }\nif ($AppArgs) { $a += '--'; $a += $AppArgs }\n$p = Start-Process dotnet -ArgumentList $a -WorkingDirectory $Project -WindowStyle Hidden -RedirectStandardOutput (Join-Path $d \"$Name.log\") -RedirectStandardError (Join-Path $d \"$Name.err\") -PassThru\n$p.Id | Set-Content $pf\nif ($Port) { for ($i = 0; $i -lt 120; $i++) { if (Test-Port $Port) { break }; Start-Sleep -Milliseconds 500 } }\n'@",
+    "dotnet build src\\ProjectRequests.Api\\ProjectRequests.Api.csproj -v q --nologo",
+    "& $env:MG_SVC ensure -Name ep01-api -Project (Resolve-Path 'src\\ProjectRequests.Api').Path -Urls http://localhost:5207 -Port 5207",
+    "az account show --query name -o none 2>$null; if ($LASTEXITCODE -ne 0) { az login -o none }  # owner signs in (lab subscription, labadmin)"
+  ],
+  "screens": [
+    {
+      "name": "local-smoke",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\net\\episodes\\01-minimal-apis",
+      "prompt": "PS> ",
+      "commands": [
+        "bash ./deploy/smoke.sh http://localhost:5207",
+        "#pause 5"
+      ],
+      "prepare": [
+        "New-Item -ItemType Directory -Force (Join-Path $env:TEMP 'mgnet') | Out-Null; $env:MG_LOGS = Join-Path $env:TEMP 'mgnet'; $env:MG_SVC = Join-Path $env:MG_LOGS 'svc.ps1'; Set-Content -LiteralPath $env:MG_SVC -Value @'\nparam([Parameter(Mandatory)][ValidateSet('start','ensure','stop')][string]$Action, [Parameter(Mandatory)][string]$Name, [string]$Project, [string]$Urls, [int]$Port, [string[]]$AppArgs = @(), [string[]]$DeleteFiles = @())\n$d = Join-Path $env:TEMP 'mgnet'; New-Item -ItemType Directory -Force $d | Out-Null\n$pf = Join-Path $d \"$Name.pid\"\nfunction Test-Port([int]$p) { try { [Net.Sockets.TcpClient]::new('localhost', $p).Dispose(); $true } catch { $false } }\nfunction Stop-Svc { if (Test-Path $pf) { taskkill /PID (Get-Content $pf) /T /F 2>&1 | Out-Null; Remove-Item $pf -ErrorAction SilentlyContinue } }\nif ($Action -eq 'stop') { Stop-Svc; return }\nif ($Action -eq 'ensure' -and $Port -and (Test-Port $Port)) { return }\nStop-Svc\nforeach ($f in $DeleteFiles) { Remove-Item (Join-Path $Project $f) -Force -ErrorAction SilentlyContinue }\n$env:ASPNETCORE_ENVIRONMENT = 'Development'\n$a = @('run', '--no-build', '--no-launch-profile')\nif ($Urls) { $a += '--urls', $Urls }\nif ($AppArgs) { $a += '--'; $a += $AppArgs }\n$p = Start-Process dotnet -ArgumentList $a -WorkingDirectory $Project -WindowStyle Hidden -RedirectStandardOutput (Join-Path $d \"$Name.log\") -RedirectStandardError (Join-Path $d \"$Name.err\") -PassThru\n$p.Id | Set-Content $pf\nif ($Port) { for ($i = 0; $i -lt 120; $i++) { if (Test-Port $Port) { break }; Start-Sleep -Milliseconds 500 } }\n'@",
+        "$shim = Join-Path $env:TEMP 'mgnet\\bin'; New-Item -ItemType Directory -Force $shim | Out-Null; if (-not (Test-Path (Join-Path $shim 'zip'))) { [IO.File]::WriteAllText((Join-Path $shim 'zip'), \"#!/bin/bash`n# zip shim (Git Bash has no zip): called as: zip -qr <out.zip> .`n/c/Windows/System32/tar.exe -a -cf `\"`$2`\" .`n\") }; if (-not (Get-Command jq -ErrorAction SilentlyContinue)) { winget install --id jqlang.jq -e --silent --accept-package-agreements --accept-source-agreements | Out-Null }; $env:PATH = \"C:\\Program Files\\Git\\bin;$shim;$env:LOCALAPPDATA\\Microsoft\\WinGet\\Links;$env:PATH\"",
+        "& $env:MG_SVC ensure -Name ep01-api -Project (Resolve-Path 'src\\ProjectRequests.Api').Path -Urls http://localhost:5207 -Port 5207"
+      ]
+    },
+    {
+      "name": "openapi",
+      "kind": "browser",
+      "url": "http://localhost:5207/openapi/v1.json",
+      "account": "none",
+      "steps": [
+        "Open the URL in a clean browser window (JSON viewer, everything collapsed)",
+        "Expand 'openapi' and note the value 3.1.1",
+        "Expand 'paths' > '/api/requests/{id}/decision' > 'post' > 'responses'",
+        "Show the five status codes: 200, 400, 404, 409 and 503"
+      ],
+      "mask": [],
+      "prepare": [
+        "New-Item -ItemType Directory -Force (Join-Path $env:TEMP 'mgnet') | Out-Null; $env:MG_LOGS = Join-Path $env:TEMP 'mgnet'; $env:MG_SVC = Join-Path $env:MG_LOGS 'svc.ps1'; Set-Content -LiteralPath $env:MG_SVC -Value @'\nparam([Parameter(Mandatory)][ValidateSet('start','ensure','stop')][string]$Action, [Parameter(Mandatory)][string]$Name, [string]$Project, [string]$Urls, [int]$Port, [string[]]$AppArgs = @(), [string[]]$DeleteFiles = @())\n$d = Join-Path $env:TEMP 'mgnet'; New-Item -ItemType Directory -Force $d | Out-Null\n$pf = Join-Path $d \"$Name.pid\"\nfunction Test-Port([int]$p) { try { [Net.Sockets.TcpClient]::new('localhost', $p).Dispose(); $true } catch { $false } }\nfunction Stop-Svc { if (Test-Path $pf) { taskkill /PID (Get-Content $pf) /T /F 2>&1 | Out-Null; Remove-Item $pf -ErrorAction SilentlyContinue } }\nif ($Action -eq 'stop') { Stop-Svc; return }\nif ($Action -eq 'ensure' -and $Port -and (Test-Port $Port)) { return }\nStop-Svc\nforeach ($f in $DeleteFiles) { Remove-Item (Join-Path $Project $f) -Force -ErrorAction SilentlyContinue }\n$env:ASPNETCORE_ENVIRONMENT = 'Development'\n$a = @('run', '--no-build', '--no-launch-profile')\nif ($Urls) { $a += '--urls', $Urls }\nif ($AppArgs) { $a += '--'; $a += $AppArgs }\n$p = Start-Process dotnet -ArgumentList $a -WorkingDirectory $Project -WindowStyle Hidden -RedirectStandardOutput (Join-Path $d \"$Name.log\") -RedirectStandardError (Join-Path $d \"$Name.err\") -PassThru\n$p.Id | Set-Content $pf\nif ($Port) { for ($i = 0; $i -lt 120; $i++) { if (Test-Port $Port) { break }; Start-Sleep -Milliseconds 500 } }\n'@",
+        "& $env:MG_SVC ensure -Name ep01-api -Project (Resolve-Path 'src\\ProjectRequests.Api').Path -Urls http://localhost:5207 -Port 5207"
+      ]
+    },
+    {
+      "name": "live-smoke",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\net\\episodes\\01-minimal-apis",
+      "prompt": "PS> ",
+      "commands": [
+        "bash ./deploy/deploy-appservice.sh",
+        "#pause 3",
+        "$h = az webapp show -g rg-mglab-net-01 -n $env:APP --query defaultHostName -o tsv",
+        "bash ./deploy/smoke.sh https://$h",
+        "#pause 5"
+      ],
+      "prepare": [
+        "New-Item -ItemType Directory -Force (Join-Path $env:TEMP 'mgnet') | Out-Null; $env:MG_LOGS = Join-Path $env:TEMP 'mgnet'; $env:MG_SVC = Join-Path $env:MG_LOGS 'svc.ps1'; Set-Content -LiteralPath $env:MG_SVC -Value @'\nparam([Parameter(Mandatory)][ValidateSet('start','ensure','stop')][string]$Action, [Parameter(Mandatory)][string]$Name, [string]$Project, [string]$Urls, [int]$Port, [string[]]$AppArgs = @(), [string[]]$DeleteFiles = @())\n$d = Join-Path $env:TEMP 'mgnet'; New-Item -ItemType Directory -Force $d | Out-Null\n$pf = Join-Path $d \"$Name.pid\"\nfunction Test-Port([int]$p) { try { [Net.Sockets.TcpClient]::new('localhost', $p).Dispose(); $true } catch { $false } }\nfunction Stop-Svc { if (Test-Path $pf) { taskkill /PID (Get-Content $pf) /T /F 2>&1 | Out-Null; Remove-Item $pf -ErrorAction SilentlyContinue } }\nif ($Action -eq 'stop') { Stop-Svc; return }\nif ($Action -eq 'ensure' -and $Port -and (Test-Port $Port)) { return }\nStop-Svc\nforeach ($f in $DeleteFiles) { Remove-Item (Join-Path $Project $f) -Force -ErrorAction SilentlyContinue }\n$env:ASPNETCORE_ENVIRONMENT = 'Development'\n$a = @('run', '--no-build', '--no-launch-profile')\nif ($Urls) { $a += '--urls', $Urls }\nif ($AppArgs) { $a += '--'; $a += $AppArgs }\n$p = Start-Process dotnet -ArgumentList $a -WorkingDirectory $Project -WindowStyle Hidden -RedirectStandardOutput (Join-Path $d \"$Name.log\") -RedirectStandardError (Join-Path $d \"$Name.err\") -PassThru\n$p.Id | Set-Content $pf\nif ($Port) { for ($i = 0; $i -lt 120; $i++) { if (Test-Port $Port) { break }; Start-Sleep -Milliseconds 500 } }\n'@",
+        "$shim = Join-Path $env:TEMP 'mgnet\\bin'; New-Item -ItemType Directory -Force $shim | Out-Null; if (-not (Test-Path (Join-Path $shim 'zip'))) { [IO.File]::WriteAllText((Join-Path $shim 'zip'), \"#!/bin/bash`n# zip shim (Git Bash has no zip): called as: zip -qr <out.zip> .`n/c/Windows/System32/tar.exe -a -cf `\"`$2`\" .`n\") }; if (-not (Get-Command jq -ErrorAction SilentlyContinue)) { winget install --id jqlang.jq -e --silent --accept-package-agreements --accept-source-agreements | Out-Null }; $env:PATH = \"C:\\Program Files\\Git\\bin;$shim;$env:LOCALAPPDATA\\Microsoft\\WinGet\\Links;$env:PATH\"",
+        "$env:RG = 'rg-mglab-net-01'; $af = Join-Path $env:TEMP 'mgnet\\ep01-app.txt'; if (-not (Test-Path $af)) { \"contoso-requests-$(Get-Random -Minimum 1000 -Maximum 9999)\" | Set-Content $af }; $env:APP = (Get-Content $af).Trim()",
+        "az account show --query name -o none 2>$null; if ($LASTEXITCODE -ne 0) { az login -o none }  # owner signs in (lab subscription, labadmin)"
+      ],
+      "maxMinutes": 20,
+      "mask": [
+        "app host name in the '==> https://<host>/healthz' line and in the smoke.sh URL, except .azurewebsites.net"
+      ]
+    },
+    {
+      "name": "readonly",
+      "kind": "browser",
+      "url": "https://portal.azure.com/",
+      "account": "labadmin",
+      "steps": [
+        "Search for the web app (name from %TEMP%\\mgnet\\ep01-app.txt) in the portal search box and open it",
+        "Settings > Environment variables > App settings: add (or edit) Api__ReadOnly = true, Apply, confirm the restart",
+        "Reveal the value so 'Api__ReadOnly = true' is readable",
+        "Beside the browser, in a terminal in the episode folder: $h = az webapp show -g rg-mglab-net-01 -n $env:APP --query defaultHostName -o tsv",
+        "Then: curl.exe -i -X POST https://$h/api/requests -H \"Content-Type: application/json\" -d '{\"title\":\"CRM rollout\",\"budget\":75000,\"requestedBy\":\"alex.demo@contoso.com\"}'  -> HTTP/1.1 503, Retry-After: 120, 'The API is in read-only mode.'",
+        "Then: curl.exe -i https://$h/api/requests -> HTTP/1.1 200"
+      ],
+      "mask": [
+        "subscription name and id",
+        "resource group path and resource ids",
+        "app host name",
+        "signed-in account in the top bar"
+      ],
+      "prepare": [
+        "New-Item -ItemType Directory -Force (Join-Path $env:TEMP 'mgnet') | Out-Null; $env:MG_LOGS = Join-Path $env:TEMP 'mgnet'; $env:MG_SVC = Join-Path $env:MG_LOGS 'svc.ps1'; Set-Content -LiteralPath $env:MG_SVC -Value @'\nparam([Parameter(Mandatory)][ValidateSet('start','ensure','stop')][string]$Action, [Parameter(Mandatory)][string]$Name, [string]$Project, [string]$Urls, [int]$Port, [string[]]$AppArgs = @(), [string[]]$DeleteFiles = @())\n$d = Join-Path $env:TEMP 'mgnet'; New-Item -ItemType Directory -Force $d | Out-Null\n$pf = Join-Path $d \"$Name.pid\"\nfunction Test-Port([int]$p) { try { [Net.Sockets.TcpClient]::new('localhost', $p).Dispose(); $true } catch { $false } }\nfunction Stop-Svc { if (Test-Path $pf) { taskkill /PID (Get-Content $pf) /T /F 2>&1 | Out-Null; Remove-Item $pf -ErrorAction SilentlyContinue } }\nif ($Action -eq 'stop') { Stop-Svc; return }\nif ($Action -eq 'ensure' -and $Port -and (Test-Port $Port)) { return }\nStop-Svc\nforeach ($f in $DeleteFiles) { Remove-Item (Join-Path $Project $f) -Force -ErrorAction SilentlyContinue }\n$env:ASPNETCORE_ENVIRONMENT = 'Development'\n$a = @('run', '--no-build', '--no-launch-profile')\nif ($Urls) { $a += '--urls', $Urls }\nif ($AppArgs) { $a += '--'; $a += $AppArgs }\n$p = Start-Process dotnet -ArgumentList $a -WorkingDirectory $Project -WindowStyle Hidden -RedirectStandardOutput (Join-Path $d \"$Name.log\") -RedirectStandardError (Join-Path $d \"$Name.err\") -PassThru\n$p.Id | Set-Content $pf\nif ($Port) { for ($i = 0; $i -lt 120; $i++) { if (Test-Port $Port) { break }; Start-Sleep -Milliseconds 500 } }\n'@",
+        "$env:RG = 'rg-mglab-net-01'; $af = Join-Path $env:TEMP 'mgnet\\ep01-app.txt'; if (-not (Test-Path $af)) { \"contoso-requests-$(Get-Random -Minimum 1000 -Maximum 9999)\" | Set-Content $af }; $env:APP = (Get-Content $af).Trim()",
+        "az account show --query name -o none 2>$null; if ($LASTEXITCODE -ne 0) { az login -o none }  # owner signs in (lab subscription, labadmin)"
+      ]
+    },
+    {
+      "name": "restart-empty",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\net\\episodes\\01-minimal-apis",
+      "prompt": "PS> ",
+      "commands": [
+        "$h = az webapp show -g rg-mglab-net-01 -n $env:APP --query defaultHostName -o tsv",
+        "curl.exe -s https://$h/api/requests",
+        "#pause 4"
+      ],
+      "prepare": [
+        "New-Item -ItemType Directory -Force (Join-Path $env:TEMP 'mgnet') | Out-Null; $env:MG_LOGS = Join-Path $env:TEMP 'mgnet'; $env:MG_SVC = Join-Path $env:MG_LOGS 'svc.ps1'; Set-Content -LiteralPath $env:MG_SVC -Value @'\nparam([Parameter(Mandatory)][ValidateSet('start','ensure','stop')][string]$Action, [Parameter(Mandatory)][string]$Name, [string]$Project, [string]$Urls, [int]$Port, [string[]]$AppArgs = @(), [string[]]$DeleteFiles = @())\n$d = Join-Path $env:TEMP 'mgnet'; New-Item -ItemType Directory -Force $d | Out-Null\n$pf = Join-Path $d \"$Name.pid\"\nfunction Test-Port([int]$p) { try { [Net.Sockets.TcpClient]::new('localhost', $p).Dispose(); $true } catch { $false } }\nfunction Stop-Svc { if (Test-Path $pf) { taskkill /PID (Get-Content $pf) /T /F 2>&1 | Out-Null; Remove-Item $pf -ErrorAction SilentlyContinue } }\nif ($Action -eq 'stop') { Stop-Svc; return }\nif ($Action -eq 'ensure' -and $Port -and (Test-Port $Port)) { return }\nStop-Svc\nforeach ($f in $DeleteFiles) { Remove-Item (Join-Path $Project $f) -Force -ErrorAction SilentlyContinue }\n$env:ASPNETCORE_ENVIRONMENT = 'Development'\n$a = @('run', '--no-build', '--no-launch-profile')\nif ($Urls) { $a += '--urls', $Urls }\nif ($AppArgs) { $a += '--'; $a += $AppArgs }\n$p = Start-Process dotnet -ArgumentList $a -WorkingDirectory $Project -WindowStyle Hidden -RedirectStandardOutput (Join-Path $d \"$Name.log\") -RedirectStandardError (Join-Path $d \"$Name.err\") -PassThru\n$p.Id | Set-Content $pf\nif ($Port) { for ($i = 0; $i -lt 120; $i++) { if (Test-Port $Port) { break }; Start-Sleep -Milliseconds 500 } }\n'@",
+        "$env:RG = 'rg-mglab-net-01'; $af = Join-Path $env:TEMP 'mgnet\\ep01-app.txt'; if (-not (Test-Path $af)) { \"contoso-requests-$(Get-Random -Minimum 1000 -Maximum 9999)\" | Set-Content $af }; $env:APP = (Get-Content $af).Trim()",
+        "az account show --query name -o none 2>$null; if ($LASTEXITCODE -ne 0) { az login -o none }  # owner signs in (lab subscription, labadmin)"
+      ],
+      "mask": [
+        "app host name (the command shows $h, but the host appears in any error text)"
+      ]
+    }
+  ],
+  "teardown": [
+    "& $env:MG_SVC stop -Name ep01-api",
+    "az group delete --name rg-mglab-net-01 --yes --no-wait",
+    "Remove-Item deploy\\out -Recurse -Force -ErrorAction SilentlyContinue",
+    "Remove-Item (Join-Path $env:TEMP 'mgnet\\ep01-*') -Force -ErrorAction SilentlyContinue"
+  ],
+  "needs": [
+    "azure",
+    "tenant",
+    "tool:jq",
+    "tool:zip (shim via Windows tar in prepare)",
+    "tool:git-bash"
+  ]
+}

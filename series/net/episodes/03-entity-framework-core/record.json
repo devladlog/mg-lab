@@ -1,0 +1,128 @@
+{
+  "note": "Live-session recording of the screen scenes (series/tools/rec). prepare/teardown run on the laptop, not recorded; commands are typed and run for real. Servers are started hidden by prepare (helper %TEMP%\\mgnet\\svc.ps1) and their logs are shown with Get-Content/Select-String. Local screens run the API on SQLite exactly as the app ships. Azure order: sql-log, lost-update, then azure-sql (owner runs the two SQL scripts in the portal Query editor), then azure-demo (its prepare publishes the app after the grant). Mask server name, app host, subscription and account.",
+  "prepare": [
+    "New-Item -ItemType Directory -Force (Join-Path $env:TEMP 'mgnet') | Out-Null; $env:MG_LOGS = Join-Path $env:TEMP 'mgnet'; $env:MG_SVC = Join-Path $env:MG_LOGS 'svc.ps1'; Set-Content -LiteralPath $env:MG_SVC -Value @'\nparam([Parameter(Mandatory)][ValidateSet('start','ensure','stop')][string]$Action, [Parameter(Mandatory)][string]$Name, [string]$Project, [string]$Urls, [int]$Port, [string[]]$AppArgs = @(), [string[]]$DeleteFiles = @())\n$d = Join-Path $env:TEMP 'mgnet'; New-Item -ItemType Directory -Force $d | Out-Null\n$pf = Join-Path $d \"$Name.pid\"\nfunction Test-Port([int]$p) { try { [Net.Sockets.TcpClient]::new('localhost', $p).Dispose(); $true } catch { $false } }\nfunction Stop-Svc { if (Test-Path $pf) { taskkill /PID (Get-Content $pf) /T /F 2>&1 | Out-Null; Remove-Item $pf -ErrorAction SilentlyContinue } }\nif ($Action -eq 'stop') { Stop-Svc; return }\nif ($Action -eq 'ensure' -and $Port -and (Test-Port $Port)) { return }\nStop-Svc\nforeach ($f in $DeleteFiles) { Remove-Item (Join-Path $Project $f) -Force -ErrorAction SilentlyContinue }\n$env:ASPNETCORE_ENVIRONMENT = 'Development'\n$a = @('run', '--no-build', '--no-launch-profile')\nif ($Urls) { $a += '--urls', $Urls }\nif ($AppArgs) { $a += '--'; $a += $AppArgs }\n$p = Start-Process dotnet -ArgumentList $a -WorkingDirectory $Project -WindowStyle Hidden -RedirectStandardOutput (Join-Path $d \"$Name.log\") -RedirectStandardError (Join-Path $d \"$Name.err\") -PassThru\n$p.Id | Set-Content $pf\nif ($Port) { for ($i = 0; $i -lt 120; $i++) { if (Test-Port $Port) { break }; Start-Sleep -Milliseconds 500 } }\n'@",
+    "dotnet tool restore",
+    "dotnet build ProjectRequests.slnx -v q --nologo",
+    "& $env:MG_SVC stop -Name ep03-api",
+    "Remove-Item src\\ProjectRequests.Api\\requests.db* -Force -ErrorAction SilentlyContinue",
+    "Push-Location src\\ProjectRequests.Api; dotnet dotnet-ef database update --context SqliteRequestsDbContext; Pop-Location",
+    "& $env:MG_SVC start -Name ep03-api -Project (Resolve-Path 'src\\ProjectRequests.Api').Path -Urls http://localhost:5207 -Port 5207",
+    "$shim = Join-Path $env:TEMP 'mgnet\\bin'; New-Item -ItemType Directory -Force $shim | Out-Null; if (-not (Test-Path (Join-Path $shim 'zip'))) { [IO.File]::WriteAllText((Join-Path $shim 'zip'), \"#!/bin/bash`n# zip shim (Git Bash has no zip): called as: zip -qr <out.zip> .`n/c/Windows/System32/tar.exe -a -cf `\"`$2`\" .`n\") }; if (-not (Get-Command jq -ErrorAction SilentlyContinue)) { winget install --id jqlang.jq -e --silent --accept-package-agreements --accept-source-agreements | Out-Null }; $env:PATH = \"C:\\Program Files\\Git\\bin;$shim;$env:LOCALAPPDATA\\Microsoft\\WinGet\\Links;$env:PATH\"",
+    "$env:RG = 'rg-mglab-net-03'; $nf = Join-Path $env:TEMP 'mgnet\\ep03-names.json'; if (-not (Test-Path $nf)) { $n = Get-Random -Minimum 1000 -Maximum 9999; @{ app = \"contoso-requests-$n\"; sql = \"contoso-sql-$n\" } | ConvertTo-Json | Set-Content $nf }; $names = Get-Content $nf | ConvertFrom-Json; $env:APP = $names.app; $env:SQL = $names.sql",
+    "az account show --query name -o none 2>$null; if ($LASTEXITCODE -ne 0) { az login -o none }  # owner signs in (lab subscription, labadmin)",
+    "bash ./deploy/deploy-azure.sh infra"
+  ],
+  "screens": [
+    {
+      "name": "sql-log",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\net\\episodes\\03-entity-framework-core",
+      "prompt": "PS> ",
+      "commands": [
+        "curl.exe -s http://localhost:5207/api/requests",
+        "bash ./deploy/local-demo.sh",
+        "#pause 3",
+        "#clear",
+        "Select-String -Path $env:MG_LOGS\\ep03-api.log -Pattern 'INNER JOIN' -Context 1,2 | Select-Object -First 1",
+        "Select-String -Path $env:MG_LOGS\\ep03-api.log -Pattern 'SET \"Budget\"' -Context 1,1 | Select-Object -First 1",
+        "#pause 6"
+      ],
+      "prepare": [
+        "New-Item -ItemType Directory -Force (Join-Path $env:TEMP 'mgnet') | Out-Null; $env:MG_LOGS = Join-Path $env:TEMP 'mgnet'; $env:MG_SVC = Join-Path $env:MG_LOGS 'svc.ps1'; Set-Content -LiteralPath $env:MG_SVC -Value @'\nparam([Parameter(Mandatory)][ValidateSet('start','ensure','stop')][string]$Action, [Parameter(Mandatory)][string]$Name, [string]$Project, [string]$Urls, [int]$Port, [string[]]$AppArgs = @(), [string[]]$DeleteFiles = @())\n$d = Join-Path $env:TEMP 'mgnet'; New-Item -ItemType Directory -Force $d | Out-Null\n$pf = Join-Path $d \"$Name.pid\"\nfunction Test-Port([int]$p) { try { [Net.Sockets.TcpClient]::new('localhost', $p).Dispose(); $true } catch { $false } }\nfunction Stop-Svc { if (Test-Path $pf) { taskkill /PID (Get-Content $pf) /T /F 2>&1 | Out-Null; Remove-Item $pf -ErrorAction SilentlyContinue } }\nif ($Action -eq 'stop') { Stop-Svc; return }\nif ($Action -eq 'ensure' -and $Port -and (Test-Port $Port)) { return }\nStop-Svc\nforeach ($f in $DeleteFiles) { Remove-Item (Join-Path $Project $f) -Force -ErrorAction SilentlyContinue }\n$env:ASPNETCORE_ENVIRONMENT = 'Development'\n$a = @('run', '--no-build', '--no-launch-profile')\nif ($Urls) { $a += '--urls', $Urls }\nif ($AppArgs) { $a += '--'; $a += $AppArgs }\n$p = Start-Process dotnet -ArgumentList $a -WorkingDirectory $Project -WindowStyle Hidden -RedirectStandardOutput (Join-Path $d \"$Name.log\") -RedirectStandardError (Join-Path $d \"$Name.err\") -PassThru\n$p.Id | Set-Content $pf\nif ($Port) { for ($i = 0; $i -lt 120; $i++) { if (Test-Port $Port) { break }; Start-Sleep -Milliseconds 500 } }\n'@",
+        "$shim = Join-Path $env:TEMP 'mgnet\\bin'; New-Item -ItemType Directory -Force $shim | Out-Null; if (-not (Test-Path (Join-Path $shim 'zip'))) { [IO.File]::WriteAllText((Join-Path $shim 'zip'), \"#!/bin/bash`n# zip shim (Git Bash has no zip): called as: zip -qr <out.zip> .`n/c/Windows/System32/tar.exe -a -cf `\"`$2`\" .`n\") }; if (-not (Get-Command jq -ErrorAction SilentlyContinue)) { winget install --id jqlang.jq -e --silent --accept-package-agreements --accept-source-agreements | Out-Null }; $env:PATH = \"C:\\Program Files\\Git\\bin;$shim;$env:LOCALAPPDATA\\Microsoft\\WinGet\\Links;$env:PATH\"",
+        "& $env:MG_SVC stop -Name ep03-api",
+        "Remove-Item src\\ProjectRequests.Api\\requests.db* -Force -ErrorAction SilentlyContinue",
+        "Push-Location src\\ProjectRequests.Api; dotnet dotnet-ef database update --context SqliteRequestsDbContext; Pop-Location",
+        "& $env:MG_SVC start -Name ep03-api -Project (Resolve-Path 'src\\ProjectRequests.Api').Path -Urls http://localhost:5207 -Port 5207"
+      ]
+    },
+    {
+      "name": "lost-update",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\net\\episodes\\03-entity-framework-core",
+      "prompt": "PS> ",
+      "commands": [
+        "bash ./deploy/local-demo.sh",
+        "#pause 6"
+      ],
+      "prepare": [
+        "New-Item -ItemType Directory -Force (Join-Path $env:TEMP 'mgnet') | Out-Null; $env:MG_LOGS = Join-Path $env:TEMP 'mgnet'; $env:MG_SVC = Join-Path $env:MG_LOGS 'svc.ps1'; Set-Content -LiteralPath $env:MG_SVC -Value @'\nparam([Parameter(Mandatory)][ValidateSet('start','ensure','stop')][string]$Action, [Parameter(Mandatory)][string]$Name, [string]$Project, [string]$Urls, [int]$Port, [string[]]$AppArgs = @(), [string[]]$DeleteFiles = @())\n$d = Join-Path $env:TEMP 'mgnet'; New-Item -ItemType Directory -Force $d | Out-Null\n$pf = Join-Path $d \"$Name.pid\"\nfunction Test-Port([int]$p) { try { [Net.Sockets.TcpClient]::new('localhost', $p).Dispose(); $true } catch { $false } }\nfunction Stop-Svc { if (Test-Path $pf) { taskkill /PID (Get-Content $pf) /T /F 2>&1 | Out-Null; Remove-Item $pf -ErrorAction SilentlyContinue } }\nif ($Action -eq 'stop') { Stop-Svc; return }\nif ($Action -eq 'ensure' -and $Port -and (Test-Port $Port)) { return }\nStop-Svc\nforeach ($f in $DeleteFiles) { Remove-Item (Join-Path $Project $f) -Force -ErrorAction SilentlyContinue }\n$env:ASPNETCORE_ENVIRONMENT = 'Development'\n$a = @('run', '--no-build', '--no-launch-profile')\nif ($Urls) { $a += '--urls', $Urls }\nif ($AppArgs) { $a += '--'; $a += $AppArgs }\n$p = Start-Process dotnet -ArgumentList $a -WorkingDirectory $Project -WindowStyle Hidden -RedirectStandardOutput (Join-Path $d \"$Name.log\") -RedirectStandardError (Join-Path $d \"$Name.err\") -PassThru\n$p.Id | Set-Content $pf\nif ($Port) { for ($i = 0; $i -lt 120; $i++) { if (Test-Port $Port) { break }; Start-Sleep -Milliseconds 500 } }\n'@",
+        "$shim = Join-Path $env:TEMP 'mgnet\\bin'; New-Item -ItemType Directory -Force $shim | Out-Null; if (-not (Test-Path (Join-Path $shim 'zip'))) { [IO.File]::WriteAllText((Join-Path $shim 'zip'), \"#!/bin/bash`n# zip shim (Git Bash has no zip): called as: zip -qr <out.zip> .`n/c/Windows/System32/tar.exe -a -cf `\"`$2`\" .`n\") }; if (-not (Get-Command jq -ErrorAction SilentlyContinue)) { winget install --id jqlang.jq -e --silent --accept-package-agreements --accept-source-agreements | Out-Null }; $env:PATH = \"C:\\Program Files\\Git\\bin;$shim;$env:LOCALAPPDATA\\Microsoft\\WinGet\\Links;$env:PATH\"",
+        "& $env:MG_SVC stop -Name ep03-api",
+        "Remove-Item src\\ProjectRequests.Api\\requests.db* -Force -ErrorAction SilentlyContinue",
+        "Push-Location src\\ProjectRequests.Api; dotnet dotnet-ef database update --context SqliteRequestsDbContext; Pop-Location",
+        "& $env:MG_SVC start -Name ep03-api -Project (Resolve-Path 'src\\ProjectRequests.Api').Path -Urls http://localhost:5207 -Port 5207"
+      ]
+    },
+    {
+      "name": "azure-sql",
+      "kind": "browser",
+      "url": "https://portal.azure.com/",
+      "account": "labadmin",
+      "steps": [
+        "Search 'requests' (SQL database in rg-mglab-net-03) and open SQL database 'requests' > Query editor (preview)",
+        "Sign in with Microsoft Entra authentication (labadmin); if asked, allow the client IP in the server firewall (remove it again in teardown)",
+        "Open/paste deploy/sqlserver-migrations.sql and Run: 'Query succeeded'; optionally Run again to show nothing changes",
+        "Run: SELECT MigrationId FROM __EFMigrationsHistory;  -> two rows (..._InitialCreate, ..._AddStatusPriorityIndex)",
+        "Run: SELECT * FROM Departments;  -> FIN, IT, OPS",
+        "Open/paste deploy/out/grant-app-identity.sql (generated by the infra step, app name filled in) and Run it BEFORE the app's first request"
+      ],
+      "mask": [
+        "SQL server name",
+        "subscription name and id",
+        "signed-in account in the top bar and the query editor login",
+        "tenant name"
+      ],
+      "prepare": [
+        "New-Item -ItemType Directory -Force (Join-Path $env:TEMP 'mgnet') | Out-Null; $env:MG_LOGS = Join-Path $env:TEMP 'mgnet'; $env:MG_SVC = Join-Path $env:MG_LOGS 'svc.ps1'; Set-Content -LiteralPath $env:MG_SVC -Value @'\nparam([Parameter(Mandatory)][ValidateSet('start','ensure','stop')][string]$Action, [Parameter(Mandatory)][string]$Name, [string]$Project, [string]$Urls, [int]$Port, [string[]]$AppArgs = @(), [string[]]$DeleteFiles = @())\n$d = Join-Path $env:TEMP 'mgnet'; New-Item -ItemType Directory -Force $d | Out-Null\n$pf = Join-Path $d \"$Name.pid\"\nfunction Test-Port([int]$p) { try { [Net.Sockets.TcpClient]::new('localhost', $p).Dispose(); $true } catch { $false } }\nfunction Stop-Svc { if (Test-Path $pf) { taskkill /PID (Get-Content $pf) /T /F 2>&1 | Out-Null; Remove-Item $pf -ErrorAction SilentlyContinue } }\nif ($Action -eq 'stop') { Stop-Svc; return }\nif ($Action -eq 'ensure' -and $Port -and (Test-Port $Port)) { return }\nStop-Svc\nforeach ($f in $DeleteFiles) { Remove-Item (Join-Path $Project $f) -Force -ErrorAction SilentlyContinue }\n$env:ASPNETCORE_ENVIRONMENT = 'Development'\n$a = @('run', '--no-build', '--no-launch-profile')\nif ($Urls) { $a += '--urls', $Urls }\nif ($AppArgs) { $a += '--'; $a += $AppArgs }\n$p = Start-Process dotnet -ArgumentList $a -WorkingDirectory $Project -WindowStyle Hidden -RedirectStandardOutput (Join-Path $d \"$Name.log\") -RedirectStandardError (Join-Path $d \"$Name.err\") -PassThru\n$p.Id | Set-Content $pf\nif ($Port) { for ($i = 0; $i -lt 120; $i++) { if (Test-Port $Port) { break }; Start-Sleep -Milliseconds 500 } }\n'@",
+        "$env:RG = 'rg-mglab-net-03'; $nf = Join-Path $env:TEMP 'mgnet\\ep03-names.json'; if (-not (Test-Path $nf)) { $n = Get-Random -Minimum 1000 -Maximum 9999; @{ app = \"contoso-requests-$n\"; sql = \"contoso-sql-$n\" } | ConvertTo-Json | Set-Content $nf }; $names = Get-Content $nf | ConvertFrom-Json; $env:APP = $names.app; $env:SQL = $names.sql",
+        "az account show --query name -o none 2>$null; if ($LASTEXITCODE -ne 0) { az login -o none }  # owner signs in (lab subscription, labadmin)"
+      ]
+    },
+    {
+      "name": "azure-demo",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\net\\episodes\\03-entity-framework-core",
+      "prompt": "PS> ",
+      "commands": [
+        "$h = az webapp show -g rg-mglab-net-03 -n $env:APP --query defaultHostName -o tsv",
+        "curl.exe -s https://$h/healthz",
+        "bash ./deploy/local-demo.sh https://$h",
+        "#pause 4",
+        "az webapp restart -g rg-mglab-net-03 -n $env:APP",
+        "curl.exe -s https://$h/api/requests",
+        "#pause 5"
+      ],
+      "prepare": [
+        "New-Item -ItemType Directory -Force (Join-Path $env:TEMP 'mgnet') | Out-Null; $env:MG_LOGS = Join-Path $env:TEMP 'mgnet'; $env:MG_SVC = Join-Path $env:MG_LOGS 'svc.ps1'; Set-Content -LiteralPath $env:MG_SVC -Value @'\nparam([Parameter(Mandatory)][ValidateSet('start','ensure','stop')][string]$Action, [Parameter(Mandatory)][string]$Name, [string]$Project, [string]$Urls, [int]$Port, [string[]]$AppArgs = @(), [string[]]$DeleteFiles = @())\n$d = Join-Path $env:TEMP 'mgnet'; New-Item -ItemType Directory -Force $d | Out-Null\n$pf = Join-Path $d \"$Name.pid\"\nfunction Test-Port([int]$p) { try { [Net.Sockets.TcpClient]::new('localhost', $p).Dispose(); $true } catch { $false } }\nfunction Stop-Svc { if (Test-Path $pf) { taskkill /PID (Get-Content $pf) /T /F 2>&1 | Out-Null; Remove-Item $pf -ErrorAction SilentlyContinue } }\nif ($Action -eq 'stop') { Stop-Svc; return }\nif ($Action -eq 'ensure' -and $Port -and (Test-Port $Port)) { return }\nStop-Svc\nforeach ($f in $DeleteFiles) { Remove-Item (Join-Path $Project $f) -Force -ErrorAction SilentlyContinue }\n$env:ASPNETCORE_ENVIRONMENT = 'Development'\n$a = @('run', '--no-build', '--no-launch-profile')\nif ($Urls) { $a += '--urls', $Urls }\nif ($AppArgs) { $a += '--'; $a += $AppArgs }\n$p = Start-Process dotnet -ArgumentList $a -WorkingDirectory $Project -WindowStyle Hidden -RedirectStandardOutput (Join-Path $d \"$Name.log\") -RedirectStandardError (Join-Path $d \"$Name.err\") -PassThru\n$p.Id | Set-Content $pf\nif ($Port) { for ($i = 0; $i -lt 120; $i++) { if (Test-Port $Port) { break }; Start-Sleep -Milliseconds 500 } }\n'@",
+        "$shim = Join-Path $env:TEMP 'mgnet\\bin'; New-Item -ItemType Directory -Force $shim | Out-Null; if (-not (Test-Path (Join-Path $shim 'zip'))) { [IO.File]::WriteAllText((Join-Path $shim 'zip'), \"#!/bin/bash`n# zip shim (Git Bash has no zip): called as: zip -qr <out.zip> .`n/c/Windows/System32/tar.exe -a -cf `\"`$2`\" .`n\") }; if (-not (Get-Command jq -ErrorAction SilentlyContinue)) { winget install --id jqlang.jq -e --silent --accept-package-agreements --accept-source-agreements | Out-Null }; $env:PATH = \"C:\\Program Files\\Git\\bin;$shim;$env:LOCALAPPDATA\\Microsoft\\WinGet\\Links;$env:PATH\"",
+        "$env:RG = 'rg-mglab-net-03'; $nf = Join-Path $env:TEMP 'mgnet\\ep03-names.json'; if (-not (Test-Path $nf)) { $n = Get-Random -Minimum 1000 -Maximum 9999; @{ app = \"contoso-requests-$n\"; sql = \"contoso-sql-$n\" } | ConvertTo-Json | Set-Content $nf }; $names = Get-Content $nf | ConvertFrom-Json; $env:APP = $names.app; $env:SQL = $names.sql",
+        "az account show --query name -o none 2>$null; if ($LASTEXITCODE -ne 0) { az login -o none }  # owner signs in (lab subscription, labadmin)",
+        "bash ./deploy/deploy-azure.sh app"
+      ],
+      "maxMinutes": 20,
+      "mask": [
+        "app host name"
+      ]
+    }
+  ],
+  "teardown": [
+    "& $env:MG_SVC stop -Name ep03-api",
+    "az group delete --name rg-mglab-net-03 --yes --no-wait",
+    "Remove-Item src\\ProjectRequests.Api\\requests.db* -Force -ErrorAction SilentlyContinue",
+    "Remove-Item deploy\\out -Recurse -Force -ErrorAction SilentlyContinue",
+    "Remove-Item (Join-Path $env:TEMP 'mgnet\\ep03*') -Force -ErrorAction SilentlyContinue"
+  ],
+  "needs": [
+    "azure",
+    "tenant",
+    "tool:jq",
+    "tool:zip (shim via Windows tar in prepare)",
+    "tool:git-bash",
+    "azure-sql-free-offer (one of 10 per subscription)"
+  ]
+}

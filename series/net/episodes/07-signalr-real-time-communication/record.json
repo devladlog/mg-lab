@@ -1,0 +1,133 @@
+{
+  "note": "Live-session recording of the screen scenes (series/tools/rec). prepare/teardown run on the laptop, not recorded; commands are typed and run for real. Servers are started hidden by prepare (helper %TEMP%\\mgnet\\svc.ps1) and their logs are shown with Get-Content/Select-String. The watcher is started inside the terminal scene (Start-Process -NoNewWindow) so its console lines appear live next to the typed commands; approvals in the group scene are done through the API (the browser click is equivalent). Browser screen: clean window at 125 % zoom.",
+  "prepare": [
+    "New-Item -ItemType Directory -Force (Join-Path $env:TEMP 'mgnet') | Out-Null; $env:MG_LOGS = Join-Path $env:TEMP 'mgnet'; $env:MG_SVC = Join-Path $env:MG_LOGS 'svc.ps1'; Set-Content -LiteralPath $env:MG_SVC -Value @'\nparam([Parameter(Mandatory)][ValidateSet('start','ensure','stop')][string]$Action, [Parameter(Mandatory)][string]$Name, [string]$Project, [string]$Urls, [int]$Port, [string[]]$AppArgs = @(), [string[]]$DeleteFiles = @())\n$d = Join-Path $env:TEMP 'mgnet'; New-Item -ItemType Directory -Force $d | Out-Null\n$pf = Join-Path $d \"$Name.pid\"\nfunction Test-Port([int]$p) { try { [Net.Sockets.TcpClient]::new('localhost', $p).Dispose(); $true } catch { $false } }\nfunction Stop-Svc { if (Test-Path $pf) { taskkill /PID (Get-Content $pf) /T /F 2>&1 | Out-Null; Remove-Item $pf -ErrorAction SilentlyContinue } }\nif ($Action -eq 'stop') { Stop-Svc; return }\nif ($Action -eq 'ensure' -and $Port -and (Test-Port $Port)) { return }\nStop-Svc\nforeach ($f in $DeleteFiles) { Remove-Item (Join-Path $Project $f) -Force -ErrorAction SilentlyContinue }\n$env:ASPNETCORE_ENVIRONMENT = 'Development'\n$a = @('run', '--no-build', '--no-launch-profile')\nif ($Urls) { $a += '--urls', $Urls }\nif ($AppArgs) { $a += '--'; $a += $AppArgs }\n$p = Start-Process dotnet -ArgumentList $a -WorkingDirectory $Project -WindowStyle Hidden -RedirectStandardOutput (Join-Path $d \"$Name.log\") -RedirectStandardError (Join-Path $d \"$Name.err\") -PassThru\n$p.Id | Set-Content $pf\nif ($Port) { for ($i = 0; $i -lt 120; $i++) { if (Test-Port $Port) { break }; Start-Sleep -Milliseconds 500 } }\n'@",
+    "dotnet build ProjectRequests.slnx -v q --nologo",
+    "Remove-Item src\\ProjectRequests.Api\\requests.db* -Force -ErrorAction SilentlyContinue",
+    "& $env:MG_SVC ensure -Name ep07-api -Project (Resolve-Path 'src\\ProjectRequests.Api').Path -Urls http://localhost:5207 -Port 5207",
+    "& $env:MG_SVC ensure -Name ep07-web -Project (Resolve-Path 'src\\ProjectRequests.Web').Path -Urls http://localhost:5180 -Port 5180"
+  ],
+  "screens": [
+    {
+      "name": "live-board",
+      "kind": "browser",
+      "url": "http://localhost:5180/live",
+      "account": "none",
+      "steps": [
+        "Two browser windows side by side. Right: http://localhost:5180/live with DevTools > Network > WS; reload and select the requests?id=... WebSocket (host localhost:5207) > Messages",
+        "Header shows 'SignalR: connected · watching all departments' and 'Rendered by: WebAssembly · interactive: True'",
+        "Left: http://localhost:5180/requests/new; Title 'Data platform', Requested by alex.demo@contoso.com, Department Information Technology, Budget 80000; Submit",
+        "Right: a highlighted row '#1 Data platform IT 80,000 High Submitted' at the top, the Events line '#1 created · IT · High · Submitted' and the frame {\"type\":1,\"target\":\"RequestCreated\",...\"priority\":\"High\"...}"
+      ],
+      "mask": [],
+      "prepare": [
+        "New-Item -ItemType Directory -Force (Join-Path $env:TEMP 'mgnet') | Out-Null; $env:MG_LOGS = Join-Path $env:TEMP 'mgnet'; $env:MG_SVC = Join-Path $env:MG_LOGS 'svc.ps1'; Set-Content -LiteralPath $env:MG_SVC -Value @'\nparam([Parameter(Mandatory)][ValidateSet('start','ensure','stop')][string]$Action, [Parameter(Mandatory)][string]$Name, [string]$Project, [string]$Urls, [int]$Port, [string[]]$AppArgs = @(), [string[]]$DeleteFiles = @())\n$d = Join-Path $env:TEMP 'mgnet'; New-Item -ItemType Directory -Force $d | Out-Null\n$pf = Join-Path $d \"$Name.pid\"\nfunction Test-Port([int]$p) { try { [Net.Sockets.TcpClient]::new('localhost', $p).Dispose(); $true } catch { $false } }\nfunction Stop-Svc { if (Test-Path $pf) { taskkill /PID (Get-Content $pf) /T /F 2>&1 | Out-Null; Remove-Item $pf -ErrorAction SilentlyContinue } }\nif ($Action -eq 'stop') { Stop-Svc; return }\nif ($Action -eq 'ensure' -and $Port -and (Test-Port $Port)) { return }\nStop-Svc\nforeach ($f in $DeleteFiles) { Remove-Item (Join-Path $Project $f) -Force -ErrorAction SilentlyContinue }\n$env:ASPNETCORE_ENVIRONMENT = 'Development'\n$a = @('run', '--no-build', '--no-launch-profile')\nif ($Urls) { $a += '--urls', $Urls }\nif ($AppArgs) { $a += '--'; $a += $AppArgs }\n$p = Start-Process dotnet -ArgumentList $a -WorkingDirectory $Project -WindowStyle Hidden -RedirectStandardOutput (Join-Path $d \"$Name.log\") -RedirectStandardError (Join-Path $d \"$Name.err\") -PassThru\n$p.Id | Set-Content $pf\nif ($Port) { for ($i = 0; $i -lt 120; $i++) { if (Test-Port $Port) { break }; Start-Sleep -Milliseconds 500 } }\n'@",
+        "& $env:MG_SVC start -Name ep07-api -Project (Resolve-Path 'src\\ProjectRequests.Api').Path -Urls http://localhost:5207 -Port 5207 -DeleteFiles 'requests.db*'",
+        "& $env:MG_SVC ensure -Name ep07-web -Project (Resolve-Path 'src\\ProjectRequests.Web').Path -Urls http://localhost:5180 -Port 5180"
+      ]
+    },
+    {
+      "name": "watcher-groups",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\net\\episodes\\07-signalr-real-time-communication\\src\\ProjectRequests.Watcher",
+      "prompt": "PS> ",
+      "commands": [
+        "$w = Start-Process dotnet -ArgumentList '.\\bin\\Debug\\net10.0\\ProjectRequests.Watcher.dll', '--department', 'FIN' -NoNewWindow -PassThru",
+        "#pause 3",
+        "$api = 'http://localhost:5207/api/requests'",
+        "Invoke-RestMethod -Method Post http://localhost:5207/api/requests -ContentType application/json -Body '{\"title\":\"Data platform\",\"budget\":80000,\"requestedBy\":\"alex.demo@contoso.com\",\"departmentCode\":\"IT\"}' | Out-Null",
+        "#pause 3",
+        "$r = Invoke-RestMethod -Method Post $api -ContentType application/json -Body '{\"title\":\"Laptop refresh\",\"budget\":12000,\"requestedBy\":\"alex.demo@contoso.com\",\"departmentCode\":\"FIN\"}'",
+        "#pause 3",
+        "Invoke-RestMethod -Method Post \"$api/$($r.id)/decision\" -ContentType application/json -Body (@{ approve = $true; decidedBy = 'sam.approver@contoso.com'; version = $r.version } | ConvertTo-Json) | Out-Null",
+        "#pause 4",
+        "$w | Stop-Process"
+      ],
+      "prepare": [
+        "New-Item -ItemType Directory -Force (Join-Path $env:TEMP 'mgnet') | Out-Null; $env:MG_LOGS = Join-Path $env:TEMP 'mgnet'; $env:MG_SVC = Join-Path $env:MG_LOGS 'svc.ps1'; Set-Content -LiteralPath $env:MG_SVC -Value @'\nparam([Parameter(Mandatory)][ValidateSet('start','ensure','stop')][string]$Action, [Parameter(Mandatory)][string]$Name, [string]$Project, [string]$Urls, [int]$Port, [string[]]$AppArgs = @(), [string[]]$DeleteFiles = @())\n$d = Join-Path $env:TEMP 'mgnet'; New-Item -ItemType Directory -Force $d | Out-Null\n$pf = Join-Path $d \"$Name.pid\"\nfunction Test-Port([int]$p) { try { [Net.Sockets.TcpClient]::new('localhost', $p).Dispose(); $true } catch { $false } }\nfunction Stop-Svc { if (Test-Path $pf) { taskkill /PID (Get-Content $pf) /T /F 2>&1 | Out-Null; Remove-Item $pf -ErrorAction SilentlyContinue } }\nif ($Action -eq 'stop') { Stop-Svc; return }\nif ($Action -eq 'ensure' -and $Port -and (Test-Port $Port)) { return }\nStop-Svc\nforeach ($f in $DeleteFiles) { Remove-Item (Join-Path $Project $f) -Force -ErrorAction SilentlyContinue }\n$env:ASPNETCORE_ENVIRONMENT = 'Development'\n$a = @('run', '--no-build', '--no-launch-profile')\nif ($Urls) { $a += '--urls', $Urls }\nif ($AppArgs) { $a += '--'; $a += $AppArgs }\n$p = Start-Process dotnet -ArgumentList $a -WorkingDirectory $Project -WindowStyle Hidden -RedirectStandardOutput (Join-Path $d \"$Name.log\") -RedirectStandardError (Join-Path $d \"$Name.err\") -PassThru\n$p.Id | Set-Content $pf\nif ($Port) { for ($i = 0; $i -lt 120; $i++) { if (Test-Port $Port) { break }; Start-Sleep -Milliseconds 500 } }\n'@",
+        "& $env:MG_SVC ensure -Name ep07-api -Project (Resolve-Path 'src\\ProjectRequests.Api').Path -Urls http://localhost:5207 -Port 5207",
+        "& $env:MG_SVC ensure -Name ep07-web -Project (Resolve-Path 'src\\ProjectRequests.Web').Path -Urls http://localhost:5180 -Port 5180"
+      ],
+      "maxMinutes": 5
+    },
+    {
+      "name": "reconnect",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\net\\episodes\\07-signalr-real-time-communication\\src\\ProjectRequests.Watcher",
+      "prompt": "PS> ",
+      "commands": [
+        "$w = Start-Process dotnet -ArgumentList '.\\bin\\Debug\\net10.0\\ProjectRequests.Watcher.dll', '--department', 'FIN' -NoNewWindow -PassThru",
+        "#pause 3",
+        "& $env:MG_SVC stop -Name ep07-api",
+        "#pause 6",
+        "& $env:MG_SVC start -Name ep07-api -Project (Resolve-Path '..\\ProjectRequests.Api').Path -Urls http://localhost:5207 -Port 5207",
+        "#pause 15",
+        "Invoke-RestMethod -Method Post http://localhost:5207/api/requests -ContentType application/json -Body '{\"title\":\"Badge readers\",\"budget\":30000,\"requestedBy\":\"alex.demo@contoso.com\",\"departmentCode\":\"FIN\"}' | Out-Null",
+        "#pause 4",
+        "$w | Stop-Process"
+      ],
+      "prepare": [
+        "New-Item -ItemType Directory -Force (Join-Path $env:TEMP 'mgnet') | Out-Null; $env:MG_LOGS = Join-Path $env:TEMP 'mgnet'; $env:MG_SVC = Join-Path $env:MG_LOGS 'svc.ps1'; Set-Content -LiteralPath $env:MG_SVC -Value @'\nparam([Parameter(Mandatory)][ValidateSet('start','ensure','stop')][string]$Action, [Parameter(Mandatory)][string]$Name, [string]$Project, [string]$Urls, [int]$Port, [string[]]$AppArgs = @(), [string[]]$DeleteFiles = @())\n$d = Join-Path $env:TEMP 'mgnet'; New-Item -ItemType Directory -Force $d | Out-Null\n$pf = Join-Path $d \"$Name.pid\"\nfunction Test-Port([int]$p) { try { [Net.Sockets.TcpClient]::new('localhost', $p).Dispose(); $true } catch { $false } }\nfunction Stop-Svc { if (Test-Path $pf) { taskkill /PID (Get-Content $pf) /T /F 2>&1 | Out-Null; Remove-Item $pf -ErrorAction SilentlyContinue } }\nif ($Action -eq 'stop') { Stop-Svc; return }\nif ($Action -eq 'ensure' -and $Port -and (Test-Port $Port)) { return }\nStop-Svc\nforeach ($f in $DeleteFiles) { Remove-Item (Join-Path $Project $f) -Force -ErrorAction SilentlyContinue }\n$env:ASPNETCORE_ENVIRONMENT = 'Development'\n$a = @('run', '--no-build', '--no-launch-profile')\nif ($Urls) { $a += '--urls', $Urls }\nif ($AppArgs) { $a += '--'; $a += $AppArgs }\n$p = Start-Process dotnet -ArgumentList $a -WorkingDirectory $Project -WindowStyle Hidden -RedirectStandardOutput (Join-Path $d \"$Name.log\") -RedirectStandardError (Join-Path $d \"$Name.err\") -PassThru\n$p.Id | Set-Content $pf\nif ($Port) { for ($i = 0; $i -lt 120; $i++) { if (Test-Port $Port) { break }; Start-Sleep -Milliseconds 500 } }\n'@",
+        "& $env:MG_SVC ensure -Name ep07-api -Project (Resolve-Path 'src\\ProjectRequests.Api').Path -Urls http://localhost:5207 -Port 5207",
+        "& $env:MG_SVC ensure -Name ep07-web -Project (Resolve-Path 'src\\ProjectRequests.Web').Path -Urls http://localhost:5180 -Port 5180"
+      ],
+      "maxMinutes": 5
+    },
+    {
+      "name": "scale-out",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\net\\episodes\\07-signalr-real-time-communication\\src\\ProjectRequests.Watcher",
+      "prompt": "PS> ",
+      "commands": [
+        "$w = Start-Process dotnet -ArgumentList '.\\bin\\Debug\\net10.0\\ProjectRequests.Watcher.dll' -NoNewWindow -PassThru",
+        "#pause 3",
+        "& $env:MG_SVC start -Name ep07-api-b -Project (Resolve-Path '..\\ProjectRequests.Api').Path -Urls http://localhost:5217 -Port 5217",
+        "Invoke-RestMethod -Method Post http://localhost:5217/api/requests -ContentType application/json -Body '{\"title\":\"Written on B\",\"budget\":5000,\"requestedBy\":\"alex.demo@contoso.com\",\"departmentCode\":\"FIN\"}'",
+        "#pause 5",
+        "Invoke-RestMethod http://localhost:5207/api/requests | Format-Table id, title, department, status",
+        "#pause 4",
+        "$w | Stop-Process",
+        "& $env:MG_SVC stop -Name ep07-api-b"
+      ],
+      "prepare": [
+        "New-Item -ItemType Directory -Force (Join-Path $env:TEMP 'mgnet') | Out-Null; $env:MG_LOGS = Join-Path $env:TEMP 'mgnet'; $env:MG_SVC = Join-Path $env:MG_LOGS 'svc.ps1'; Set-Content -LiteralPath $env:MG_SVC -Value @'\nparam([Parameter(Mandatory)][ValidateSet('start','ensure','stop')][string]$Action, [Parameter(Mandatory)][string]$Name, [string]$Project, [string]$Urls, [int]$Port, [string[]]$AppArgs = @(), [string[]]$DeleteFiles = @())\n$d = Join-Path $env:TEMP 'mgnet'; New-Item -ItemType Directory -Force $d | Out-Null\n$pf = Join-Path $d \"$Name.pid\"\nfunction Test-Port([int]$p) { try { [Net.Sockets.TcpClient]::new('localhost', $p).Dispose(); $true } catch { $false } }\nfunction Stop-Svc { if (Test-Path $pf) { taskkill /PID (Get-Content $pf) /T /F 2>&1 | Out-Null; Remove-Item $pf -ErrorAction SilentlyContinue } }\nif ($Action -eq 'stop') { Stop-Svc; return }\nif ($Action -eq 'ensure' -and $Port -and (Test-Port $Port)) { return }\nStop-Svc\nforeach ($f in $DeleteFiles) { Remove-Item (Join-Path $Project $f) -Force -ErrorAction SilentlyContinue }\n$env:ASPNETCORE_ENVIRONMENT = 'Development'\n$a = @('run', '--no-build', '--no-launch-profile')\nif ($Urls) { $a += '--urls', $Urls }\nif ($AppArgs) { $a += '--'; $a += $AppArgs }\n$p = Start-Process dotnet -ArgumentList $a -WorkingDirectory $Project -WindowStyle Hidden -RedirectStandardOutput (Join-Path $d \"$Name.log\") -RedirectStandardError (Join-Path $d \"$Name.err\") -PassThru\n$p.Id | Set-Content $pf\nif ($Port) { for ($i = 0; $i -lt 120; $i++) { if (Test-Port $Port) { break }; Start-Sleep -Milliseconds 500 } }\n'@",
+        "& $env:MG_SVC ensure -Name ep07-api -Project (Resolve-Path 'src\\ProjectRequests.Api').Path -Urls http://localhost:5207 -Port 5207",
+        "& $env:MG_SVC ensure -Name ep07-web -Project (Resolve-Path 'src\\ProjectRequests.Web').Path -Urls http://localhost:5180 -Port 5180"
+      ],
+      "maxMinutes": 5
+    },
+    {
+      "name": "tests",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\net\\episodes\\07-signalr-real-time-communication",
+      "prompt": "PS> ",
+      "commands": [
+        "dotnet test",
+        "#pause 5"
+      ],
+      "prepare": [
+        "New-Item -ItemType Directory -Force (Join-Path $env:TEMP 'mgnet') | Out-Null; $env:MG_LOGS = Join-Path $env:TEMP 'mgnet'; $env:MG_SVC = Join-Path $env:MG_LOGS 'svc.ps1'; Set-Content -LiteralPath $env:MG_SVC -Value @'\nparam([Parameter(Mandatory)][ValidateSet('start','ensure','stop')][string]$Action, [Parameter(Mandatory)][string]$Name, [string]$Project, [string]$Urls, [int]$Port, [string[]]$AppArgs = @(), [string[]]$DeleteFiles = @())\n$d = Join-Path $env:TEMP 'mgnet'; New-Item -ItemType Directory -Force $d | Out-Null\n$pf = Join-Path $d \"$Name.pid\"\nfunction Test-Port([int]$p) { try { [Net.Sockets.TcpClient]::new('localhost', $p).Dispose(); $true } catch { $false } }\nfunction Stop-Svc { if (Test-Path $pf) { taskkill /PID (Get-Content $pf) /T /F 2>&1 | Out-Null; Remove-Item $pf -ErrorAction SilentlyContinue } }\nif ($Action -eq 'stop') { Stop-Svc; return }\nif ($Action -eq 'ensure' -and $Port -and (Test-Port $Port)) { return }\nStop-Svc\nforeach ($f in $DeleteFiles) { Remove-Item (Join-Path $Project $f) -Force -ErrorAction SilentlyContinue }\n$env:ASPNETCORE_ENVIRONMENT = 'Development'\n$a = @('run', '--no-build', '--no-launch-profile')\nif ($Urls) { $a += '--urls', $Urls }\nif ($AppArgs) { $a += '--'; $a += $AppArgs }\n$p = Start-Process dotnet -ArgumentList $a -WorkingDirectory $Project -WindowStyle Hidden -RedirectStandardOutput (Join-Path $d \"$Name.log\") -RedirectStandardError (Join-Path $d \"$Name.err\") -PassThru\n$p.Id | Set-Content $pf\nif ($Port) { for ($i = 0; $i -lt 120; $i++) { if (Test-Port $Port) { break }; Start-Sleep -Milliseconds 500 } }\n'@",
+        "& $env:MG_SVC stop -Name ep07-api",
+        "& $env:MG_SVC stop -Name ep07-web",
+        "& $env:MG_SVC stop -Name ep07-api-b"
+      ],
+      "maxMinutes": 10
+    }
+  ],
+  "teardown": [
+    "& $env:MG_SVC stop -Name ep07-api",
+    "& $env:MG_SVC stop -Name ep07-web",
+    "& $env:MG_SVC stop -Name ep07-api-b",
+    "Get-CimInstance Win32_Process -Filter \"Name = 'dotnet.exe'\" | Where-Object CommandLine -like '*ProjectRequests.Watcher*' | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }",
+    "Remove-Item src\\ProjectRequests.Api\\requests.db* -Force -ErrorAction SilentlyContinue",
+    "Remove-Item (Join-Path $env:TEMP 'mgnet\\ep07-*') -Force -ErrorAction SilentlyContinue"
+  ],
+  "needs": [
+    "browser:edge-or-chrome with DevTools",
+    "ports 5207, 5217 and 5180 free"
+  ]
+}
