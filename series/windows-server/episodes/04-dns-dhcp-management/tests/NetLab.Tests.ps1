@@ -41,20 +41,20 @@ BeforeAll {
 
 Describe 'IPv4 and reverse zone helpers' {
     It '<Net> -> <Zone>' -ForEach @(
-        @{ Net = '10.20.0.0/24'; Zone = '0.20.10.in-addr.arpa' }
+        @{ Net = '10.50.0.0/24'; Zone = '0.20.10.in-addr.arpa' }
         @{ Net = '172.16.0.0/16'; Zone = '16.172.in-addr.arpa' }
         @{ Net = '10.0.0.0/8'; Zone = '10.in-addr.arpa' }
     ) { ConvertTo-NetLabReverseZoneName $Net | Should -Be $Zone }
-    It 'refuses prefixes that are not on an octet boundary' { { ConvertTo-NetLabReverseZoneName '10.20.0.0/20' } | Should -Throw '*octet boundary*' }
+    It 'refuses prefixes that are not on an octet boundary' { { ConvertTo-NetLabReverseZoneName '10.50.0.0/20' } | Should -Throw '*octet boundary*' }
     It 'finds the PTR owner name inside a zone, and nothing outside it' {
-        Get-NetLabPtrName -IPAddress '10.20.0.60' -ReverseZone '0.20.10.in-addr.arpa' | Should -Be '60'
+        Get-NetLabPtrName -IPAddress '10.50.0.60' -ReverseZone '0.20.10.in-addr.arpa' | Should -Be '60'
         Get-NetLabPtrName -IPAddress '172.16.50.41' -ReverseZone '16.172.in-addr.arpa' | Should -Be '41.50'
         Get-NetLabPtrName -IPAddress '10.30.0.5' -ReverseZone '0.20.10.in-addr.arpa' | Should -BeNullOrEmpty
     }
     It 'compares addresses numerically, not as text' {
         Test-NetLabIpInRange '172.16.50.100' '172.16.50.21' '172.16.50.254' | Should -BeTrue
         Test-NetLabIpInRange '172.16.50.3' '172.16.50.21' '172.16.50.254' | Should -BeFalse
-        { ConvertTo-NetLabUInt32 '10.20.0.256' } | Should -Throw '*not an IPv4 address*'
+        { ConvertTo-NetLabUInt32 '10.50.0.256' } | Should -Throw '*not an IPv4 address*'
     }
 }
 
@@ -66,7 +66,7 @@ Describe 'Read-NetLabDefinition' {
         Remove-Item $p
     }
     It 'refuses a failover partner that is not a DHCP server here, and non-octet reverse zones' {
-        $p = New-TempDefinition { param($d) $d.Dhcp.Failover.Partner = 'CON-SRV09'; $d.Dns.ReverseZones[0].NetworkId = '10.20.0.0/23' }
+        $p = New-TempDefinition { param($d) $d.Dhcp.Failover.Partner = 'CON-SRV09'; $d.Dns.ReverseZones[0].NetworkId = '10.50.0.0/23' }
         { Read-NetLabDefinition -Path $p } | Should -Throw '*CON-SRV09*'
         { Read-NetLabDefinition -Path $p } | Should -Throw '*octet boundary*'
         Remove-Item $p
@@ -102,7 +102,7 @@ Describe 'Health checks (fictional snapshot)' {
     It 'finds missing and mismatched PTRs, a reverse zone gap and a dangling CNAME' {
         $s = Get-Snapshot
         (Get-Check $s 'MissingPtr').Target | Should -Be 'nas01.lab.contoso.com'
-        (Get-Check $s 'PtrMismatch').Target | Should -Be '10.20.0.99'
+        (Get-Check $s 'PtrMismatch').Target | Should -Be '10.50.0.99'
         (Get-Check $s 'NoReverseZone').Target | Should -Be '172.16.50.0/24'
         (Get-Check $s 'CnameTargetMissing').Target | Should -Be 'wiki.lab.contoso.com'
     }
@@ -146,7 +146,7 @@ Describe 'Invoke-NetLabDnsDeployment (DnsServer cmdlets mocked)' {
     It 'creates the reverse zone, turns on aging and scavenging, adds A, PTR and CNAME records' {
         Invoke-NetLabDnsDeployment -DefinitionPath $script:Definition | Out-Null
         Should -Invoke Add-DnsServerPrimaryZone -ModuleName NetLab -Times 1 -Exactly -ParameterFilter {
-            $ComputerName -eq 'CON-DC01' -and $NetworkId -eq '10.20.0.0/24' -and $ReplicationScope -eq 'Domain' -and $DynamicUpdate -eq 'Secure'
+            $ComputerName -eq 'CON-DC01' -and $NetworkId -eq '10.50.0.0/24' -and $ReplicationScope -eq 'Domain' -and $DynamicUpdate -eq 'Secure'
         }
         Should -Invoke Set-DnsServerZoneAging -ModuleName NetLab -Times 2 -Exactly -ParameterFilter { $Aging -and $NoRefreshInterval -eq $script:Week -and $RefreshInterval -eq $script:Week }
         Should -Invoke Set-DnsServerScavenging -ModuleName NetLab -Times 1 -Exactly -ParameterFilter { $ScavengingState -eq $true }
@@ -168,7 +168,7 @@ Describe 'Invoke-NetLabDnsDeployment (DnsServer cmdlets mocked)' {
         Mock Get-DnsServerZoneAging -ModuleName NetLab { [pscustomobject]@{ AgingEnabled = $true; NoRefreshInterval = $script:Week; RefreshInterval = $script:Week } }
         Mock Get-DnsServerScavenging -ModuleName NetLab { [pscustomobject]@{ ScavengingState = $true; ScavengingInterval = $script:Week } }
         Mock Get-DnsServerResourceRecord -ModuleName NetLab {
-            $map = @{ printer01 = '10.20.0.60'; nas01 = '10.20.0.61'; '60' = 'printer01.lab.contoso.com.'; '61' = 'nas01.lab.contoso.com.'
+            $map = @{ printer01 = '10.50.0.60'; nas01 = '10.50.0.61'; '60' = 'printer01.lab.contoso.com.'; '61' = 'nas01.lab.contoso.com.'
                 intranet = 'con-srv02.lab.contoso.com.'; sql = 'con-sql01.lab.contoso.com.' }
             [pscustomobject]@{ RecordData = [pscustomobject]@{ IPv4Address = $map[$Name]; PtrDomainName = $map[$Name]; HostNameAlias = $map[$Name] } }
         }
@@ -177,12 +177,12 @@ Describe 'Invoke-NetLabDnsDeployment (DnsServer cmdlets mocked)' {
         @($log | Where-Object Result -ne 'NoChange').Count | Should -Be 0
     }
     It 'repairs an A record that points elsewhere, and its PTR' {
-        Mock Get-DnsServerResourceRecord -ModuleName NetLab -ParameterFilter { $Name -eq 'printer01' } { [pscustomobject]@{ RecordData = [pscustomobject]@{ IPv4Address = '10.20.0.99' } } }
+        Mock Get-DnsServerResourceRecord -ModuleName NetLab -ParameterFilter { $Name -eq 'printer01' } { [pscustomobject]@{ RecordData = [pscustomobject]@{ IPv4Address = '10.50.0.99' } } }
         Mock Get-DnsServerResourceRecord -ModuleName NetLab -ParameterFilter { $Name -eq '60' } { [pscustomobject]@{ RecordData = [pscustomobject]@{ PtrDomainName = 'oldprinter.lab.contoso.com.' } } }
         Invoke-NetLabDnsDeployment -DefinitionPath $script:Definition | Out-Null
-        Should -Invoke Remove-DnsServerResourceRecord -ModuleName NetLab -Times 1 -Exactly -ParameterFilter { $RRType -eq 'A' -and $RecordData -eq '10.20.0.99' }
+        Should -Invoke Remove-DnsServerResourceRecord -ModuleName NetLab -Times 1 -Exactly -ParameterFilter { $RRType -eq 'A' -and $RecordData -eq '10.50.0.99' }
         Should -Invoke Remove-DnsServerResourceRecord -ModuleName NetLab -Times 1 -Exactly -ParameterFilter { $RRType -eq 'Ptr' -and $Name -eq '60' }
-        Should -Invoke Add-DnsServerResourceRecordA -ModuleName NetLab -Times 1 -Exactly -ParameterFilter { $Name -eq 'printer01' -and $IPv4Address -eq '10.20.0.60' }
+        Should -Invoke Add-DnsServerResourceRecordA -ModuleName NetLab -Times 1 -Exactly -ParameterFilter { $Name -eq 'printer01' -and $IPv4Address -eq '10.50.0.60' }
     }
     It 'stops if the forward zone does not exist' {
         Mock Get-DnsServerZone -ModuleName NetLab { $null }
@@ -216,7 +216,7 @@ Describe 'Invoke-NetLabDhcpDeployment (DhcpServer cmdlets mocked)' {
             $ComputerName -eq 'CON-SRV01' -and $StartRange -eq '172.16.50.1' -and $State -eq 'Active' -and $LeaseDuration -eq [timespan]::FromDays(1)
         }
         Should -Invoke Add-DhcpServerv4ExclusionRange -ModuleName NetLab -Times 1 -Exactly -ParameterFilter { $EndRange -eq '172.16.50.20' }
-        Should -Invoke Set-DhcpServerv4OptionValue -ModuleName NetLab -Times 1 -Exactly -ParameterFilter { $DnsServer -contains '10.20.0.10' -and $DnsDomain -eq 'lab.contoso.com' }
+        Should -Invoke Set-DhcpServerv4OptionValue -ModuleName NetLab -Times 1 -Exactly -ParameterFilter { $DnsServer -contains '10.50.0.10' -and $DnsDomain -eq 'lab.contoso.com' }
         Should -Invoke Add-DhcpServerv4Reservation -ModuleName NetLab -Times 1 -Exactly -ParameterFilter { $IPAddress -eq '172.16.50.41' -and $ClientId -eq '00-15-5d-14-00-41' }
         Should -Invoke Add-DhcpServerv4Failover -ModuleName NetLab -Times 1 -Exactly -ParameterFilter {
             $ComputerName -eq 'CON-SRV01' -and $PartnerServer -eq 'CON-SRV02' -and $ScopeId -eq '172.16.50.0' -and $LoadBalancePercent -eq 50 -and -not $SharedSecret
@@ -242,7 +242,7 @@ Describe 'Invoke-NetLabDhcpDeployment (DhcpServer cmdlets mocked)' {
             Mock Get-DhcpServerv4Failover -ModuleName NetLab { [pscustomobject]@{ Name = 'CON-SRV01-CON-SRV02'; ScopeId = @('172.16.50.0') } }
             Mock Get-DhcpServerv4Scope -ModuleName NetLab { [pscustomobject]@{ ScopeId = '172.16.50.0' } }
             Mock Get-DhcpServerv4ExclusionRange -ModuleName NetLab { [pscustomobject]@{ StartRange = '172.16.50.1'; EndRange = '172.16.50.20' } }
-            Mock Get-DhcpServerv4OptionValue -ModuleName NetLab { @([pscustomobject]@{ OptionId = 6; Value = @('10.20.0.10') }, [pscustomobject]@{ OptionId = 15; Value = @('lab.contoso.com') }) }
+            Mock Get-DhcpServerv4OptionValue -ModuleName NetLab { @([pscustomobject]@{ OptionId = 6; Value = @('10.50.0.10') }, [pscustomobject]@{ OptionId = 15; Value = @('lab.contoso.com') }) }
             Mock Get-DhcpServerv4Reservation -ModuleName NetLab { [pscustomobject]@{ IPAddress = '172.16.50.41'; ClientId = '00-15-5D-14-00-41' } }
         }
         It 'reports NoChange and does not replicate when nothing changed' {
@@ -277,15 +277,15 @@ Describe 'Export-NetLabSnapshot (cmdlets mocked)' {
         Mock Get-DnsServerScavenging -ModuleName NetLab { [pscustomobject]@{ ScavengingState = $true; ScavengingInterval = $script:Week } }
         Mock Get-DnsServerResourceRecord -ModuleName NetLab {
             if ($ZoneName -eq 'lab.contoso.com') {
-                @([pscustomobject]@{ HostName = 'con-srv01'; RecordType = 'A'; Timestamp = [datetime]'2026-11-18T08:00:00Z'; RecordData = [pscustomobject]@{ IPv4Address = '10.20.0.21' } },
+                @([pscustomobject]@{ HostName = 'con-srv01'; RecordType = 'A'; Timestamp = [datetime]'2026-11-18T08:00:00Z'; RecordData = [pscustomobject]@{ IPv4Address = '10.50.0.21' } },
                     [pscustomobject]@{ HostName = '@'; RecordType = 'NS'; Timestamp = $null; RecordData = [pscustomobject]@{ NameServer = 'con-dc01.lab.contoso.com.' } })
             }
             else { @([pscustomobject]@{ HostName = '21'; RecordType = 'PTR'; Timestamp = $null; RecordData = [pscustomobject]@{ PtrDomainName = 'con-srv01.lab.contoso.com.' } }) }
         }
         Mock Get-DhcpServerv4Scope -ModuleName NetLab { @() }
-        Mock Get-DhcpServerv4OptionValue -ModuleName NetLab { @([pscustomobject]@{ OptionId = 6; Value = @('10.20.0.10') }, [pscustomobject]@{ OptionId = 15; Value = @('lab.contoso.com') }) }
+        Mock Get-DhcpServerv4OptionValue -ModuleName NetLab { @([pscustomobject]@{ OptionId = 6; Value = @('10.50.0.10') }, [pscustomobject]@{ OptionId = 15; Value = @('lab.contoso.com') }) }
         Mock Get-DhcpServerv4Failover -ModuleName NetLab { @() }
-        Mock Get-DhcpServerInDC -ModuleName NetLab { @([pscustomobject]@{ DnsName = 'con-srv01.lab.contoso.com'; IPAddress = '10.20.0.21' }, [pscustomobject]@{ DnsName = 'con-srv02.lab.contoso.com'; IPAddress = '10.20.0.22' }) }
+        Mock Get-DhcpServerInDC -ModuleName NetLab { @([pscustomobject]@{ DnsName = 'con-srv01.lab.contoso.com'; IPAddress = '10.50.0.21' }, [pscustomobject]@{ DnsName = 'con-srv02.lab.contoso.com'; IPAddress = '10.50.0.22' }) }
 
         $path = Join-Path ([IO.Path]::GetTempPath()) "net-snap-$([guid]::NewGuid()).json"
         $s = Export-NetLabSnapshot -DefinitionPath $script:Definition -Path $path

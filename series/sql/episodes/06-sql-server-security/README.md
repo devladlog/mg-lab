@@ -61,7 +61,7 @@ What runs where (Docker isn't available in the build container, so there is no S
 
 ```powershell
 # episode 5's setup first (database ContosoBikesApp, lab_demo as db_owner); then from this folder:
-$env:SQL_CONNECTION_STRING = "Server=10.20.0.30,1433;Database=ContosoBikesApp;UID=lab_demo;PWD=<password>;Encrypt=yes;TrustServerCertificate=yes"
+$env:SQL_CONNECTION_STRING = "Server=10.50.0.30,1433;Database=ContosoBikesApp;UID=lab_demo;PWD=<password>;Encrypt=yes;TrustServerCertificate=yes"
 py src/security_lab.py --engine sqlserver --setup
 # expect: every step "=> OK" and "8/8 steps behaved as expected on sqlserver"
 py src/security_lab.py --engine sqlserver --reset-only     # tear-down: removes this episode's objects

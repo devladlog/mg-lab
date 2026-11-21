@@ -10,18 +10,18 @@ recorded on the shared DC (it is already the DC of `lab.contoso.com`, and the sc
 
 | VM | OS / edition | vCPU / RAM / disk | Network | Role / software |
 |---|---|---|---|---|
-| **CON-FOREST01** (throwaway, listed in `series/LAB-REQUESTS.md`) | Windows Server 2025 Datacenter Eval, Server Core | 2 / 2–3 GB dynamic / 60 GB (differencing disk on the lab base image is fine) | **Private** Hyper-V switch `MGLab-Isolated` only (no NAT, no host access), static IP **10.20.0.90/24**, no gateway, DNS 127.0.0.1 after promotion | Not domain-joined. Gets AD DS + DNS from `New-LabForest.ps1`. Deleted after the shot |
+| **CON-FOREST01** (throwaway, listed in `series/LAB-REQUESTS.md`) | Windows Server 2025 Datacenter Eval, Server Core | 2 / 2–3 GB dynamic / 60 GB (differencing disk on the lab base image is fine) | **Private** Hyper-V switch `MGLab-Isolated` only (no NAT, no host access), static IP **10.50.0.90/24**, no gateway, DNS 127.0.0.1 after promotion | Not domain-joined. Gets AD DS + DNS from `New-LabForest.ps1`. Deleted after the shot |
 
 It promotes a forest with the same names as the shared lab (`lab.contoso.com` / NetBIOS `CONTOSO`) so the shot shows
 how the shared domain was built. **Never connect CON-FOREST01 to `MGLab-NAT`**: two forests with the same name on one
 network break name resolution for the shared VMs.
 
-**2. Every other screen → the shared lab domain** `lab.contoso.com` (NetBIOS `CONTOSO`) on `10.20.0.0/24`:
+**2. Every other screen → the shared lab domain** `lab.contoso.com` (NetBIOS `CONTOSO`) on `10.50.0.0/24`:
 
 | VM | Used for | Changes made for the recording |
 |---|---|---|
-| **CON-DC01** (10.20.0.10, Server Core) | provisioning, snapshot, hygiene report, lastLogon query | PowerShell 7 (MSI) installed; episode folder in `C:\lab\ep02`; OU tree `OU=Contoso`, 5 groups, 8 users from `src/users.csv`; `adm-alex` in Domain Admins (removed right after the report shot) |
-| **CON-SRV02** (10.20.0.22, Desktop Experience) | the sign-in for the lastLogon gotcha | none (interactive sign-in as `CONTOSO\jgoncalves`) |
+| **CON-DC01** (10.50.0.10, Server Core) | provisioning, snapshot, hygiene report, lastLogon query | PowerShell 7 (MSI) installed; episode folder in `C:\lab\ep02`; OU tree `OU=Contoso`, 5 groups, 8 users from `src/users.csv`; `adm-alex` in Domain Admins (removed right after the report shot) |
+| **CON-SRV02** (10.50.0.22, Desktop Experience) | the sign-in for the lastLogon gotcha | none (interactive sign-in as `CONTOSO\jgoncalves`) |
 
 - Sign-in: the **lab Administrator** (`CONTOSO\Administrator` on the shared VMs, local Administrator on
   CON-FOREST01). The recorder types passwords; they are never written in a file or shown.

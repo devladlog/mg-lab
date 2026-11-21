@@ -3,7 +3,7 @@
 ## Lab environment
 
 All screens are recorded on the **shared local Hyper-V lab** (`series/LAB.md`): domain `lab.contoso.com`, NetBIOS
-`CONTOSO`, network `10.20.0.0/24`. No extra VM, no tenant, no Azure. Windows Admin Center has no additional cost beyond
+`CONTOSO`, network `10.50.0.0/24`. No extra VM, no tenant, no Azure. Windows Admin Center has no additional cost beyond
 Windows (Learn FAQ); the VMs are evaluation editions. Cost 0.
 
 ### Where Windows Admin Center goes: CON-SRV02, as a gateway
@@ -19,11 +19,11 @@ Windows (Learn FAQ); the VMs are evaluation editions. Cost 0.
 
 | Role in the episode | Shared VM | OS / edition | IP | vCPU / RAM | Changes for the recording (undone in tear-down) |
 |---|---|---|---|---|---|
-| **Gateway** | **CON-SRV02** | WS 2025 Datacenter Eval, Desktop Experience | 10.20.0.22 | 2 / **raise max to 4 GB** (from 3) | Windows Admin Center (Administration Mode, port 443, self-signed certificate), `RSAT-AD-PowerShell`, episode folder in `C:\lab\ep06` |
-| Node, RBAC target | CON-SRV01 | WS 2025 Datacenter Eval, Server Core | 10.20.0.21 | 2 / 1–2 GB | RBAC applied from the UI (JEA endpoint `Microsoft.Sme.PowerShell`, `Microsoft.Sme*` modules, 3 local groups), `alex.demo` in *Windows Admin Center Readers*, RBCD from the gateway |
-| Node | CON-DC01 | WS 2025 Datacenter Eval, Server Core | 10.20.0.10 | 2 / 2–3 GB | user `alex.demo` (enabled; password typed by the recorder); no delegation on the DC |
-| Node | CON-CLI01 | WS 2025 Datacenter Eval, Server Core | 10.20.0.41 | 1 / 1–1.5 GB | RBCD from the gateway |
-| Node (optional) | CON-SQL01 | WS 2025 Datacenter Eval, Server Core | 10.20.0.30 | 2 / 2–6 GB | none; may stay off (the preflight reports it as Info, `Optional: true`) |
+| **Gateway** | **CON-SRV02** | WS 2025 Datacenter Eval, Desktop Experience | 10.50.0.22 | 2 / **raise max to 4 GB** (from 3) | Windows Admin Center (Administration Mode, port 443, self-signed certificate), `RSAT-AD-PowerShell`, episode folder in `C:\lab\ep06` |
+| Node, RBAC target | CON-SRV01 | WS 2025 Datacenter Eval, Server Core | 10.50.0.21 | 2 / 1–2 GB | RBAC applied from the UI (JEA endpoint `Microsoft.Sme.PowerShell`, `Microsoft.Sme*` modules, 3 local groups), `alex.demo` in *Windows Admin Center Readers*, RBCD from the gateway |
+| Node | CON-DC01 | WS 2025 Datacenter Eval, Server Core | 10.50.0.10 | 2 / 2–3 GB | user `alex.demo` (enabled; password typed by the recorder); no delegation on the DC |
+| Node | CON-CLI01 | WS 2025 Datacenter Eval, Server Core | 10.50.0.41 | 1 / 1–1.5 GB | RBCD from the gateway |
+| Node (optional) | CON-SQL01 | WS 2025 Datacenter Eval, Server Core | 10.50.0.30 | 2 / 2–6 GB | none; may stay off (the preflight reports it as Info, `Optional: true`) |
 
 - Memory while recording: CON-DC01 + CON-SRV01 + CON-SRV02 (4 GB) + CON-CLI01 ≈ 10.5 GB; leave CON-SQL01 off.
 - Software: the Windows Admin Center installer (`WindowsAdminCenter.exe`) from the

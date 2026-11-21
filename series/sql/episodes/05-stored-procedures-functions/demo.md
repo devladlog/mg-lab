@@ -8,8 +8,8 @@ record both episodes in one session if possible.
 
 | Machine | What | Notes |
 |---|---|---|
-| **CON-SQL01** (existing, `series/LAB.md`) | Windows Server 2025 Datacenter Eval, Server Core, SQL Server 2022 Developer, default instance, TCP 1433, mixed auth, 10.20.0.30, 2 vCPU / 2–6 GB | Database `ContosoBikesApp`, compatibility level 160 (`00-create-database.sql`). 2 GB RAM is enough for this episode |
-| **Recording laptop** (host, 10.20.0.1) | SSMS (any current version), Python 3.10+, Windows Terminal (dark theme) | `py -m pip install -r requirements.txt` in this folder. The .NET SDK is only needed for the tests, not for the demo |
+| **CON-SQL01** (existing, `series/LAB.md`) | Windows Server 2025 Datacenter Eval, Server Core, SQL Server 2022 Developer, default instance, TCP 1433, mixed auth, 10.50.0.30, 2 vCPU / 2–6 GB | Database `ContosoBikesApp`, compatibility level 160 (`00-create-database.sql`). 2 GB RAM is enough for this episode |
+| **Recording laptop** (host, 10.50.0.1) | SSMS (any current version), Python 3.10+, Windows Terminal (dark theme) | `py -m pip install -r requirements.txt` in this folder. The .NET SDK is only needed for the tests, not for the demo |
 
 Login: `lab_demo` (SQL login created in episode 3's demo.md; create it as described there if it doesn't exist).
 In this database it needs `db_owner`: the runner creates tables, a type, functions and procedures, and asks for
@@ -32,7 +32,7 @@ actual plan), write it in README "gotchas", and adjust the narration in `script.
 
 ## Setup (once, before recording)
 
-1. Start the lab (`lab/hyperv/Start-MGLab.ps1`); check CON-SQL01 answers on 10.20.0.30:1433.
+1. Start the lab (`lab/hyperv/Start-MGLab.ps1`); check CON-SQL01 answers on 10.50.0.30:1433.
 2. SSMS as the lab Administrator, against `master`: run `src/sql/00-create-database.sql`. Then:
    ```sql
    USE ContosoBikesApp;
@@ -42,7 +42,7 @@ actual plan), write it in README "gotchas", and adjust the narration in `script.
 3. Terminal on the laptop, in this folder (password typed off-screen):
    ```powershell
    py -m pip install -r requirements.txt
-   $env:SQL_CONNECTION_STRING = "Server=10.20.0.30,1433;Database=ContosoBikesApp;UID=lab_demo;PWD=<password>;Encrypt=yes;TrustServerCertificate=yes"
+   $env:SQL_CONNECTION_STRING = "Server=10.50.0.30,1433;Database=ContosoBikesApp;UID=lab_demo;PWD=<password>;Encrypt=yes;TrustServerCertificate=yes"
    py src/proc_lab.py --engine sqlserver --setup
    ```
    Expected: `setup: tables, data, functions and procedures (re)created`, eight steps each ending `=> OK`,
@@ -69,7 +69,7 @@ plan > Show Execution Plan XML, Ctrl+F `UserDefinedFunction`; then the same for 
 ## Masking
 
 - Never show the password or `$env:SQL_CONNECTION_STRING`.
-- Blur `10.20.0.30` and the login name in SSMS (title bar, status bar, Object Explorer), or connect through a
+- Blur `10.50.0.30` and the login name in SSMS (title bar, status bar, Object Explorer), or connect through a
   hosts-file alias so it reads `CON-SQL01`.
 - All customers, emails (`@contoso.com`) and orders are fictional; nothing else to mask.
 

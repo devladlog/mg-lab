@@ -7,8 +7,8 @@ from episode 3. No tenant, no Azure, no licence, cost 0. Best recorded right aft
 
 | Machine | What | Notes |
 |---|---|---|
-| **CON-SQL01** (existing, `series/LAB.md`) | Windows Server 2025 Datacenter Eval, Server Core, SQL Server 2022 Developer, default instance, TCP 1433, mixed auth, 10.20.0.30, 2 vCPU / 2–6 GB | Database `ContosoBikesPerf` (compatibility level 160, Query Store on, capture mode ALL) from episode 3's `00-create-database.sql`. At least 4 GB for the VM while recording |
-| **Recording laptop** (host, 10.20.0.1) | SSMS (any current version, Query Store reports), Python 3.10+, Windows Terminal (dark theme) | `py -m pip install -r requirements.txt` in this folder |
+| **CON-SQL01** (existing, `series/LAB.md`) | Windows Server 2025 Datacenter Eval, Server Core, SQL Server 2022 Developer, default instance, TCP 1433, mixed auth, 10.50.0.30, 2 vCPU / 2–6 GB | Database `ContosoBikesPerf` (compatibility level 160, Query Store on, capture mode ALL) from episode 3's `00-create-database.sql`. At least 4 GB for the VM while recording |
+| **Recording laptop** (host, 10.50.0.1) | SSMS (any current version, Query Store reports), Python 3.10+, Windows Terminal (dark theme) | `py -m pip install -r requirements.txt` in this folder |
 
 Login: `lab_demo` from episode 3's demo.md (db_owner on `ContosoBikesPerf`, `VIEW SERVER PERFORMANCE STATE`).
 db_owner covers what this episode needs: `ALTER DATABASE SCOPED CONFIGURATION`, `sp_recompile`,
@@ -35,7 +35,7 @@ optimizer picks a different plan for the Megastore), **don't change the check to
 2. Terminal on the laptop, in this folder (password typed off-screen):
    ```powershell
    py -m pip install -r requirements.txt
-   $env:SQL_CONNECTION_STRING = "Server=10.20.0.30,1433;Database=ContosoBikesPerf;UID=lab_demo;PWD=<password>;Encrypt=yes;TrustServerCertificate=yes"
+   $env:SQL_CONNECTION_STRING = "Server=10.50.0.30,1433;Database=ContosoBikesPerf;UID=lab_demo;PWD=<password>;Encrypt=yes;TrustServerCertificate=yes"
    py src/tune_lab.py --engine sqlserver --setup --save-plans plans
    ```
    `--setup` reloads the data and runs `02-indexes.sql` and `03-procedures.sql`. Expected: four tables, every
@@ -65,7 +65,7 @@ the plan XML shows a `QueryVariantID`. (Don't use the runner for this: its sniff
 ## Masking
 
 - Never show the password or `$env:SQL_CONNECTION_STRING`.
-- Blur `10.20.0.30` and the login name in SSMS (title bar, status bar, Object Explorer), or connect through a
+- Blur `10.50.0.30` and the login name in SSMS (title bar, status bar, Object Explorer), or connect through a
   hosts-file alias so it reads `CON-SQL01`.
 - All data is generated and fictional.
 

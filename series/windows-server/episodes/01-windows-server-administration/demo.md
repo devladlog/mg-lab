@@ -3,14 +3,14 @@
 ## Lab environment
 
 All screens are recorded on the **shared local Hyper-V lab** (`series/LAB.md`): domain `lab.contoso.com`, NetBIOS
-`CONTOSO`, network `10.20.0.0/24`. No extra VM, no tenant, no Azure, no licence (evaluation editions), cost 0.
+`CONTOSO`, network `10.50.0.0/24`. No extra VM, no tenant, no Azure, no licence (evaluation editions), cost 0.
 
 | Role in the episode | Shared VM | OS / edition | IP | Changes made for the recording (all undone in tear-down) |
 |---|---|---|---|---|
-| Domain controller (healthy Core server) | **CON-DC01** | WS 2025 Datacenter Eval, Server Core | 10.20.0.10 | none (read-only target); AD user `alex.demo` created for the local-admin finding |
-| App server (healthy Core server) | **CON-SRV01** | WS 2025 Datacenter Eval, Server Core | 10.20.0.21 | IIS (`Web-Server`) installed |
-| File server, the "problem child" | **CON-SRV02** | WS 2025 Datacenter Eval, **Desktop Experience** | 10.20.0.22 | `FS-FileServer`, then SMB1, Public firewall profile off, RDP on, `CONTOSO\alex.demo` in local Administrators |
-| Admin machine (runs the baseline) | **CON-CLI01** | WS 2025 Datacenter Eval, Server Core | 10.20.0.41 | PowerShell 7 (MSI) and the episode folder in `C:\lab\ep01` |
+| Domain controller (healthy Core server) | **CON-DC01** | WS 2025 Datacenter Eval, Server Core | 10.50.0.10 | none (read-only target); AD user `alex.demo` created for the local-admin finding |
+| App server (healthy Core server) | **CON-SRV01** | WS 2025 Datacenter Eval, Server Core | 10.50.0.21 | IIS (`Web-Server`) installed |
+| File server, the "problem child" | **CON-SRV02** | WS 2025 Datacenter Eval, **Desktop Experience** | 10.50.0.22 | `FS-FileServer`, then SMB1, Public firewall profile off, RDP on, `CONTOSO\alex.demo` in local Administrators |
+| Admin machine (runs the baseline) | **CON-CLI01** | WS 2025 Datacenter Eval, Server Core | 10.50.0.41 | PowerShell 7 (MSI) and the episode folder in `C:\lab\ep01` |
 
 - Earlier drafts named the servers CON-FS01 and CON-APP01; they map to **CON-SRV02** and **CON-SRV01**. The test
   fixtures and `sample/report.md` keep the fictional CON-FS01/CON-APP01 snapshots (tests only).

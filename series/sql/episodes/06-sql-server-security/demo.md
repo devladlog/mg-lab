@@ -7,8 +7,8 @@ Everything runs on the shared lab VM **CON-SQL01** (SQL Server 2022 Developer), 
 
 | Machine | What | Notes |
 |---|---|---|
-| **CON-SQL01** (existing, `series/LAB.md`) | Windows Server 2025 Datacenter Eval, Server Core, SQL Server 2022 Developer, default instance, TCP 1433, mixed auth, 10.20.0.30, 2 vCPU / 2–6 GB | Database `ContosoBikesApp` from episode 5 (`00-create-database.sql`). 2 GB RAM is enough |
-| **Recording laptop** (host, 10.20.0.1) | SSMS (any current version), Python 3.10+, Windows Terminal (dark theme) | `py -m pip install -r requirements.txt` in this folder |
+| **CON-SQL01** (existing, `series/LAB.md`) | Windows Server 2025 Datacenter Eval, Server Core, SQL Server 2022 Developer, default instance, TCP 1433, mixed auth, 10.50.0.30, 2 vCPU / 2–6 GB | Database `ContosoBikesApp` from episode 5 (`00-create-database.sql`). 2 GB RAM is enough |
+| **Recording laptop** (host, 10.50.0.1) | SSMS (any current version), Python 3.10+, Windows Terminal (dark theme) | `py -m pip install -r requirements.txt` in this folder |
 
 Login: `lab_demo` with `db_owner` in `ContosoBikesApp` (episode 5's demo.md, setup step 2). `db_owner` covers
 everything this episode does: create users, roles, certificate, security policy and mask, grant, and impersonate
@@ -34,7 +34,7 @@ in SSMS, read the Messages tab), write it in README "gotchas", and adjust the na
 2. Terminal on the laptop, in this folder (password typed off-screen):
    ```powershell
    py -m pip install -r requirements.txt
-   $env:SQL_CONNECTION_STRING = "Server=10.20.0.30,1433;Database=ContosoBikesApp;UID=lab_demo;PWD=<password>;Encrypt=yes;TrustServerCertificate=yes"
+   $env:SQL_CONNECTION_STRING = "Server=10.50.0.30,1433;Database=ContosoBikesApp;UID=lab_demo;PWD=<password>;Encrypt=yes;TrustServerCertificate=yes"
    py src/security_lab.py --engine sqlserver --setup
    ```
    Expected: the setup line, `ran 14-sign-search-procedure.sql` before s04, `ran 15-row-level-security.sql` before
@@ -65,7 +65,7 @@ parameterized search before signing (then let the runner sign it in step 3).
 
 - Never show the password or `$env:SQL_CONNECTION_STRING`. The certificate password never exists outside the
   server session (generated with `NEWID()` and discarded), so there's nothing else to hide.
-- Blur `10.20.0.30` and the login name in SSMS (title bar, status bar, Object Explorer), or connect through a
+- Blur `10.50.0.30` and the login name in SSMS (title bar, status bar, Object Explorer), or connect through a
   hosts-file alias so it reads `CON-SQL01`.
 - All names and emails (`@contoso.com`) are fictional. The "OwnerSees" column shows them in clear on purpose.
 

@@ -63,7 +63,7 @@ container, so there is no SQL Server here):
 ```powershell
 # 1. as the lab Administrator, against master: src/sql/00-create-database.sql
 # 2. from this folder (password typed off-screen, never stored):
-$env:SQL_CONNECTION_STRING = "Server=10.20.0.30,1433;Database=ContosoBikesApp;UID=lab_demo;PWD=<password>;Encrypt=yes;TrustServerCertificate=yes"
+$env:SQL_CONNECTION_STRING = "Server=10.50.0.30,1433;Database=ContosoBikesApp;UID=lab_demo;PWD=<password>;Encrypt=yes;TrustServerCertificate=yes"
 py src/proc_lab.py --engine sqlserver --setup
 # expect: every check OK and "8/8 steps behaved as expected on sqlserver"
 ```

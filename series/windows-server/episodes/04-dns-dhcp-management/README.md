@@ -9,7 +9,7 @@ checks both against each other:
    continue if a switch with that name exists and isn't Private. `-Remove` undoes it.
    **`setup/Install-DhcpRole.ps1`** installs the DHCP role, creates the DHCP security groups, restarts the service and
    clears the Server Manager post-install alert (the steps from Learn's DHCP PowerShell deployment guide).
-2. **`Invoke-NetLabDnsDeployment`** on CON-DC01: computes the reverse zone name (`10.20.0.0/24` →
+2. **`Invoke-NetLabDnsDeployment`** on CON-DC01: computes the reverse zone name (`10.50.0.0/24` →
    `0.20.10.in-addr.arpa`) and creates it AD-integrated with secure updates, sets aging on the managed zones,
    enables server scavenging, and adds the static A + PTR records and CNAMEs from the file; repairs drift.
 3. **`Invoke-NetLabDhcpDeployment`**: authorizes both servers in AD, binds the DHCP service only to the `DHCPTest`
@@ -61,7 +61,7 @@ Invoke-NetLabDhcpDeployment -DefinitionPath .\network.json
 .\Invoke-NetLabReport.ps1 -SnapshotFile .\net-snapshot.json -OutFile .\net-report.md
 ```
 
-See [demo.md](demo.md) for the lab environment (the extra VM CON-CLI01 at 10.20.0.41 and the Private switch), the six
+See [demo.md](demo.md) for the lab environment (the extra VM CON-CLI01 at 10.50.0.41 and the Private switch), the six
 steps/screens and tear-down.
 
 ## Design choices
@@ -107,7 +107,7 @@ steps/screens and tear-down.
   episode 3); this module uses `ArrayList` from the start.
 
 > **Not run yet (needs the lab, see [demo.md](demo.md)):** both deployments, the export and both setup scripts against
-> real servers; only unit-tested with mocks and parsed. To confirm in the lab: the zone name `-NetworkId 10.20.0.0/24`
+> real servers; only unit-tested with mocks and parsed. To confirm in the lab: the zone name `-NetworkId 10.50.0.0/24`
 > creates; property names on `Get-DnsServerResourceRecord`, `Get-DhcpServerv4Failover` (`State`, `ScopeId`,
 > `PartnerServer`) and `Get-DhcpServerv4ScopeStatistics` (`PercentageInUse`); the healthy failover `State` string
 > (`Normal`); hot-adding the NICs to running VMs; whether the partner really lacks a hand-added reservation until

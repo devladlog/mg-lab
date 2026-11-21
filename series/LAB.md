@@ -33,21 +33,21 @@ All demos are recorded for real. Use these shared resources before asking for ne
   deleted inside the episode.
 
 ## Local Hyper-V lab (on the recording laptop, built by `lab/hyperv/Start-MGLab.ps1`)
-Internal NAT network `10.20.0.0/24`, host = `10.20.0.1`, domain `lab.contoso.com` (NetBIOS `CONTOSO`).
+Internal NAT network `10.50.0.0/24`, host = `10.50.0.1`, domain `lab.contoso.com` (NetBIOS `CONTOSO`).
 
 | VM | OS | Role | IP | vCPU / RAM |
 |----|----|------|----|-----------|
-| CON-DC01 | Windows Server 2025 Datacenter Eval, Server Core | AD DS + DNS | 10.20.0.10 | 2 / 2–3 GB |
-| CON-SRV01 | Windows Server 2025 Datacenter Eval, Server Core | member server | 10.20.0.21 | 2 / 1–2 GB |
-| CON-SRV02 | Windows Server 2025 Datacenter Eval, Desktop Experience | member server (GUI tools) | 10.20.0.22 | 2 / 2–3 GB |
-| CON-SQL01 | Windows Server 2025 Datacenter Eval, Server Core | SQL Server 2022 Developer, default instance, TCP 1433, mixed auth | 10.20.0.30 | 2 / 2–6 GB |
-| CON-CLI01 | Windows Server 2025 Datacenter Eval, Server Core | test client (DHCP/DNS/GPO demos) | 10.20.0.41 | 1 / 1–1.5 GB |
+| CON-DC01 | Windows Server 2025 Datacenter Eval, Server Core | AD DS + DNS | 10.50.0.10 | 2 / 2–3 GB |
+| CON-SRV01 | Windows Server 2025 Datacenter Eval, Server Core | member server | 10.50.0.21 | 2 / 1–2 GB |
+| CON-SRV02 | Windows Server 2025 Datacenter Eval, Desktop Experience | member server (GUI tools) | 10.50.0.22 | 2 / 2–3 GB |
+| CON-SQL01 | Windows Server 2025 Datacenter Eval, Server Core | SQL Server 2022 Developer, default instance, TCP 1433, mixed auth | 10.50.0.30 | 2 / 2–6 GB |
+| CON-CLI01 | Windows Server 2025 Datacenter Eval, Server Core | test client (DHCP/DNS/GPO demos) | 10.50.0.41 | 1 / 1–1.5 GB |
 
 - The recording laptop itself is Windows: Power BI Desktop, VS Code, SSMS, browsers and terminals run on the host and
   reach the VMs at the IPs above.
 - More VMs can be added in `lab/hyperv/lab.config.psd1` (keep the laptop's RAM in mind: the four VMs above use up to
   ~14 GB). If an episode needs an extra VM, add a `## Lab environment` entry in demo.md with name, OS/edition,
-  vCPU/RAM/disk, IP in 10.20.0.40–99, role, and software.
+  vCPU/RAM/disk, IP in 10.50.0.40–99, role, and software.
 - An episode that records a destructive or "from zero" step (e.g. promoting a new forest) uses a throwaway VM, never
   the shared ones, and says so in demo.md.
 - Credentials are never written in any file in the repo; demo.md says "lab Administrator" and the recorder signs in.

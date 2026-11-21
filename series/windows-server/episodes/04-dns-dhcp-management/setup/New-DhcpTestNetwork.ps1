@@ -2,7 +2,7 @@
 .SYNOPSIS
   DEVLADLOG Windows Server #4 - isolated network for the DHCP demo (run on the Hyper-V host, elevated).
 .DESCRIPTION
-  The lab NAT switch (10.20.0.0/24) has no DHCP of its own, and a test DHCP server must never answer on it.
+  The lab NAT switch (10.50.0.0/24) has no DHCP of its own, and a test DHCP server must never answer on it.
   This script creates a Hyper-V *Private* switch (VM-to-VM only: no host, no NAT, no physical network) and gives
   CON-SRV01, CON-SRV02 and CON-CLI01 a second NIC named DHCPTest on it, with fixed MACs. Inside the guests
   (PowerShell Direct, no network needed) it renames the NIC, stops it registering in DNS, and sets

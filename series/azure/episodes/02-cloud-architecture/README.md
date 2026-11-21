@@ -18,7 +18,7 @@ A small reference workload where the architecture is **code with tests**, not a 
 ```
 governance.bicep ─► Azure Policy (allowed locations, require tag)            all logs ─► Log Analytics
 main.bicep
-  network    VNet 10.20.0.0/24: snet-app (/26, delegated to Microsoft.Web/serverFarms), snet-pe (/26), NSGs
+  network    VNet 10.50.0.0/24: snet-app (/26, delegated to Microsoft.Web/serverFarms), snet-pe (/26), NSGs
              privatelink.blob.<storage suffix>, privatelink.vaultcore.azure.net (linked to the VNet)
   data       storage (no public access, no keys) + key vault (RBAC, no public access) ─ private endpoints
   app        plan (B1 | P1v3 x2 zone-redundant) + web app (identity, VNet integration, /healthz) ─ 2 data roles

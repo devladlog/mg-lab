@@ -7,8 +7,8 @@ cost 0. Episode 4 reuses the same database, so record both episodes in one sessi
 
 | Machine | What | Notes |
 |---|---|---|
-| **CON-SQL01** (existing, `series/LAB.md`) | Windows Server 2025 Datacenter Eval, Server Core, SQL Server 2022 Developer, default instance, TCP 1433, mixed auth, 10.20.0.30, 2 vCPU / 2–6 GB | Database `ContosoBikesPerf`: ~100 MB data (200,000 rows of ~400 bytes) plus indexes, SIMPLE recovery. Give the VM at least 4 GB while recording so the table stays in memory |
-| **Recording laptop** (host, 10.20.0.1) | SSMS (any current version), Python 3.10+, a terminal (Windows Terminal, dark theme) | Screens are recorded here. `py -m pip install -r requirements.txt` in this folder |
+| **CON-SQL01** (existing, `series/LAB.md`) | Windows Server 2025 Datacenter Eval, Server Core, SQL Server 2022 Developer, default instance, TCP 1433, mixed auth, 10.50.0.30, 2 vCPU / 2–6 GB | Database `ContosoBikesPerf`: ~100 MB data (200,000 rows of ~400 bytes) plus indexes, SIMPLE recovery. Give the VM at least 4 GB while recording so the table stays in memory |
+| **Recording laptop** (host, 10.50.0.1) | SSMS (any current version), Python 3.10+, a terminal (Windows Terminal, dark theme) | Screens are recorded here. `py -m pip install -r requirements.txt` in this folder |
 
 No extra VM. Nothing destructive: the episode only creates and drops its own database and indexes.
 
@@ -27,7 +27,7 @@ it in SSMS, and record what SQL Server did and why in README "gotchas"; then fix
 
 ## Setup (once, before recording)
 
-1. Start the lab (`lab/hyperv/Start-MGLab.ps1`) and check CON-SQL01 answers on 10.20.0.30:1433.
+1. Start the lab (`lab/hyperv/Start-MGLab.ps1`) and check CON-SQL01 answers on 10.50.0.30:1433.
 2. In SSMS, connect to CON-SQL01 as the lab Administrator and run `src/sql/00-create-database.sql` (against
    `master`). Check: `SELECT compatibility_level FROM sys.databases WHERE name = 'ContosoBikesPerf';` returns 160.
 3. Create the login the runner uses (password typed off-screen, never saved in the repo):
@@ -41,7 +41,7 @@ it in SSMS, and record what SQL Server did and why in README "gotchas"; then fix
 4. Terminal on the laptop, in this folder (PowerShell; the password is typed off-screen):
    ```powershell
    py -m pip install -r requirements.txt
-   $env:SQL_CONNECTION_STRING = "Server=10.20.0.30,1433;Database=ContosoBikesPerf;UID=lab_demo;PWD=<password>;Encrypt=yes;TrustServerCertificate=yes"
+   $env:SQL_CONNECTION_STRING = "Server=10.50.0.30,1433;Database=ContosoBikesPerf;UID=lab_demo;PWD=<password>;Encrypt=yes;TrustServerCertificate=yes"
    py src/index_lab.py --engine sqlserver --setup --save-plans plans
    ```
    Expected: `setup: Sales.Customers and Sales.Orders loaded`, three step tables with every check `OK`, three
@@ -70,7 +70,7 @@ gitignored): they are the real plans the tests only approximate.
 ## Masking
 
 - Never show the password, the `CREATE LOGIN` line with it, or `$env:SQL_CONNECTION_STRING`.
-- SSMS shows the server you typed in the Connect dialog: blur `10.20.0.30` and the login name in the status bar
+- SSMS shows the server you typed in the Connect dialog: blur `10.50.0.30` and the login name in the status bar
   and Object Explorer, or connect through a hosts-file alias so it reads `CON-SQL01`.
 - All customers, orders and account numbers are generated and fictional; nothing else to mask.
 

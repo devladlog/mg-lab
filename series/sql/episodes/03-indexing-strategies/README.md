@@ -60,7 +60,7 @@ What runs locally, and what doesn't:
 ```bash
 # 1. run src/sql/00-create-database.sql against master (SSMS or sqlcmd), as the lab Administrator
 # 2. from this folder (the password is typed off-screen):
-export SQL_CONNECTION_STRING="Server=10.20.0.30,1433;Database=ContosoBikesPerf;UID=<lab login>;PWD=<password>;Encrypt=yes;TrustServerCertificate=yes"
+export SQL_CONNECTION_STRING="Server=10.50.0.30,1433;Database=ContosoBikesPerf;UID=<lab login>;PWD=<password>;Encrypt=yes;TrustServerCertificate=yes"
 python3 src/index_lab.py --engine sqlserver --setup --save-plans plans
 # expect: three step tables, every check OK, "9/9 steps behaved as expected on sqlserver",
 # then the final design's index sizes and usage

@@ -80,8 +80,8 @@ scenes:
     heading: "DNS: compute the reverse zone, then the records"
     lang: powershell
     code: |
-      ConvertTo-NetLabReverseZoneName '10.20.0.0/24'        # 0.20.10.in-addr.arpa
-      Get-NetLabPtrName '10.20.0.60' '0.20.10.in-addr.arpa'  # 60
+      ConvertTo-NetLabReverseZoneName '10.50.0.0/24'        # 0.20.10.in-addr.arpa
+      Get-NetLabPtrName '10.50.0.60' '0.20.10.in-addr.arpa'  # 60
 
       Add-DnsServerPrimaryZone -ComputerName $cn -NetworkId $rz.NetworkId -ReplicationScope Domain -DynamicUpdate Secure
       Set-DnsServerZoneAging -ComputerName $cn -Name $z -Aging $true -NoRefreshInterval $noRefresh -RefreshInterval $refresh
@@ -105,7 +105,7 @@ scenes:
       On CON-SRV02 (RSAT DNS): Invoke-NetLabDnsDeployment -DefinitionPath .\network.json | Format-Table twice. First run:
       ReverseZone, ZoneAging x2, Scavenging, A x2, PTR x2, CNAME x2 = Done; second run all NoChange. Then
       Invoke-Command -ComputerName CON-SRV01 { ipconfig /registerdns } and, a minute later,
-      Resolve-DnsName 10.20.0.21 -Server CON-DC01 and Resolve-DnsName printer01.lab.contoso.com -Server CON-DC01.
+      Resolve-DnsName 10.50.0.21 -Server CON-DC01 and Resolve-DnsName printer01.lab.contoso.com -Server CON-DC01.
     narration: >
       On the lab. The first run creates the reverse zone, the records and their PTRs, and switches on aging and
       scavenging. The second run changes nothing. Our member server registers its own PTR as soon as the reverse
@@ -174,7 +174,7 @@ scenes:
     demo: >
       On the Hyper-V host: Invoke-Command -VMName CON-CLI01 -Credential (lab Administrator) { ipconfig /renew DHCPTest;
       ipconfig /all }. Show the DHCPTest adapter: IPv4 172.16.50.41, DHCP Server 172.16.50.2 or .3, DNS Servers
-      10.20.0.10, connection-specific suffix lab.contoso.com. Side by side: Get-DhcpServerv4Lease -ComputerName
+      10.50.0.10, connection-specific suffix lab.contoso.com. Side by side: Get-DhcpServerv4Lease -ComputerName
       CON-SRV01 -ScopeId 172.16.50.0 and the same on CON-SRV02 (the lease is on both).
     narration: >
       And the client. Its isolated card asks for an address and gets point forty one, its reservation, with our DNS

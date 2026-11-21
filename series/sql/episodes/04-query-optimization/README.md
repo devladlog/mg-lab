@@ -53,7 +53,7 @@ locally, and a test checks that both procedures contain the same query.
 
 ```bash
 # database from episode 3, or run src/sql/00-create-database.sql against master first
-export SQL_CONNECTION_STRING="Server=10.20.0.30,1433;Database=ContosoBikesPerf;UID=<lab login>;PWD=<password>;Encrypt=yes;TrustServerCertificate=yes"
+export SQL_CONNECTION_STRING="Server=10.50.0.30,1433;Database=ContosoBikesPerf;UID=<lab login>;PWD=<password>;Encrypt=yes;TrustServerCertificate=yes"
 python3 src/tune_lab.py --engine sqlserver --setup --save-plans plans
 # expect: four tables, every check OK, "12/12 runs behaved as expected on sqlserver";
 # one plan stays forced in Query Store (the runner prints the unforce command)

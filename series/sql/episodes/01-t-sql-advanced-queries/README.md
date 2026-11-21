@@ -43,14 +43,14 @@ python3 -m pytest tests -q                 # 31 passed
 
 ## Run it on SQL Server 2022
 
-The recording uses the shared lab VM **CON-SQL01** (SQL Server 2022 Developer, `10.20.0.30,1433`, see
+The recording uses the shared lab VM **CON-SQL01** (SQL Server 2022 Developer, `10.50.0.30,1433`, see
 `series/LAB.md`); see demo.md for the full recording steps.
 
 ```powershell
-# 1. run src/sql/00-create-database.sql against master on 10.20.0.30,1433 (VS Code MSSQL extension, SSMS or sqlcmd)
+# 1. run src/sql/00-create-database.sql against master on 10.50.0.30,1433 (VS Code MSSQL extension, SSMS or sqlcmd)
 # 2. then, from this folder (password typed, never stored):
 $pw = Read-Host -AsSecureString 'sa password'
-$env:SQL_CONNECTION_STRING = "Server=10.20.0.30,1433;Database=ContosoLab;UID=sa;PWD=$([Net.NetworkCredential]::new('', $pw).Password);Encrypt=yes;TrustServerCertificate=yes"
+$env:SQL_CONNECTION_STRING = "Server=10.50.0.30,1433;Database=ContosoLab;UID=sa;PWD=$([Net.NetworkCredential]::new('', $pw).Password);Encrypt=yes;TrustServerCertificate=yes"
 python src/tsql_runner.py --engine sqlserver --setup     # expect: 10/10 queries match expected/ on sqlserver
 ```
 

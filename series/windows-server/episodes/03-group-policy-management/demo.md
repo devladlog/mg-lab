@@ -2,14 +2,14 @@
 
 ## Lab environment
 
-No new VM. Everything runs on the shared Hyper-V lab from `series/LAB.md` (network `10.20.0.0/24`, domain
+No new VM. Everything runs on the shared Hyper-V lab from `series/LAB.md` (network `10.50.0.0/24`, domain
 `lab.contoso.com`, NetBIOS `CONTOSO`):
 
 | VM | Role in this episode | What to install / prepare |
 |---|---|---|
-| CON-DC01 (10.20.0.10, Server Core) | Domain controller, PDC emulator: the GroupPolicy cmdlets talk to it | nothing |
-| CON-SRV01 (10.20.0.21, Server Core) | Target of `CON-Servers-Baseline` (script block logging, NLA) | move to `OU=Servers,OU=Contoso` |
-| CON-SRV02 (10.20.0.22, Desktop Experience) | Admin box: GPMC, Windows PowerShell 5.1, and the computer João signs in to for the gotcha | `Install-WindowsFeature GPMC, RSAT-AD-PowerShell`; move to `OU=Servers,OU=Contoso` |
+| CON-DC01 (10.50.0.10, Server Core) | Domain controller, PDC emulator: the GroupPolicy cmdlets talk to it | nothing |
+| CON-SRV01 (10.50.0.21, Server Core) | Target of `CON-Servers-Baseline` (script block logging, NLA) | move to `OU=Servers,OU=Contoso` |
+| CON-SRV02 (10.50.0.22, Desktop Experience) | Admin box: GPMC, Windows PowerShell 5.1, and the computer João signs in to for the gotcha | `Install-WindowsFeature GPMC, RSAT-AD-PowerShell`; move to `OU=Servers,OU=Contoso` |
 
 - Screens are recorded on the **CON-SRV02 VM console** (VMConnect, enhanced session, 1600×900, PowerShell font 18+).
   The report preview can be on the host in VS Code (copy `gpo-report.md` out) or in Notepad on CON-SRV02.

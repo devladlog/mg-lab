@@ -7,15 +7,15 @@ narration of each screen scene to what is actually on screen.
 
 ## Lab environment
 
-Shared Hyper-V lab from `series/LAB.md` (NAT network `10.20.0.0/24`, domain `lab.contoso.com`, NetBIOS `CONTOSO`),
+Shared Hyper-V lab from `series/LAB.md` (NAT network `10.50.0.0/24`, domain `lab.contoso.com`, NetBIOS `CONTOSO`),
 plus **one extra VM** and **one isolated Private switch**:
 
 | Item | Spec | Role in this episode |
 |---|---|---|
-| CON-DC01 (existing) | 10.20.0.10, Server Core | DNS server for `lab.contoso.com`; gets the reverse zone `0.20.10.in-addr.arpa`, aging and scavenging |
-| CON-SRV01 (existing) | 10.20.0.21, Server Core | DHCP server (primary). Second NIC `DHCPTest` on the Private switch, 172.16.50.2/24, MAC 00-15-5D-14-00-02 |
-| CON-SRV02 (existing) | 10.20.0.22, Desktop Experience | DHCP failover partner + admin box (RSAT DNS/DHCP, recording). `DHCPTest` NIC 172.16.50.3/24, MAC 00-15-5D-14-00-03 |
-| **CON-CLI01 (new)** | Windows Server 2025 Datacenter **Evaluation, Server Core**, 1 vCPU, 1 GB startup / 1.5 GB max dynamic RAM, 40 GB disk, Generation 2. NIC 1 on `MGLab-NAT` with **10.20.0.41** (static, like the other lab VMs), domain-joined to `lab.contoso.com`. No extra software | DHCP client. Second NIC `DHCPTest` on the Private switch, DHCP, fixed MAC **00-15-5D-14-00-41** (matches the reservation) |
+| CON-DC01 (existing) | 10.50.0.10, Server Core | DNS server for `lab.contoso.com`; gets the reverse zone `0.20.10.in-addr.arpa`, aging and scavenging |
+| CON-SRV01 (existing) | 10.50.0.21, Server Core | DHCP server (primary). Second NIC `DHCPTest` on the Private switch, 172.16.50.2/24, MAC 00-15-5D-14-00-02 |
+| CON-SRV02 (existing) | 10.50.0.22, Desktop Experience | DHCP failover partner + admin box (RSAT DNS/DHCP, recording). `DHCPTest` NIC 172.16.50.3/24, MAC 00-15-5D-14-00-03 |
+| **CON-CLI01 (new)** | Windows Server 2025 Datacenter **Evaluation, Server Core**, 1 vCPU, 1 GB startup / 1.5 GB max dynamic RAM, 40 GB disk, Generation 2. NIC 1 on `MGLab-NAT` with **10.50.0.41** (static, like the other lab VMs), domain-joined to `lab.contoso.com`. No extra software | DHCP client. Second NIC `DHCPTest` on the Private switch, DHCP, fixed MAC **00-15-5D-14-00-41** (matches the reservation) |
 | **Switch `MGLab-DHCPTest`** | Hyper-V **Private** switch (VM-to-VM only, no host vNIC, no NAT, no physical uplink), subnet 172.16.50.0/24, no gateway | The only network where the lab DHCP servers answer |
 
 - Suggested `lab/hyperv/lab.config.psd1` entry for the lead session (this episode doesn't edit it):
@@ -25,7 +25,7 @@ plus **one extra VM** and **one isolated Private switch**:
   must never answer on it. Two layers keep it that way: the DHCP servers' only scope is on 172.16.50.0/24, and
   `Invoke-NetLabDhcpDeployment` unbinds the DHCP service from every interface except `DHCPTest`. The Private switch
   has no path to the host or the home network.
-- The DHCP option *DNS server = 10.20.0.10* points at the DC through the client's NAT NIC; the `DHCPTest` NICs are
+- The DHCP option *DNS server = 10.50.0.10* points at the DC through the client's NAT NIC; the `DHCPTest` NICs are
   set not to register in DNS, so the zone keeps one record per host.
 - Screens: CON-SRV02 VM console (VMConnect, 1600×900, font 18+) and, for the client, PowerShell Direct from the
   Hyper-V host (`Invoke-Command -VMName`), which works without any network.
@@ -61,11 +61,11 @@ Invoke-NetLabDnsDeployment -DefinitionPath .\network.json | Format-Table Server,
 Invoke-NetLabDnsDeployment -DefinitionPath .\network.json | Format-Table Server, Action, Target, Result -AutoSize
 Invoke-Command -ComputerName CON-SRV01 { ipconfig /registerdns }
 Start-Sleep 60
-Resolve-DnsName 10.20.0.21 -Server CON-DC01
-Resolve-DnsName printer01.lab.contoso.com -Server CON-DC01; Resolve-DnsName 10.20.0.60 -Server CON-DC01
+Resolve-DnsName 10.50.0.21 -Server CON-DC01
+Resolve-DnsName printer01.lab.contoso.com -Server CON-DC01; Resolve-DnsName 10.50.0.60 -Server CON-DC01
 ```
 Expected run 1: ReverseZone, ZoneAging ×2, Scavenging, A ×2, PTR ×2, CNAME ×2 = Done; run 2: 10 × NoChange.
-- **Verify and note in README:** the zone name `Add-DnsServerPrimaryZone -NetworkId 10.20.0.0/24` really creates
+- **Verify and note in README:** the zone name `Add-DnsServerPrimaryZone -NetworkId 10.50.0.0/24` really creates
   (Learn's example text and output disagree; we expect `0.20.10.in-addr.arpa`); that CON-SRV01 registers its PTR after
   `ipconfig /registerdns`; the property names `RecordData.IPv4Address` / `PtrDomainName` / `HostNameAlias`.
 
@@ -80,7 +80,7 @@ Expected: Authorize ×2, Binding (Ethernet=False and DHCPTest=True on each), Sco
 Failover = Done. Run it a second time off-camera: everything NoChange, no Replicate.
 - **Verify:** the NAT adapter's alias in `Get-DhcpServerv4Binding` (the code doesn't care, it unbinds everything except
   `DHCPTest`); the exact `State` string of a healthy relationship (we check for `Normal`); that `Set-DhcpServerv4OptionValue
-  -DnsServer 10.20.0.10` is accepted (CON-SRV01 reaches the DC over its NAT NIC).
+  -DnsServer 10.50.0.10` is accepted (CON-SRV01 reaches the DC over its NAT NIC).
 
 ### 3. `screens/lease.jpg` — "The client gets its reserved address" (**needs lab**)
 On the Hyper-V host:
@@ -92,7 +92,7 @@ and on CON-SRV02:
 Get-DhcpServerv4Lease -ComputerName CON-SRV01 -ScopeId 172.16.50.0
 Get-DhcpServerv4Lease -ComputerName CON-SRV02 -ScopeId 172.16.50.0
 ```
-Capture the `DHCPTest` adapter (172.16.50.41, DHCP Server 172.16.50.2 or .3, DNS 10.20.0.10, suffix
+Capture the `DHCPTest` adapter (172.16.50.41, DHCP Server 172.16.50.2 or .3, DNS 10.50.0.10, suffix
 `lab.contoso.com`) next to the two lease lists.
 
 ### 4. `screens/failover-drift.jpg` — "Gotcha: the partner never heard about it" (**needs lab**)
@@ -122,7 +122,7 @@ anything else the real lab reports (likely `ZoneAgingDisabled` for `_msdcs.lab.c
 doesn't touch). Open `net-report.md` in a markdown preview.
 
 ## Masking
-- Everything is fictional (`lab.contoso.com`, `CONTOSO`, 10.20.0.0/24, 172.16.50.0/24, MACs in the Hyper-V
+- Everything is fictional (`lab.contoso.com`, `CONTOSO`, 10.50.0.0/24, 172.16.50.0/24, MACs in the Hyper-V
   00-15-5D range set by the script). Keep it that way.
 - Hide the Hyper-V host name, the host's Windows user profile path and any home-network adapter or IP that shows up in
   `ipconfig /all` on the host.
@@ -132,8 +132,8 @@ On CON-SRV02:
 ```powershell
 Remove-DnsServerResourceRecord -ComputerName CON-DC01 -ZoneName lab.contoso.com -Name camera01 -RRType A -Force
 Remove-DhcpServerv4Failover -ComputerName CON-SRV01 -Name CON-SRV01-CON-SRV02      # confirm the prompt
-Remove-DhcpServerInDC -DnsName con-srv01.lab.contoso.com -IPAddress 10.20.0.21
-Remove-DhcpServerInDC -DnsName con-srv02.lab.contoso.com -IPAddress 10.20.0.22
+Remove-DhcpServerInDC -DnsName con-srv01.lab.contoso.com -IPAddress 10.50.0.21
+Remove-DhcpServerInDC -DnsName con-srv02.lab.contoso.com -IPAddress 10.50.0.22
 Invoke-Command -ComputerName CON-SRV01, CON-SRV02 { Uninstall-WindowsFeature DHCP -IncludeManagementTools }
 ```
 On the Hyper-V host: `.\setup\New-DhcpTestNetwork.ps1 -Credential $cred -Remove` (removes the three `DHCPTest` NICs and

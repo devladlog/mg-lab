@@ -8,7 +8,7 @@ Every mode of `deploy/Invoke-Tests.ps1` except `SqlServer` was run with `pwsh`; 
 | What | Details |
 |---|---|
 | Recording machine | Lab Windows laptop (host), VS Code + C# Dev Kit, PowerShell 7, .NET SDK 10.0.1xx, a browser. Screens 1–4 and 5 are all recorded here |
-| CON-SQL01 (shared VM, exists) | Windows Server 2025 Datacenter Eval, Server Core, SQL Server 2022 Developer, default instance, TCP 1433, mixed auth, 10.20.0.30. Only for screen 5 |
+| CON-SQL01 (shared VM, exists) | Windows Server 2025 Datacenter Eval, Server Core, SQL Server 2022 Developer, default instance, TCP 1433, mixed auth, 10.50.0.30. Only for screen 5 |
 | SSMS on the host | Optional, for the second capture of screen 5 and for creating the login |
 | Azure / M365 | Not used. Cost: €0 |
 
@@ -59,10 +59,10 @@ capture run `Clear-Host`.
      ~93 %, branch ~89 % (container run: 93.4 % / 89.2 %), the class list with `PriorityRules` at 50 %.
    - Second capture: click `PriorityRules` → the two `const decimal` lines in red, both methods green.
 5. **`screens/sqlserver-lab.jpg`** — *The same tests against SQL Server in the lab* (**needs CON-SQL01**)
-   - Start the Hyper-V lab (`lab/hyperv/Start-MGLab.ps1`) and check `Test-NetConnection 10.20.0.30 -Port 1433`.
+   - Start the Hyper-V lab (`lab/hyperv/Start-MGLab.ps1`) and check `Test-NetConnection 10.50.0.30 -Port 1433`.
    - Off camera, in the pwsh terminal:
      ```powershell
-     $env:REQUESTS_TEST_SQLSERVER = 'Server=10.20.0.30;User ID=requests_tests;Password=<typed>;TrustServerCertificate=True'
+     $env:REQUESTS_TEST_SQLSERVER = 'Server=10.50.0.30;User ID=requests_tests;Password=<typed>;TrustServerCertificate=True'
      Clear-Host
      ```
      (no `Database=`; the tests create their own. `TrustServerCertificate=True` because the lab instance uses its
@@ -72,7 +72,7 @@ capture run `Clear-Host`.
    - Optional second capture: SSMS Object Explorer connected to CON-SQL01, refresh **Databases** during the run to
      catch a `ProjectRequests_xunit_…` or `ProjectRequests_nunit_…` database, refresh again after: gone.
    - **Masking:** the connection string must never be on screen (never `echo` the variable). If a test fails, the
-     error can include the server name `10.20.0.30` — that's lab-internal and fine, but no password.
+     error can include the server name `10.50.0.30` — that's lab-internal and fine, but no password.
    - Not verified in the container (no SQL Server here). If it fails, report the error text; don't re-record with
      the tests disabled.
 

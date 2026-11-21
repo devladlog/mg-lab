@@ -4,11 +4,11 @@
 
 | Item | What this episode needs |
 |---|---|
-| VM | **CON-SQL01** (shared lab VM): Windows Server 2025 Datacenter Eval, Server Core, SQL Server 2022 **Developer**, default instance, TCP **10.20.0.30,1433**, mixed auth. Nothing else; CON-DC01 must be running (domain/DNS for the VM) |
+| VM | **CON-SQL01** (shared lab VM): Windows Server 2025 Datacenter Eval, Server Core, SQL Server 2022 **Developer**, default instance, TCP **10.50.0.30,1433**, mixed auth. Nothing else; CON-DC01 must be running (domain/DNS for the VM) |
 | Database | `ContosoLab`, created by `src/sql/00-create-database.sql` (compatibility level 160), dropped in tear-down |
 | SQL login | `sa` (mixed auth, set by the lab build). The recorder types the lab Administrator password off camera; it is never written in a file or on screen |
 | Tenant / Azure | none. No cloud resource, no licence, cost 0 |
-| Recording machine | The Windows lab laptop (Hyper-V host, reaches 10.20.0.0/24): VS Code with the **MSSQL** extension (or SSMS) for the grids, PowerShell 7 terminal for pytest and the runner, Python 3.10+ for Windows |
+| Recording machine | The Windows lab laptop (Hyper-V host, reaches 10.50.0.0/24): VS Code with the **MSSQL** extension (or SSMS) for the grids, PowerShell 7 terminal for pytest and the runner, Python 3.10+ for Windows |
 
 No Docker container: the screens show the shared SQL Server VM. DuckDB stays the engine of the automated tests only.
 
@@ -28,7 +28,7 @@ the query or the test.
 
 ## Prerequisites
 - Lab started (`lab/hyperv/Start-MGLab.ps1`), CON-DC01 and CON-SQL01 running. From the laptop:
-  `Test-NetConnection 10.20.0.30 -Port 1433` → `TcpTestSucceeded : True`.
+  `Test-NetConnection 10.50.0.30 -Port 1433` → `TcpTestSucceeded : True`.
 - VS Code with the **MSSQL** extension (or SSMS) on the laptop.
 - Python 3.10+ for Windows and, in the episode folder, `python -m pip install -r requirements.txt` (on Windows the
   mssql-python wheel needs no extra system packages).
@@ -37,14 +37,14 @@ the query or the test.
 - Cost: 0.
 
 ## Setup
-1. In VS Code, add a connection: server `10.20.0.30,1433`, SQL login `sa`, password typed off camera (don't save it),
+1. In VS Code, add a connection: server `10.50.0.30,1433`, SQL login `sa`, password typed off camera (don't save it),
    trust server certificate (lab only: the instance uses its self-signed certificate). Profile name: `MG Lab SQL`.
 2. Open `src/sql/00-create-database.sql`, run it against `master`. Check: `SELECT name, compatibility_level FROM
    sys.databases WHERE name = 'ContosoLab';` returns 160.
 3. In the terminal (password typed off camera, never echoed):
    ```powershell
    $pw = Read-Host -AsSecureString 'sa password'
-   $env:SQL_CONNECTION_STRING = "Server=10.20.0.30,1433;Database=ContosoLab;UID=sa;PWD=$([Net.NetworkCredential]::new('', $pw).Password);Encrypt=yes;TrustServerCertificate=yes"
+   $env:SQL_CONNECTION_STRING = "Server=10.50.0.30,1433;Database=ContosoLab;UID=sa;PWD=$([Net.NetworkCredential]::new('', $pw).Password);Encrypt=yes;TrustServerCertificate=yes"
    python src/tsql_runner.py --engine sqlserver --setup
    ```
    Expected: ten `OK` lines and `10/10 queries match expected/ on sqlserver`. (This also loads the data, so the
@@ -65,14 +65,14 @@ Expected values for every query are in `expected/*.csv` (same rows the grid must
 
 ## Masking
 - Never show the `sa` password, the `Read-Host` input or `$env:SQL_CONNECTION_STRING`.
-- The VS Code connection panel shows `10.20.0.30,1433` (lab-internal address, fine to show); hide the account/profile
+- The VS Code connection panel shows `10.50.0.30,1433` (lab-internal address, fine to show); hide the account/profile
   picture in the activity bar.
 - Check terminal and VS Code title bars for the laptop's machine name or Windows user name (record from a neutral
   folder such as `C:\MGLab\repo`). `pipeline/mask.js` isn't needed (no browser).
 
 ## Tear-down
 ```sql
--- from master, in VS Code / SSMS connected to 10.20.0.30,1433
+-- from master, in VS Code / SSMS connected to 10.50.0.30,1433
 ALTER DATABASE ContosoLab SET SINGLE_USER WITH ROLLBACK IMMEDIATE;
 DROP DATABASE ContosoLab;
 ```

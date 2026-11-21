@@ -43,13 +43,13 @@ function Test-NetLabIpInRange {
 
 function ConvertTo-NetLabReverseZoneName {
     <#
-      '10.20.0.0/24' -> '0.20.10.in-addr.arpa'. Only octet boundaries (/8, /16, /24): that's what a classic
+      '10.50.0.0/24' -> '0.20.10.in-addr.arpa'. Only octet boundaries (/8, /16, /24): that's what a classic
       in-addr.arpa zone covers. We compute the name ourselves and look the zone up by it.
     #>
     [CmdletBinding()] [OutputType([string])]
     param([Parameter(Mandatory)][string] $NetworkId)
     $parts = $NetworkId.Split('/')
-    if ($parts.Count -ne 2) { throw "NetworkId '$NetworkId' must look like 10.20.0.0/24." }
+    if ($parts.Count -ne 2) { throw "NetworkId '$NetworkId' must look like 10.50.0.0/24." }
     $prefix = [int]$parts[1]
     if ($prefix -notin 8, 16, 24) { throw "Prefix /$prefix is not on an octet boundary (use /8, /16 or /24)." }
     [void](ConvertTo-NetLabUInt32 $parts[0])
@@ -59,7 +59,7 @@ function ConvertTo-NetLabReverseZoneName {
 }
 
 function Get-NetLabPtrName {
-    <# Relative PTR owner name of an address inside a reverse zone: (10.20.0.60, 0.20.10.in-addr.arpa) -> '60'. $null if outside. #>
+    <# Relative PTR owner name of an address inside a reverse zone: (10.50.0.60, 0.20.10.in-addr.arpa) -> '60'. $null if outside. #>
     [CmdletBinding()]
     param([Parameter(Mandatory)][string] $IPAddress, [Parameter(Mandatory)][string] $ReverseZone)
     $zoneOctets = @($ReverseZone -replace '\.in-addr\.arpa\.?$', '' -split '\.')

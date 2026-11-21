@@ -43,7 +43,7 @@ pwsh ./deploy/Invoke-Tests.ps1 -Mode Coverage  # TestResults/*.cobertura.xml + *
                                                #   -> line coverage 93.4 %, branch 89.2 % (generated code + migrations excluded)
 
 # needs a SQL Server (lab: CON-SQL01) - connection string WITHOUT a database name, never committed:
-REQUESTS_TEST_SQLSERVER='Server=10.20.0.30;User ID=requests_tests;Password=...;TrustServerCertificate=True' \
+REQUESTS_TEST_SQLSERVER='Server=10.50.0.30;User ID=requests_tests;Password=...;TrustServerCertificate=True' \
   pwsh ./deploy/Invoke-Tests.ps1 -Mode SqlServer
 ```
 

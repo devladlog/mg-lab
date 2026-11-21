@@ -3,15 +3,15 @@
 ## Lab environment
 
 All screens are recorded on the **shared local Hyper-V lab** (`series/LAB.md`): domain `lab.contoso.com`, NetBIOS
-`CONTOSO`, network `10.20.0.0/24`. No extra VM, no tenant, no Azure, no licence (evaluation editions), cost 0.
+`CONTOSO`, network `10.50.0.0/24`. No extra VM, no tenant, no Azure, no licence (evaluation editions), cost 0.
 
 | Role in the episode | Shared VM | OS / edition | IP | Changes made for the recording (all undone in tear-down, except the KDS root key) |
 |---|---|---|---|---|
-| Domain controller: groups, gMSA | **CON-DC01** | WS 2025 Datacenter Eval, Server Core | 10.20.0.10 | KDS root key (lab form, see below), groups `GG-AppOps-Readers` / `GG-AppOps-Operators`, gMSA `gmsa-opsjob`, enabled user `alex.demo` |
-| App server with the JEA endpoint | **CON-SRV01** | WS 2025 Datacenter Eval, Server Core | 10.20.0.21 | IIS (`Web-Server`), module `ContosoOps` in `C:\Program Files\WindowsPowerShell\Modules`, endpoint `Contoso.AppOps`, transcripts in `C:\ProgramData\JEAConfiguration\Transcripts`, ~60 MB of old demo log files |
-| Job host (runs the scheduled task) | **CON-SRV02** | WS 2025 Datacenter Eval, **Desktop Experience** (Task Scheduler GUI) | 10.20.0.22 | `RSAT-AD-PowerShell`, gMSA installed, `C:\OpsJob`, task `\Contoso\OpsJob` |
-| Helpdesk client | **CON-CLI01** | WS 2025 Datacenter Eval, Server Core | 10.20.0.41 | none (PowerShell 7 from episode 1; Windows PowerShell 5.1 works too) |
-| Recording machine | Hyper-V host (Windows laptop) | — | 10.20.0.1 | elevated PowerShell for PowerShell Direct; VMConnect windows |
+| Domain controller: groups, gMSA | **CON-DC01** | WS 2025 Datacenter Eval, Server Core | 10.50.0.10 | KDS root key (lab form, see below), groups `GG-AppOps-Readers` / `GG-AppOps-Operators`, gMSA `gmsa-opsjob`, enabled user `alex.demo` |
+| App server with the JEA endpoint | **CON-SRV01** | WS 2025 Datacenter Eval, Server Core | 10.50.0.21 | IIS (`Web-Server`), module `ContosoOps` in `C:\Program Files\WindowsPowerShell\Modules`, endpoint `Contoso.AppOps`, transcripts in `C:\ProgramData\JEAConfiguration\Transcripts`, ~60 MB of old demo log files |
+| Job host (runs the scheduled task) | **CON-SRV02** | WS 2025 Datacenter Eval, **Desktop Experience** (Task Scheduler GUI) | 10.50.0.22 | `RSAT-AD-PowerShell`, gMSA installed, `C:\OpsJob`, task `\Contoso\OpsJob` |
+| Helpdesk client | **CON-CLI01** | WS 2025 Datacenter Eval, Server Core | 10.50.0.41 | none (PowerShell 7 from episode 1; Windows PowerShell 5.1 works too) |
+| Recording machine | Hyper-V host (Windows laptop) | — | 10.50.0.1 | elevated PowerShell for PowerShell Direct; VMConnect windows |
 
 - Sign-in: the **lab Administrator** (`CONTOSO\Administrator`) for setup; **`CONTOSO\alex.demo`** for the helpdesk
   screens. The recorder types every password; none is written in a file or shown on screen.

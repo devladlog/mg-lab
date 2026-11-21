@@ -12,7 +12,7 @@ public sealed class SqlServerTests
     [Fact]
     public void Each_run_gets_its_own_database_and_keeps_the_server_settings()     // no server needed
     {
-        const string server = "Server=10.20.0.30;User ID=requests_tests;TrustServerCertificate=True";
+        const string server = "Server=10.50.0.30;User ID=requests_tests;TrustServerCertificate=True";
 
         using var first = SqlServerTestDatabase.CreateContext(server, "xunit");
         using var second = SqlServerTestDatabase.CreateContext(server, "xunit");
@@ -21,7 +21,7 @@ public sealed class SqlServerTests
         var b = new Microsoft.Data.SqlClient.SqlConnectionStringBuilder(second.Database.GetConnectionString());
         Assert.StartsWith("ProjectRequests_xunit_", a.InitialCatalog);
         Assert.NotEqual(a.InitialCatalog, b.InitialCatalog);
-        Assert.Equal("10.20.0.30", a.DataSource);
+        Assert.Equal("10.50.0.30", a.DataSource);
         Assert.True(a.TrustServerCertificate);
     }
 

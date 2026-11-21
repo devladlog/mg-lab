@@ -4,21 +4,21 @@
     "Server": "CON-DC01",
     "ForwardZone": "lab.contoso.com",
     "ReverseZones": [
-      { "NetworkId": "10.20.0.0/24", "ReplicationScope": "Domain" }
+      { "NetworkId": "10.50.0.0/24", "ReplicationScope": "Domain" }
     ],
     "Aging": { "NoRefreshDays": 7, "RefreshDays": 7 },
     "Scavenging": { "Enabled": true, "IntervalDays": 7 },
     "Records": [
-      { "Type": "A", "Name": "printer01", "Address": "10.20.0.60", "Ptr": true, "Note": "fictional network printer, static record" },
-      { "Type": "A", "Name": "nas01", "Address": "10.20.0.61", "Ptr": true, "Note": "fictional NAS, static record" },
+      { "Type": "A", "Name": "printer01", "Address": "10.50.0.60", "Ptr": true, "Note": "fictional network printer, static record" },
+      { "Type": "A", "Name": "nas01", "Address": "10.50.0.61", "Ptr": true, "Note": "fictional NAS, static record" },
       { "Type": "CNAME", "Name": "intranet", "Target": "con-srv02.lab.contoso.com" },
       { "Type": "CNAME", "Name": "sql", "Target": "con-sql01.lab.contoso.com" }
     ]
   },
   "Dhcp": {
     "Servers": [
-      { "Name": "CON-SRV01", "DnsName": "con-srv01.lab.contoso.com", "AuthorizeIPAddress": "10.20.0.21", "BindInterface": "DHCPTest" },
-      { "Name": "CON-SRV02", "DnsName": "con-srv02.lab.contoso.com", "AuthorizeIPAddress": "10.20.0.22", "BindInterface": "DHCPTest" }
+      { "Name": "CON-SRV01", "DnsName": "con-srv01.lab.contoso.com", "AuthorizeIPAddress": "10.50.0.21", "BindInterface": "DHCPTest" },
+      { "Name": "CON-SRV02", "DnsName": "con-srv02.lab.contoso.com", "AuthorizeIPAddress": "10.50.0.22", "BindInterface": "DHCPTest" }
     ],
     "Scopes": [
       {
@@ -29,7 +29,7 @@
         "SubnetMask": "255.255.255.0",
         "LeaseDuration": "1.00:00:00",
         "Exclusions": [ { "Start": "172.16.50.1", "End": "172.16.50.20" } ],
-        "Options": { "DnsServer": [ "10.20.0.10" ], "DnsDomain": "lab.contoso.com" },
+        "Options": { "DnsServer": [ "10.50.0.10" ], "DnsDomain": "lab.contoso.com" },
         "Reservations": [
           { "Name": "con-cli01", "IPAddress": "172.16.50.41", "ClientId": "00-15-5d-14-00-41", "Description": "CON-CLI01 DHCPTest NIC (static MAC set by setup)" }
         ]

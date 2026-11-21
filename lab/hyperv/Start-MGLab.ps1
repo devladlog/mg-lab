@@ -48,8 +48,9 @@ Write-Host ("  {0} | {1} | {2} logical CPUs | RAM {3} GB (free {4} GB)" -f $os.C
 if ($os.Caption -match 'Home') { throw 'Windows Home has no Hyper-V. Pro, Enterprise or Education is required.' }
 
 $vms = @($cfg.VMs | Where-Object { -not $Only -or $Only -contains $_.Name })
-$planMaxGB = ($vms | Measure-Object -Property MaxGB -Sum).Sum
-$planStartGB = ($vms | Measure-Object -Property StartupGB -Sum).Sum
+# Windows PowerShell 5.1's Measure-Object can't read hashtable keys, so enumerate the values first.
+$planMaxGB = ($vms.MaxGB | Measure-Object -Sum).Sum
+$planStartGB = ($vms.StartupGB | Measure-Object -Sum).Sum
 Write-Host ("  Plan: {0} VMs, startup RAM {1} GB, max RAM {2} GB" -f $vms.Count, $planStartGB, $planMaxGB)
 if ($planStartGB -gt ($ramGB - 6)) { Write-Warn2 'Startup RAM leaves less than 6 GB for Windows and the recording apps. Lower StartupGB in lab.config.psd1 or use -Only.' }
 
@@ -143,9 +144,24 @@ Get-Download $cfg.Media.ServerIso $serverIso 4GB
 
 # ---------------------------------------------------------------- base disks
 Write-Stage 'Base disks'
+function Get-PartitionLetter($Part) {
+    # Windows may already have auto-mounted the partition; only assign a letter when it has none.
+    $p = Get-Partition -DiskNumber $Part.DiskNumber -PartitionNumber $Part.PartitionNumber
+    if ([string]$p.DriveLetter -notmatch '^[A-Za-z]$') {
+        $p | Add-PartitionAccessPath -AssignDriveLetter
+        $p = Get-Partition -DiskNumber $Part.DiskNumber -PartitionNumber $Part.PartitionNumber
+    }
+    [string]$p.DriveLetter
+}
 function New-BaseDisk([string]$Kind) {
     $path = "$($P.Base)\ws2025-$($Kind.ToLower()).vhdx"
-    if (Test-Path $path) { Write-Skip (Split-Path $path -Leaf); return $path }
+    if (Test-Path $path) {
+        # The read-only flag is set only after a base disk is complete, so it doubles as the "finished" marker.
+        if ((Get-Item $path).IsReadOnly) { Write-Skip (Split-Path $path -Leaf); return $path }
+        Write-Warn2 "Removing unfinished $(Split-Path $path -Leaf) from an interrupted run"
+        try { Dismount-VHD -Path $path -ErrorAction Stop } catch { }
+        Remove-Item $path -Force
+    }
     $img = Mount-DiskImage -ImagePath $serverIso -PassThru
     try {
         $isoDrive = ($img | Get-Volume).DriveLetter
@@ -164,10 +180,8 @@ function New-BaseDisk([string]$Kind) {
             New-Partition -DiskNumber $disk.Number -Size 16MB -GptType '{e3c9e316-0b5c-4db8-817d-f92df00215ae}' | Out-Null
             $os = New-Partition -DiskNumber $disk.Number -UseMaximumSize -GptType '{ebd0a0a2-b9e5-4433-87c0-68b6b72699c7}'
             $os | Format-Volume -FileSystem NTFS -NewFileSystemLabel Windows -Confirm:$false | Out-Null
-            $efi | Add-PartitionAccessPath -AssignDriveLetter
-            $os | Add-PartitionAccessPath -AssignDriveLetter
-            $s = (Get-Partition -DiskNumber $disk.Number -PartitionNumber $efi.PartitionNumber).DriveLetter
-            $w = (Get-Partition -DiskNumber $disk.Number -PartitionNumber $os.PartitionNumber).DriveLetter
+            $s = Get-PartitionLetter $efi
+            $w = Get-PartitionLetter $os
             Expand-WindowsImage -ImagePath $wim -Index $want.ImageIndex -ApplyPath "${w}:\" | Out-Null
             & "$env:windir\System32\bcdboot.exe" "${w}:\Windows" /s "${s}:" /f UEFI | Out-Null
             if ($LASTEXITCODE -ne 0) { throw "bcdboot failed ($LASTEXITCODE)" }
@@ -215,29 +229,37 @@ foreach ($v in $vms) {
     if (Get-VM -Name $v.Name -ErrorAction SilentlyContinue) { Write-Skip "$($v.Name) exists"; continue }
     $dir = "$($P.Vms)\$($v.Name)"; New-Item -ItemType Directory -Force -Path $dir | Out-Null
     $child = "$dir\$($v.Name).vhdx"
+    if (Test-Path $child) {   # left over from an interrupted run (the VM was never registered)
+        try { Dismount-VHD -Path $child -ErrorAction Stop } catch { }
+        Remove-Item $child -Force
+    }
     New-VHD -Path $child -ParentPath $base[$v.Image] -Differencing | Out-Null
     if ($v.DiskGB -gt 60) { Resize-VHD -Path $child -SizeBytes ([int64]$v.DiskGB * 1GB) }
     $disk = Mount-VHD -Path $child -Passthru | Get-Disk
     try {
         $osPart = Get-Partition -DiskNumber $disk.Number | Where-Object { $_.GptType -eq '{ebd0a0a2-b9e5-4433-87c0-68b6b72699c7}' } | Select-Object -First 1
-        $osPart | Add-PartitionAccessPath -AssignDriveLetter
-        $w = (Get-Partition -DiskNumber $disk.Number -PartitionNumber $osPart.PartitionNumber).DriveLetter
+        $w = Get-PartitionLetter $osPart
         New-Item -ItemType Directory -Force -Path "${w}:\Windows\Panther" | Out-Null
         New-Unattend $v.Name | Set-Content -Path "${w}:\Windows\Panther\unattend.xml" -Encoding UTF8
     } finally { Dismount-VHD -Path $child }
-    New-VM -Name $v.Name -Generation 2 -VHDPath $child -SwitchName $sw.Name -MemoryStartupBytes ([int64]$v.StartupGB * 1GB) -Path $P.Vms | Out-Null
-    Set-VM -Name $v.Name -ProcessorCount $v.vCPU -DynamicMemory -MemoryMinimumBytes 512MB -MemoryMaximumBytes ([int64]$v.MaxGB * 1GB) `
+    New-VM -Name $v.Name -Generation 2 -VHDPath $child -SwitchName $sw.Name -MemoryStartupBytes ([int64]($v.StartupGB * 1GB)) -Path $P.Vms | Out-Null
+    Set-VM -Name $v.Name -ProcessorCount $v.vCPU -DynamicMemory -MemoryMinimumBytes 512MB -MemoryMaximumBytes ([int64]($v.MaxGB * 1GB)) `
         -AutomaticCheckpointsEnabled $false -AutomaticStopAction ShutDown -AutomaticStartAction Nothing
     Enable-VMIntegrationService -VMName $v.Name -Name 'Guest Service Interface'
+    # Hyper-V can't hot-add a DVD drive, so the SQL VM gets an empty one now; the SQL media is inserted later.
+    if ($v.Role -eq 'SQL') { Add-VMDvdDrive -VMName $v.Name }
     Start-VM -Name $v.Name
     Write-Ok "$($v.Name) created and started ($($v.Image), $($v.vCPU) vCPU, $($v.StartupGB)-$($v.MaxGB) GB, $($v.DiskGB) GB)"
 }
 
-function Wait-Guest([string]$Name, [pscredential]$Cred, [int]$Minutes = 20) {
+function Wait-Guest([string]$Name, [pscredential[]]$Cred, [int]$Minutes = 20) {
+    # Succeeds when any of the credentials works (a DC only accepts the domain account after promotion).
     $until = (Get-Date).AddMinutes($Minutes)
     while ((Get-Date) -lt $until) {
-        try { Invoke-Command -VMName $Name -Credential $Cred -ScriptBlock { $env:COMPUTERNAME } -ErrorAction Stop | Out-Null; return }
-        catch { Start-Sleep -Seconds 15 }
+        foreach ($c in $Cred) {
+            try { Invoke-Command -VMName $Name -Credential $c -ScriptBlock { $env:COMPUTERNAME } -ErrorAction Stop | Out-Null; return } catch { }
+        }
+        Start-Sleep -Seconds 15
     }
     throw "$Name did not answer PowerShell Direct within $Minutes minutes (open it in Hyper-V Manager to see why)."
 }
@@ -246,7 +268,7 @@ function Get-GuestCred([string]$Name) {
     foreach ($c in $domainCred, $localCred) {
         try { Invoke-Command -VMName $Name -Credential $c -ScriptBlock { 1 } -ErrorAction Stop | Out-Null; return $c } catch { }
     }
-    return $null
+    throw "Neither the domain nor the local Administrator credential works on $Name."
 }
 
 # ---------------------------------------------------------------- guest network
@@ -254,7 +276,7 @@ Write-Stage 'Guest network and remote access'
 $dcCfg = $cfg.VMs | Where-Object Role -eq 'DC' | Select-Object -First 1
 $dcIP = "$($sw.Prefix).$($dcCfg.IP)"
 foreach ($v in $vms) {
-    Wait-Guest $v.Name $localCred -Minutes 25
+    Wait-Guest $v.Name $localCred, $domainCred -Minutes 25
     $cred = Get-GuestCred $v.Name
     $ip = "$($sw.Prefix).$($v.IP)"
     $dns = if ($v.Role -eq 'DC' -or $NoDomain) { @('1.1.1.1', '8.8.8.8') } else { @($dcIP) }
@@ -323,19 +345,18 @@ if ($sqlCfg -and -not $NoSql) {
     $installed = Invoke-Command -VMName $sqlCfg.Name -Credential $sqlCred -ScriptBlock { [bool](Get-Service MSSQLSERVER -ErrorAction SilentlyContinue) }
     if ($installed) { Write-Skip 'SQL Server already installed' }
     else {
-        $sqlIso = Get-ChildItem "$($P.Iso)\sql" -Filter *.iso -ErrorAction SilentlyContinue | Select-Object -First 1
-        if (-not $sqlIso) {
-            $boot = "$($P.Iso)\SQL2022-SSEI-Eval.exe"
-            Get-Download $cfg.Media.SqlSetup $boot 1MB
-            New-Item -ItemType Directory -Force -Path "$($P.Iso)\sql" | Out-Null
-            Write-Host '  Downloading SQL Server 2022 media (ISO)...'
-            $p = Start-Process -FilePath $boot -ArgumentList '/ACTION=Download', "/MEDIAPATH=$($P.Iso)\sql", '/MEDIATYPE=ISO', '/QUIET' -Wait -PassThru
-            $sqlIso = Get-ChildItem "$($P.Iso)\sql" -Filter *.iso | Select-Object -First 1
-            if (-not $sqlIso) { throw "SQL media download failed (exit $($p.ExitCode))." }
+        # Direct ISO download (BITS, resumable, only renamed into place when complete), ~1.1 GB.
+        New-Item -ItemType Directory -Force -Path "$($P.Iso)\sql" | Out-Null
+        $sqlIsoPath = "$($P.Iso)\sql\SQLServer2022-x64-ENU-Dev.iso"
+        Get-Download $cfg.Media.SqlIso $sqlIsoPath 1GB
+        $sqlIso = Get-Item $sqlIsoPath
+        if (-not (Get-VMDvdDrive -VMName $sqlCfg.Name)) {
+            # Only VMs built by an older version of this script lack the drive; adding one needs the VM off.
+            Write-Host "  Adding a DVD drive to $($sqlCfg.Name) (restarts it)..."
+            Stop-VM -Name $sqlCfg.Name; Add-VMDvdDrive -VMName $sqlCfg.Name; Start-VM -Name $sqlCfg.Name
+            Wait-Guest $sqlCfg.Name $sqlCred -Minutes 15
         }
-        Get-VMDvdDrive -VMName $sqlCfg.Name | Where-Object Path | Set-VMDvdDrive -Path $null
-        if (-not (Get-VMDvdDrive -VMName $sqlCfg.Name)) { Add-VMDvdDrive -VMName $sqlCfg.Name -Path $sqlIso.FullName }
-        else { Set-VMDvdDrive -VMName $sqlCfg.Name -Path $sqlIso.FullName }
+        Get-VMDvdDrive -VMName $sqlCfg.Name | Select-Object -First 1 | Set-VMDvdDrive -Path $sqlIso.FullName
         Write-Host '  Installing the database engine (10-15 min)...'
         $r = Invoke-Command -VMName $sqlCfg.Name -Credential $sqlCred -ArgumentList $labPass, $cfg.NetBIOS -ScriptBlock {
             param($sa, $netbios)
@@ -351,7 +372,7 @@ if ($sqlCfg -and -not $NoSql) {
             New-NetFirewallRule -DisplayName 'SQL Server 1433' -Direction Inbound -Protocol TCP -LocalPort 1433 -Action Allow -ErrorAction SilentlyContinue | Out-Null
             [pscustomobject]@{ Exit = $p.ExitCode; Running = [bool](Get-Service MSSQLSERVER -ErrorAction SilentlyContinue | Where-Object Status -eq Running) }
         }
-        Set-VMDvdDrive -VMName $sqlCfg.Name -Path $null
+        Get-VMDvdDrive -VMName $sqlCfg.Name | Select-Object -First 1 | Set-VMDvdDrive -Path $null
         if (-not $r.Running) { throw "SQL setup exit code $($r.Exit). Logs: C:\Program Files\Microsoft SQL Server\160\Setup Bootstrap\Log on $($sqlCfg.Name)." }
         Write-Ok "SQL Server running on $($sw.Prefix).$($sqlCfg.IP),1433 (logins: sa or $($cfg.NetBIOS)\Administrator)"
     }

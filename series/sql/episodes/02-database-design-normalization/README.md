@@ -46,12 +46,12 @@ available in the build container). We used DuckDB rather than SQLite because the
 
 ## Run it on SQL Server 2022
 
-On the shared lab VM **CON-SQL01** (SQL Server 2022 Developer, `10.20.0.30,1433`, see `series/LAB.md`):
+On the shared lab VM **CON-SQL01** (SQL Server 2022 Developer, `10.50.0.30,1433`, see `series/LAB.md`):
 
 ```powershell
-# run src/sql/00-create-database.sql against master on 10.20.0.30,1433, then (password typed, never stored):
+# run src/sql/00-create-database.sql against master on 10.50.0.30,1433, then (password typed, never stored):
 $pw = Read-Host -AsSecureString 'sa password'
-$env:SQL_CONNECTION_STRING = "Server=10.20.0.30,1433;Database=ContosoTraining;UID=sa;PWD=$([Net.NetworkCredential]::new('', $pw).Password);Encrypt=yes;TrustServerCertificate=yes"
+$env:SQL_CONNECTION_STRING = "Server=10.50.0.30,1433;Database=ContosoTraining;UID=sa;PWD=$([Net.NetworkCredential]::new('', $pw).Password);Encrypt=yes;TrustServerCertificate=yes"
 python src/tsql_runner.py --engine sqlserver --setup     # expect 3/3 and 6/6 on sqlserver
 ```
 
