@@ -102,7 +102,7 @@
   "teardown": [
     "Invoke-Command -VMName CON-SRV02 -Credential $cred { C:\\lab\\ep05\\setup\\Register-OpsJobTask.ps1 -Remove; Remove-Item C:\\lab\\ep05 -Recurse -Force -ErrorAction SilentlyContinue }",
     "Invoke-Command -VMName CON-SRV01 -Credential $cred { Unregister-PSSessionConfiguration -Name Contoso.AppOps -Force -ErrorAction SilentlyContinue; Remove-Item \"C:\\Program Files\\WindowsPowerShell\\Modules\\ContosoOps\" -Recurse -Force -ErrorAction SilentlyContinue; Remove-Item C:\\ProgramData\\JEAConfiguration -Recurse -Force -ErrorAction SilentlyContinue; Remove-Item C:\\inetpub\\logs\\LogFiles\\W3SVC1\\u_ex2610*.log -Force -ErrorAction SilentlyContinue; Uninstall-WindowsFeature Web-Server | Out-Null; Remove-Item C:\\lab\\ep05 -Recurse -Force -ErrorAction SilentlyContinue }",
-    "Invoke-Command -VMName CON-DC01 -Credential $cred { & C:\\lab\\ep05\\setup\\New-OpsJobIdentity.ps1 -Remove; Remove-ADUser alex.demo -Confirm:$false -ErrorAction SilentlyContinue; Remove-Item C:\\lab\\ep05 -Recurse -Force -ErrorAction SilentlyContinue }",
+    "Invoke-Command -VMName CON-DC01 -Credential $cred { & C:\\lab\\ep05\\setup\\New-OpsJobIdentity.ps1 -Remove; Remove-Item C:\\lab\\ep05 -Recurse -Force -ErrorAction SilentlyContinue }",
     "Invoke-Command -VMName CON-CLI01 -Credential $cred { Remove-Item C:\\lab\\alex.xml -Force -ErrorAction SilentlyContinue }",
     "# the KDS root key stays on purpose (forest-wide, reused by later episodes); restart CON-SRV01 if Uninstall-WindowsFeature asked for it"
   ],
