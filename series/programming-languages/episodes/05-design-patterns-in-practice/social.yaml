@@ -1,0 +1,79 @@
+episode: 5
+series: "DEVLADLOG Code"
+status: draft-hold-for-review
+ai_label: true
+youtube_url: "{YOUTUBE_URL}"
+linkedin_company:
+  text: |
+    One word changed in a service registration. On a laptop in Development the app refuses to start. In Production it runs, exits with code 0, and both audit trails are empty.
+
+    Episode 5 of DEVLADLOG Code builds design patterns as code that runs, with the dependency injection every .NET app already has:
+    - Strategy: one class per approval route, picked from an IEnumerable, with no service locator
+    - Decorator: a cached, metered approver directory wired with keyed services
+    - Observer: audit, outbox and budget tally, each call isolated
+    - Options: the policy in configuration, validated when the host starts
+
+    The gotcha is a captive dependency: a singleton that holds a scoped audit trail forever. We show it in both environments, then add a test that builds the container with scope validation on, whatever the environment. 27 tests.
+
+    Watch: {YOUTUBE_URL}
+    Code: {REPO_URL}
+    Guide: {BLOG_URL}
+
+    Narration uses an AI voice.
+    #DotNet #CSharp #DependencyInjection #DesignPatterns
+linkedin_personal:
+  text: |
+    A singleton observer that holds a scoped audit trail is a captive dependency. It compiles. In Production our console app ran, exited with code 0, and both batches reported 0 audit entries instead of 4.
+
+    Run the same code with the Development environment and the host refuses to build: cannot consume scoped service AuditTrail from singleton IRequestObserver. That check is on by default in Development only.
+
+    So I stopped relying on someone remembering to run in Development. A test now builds the real composition root with ValidateScopes and ValidateOnBuild on, whatever the environment.
+
+    Episode 5 of my C# series: {YOUTUBE_URL}
+
+    #DotNet #DependencyInjection
+
+    Narration uses an AI voice.
+facebook:
+  text: |
+    New C# video: design patterns as code that runs. Strategy, Decorator, Observer and Options with .NET dependency injection. Plus a one-line registration mistake that fails in Development but, in Production, runs fine and quietly leaves the audit trail empty. We show it, then show the test that catches it.
+
+    Watch: {YOUTUBE_URL}
+
+    #DotNet #DesignPatterns
+
+    Narration uses an AI voice.
+shorts:
+  - id: hook
+    youtube_short_title: "C# design patterns as code that runs, plus a silent DI bug #Shorts"
+    instagram_reel:
+      caption: |
+        Design patterns usually come as boxes and arrows. Today they come as code that runs: Strategy, Decorator, Observer and Options, built with the dependency injection every .NET app already has. And a one-line registration mistake that fails on your laptop, but in production runs fine and quietly loses your audit trail.
+        Full episode: link in bio.
+        Narration uses an AI voice.
+        #CSharp #DotNet #DesignPatterns
+      cover_text: "Patterns that actually run"
+    tiktok:
+      caption: "Strategy, Decorator, Observer and Options with .NET DI. And a one-line mistake that quietly loses your audit trail in production. #CSharp #DotNet #DesignPatterns"
+  - id: decorator
+    youtube_short_title: "Wire decorators with .NET keyed services (order matters) #Shorts"
+    instagram_reel:
+      caption: |
+        A trick for wiring decorators with the built-in .NET container: register the inner layers as keyed services. Only the outermost decorator is registered without a key, so nobody can skip the cache by accident. And the order matters. The meter outside the cache counted 3 of 3 calls. Inside the cache it counted only 1, the misses.
+        Full episode: link in bio.
+        Narration uses an AI voice.
+        #CSharp #DotNet #DependencyInjection
+      cover_text: "Decorators with keyed services"
+    tiktok:
+      caption: "Wire decorators with keyed services. Meter outside the cache counts 3 of 3 calls, inside it counts 1. Order matters. #CSharp #DotNet #DependencyInjection"
+  - id: captive
+    youtube_short_title: "Captive dependency: exit code 0 and an empty audit trail #Shorts"
+    instagram_reel:
+      caption: |
+        A singleton takes a scoped audit trail in its constructor and keeps the first one forever. That is a captive dependency. It compiles. In Production the app runs, exits with code 0, and the audit trails are empty. In Development the host refuses to build. The fix is a test that validates scopes on build.
+        Full episode: link in bio.
+        Narration uses an AI voice.
+        #CSharp #DotNet #DependencyInjection
+      cover_text: "Exit code 0, empty audit"
+    tiktok:
+      caption: "Singleton holding a scoped service: Production runs with exit code 0 and an empty audit trail. Development refuses. #CSharp #DotNet #DependencyInjection"

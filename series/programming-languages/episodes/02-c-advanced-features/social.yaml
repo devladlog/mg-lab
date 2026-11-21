@@ -1,0 +1,78 @@
+episode: 2
+series: "DEVLADLOG Code"
+status: draft-hold-for-review
+ai_label: true
+youtube_url: "{YOUTUBE_URL}"
+linkedin_company:
+  text: |
+    The same line of C# can call a different method after you upgrade to C# 14. No warning in either version.
+
+    Episode 2 of DEVLADLOG Code builds a small library on .NET 10 with C# 14 and checks which advanced features earn a place in production code:
+    - records with required and init, plus the new field keyword for validation in the accessor
+    - property, relational and list patterns that read like the approval policy
+    - extension members: extension properties and static extension members
+    - span parsing with a test that asserts zero bytes allocated
+    - 53 xUnit tests, and warnings as errors on every project
+
+    The gotcha: values.Average() calls LINQ under C# 13 and our own span method under C# 14. Microsoft documents it as a breaking change.
+
+    Watch: {YOUTUBE_URL}
+    Code: {REPO_URL}
+    Guide: {BLOG_URL}
+
+    Narration uses an AI voice.
+    #DotNet #CSharp #CSharp14 #DevTools
+linkedin_personal:
+  text: |
+    We had our own Average extension over ReadOnlySpan<int>, and System.Linq imported as usual. Compiled as C# 13, values.Average() on an int[] calls LINQ and returns 2. Compiled as C# 14, the same source line calls our span method and returns -1. No warning in either version.
+
+    Microsoft lists it as a compiler breaking change: span overloads now apply in more places. If you mean LINQ, call Enumerable.Average explicitly.
+
+    My lesson: re-run the whole test suite after every language upgrade, not only the build. Episode 2 of my C# series shows this and the other C# 14 traps: {YOUTUBE_URL}
+
+    #DotNet #CSharp
+
+    Narration uses an AI voice.
+facebook:
+  text: |
+    New video on advanced C# 14 and .NET 10, the parts worth using and the parts that bite. Extension members, the field keyword, list patterns, and a span parser that allocates zero bytes. Plus one line of code that calls a different method after you upgrade, with no warning. Fifty-three tests back it up.
+
+    Watch: {YOUTUBE_URL}
+
+    #DotNet #CSharp
+
+    Narration uses an AI voice.
+shorts:
+  - id: hook
+    youtube_short_title: "Advanced C# 14: which features belong in production? #Shorts"
+    instagram_reel:
+      caption: |
+        Advanced C# features make great conference slides. But which ones belong in production code, and which ones quietly change what your code does? We build a small library with C# 14 on .NET 10: records, patterns, extension members and spans. Fifty-three tests, and one line that calls a different method after you upgrade.
+        Full episode: link in bio.
+        Narration uses an AI voice.
+        #CSharp #DotNet #CSharp14
+      cover_text: "C# 14: use it or skip it?"
+    tiktok:
+      caption: "C# 14 on .NET 10: records, patterns, extension members, spans. And one line that calls a different method after you upgrade. #CSharp #DotNet #CSharp14"
+  - id: gotcha
+    youtube_short_title: "Same C# line, different method after upgrading to C# 14 #Shorts"
+    instagram_reel:
+      caption: |
+        Our own Average extension over ReadOnlySpan, with LINQ imported as usual. Compiled as C# 13, values.Average() calls LINQ and returns 2. Compiled as C# 14, the same source line calls our span method and returns -1. No warning in either version. If you mean LINQ, call Enumerable.Average explicitly.
+        Full episode: link in bio.
+        Narration uses an AI voice.
+        #CSharp #DotNet #CSharp14
+      cover_text: "Same line, other method"
+    tiktok:
+      caption: "C# 13: values.Average() = 2 (LINQ). C# 14: the same line = -1 (your span method). No warning. A documented breaking change. #CSharp #DotNet"
+  - id: warnings
+    youtube_short_title: "C# 14 gotchas are only warnings unless you say so #Shorts"
+    instagram_reel:
+      caption: |
+        A switch over every state of our closed record hierarchy is still not exhaustive, because C# has no closed hierarchies. A class with a member called field now binds to the new keyword. And all of it is only a warning by default. Without warnings as errors, the build just succeeds.
+        Full episode: link in bio.
+        Narration uses an AI voice.
+        #CSharp #DotNet #DevTools
+      cover_text: "Only a warning?"
+    tiktok:
+      caption: "CS8509, CS9258, CS9264 are only warnings by default. Without TreatWarningsAsErrors the build just succeeds. #CSharp #DotNet #CSharp14"

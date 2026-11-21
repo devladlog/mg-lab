@@ -1,0 +1,78 @@
+episode: 10
+series: "DEVLADLOG Code"
+status: draft-hold-for-review
+ai_label: true
+youtube_url: "{YOUTUBE_URL}"
+linkedin_company:
+  text: |
+    Ask five developers why a report is slow and you get five answers. The team's first guess, the JSON clone, was the smallest of the three real causes.
+
+    Episode 10 of DEVLADLOG Code stops guessing and measures a Node.js report over the Contoso project requests, with no packages:
+    - a benchmark that warms up, repeats and reports the median and p95, because one timing proves nothing
+    - a V8 CPU profile read by line: about half the time was one toLocaleString line, about a third the duplicate check, the JSON copy a few percent
+    - a Set, one shared formatter and an object spread as the fix, with a test that both versions produce identical output
+    - event loop delay: the slow version made a 10 ms timer fire about 600 ms late
+    - a cache that never forgets, against a small LRU, measured on the heap
+
+    14 tests keep it honest.
+
+    Watch: {YOUTUBE_URL}
+    Code: {REPO_URL}
+    Guide: {BLOG_URL}
+
+    Narration uses an AI voice.
+    #NodeJS #Profiling #Performance #DevTools
+linkedin_personal:
+  text: |
+    I profiled a slow Node report and expected the hot callback to show up as its own function. It mostly did not. V8 inlines small callbacks into the caller, and built-ins like toLocaleString have no frame of their own, so about 80 percent of the time landed on one function. That tells you nothing.
+
+    The answer was in the position ticks on every profile node, a sample count per line. Read by line, one toLocaleString call was about half the time. The JSON clone everyone suspected was a few percent.
+
+    Episode 10, measure, don't guess: {YOUTUBE_URL}
+
+    #NodeJS #Performance
+
+    Narration uses an AI voice.
+facebook:
+  text: |
+    New video: performance profiling in Node.js, measure instead of guess. A benchmark with warm-up and a median, a CPU profile that names the guilty lines, event loop delay, and a cache that leaks. The line the team suspected turned out to be the smallest problem. Fourteen tests.
+
+    Watch: {YOUTUBE_URL}
+
+    #NodeJS #Performance
+
+    Narration uses an AI voice.
+shorts:
+  - id: hook
+    youtube_short_title: "Slow Node.js report? Stop guessing, profile it #Shorts"
+    instagram_reel:
+      caption: |
+        A report that takes a noticeable fraction of a second for just three thousand rows. Ask five developers why, and you get five answers. Probably the sorting. Probably the clone. Maybe garbage collection. Today we stop guessing and measure with a benchmark, a CPU profile, event loop delay and the heap, and the profiler names the guilty lines.
+        Full episode: link in bio.
+        Narration uses an AI voice.
+        #NodeJS #Profiling #Performance
+      cover_text: "Measure, don't guess"
+    tiktok:
+      caption: "Five developers, five guesses on why a report is slow. We profile it with a benchmark and the V8 profiler instead. #NodeJS #Profiling #Performance"
+  - id: hotline
+    youtube_short_title: "The CPU profiler names the guilty line in Node.js #Shorts"
+    instagram_reel:
+      caption: |
+        The function view of the CPU profile says almost everything happens inside the report function. Not helpful. The line view is. A little over half the time is one line: budget formatting with toLocaleString. About a third is the duplicate check with some. The JSON clone everybody suspected? A few percent.
+        Full episode: link in bio.
+        Narration uses an AI voice.
+        #NodeJS #Profiling #Performance
+      cover_text: "Read lines, not functions"
+    tiktok:
+      caption: "CPU profile by line: about half the time is toLocaleString, a third is a duplicate check, the suspected JSON clone a few percent. #NodeJS #Profiling"
+  - id: gotcha
+    youtube_short_title: "Why the callback is missing from your Node.js profile #Shorts"
+    instagram_reel:
+      caption: |
+        I expected the some callback to show up as its own hot function. It mostly does not. The compiler inlines small callbacks into the function that calls them, and built-in calls like toLocaleString have no frame at all, so their time lands on the caller. Every profile node carries position ticks, a count of samples per line. Read those.
+        Full episode: link in bio.
+        Narration uses an AI voice.
+        #NodeJS #Profiling #Performance
+      cover_text: "Where did my callback go?"
+    tiktok:
+      caption: "80% in one function tells you nothing. V8 inlines small callbacks, built-ins have no frame. Read the position ticks per line. #NodeJS #Profiling"

@@ -1,0 +1,78 @@
+episode: 7
+series: "DEVLADLOG Code"
+status: draft-hold-for-review
+ai_label: true
+youtube_url: "{YOUTUBE_URL}"
+linkedin_company:
+  text: |
+    Every company has a PowerShell script nobody dares to touch. Copied between servers, no tests, and it fails silently.
+
+    Episode 7 of DEVLADLOG Code automates the Contoso project request approvals the way you would write it now:
+    - PSScriptAnalyzer on the legacy script: 13 findings, one of them an error. The same analyzer on the new module: zero
+    - a small module with validated parameters that returns typed objects, not text
+    - bad rows become errors with a stable error id, and the batch keeps going
+    - -WhatIf and -Confirm on the command that writes to disk, and no overwrite unless you pass -Force
+    - 29 Pester tests, and one command that runs both gates and exits with code 1 if either fails
+
+    We also show three real gotchas: try and catch that sees nothing, output you did not ask for, and ConvertTo-Json stopping at depth 2.
+
+    Watch: {YOUTUBE_URL}
+    Code: {REPO_URL}
+    Guide: {BLOG_URL}
+
+    Narration uses an AI voice.
+    #PowerShell #Pester #Automation #DevTools
+linkedin_personal:
+  text: |
+    ConvertTo-Json has a default depth of 2. My approvers sat three levels down, so the default turned them into the text System.Collections.Specialized.OrderedDictionary. PowerShell 7 only warns about it, the output is already wrong.
+
+    The module now passes -Depth 5, and a Pester test reads all three approvers of a Board request back.
+
+    It was one of three gotchas in episode 7 of my series, where I rebuild a legacy approval script as a module with -WhatIf, an analyzer gate and 29 Pester tests: {YOUTUBE_URL}
+
+    #PowerShell #Pester
+
+    Narration uses an AI voice.
+facebook:
+  text: |
+    New video: PowerShell automation, the safe way. We rebuild a legacy approval script as a small module that returns objects, reports bad rows without stopping, and supports -WhatIf before it writes a single file. Two gates, the script analyzer and 29 Pester tests, run in one command.
+
+    Watch: {YOUTUBE_URL}
+
+    #PowerShell #DevTools
+
+    Narration uses an AI voice.
+shorts:
+  - id: hook
+    youtube_short_title: "The PowerShell script nobody dares to touch, fixed safely #Shorts"
+    instagram_reel:
+      caption: |
+        Every company has a PowerShell script nobody dares to touch. Copied between servers, no tests, and it fails silently. We automate project request approvals the way you would write it now: a module, objects in the pipeline, safe by default with -WhatIf, and checked by two gates before anything runs.
+        Full episode: link in bio.
+        Narration uses an AI voice.
+        #PowerShell #Pester #DevTools
+      cover_text: "The script nobody touches"
+    tiktok:
+      caption: "The PowerShell script nobody dares to touch, rebuilt: a module, objects, -WhatIf, and two gates before anything runs. #PowerShell #Pester #DevTools"
+  - id: whatif
+    youtube_short_title: "PowerShell -WhatIf, then for real: safe by default #Shorts"
+    instagram_reel:
+      caption: |
+        -WhatIf lists the eight files the command would write, and afterwards the folder does not exist. Now for real: eight approval packs, one per request. The Legal request has no approver in the file, so it is reported, not written. Run it again, and eight errors tell you the packs already exist.
+        Full episode: link in bio.
+        Narration uses an AI voice.
+        #PowerShell #DevTools #Automation
+      cover_text: "-WhatIf, then for real"
+    tiktok:
+      caption: "-WhatIf lists 8 files and writes none. Run it for real: 8 packs. Run it again: 8 errors say they already exist. #PowerShell #DevTools #Automation"
+  - id: output
+    youtube_short_title: "PowerShell function returns output you did not ask for #Shorts"
+    instagram_reel:
+      caption: |
+        ArrayList.Add returns the index it just added. Inside a PowerShell function, every value that is not captured goes into the output, so the caller gets 0, 1, and then the real codes. Assign the call to null and the function says only what you meant.
+        Full episode: link in bio.
+        Narration uses an AI voice.
+        #PowerShell #DevTools #Automation
+      cover_text: "Output you did not ask for"
+    tiktok:
+      caption: "ArrayList.Add returns an index, and in a PowerShell function it leaks into the output: 0, 1, then your real values. Use $null =. #PowerShell #DevTools"

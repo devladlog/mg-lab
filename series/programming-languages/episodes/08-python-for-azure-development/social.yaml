@@ -1,0 +1,80 @@
+episode: 8
+series: "DEVLADLOG Code"
+status: draft-hold-for-review
+ai_label: true
+youtube_url: "{YOUTUBE_URL}"
+linkedin_company:
+  text: |
+    Most Python Azure tutorials start by pasting a connection string. That string is a key to the whole storage account, and sooner or later it ends up in git.
+
+    Episode 8 of DEVLADLOG Code writes the Contoso approval packs to Azure Blob Storage the keyless way:
+    - Microsoft Entra ID and one data role, with shared key access switched off in the Bicep file
+    - DefaultAzureCredential for development and a specific managed identity credential in Azure, as Microsoft's guidance recommends
+    - pure Python rules first, with Azure only at the edge
+    - writes that are safe to repeat: an existing blob becomes a status, and overwrite is an explicit flag
+    - async uploads with a semaphore and a TaskGroup, and the ExceptionGroup they hide
+
+    46 tests, ruff and strict mypy clean, with the blob tests running against the Azurite emulator.
+
+    Watch: {YOUTUBE_URL}
+    Code: {REPO_URL}
+    Guide: {BLOG_URL}
+
+    Narration uses an AI voice.
+    #Azure #Python #EntraID #BlobStorage
+linkedin_personal:
+  text: |
+    A TaskGroup in Python always wraps failures in an ExceptionGroup, even a single one. So a plain except for the error you expect never runs.
+
+    The fix is except*, which matches inside the group. My test proves it with a missing container, against the Azurite emulator.
+
+    Two more from the same episode: Excel's CSV UTF-8 starts with a byte order mark, so the first column gets a different name and every row fails unless you decode with utf-8-sig. And Decimal is not JSON serializable, so the approval pack stores money as a string.
+
+    Episode 8, Python for Azure without a single key: {YOUTUBE_URL}
+
+    #Python #Azure
+
+    Narration uses an AI voice.
+facebook:
+  text: |
+    New video: Python for Azure with no keys and no connection strings. We write approval packs to Blob Storage using Entra ID, make the writes safe to run twice, and add async uploads. Plus three real gotchas, including the error that hides inside an exception group. Forty-six tests.
+
+    Watch: {YOUTUBE_URL}
+
+    #Python #Azure
+
+    Narration uses an AI voice.
+shorts:
+  - id: hook
+    youtube_short_title: "Python Azure Blob Storage with no keys, no connection string #Shorts"
+    instagram_reel:
+      caption: |
+        Most Python Azure tutorials start by pasting a connection string. That string is a key to the whole storage account, and sooner or later it ends up in git. We write approval packs to Azure Blob Storage the keyless way: Entra ID, one role, and code that is safe to run twice.
+        Full episode: link in bio.
+        Narration uses an AI voice.
+        #Azure #Python #EntraID
+      cover_text: "Python for Azure, no keys"
+    tiktok:
+      caption: "A storage connection string is a key to the whole account. Write to Azure Blob Storage with Entra ID and one role instead. #Azure #Python #EntraID"
+  - id: denied
+    youtube_short_title: "Azure Owner role, still no access to blob data? Data roles #Shorts"
+    instagram_reel:
+      caption: |
+        You own the subscription, and a blob upload through Entra ID can still be refused. Owner, Contributor and Storage Account Contributor manage the storage account. Microsoft documents that they do not give you blob data access through Entra ID. That needs a data role, such as Storage Blob Data Contributor. Our code turns the raw error into a sentence that names the role.
+        Full episode: link in bio.
+        Narration uses an AI voice.
+        #Azure #BlobStorage #EntraID
+      cover_text: "Owner is not a data role"
+    tiktok:
+      caption: "Owner and Contributor manage the storage account, they do not grant blob data access through Entra ID. You need a data role. #Azure #BlobStorage #EntraID"
+  - id: idempotent
+    youtube_short_title: "Make Azure Blob uploads safe to run twice in Python #Shorts"
+    instagram_reel:
+      caption: |
+        Idempotent writes. upload_blob refuses to replace an existing blob unless you pass overwrite=True. We turn that refusal into a status, exists, instead of a crash. Run the job twice and the second run changes nothing, and tells you so. Overwriting is an explicit flag. The tests check the sync and async paths against the Azurite emulator.
+        Full episode: link in bio.
+        Narration uses an AI voice.
+        #Azure #Python #BlobStorage
+      cover_text: "Safe to run twice"
+    tiktok:
+      caption: "upload_blob refuses to overwrite unless you say so. Turn that into an 'exists' status and a second run changes nothing. #Azure #Python #BlobStorage"

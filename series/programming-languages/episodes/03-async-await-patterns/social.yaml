@@ -1,0 +1,76 @@
+episode: 3
+series: "DEVLADLOG Code"
+status: draft-hold-for-review
+ai_label: true
+youtube_url: "{YOUTUBE_URL}"
+linkedin_company:
+  text: |
+    Your timeout threw after 150 ms. The API call kept running for 300 ms anyway.
+
+    Episode 3 of DEVLADLOG Code calls a small Finance API from C# on .NET 10 and measures async and await instead of describing it. Twelve requests:
+    - one at a time: 3.7 seconds
+    - all at once: a third of a second, with 24 calls in flight on the API
+    - bounded to 4 requests: about 1 second, and the API never sees more than 8 calls
+
+    We also show a timeout that cancels the work versus Task.WaitAsync, which only stops waiting, plus retries tested with FakeTimeProvider, and a deadlock reproduced on demand on a single-threaded context. 27 xUnit tests back it up.
+
+    Watch: {YOUTUBE_URL}
+    Code: {REPO_URL}
+    Guide: {BLOG_URL}
+
+    Narration uses an AI voice.
+    #DotNet #CSharp #AsyncAwait #DevTools
+linkedin_personal:
+  text: |
+    Task.WaitAsync(timeout) and a real timeout both throw TimeoutException after about 150 ms. They look identical in the code and in the exception. The API log tells them apart: with the real timeout the call shows ABORTED by the client after 150 ms. With WaitAsync it shows done 300 ms.
+
+    WaitAsync stops waiting, not working. Nobody cancelled the HTTP call. Do that under load and your timeouts make things worse.
+
+    The fix is a linked cancellation token that reaches HttpClient. Episode 3 of my C# series measures it from the server side: {YOUTUBE_URL}
+
+    #DotNet #AsyncAwait
+
+    Narration uses an AI voice.
+facebook:
+  text: |
+    New C# video: async and await, measured. Twelve API requests take 3.7 seconds one at a time, a third of a second all at once, and about one second with a limit of four. We also show a timeout that lies, a deadlock you can reproduce on demand, and why you should bound concurrency yourself.
+
+    Watch: {YOUTUBE_URL}
+
+    #DotNet #AsyncAwait
+
+    Narration uses an AI voice.
+shorts:
+  - id: hook
+    youtube_short_title: "Is your async C# really concurrent? We measured it #Shorts"
+    instagram_reel:
+      caption: |
+        Your code is full of async and await. But is it actually concurrent? Does your timeout stop the work, or just stop waiting for it? We call a real API from C# and measure everything: twelve requests in 3.7 seconds, then in one. Plus a timeout that lies, and a deadlock you can reproduce on demand.
+        Full episode: link in bio.
+        Narration uses an AI voice.
+        #CSharp #DotNet #AsyncAwait
+      cover_text: "Is your async concurrent?"
+    tiktok:
+      caption: "12 API requests: 3.7 s one at a time, about 1 s bounded. Plus a timeout that lies and a deadlock on demand. #CSharp #DotNet #AsyncAwait"
+  - id: gotcha
+    youtube_short_title: "Task.WaitAsync stops waiting, not working (C# timeout trap) #Shorts"
+    instagram_reel:
+      caption: |
+        Task.WaitAsync with a timeout looks like a real timeout. Both throw a TimeoutException after 150 milliseconds. But WaitAsync only stops waiting. Nobody cancelled the HTTP call, so the API finishes the whole 300 millisecond lookup anyway. Under load, that makes things worse. Pass a linked cancellation token to HttpClient instead.
+        Full episode: link in bio.
+        Narration uses an AI voice.
+        #CSharp #DotNet #AsyncAwait
+      cover_text: "WaitAsync doesn't cancel"
+    tiktok:
+      caption: "Task.WaitAsync(timeout) throws after 150 ms, but the API call runs to 300 ms. It stops waiting, not working. #CSharp #DotNet #AsyncAwait"
+  - id: deadlock
+    youtube_short_title: "The async deadlock, reproduced on demand in C# #Shorts"
+    instagram_reel:
+      caption: |
+        On a single-threaded context, like a UI thread, we block on an async method with Wait. The method finishes its work in 100 milliseconds, then needs that same thread to continue. The thread is blocked waiting for it. Deadlock. ConfigureAwait(false) in the library avoids it, and awaiting all the way avoids the problem entirely.
+        Full episode: link in bio.
+        Narration uses an AI voice.
+        #CSharp #DotNet #AsyncAwait
+      cover_text: "The deadlock, on demand"
+    tiktok:
+      caption: "Block on async code on a single-threaded context and it deadlocks. ConfigureAwait(false) in libraries, and await all the way. #CSharp #DotNet #AsyncAwait"

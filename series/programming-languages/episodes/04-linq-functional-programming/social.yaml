@@ -1,0 +1,79 @@
+episode: 4
+series: "DEVLADLOG Code"
+status: draft-hold-for-review
+ai_label: true
+youtube_url: "{YOUTUBE_URL}"
+linkedin_company:
+  text: |
+    Two C# methods with the same body. One reads 5 rows from the database, the other reads all 12. Same result, no exception, no warning.
+
+    Episode 4 of DEVLADLOG Code writes functional C# with LINQ over the Contoso project requests and looks at what really runs:
+    - pure functions over immutable records, with CountBy, AggregateBy and Index from .NET 9 and LeftJoin from .NET 10
+    - a CSV import where errors are values, written as a query with Select and SelectMany on a Result type
+    - deferred execution: the analyzer rule CA1851 catches a query that runs three times, and a lambda that captures the variable changes the count from 5 to 1
+    - the SQL SQLite actually received: IQueryable gets a WHERE clause, IEnumerable does not
+
+    34 tests, and the same queries against a real SQLite database with EF Core 10.
+
+    Watch: {YOUTUBE_URL}
+    Code: {REPO_URL}
+    Guide: {BLOG_URL}
+
+    Narration uses an AI voice.
+    #DotNet #CSharp #LINQ #EntityFramework
+linkedin_personal:
+  text: |
+    I wrote the same filter twice. Same body, one parameter typed IQueryable, the other IEnumerable. Both returned the same 5 requests.
+
+    The SQL tells a different story. With IQueryable, SQLite received a WHERE clause and 5 rows. With IEnumerable, there was no WHERE clause: all 12 rows came back and the filter ran in memory. No exception, no warning.
+
+    With 12 rows nobody notices. With twelve million everybody does. I now keep a test that checks the generated SQL.
+
+    Episode 4 of my C# series, with the other LINQ surprises: {YOUTUBE_URL}
+
+    #DotNet #LINQ
+
+    Narration uses an AI voice.
+facebook:
+  text: |
+    New C# video: LINQ without the surprises. We write functional C# with the new .NET 9 and 10 operators, then look at what really runs. A query that executes three times, a lambda that captures a variable so the count goes from five to one, and one parameter type that makes your app read the whole table.
+
+    Watch: {YOUTUBE_URL}
+
+    #DotNet #LINQ
+
+    Narration uses an AI voice.
+shorts:
+  - id: hook
+    youtube_short_title: "LINQ looks simple until you check what really runs #Shorts"
+    instagram_reel:
+      caption: |
+        LINQ looks like it simply reads data. Then a query quietly runs three times. A variable you changed later changes the answer. And one parameter type makes your app download the whole table, with the right result and no warning. We write functional C# with LINQ and look at what really runs.
+        Full episode: link in bio.
+        Narration uses an AI voice.
+        #LINQ #CSharp #DotNet
+      cover_text: "What does LINQ really run?"
+    tiktok:
+      caption: "A LINQ query runs three times. A changed variable changes the answer. One parameter type reads the whole table. #LINQ #CSharp #DotNet"
+  - id: gotcha
+    youtube_short_title: "LINQ count 5, then 1: the lambda captures the variable #Shorts"
+    instagram_reel:
+      caption: |
+        We define a LINQ query with a threshold of 50,000. Count says 5. Later, someone changes the threshold variable. Same query object, count again: 1. The lambda captured the variable, not its value, and the query only runs when you enumerate it. If you need a snapshot, call ToList at that moment.
+        Full episode: link in bio.
+        Narration uses an AI voice.
+        #LINQ #CSharp #DotNet
+      cover_text: "Count 5, then count 1"
+    tiktok:
+      caption: "Same LINQ query, count 5. Change the threshold variable, count 1. The lambda captures the variable, not the value. #LINQ #CSharp #DotNet"
+  - id: iqueryable
+    youtube_short_title: "IQueryable vs IEnumerable: same body, different SQL #Shorts"
+    instagram_reel:
+      caption: |
+        Two methods with the same body. With IQueryable, Entity Framework turns the Where into SQL: a WHERE clause and 5 rows. With IEnumerable, it reads every row and the filter runs in memory: no WHERE clause, 12 rows, for the same 5 results. Same answer, no error, no warning.
+        Full episode: link in bio.
+        Narration uses an AI voice.
+        #LINQ #EntityFramework #DotNet
+      cover_text: "Same body, different SQL"
+    tiktok:
+      caption: "IQueryable: WHERE clause, 5 rows. IEnumerable: no WHERE, 12 rows, same 5 results. No warning. #LINQ #EntityFramework #DotNet"
