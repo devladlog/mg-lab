@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<manifest>
+  <control namespace="MGLab" constructor="BudgetBand" version="1.0.1"
+           display-name-key="Budget band" description-key="Currency input that understands 50k and local number formats, and shows which approval band the amount falls into."
+           control-type="standard">
+    <external-service-usage enabled="false"></external-service-usage>
+
+    <type-group name="amounts">
+      <type>Currency</type>
+      <type>Decimal</type>
+    </type-group>
+
+    <!-- The column the control edits -->
+    <property name="amount" display-name-key="Amount" description-key="The currency column to edit."
+              of-type-group="amounts" usage="bound" required="true" />
+
+    <!-- Configured per form by the maker (static values or another column) -->
+    <property name="highThreshold" display-name-key="High priority threshold" description-key="Amounts at or above this are High priority. Keep in sync with the server-side rule."
+              of-type="Whole.None" usage="input" required="false" default-value="50000" />
+    <property name="approvalLimit" display-name-key="Approval limit" description-key="Optional. Amounts above this need a board decision."
+              of-type="Whole.None" usage="input" required="false" />
+
+    <resources>
+      <code path="index.ts" order="1" />
+      <css path="css/BudgetBand.css" order="1" />
+    </resources>
+  </control>
+</manifest>

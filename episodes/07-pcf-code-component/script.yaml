@@ -1,0 +1,247 @@
+episode: 7
+slug: pcf-code-component
+title: "A Power Apps code component (PCF) in TypeScript"
+subtitle: "Unit-tested, pushed to Dataverse, real form"
+voice: am_michael
+thumbnail_text: "PCF CODE\nCOMPONENT\nIN TYPESCRIPT"
+youtube:
+  title: "Power Apps Code Component (PCF) in TypeScript with Unit Tests (Real Demo) | MG Lab #7"
+  tags: [PCF, Power Apps component framework, code component, TypeScript, Jest, model-driven apps, Dataverse, pac CLI, Power Platform]
+next_episode: ""
+
+scenes:
+  - id: hook
+    type: title
+    heading: "A code component in TypeScript"
+    sub: "Unit-tested, pushed to Dataverse, on a real form"
+    short: hook
+    narration: >
+      Users type fifty k into a budget field and get an error. They don't know a big budget changes the priority until
+      after they save. In this episode we fix both with a Power Apps code component written in TypeScript: unit tested,
+      pushed to Dataverse, and running on a real form, including the bug we only found there. Welcome to MG Lab.
+
+  - id: when
+    type: bullets
+    heading: "When is a code component worth it?"
+    bullets:
+      - "Business rules and form logic first: no code"
+      - "Code component when the input itself must change"
+      - "Reusable across forms, apps and environments"
+      - "Ships in a solution, like any other component"
+      - "The server still enforces the rules"
+    narration: >
+      First, when is it worth it? Start with business rules and form logic, they need no code. A code component makes
+      sense when the input itself has to behave differently. It's reusable across forms and apps, it ships in a solution
+      like everything else, and it never replaces server-side rules. It explains them.
+
+  - id: plan
+    type: bullets
+    heading: "What we're building"
+    bullets:
+      - "Budget band: a field component for currency columns"
+      - "Understands 50k, 1.2m and the user's number format"
+      - "Shows the approval band while you type"
+      - "Same 50,000 threshold as the plugin from episode 4"
+      - "Logic in a pure module, covered by Jest tests"
+    narration: >
+      We're building Budget band, a field component for currency columns. It understands fifty k, one point two m and
+      the user's own number format, and shows which approval band the amount falls into while you type. Same fifty
+      thousand threshold as the plugin from episode four. And all the logic lives in a pure module with Jest tests.
+
+  - id: manifest
+    type: code
+    heading: "The manifest: what the maker can configure"
+    lang: xml
+    code: |
+      <control namespace="MGLab" constructor="BudgetBand" version="1.0.1" control-type="standard">
+        <type-group name="amounts"> <type>Currency</type> <type>Decimal</type> </type-group>
+
+        <property name="amount"        of-type-group="amounts" usage="bound" required="true" />
+        <property name="highThreshold" of-type="Whole.None"    usage="input" default-value="50000" />
+        <property name="approvalLimit" of-type="Whole.None"    usage="input" />
+
+        <resources>
+          <code path="index.ts" order="1" />
+          <css  path="css/BudgetBand.css" order="1" />
+        </resources>
+      </control>
+    narration: >
+      It starts with pac p c f init and the manifest. One bound property, the currency column the control edits. And two
+      input properties the maker configures on the form: the high priority threshold, defaulting to fifty thousand, and
+      an optional approval limit.
+
+  - id: logic
+    type: code
+    heading: "The rules live in a pure module"
+    lang: typescript
+    code: |
+      export function parseAmount(input: string, format: NumberFormat): ParseResult {
+          let text = input.trim().toLowerCase().replace(/[€$]/g, "").trim();
+          if (text === "") return { ok: true, value: null };
+          if (text.startsWith("-")) return { ok: false, error: "Budget can't be negative." };
+          // "50k" → 50 × 1,000 ; then the USER's group and decimal separators
+          ...
+      }
+
+      export function classify(value: number | null, highThreshold: number, max?: number | null) {
+          if (max && value > max)    return { band: "overMax", message: "Above the approval limit..." };
+          if (value >= highThreshold) return { band: "high",    message: "Priority will be set to High on save." };
+          return { band: "standard", message: "Standard budget." };
+      }
+    narration: >
+      The rules live in budget dot t s, with no DOM and no P C F context. Parse amount turns what the user typed into a
+      number, using the user's own separators. Classify decides the band. The control class only wires the input box to
+      the platform: update view in, notify output changed out, and only when the user leaves the field.
+
+  - id: tests
+    type: code
+    heading: "Nineteen Jest tests"
+    lang: text
+    code: |
+      $ npx jest
+       PASS  BudgetBand/__tests__/budget.test.ts
+        parseAmount
+          ✓ en-US: 50,000.50 -> 50000.5
+          ✓ en-US: 50k -> 50000
+          ✓ pt-PT: 50 000,50 -> 50000.5
+          ✓ pt-PT: a dot is not a decimal separator
+          ✓ en-US: 75.000 is seventy-five, not seventy-five thousand
+          ...
+        classify
+          ✓ the threshold itself is high (same >= as the plugin)
+          ✓ above the approval limit
+
+      Tests:       19 passed, 19 total
+      Time:        1.1 s
+    narration: >
+      Because the logic is pure, it's easy to test. Nineteen Jest tests cover English and Portuguese number formats,
+      suffixes, empty and invalid input, and the band boundaries, including the exact threshold, with the same greater
+      or equal as the plugin. They run in about a second, so they go in your pipeline.
+
+  - id: push
+    type: code
+    heading: "pac pcf push"
+    lang: text
+    code: |
+      $ npm run build                        # ESLint + webpack → out/controls/BudgetBand
+      [build] Succeeded
+
+      $ pac auth create --deviceCode --environment https://contoso-dev.crm.dynamics.com
+      $ pac pcf push --solution-unique-name MGLabDemo
+        Building temporary solution wrapper: done.
+        Solution Imported successfully.
+        Adding control to solution 'MGLabDemo'.
+        Published All Customizations.
+
+      # ~80 seconds, from Linux. No Visual Studio needed.
+    narration: >
+      To deploy, sign in with a device code and run pac p c f push. It builds a temporary solution, imports it and adds
+      the control to our solution. About eighty seconds, and this ran on Linux with the dot net version of the Power
+      Platform CLI. Push is for development. For release, you package a solution project, and we'll get to that.
+
+  - id: designer
+    type: screen
+    heading: "Configured on the form, no code"
+    image: screens/designer.jpg
+    crop: [290, 180, 1060, 518]
+    highlight: [808, 8, 250, 500]
+    bar: "Power Apps · form designer · Budget → Components"
+    narration: >
+      In the form designer, select the budget field, open components and add Budget band. The maker sets the threshold
+      and the approval limit right here: fifty thousand and two hundred and fifty thousand. No code, and a different
+      form can use different values.
+
+  - id: live
+    type: screen
+    heading: "Type 75k, see the consequence"
+    image: screens/typing75k.jpg
+    crop: [0, 330, 820, 160]
+    highlight: [160, 40, 656, 64]
+    bar: "Model-driven app · Project Request"
+    short: live
+    narration: >
+      Now the real form. The user types seventy-five k. Before anything is saved, the bar turns orange and the control
+      explains what will happen: high budget, priority will be set to High on save. No surprises after the fact.
+
+  - id: server
+    type: screen
+    heading: "The client explains, the server enforces"
+    image: screens/saved.jpg
+    crop: [0, 330, 820, 160]
+    highlight: [160, 40, 656, 102]
+    bar: "Model-driven app · after Save"
+    short: server
+    narration: >
+      Leave the field and it becomes seventy-five thousand euros. Save, and priority is now High. That's not the
+      control, it's the plugin from episode four running on the server. The control only explains the rule. The server
+      still enforces it, for every app, every import and every API call.
+
+  - id: dollar
+    type: screen
+    heading: "The bug we only saw on the real form"
+    image: screens/dollar.jpg
+    crop: [0, 330, 820, 160]
+    highlight: [160, 40, 300, 42]
+    bar: "Model-driven app · version 1.0.0"
+    short: gotcha
+    narration: >
+      And the bug we only found on the real form. Version one point oh showed dollars on a euro record. Format currency
+      doesn't know the record's currency, it falls back to the user's default unless you pass a symbol. The fix: show
+      the platform's own formatted value, which does know the currency. Bump the version, push again. Tests didn't catch
+      it, because they never saw the platform.
+
+  - id: locale
+    type: screen
+    heading: "75.000 is not 75,000 for everyone"
+    image: screens/dot.jpg
+    crop: [0, 330, 820, 160]
+    highlight: [160, 40, 400, 64]
+    bar: "Model-driven app · English (United States) user"
+    short: locale
+    narration: >
+      One more on number formats. For this user, in English United States format, seventy-five dot zero zero zero is
+      seventy-five, a standard budget. For a Portuguese user, the same keystrokes mean seventy-five thousand. That's why
+      the parser reads the separators from the user's settings, and why both cases have a test.
+
+  - id: alm
+    type: code
+    heading: "From push to a real release"
+    lang: text
+    code: |
+      # BudgetBand.pcfproj — ship optimized code
+      <PcfBuildMode>production</PcfBuildMode>
+
+      # Package it in a solution project
+      $ pac solution init --publisher-name mglab --publisher-prefix mgl
+      $ pac solution add-reference --path ../BudgetBand
+      $ dotnet build -c Release              # → bin/Release/Solution.zip
+
+      # Every change: bump the version in the manifest (1.0.0 → 1.0.1)
+      # or the platform keeps serving the old bundle.
+    narration: >
+      For a real release, set the build mode to production, create a solution project with pac solution init, add a
+      reference to the component and build it. That zip goes through the same pipeline as everything else, like in
+      episode one. And bump the version on every change, or the platform keeps serving the old bundle.
+
+  - id: recap
+    type: bullets
+    heading: "Five rules"
+    bullets:
+      - "Business rules first; code components when the input must change"
+      - "Logic in a pure module, unit-tested"
+      - "The client explains, the server enforces"
+      - "Respect the user's number format and the record's currency"
+      - "Production build, solution project, bump the version"
+    narration: >
+      Five rules. Use business rules first, and code components when the input itself must change. Keep the logic in a
+      pure module with unit tests. Let the client explain and the server enforce. Respect the user's number format and
+      the record's currency. And release with a production build, a solution project and a new version number.
+
+  - id: outro
+    type: outro
+    heading: "Component, tests and solution project on GitHub"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The component, the Jest tests and the solution project are on GitHub. The link is in the description. Tell us in
+      the comments what you'd like to see in the next MG Lab episode. Subscribe so you don't miss it. This was MG Lab,
+      by Momento Galático.
