@@ -24,7 +24,7 @@ The same table is used in [episode 2](../02-security-roles-teams/) to explain se
 | [`src/dvlab/fake.py`](src/dvlab/fake.py) | **In-memory stand-in** for the slice of the Web API used here, mounted as a `requests` transport adapter (see below) |
 | [`src/dvlab/cli.py`](src/dvlab/cli.py) | `python -m dvlab provision | import | report | all [--fake]` |
 | [`sample/project-requests.csv`](sample/project-requests.csv) | 21 fictional rows: one duplicate code (update), one negative budget (server rejects), one code with `/` (rejected locally) |
-| [`tests/`](tests/) | 41 pytest tests |
+| [`tests/`](tests/) | 43 pytest tests |
 
 ## Run and test (no tenant)
 

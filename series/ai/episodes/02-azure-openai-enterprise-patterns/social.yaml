@@ -1,0 +1,87 @@
+episode: 2
+series: DEVLADLOG AI
+status: draft-hold-for-review
+ai_label: true
+youtube_url: '{YOUTUBE_URL}'
+linkedin_company:
+  text: |
+    One team calling one model deployment is a demo. Ten teams sharing it is a platform.
+
+    Episode 2 of DEVLADLOG AI builds the AI gateway pattern in Azure API Management, as code:
+
+    - Both Azure OpenAI accounts keyless: local auth disabled, only the gateway's managed identity can call the model
+    - One subscription and one token budget per team: over the minute limit returns 429, over the monthly quota returns 403
+    - Primary and secondary region behind circuit breakers that accept 429
+    - Token metrics by subscription in Application Insights
+    - 37 tests that run before anything is deployed, including a Bicep compile
+
+    The gotcha: the OpenAI SDK retries a 429 twice by default, so a gateway retry behind it can turn one call into nine. Retry in one place.
+
+    Watch the episode: {YOUTUBE_URL}
+    Code: {REPO_URL}
+    Guide: {BLOG_URL}
+
+    Narration uses an AI voice.
+    #AzureOpenAI #APIManagement #AzureAI #Bicep
+linkedin_personal:
+  text: |
+    A team's quota got burned by one chatty app, and everyone else paid for it. That is the problem an AI gateway solves, so I built one in Bicep for the second DEVLADLOG AI episode.
+
+    The part that surprised me: the OpenAI SDK retries a 429 twice by default. Put a gateway retry of two behind it and one click can become nine calls to the model, all counting against your quota. The test in the repo proves one call becomes three requests.
+
+    Retry in one place. Ours is the gateway.
+
+    {YOUTUBE_URL}
+
+    #AzureOpenAI #AzureAI
+    Narration uses an AI voice.
+facebook:
+  text: |
+    Ten teams sharing one Azure OpenAI model needs rules: no keys in apps, a token budget per team, and a second region when the first throttles.
+
+    This DEVLADLOG AI episode builds that gateway in Azure API Management, all in Bicep, with 37 tests that run before deployment. One surprise: SDK retries and gateway retries multiply, so one call can become nine.
+
+    Watch: {YOUTUBE_URL}
+
+    #AzureOpenAI #AzureAI
+    Narration uses an AI voice.
+shorts:
+- id: hook
+  youtube_short_title: 'Ten teams, one Azure OpenAI model, zero keys #Shorts'
+  instagram_reel:
+    caption: |
+      One team calling one model deployment is a demo. Ten teams sharing it is a platform. Who used which tokens? What happens when one app burns the quota for everyone, or a region starts throttling? And where are the keys? This episode answers it as code, with an API Management gateway.
+
+      Full episode: link in bio
+
+      #AzureOpenAI #APIManagement #AzureAI
+    cover_text: TEN TEAMS, ZERO KEYS
+  tiktok:
+    caption: 'One model, ten teams: who used which tokens? What if one app burns the quota? And where
+      are the keys? We build the AI gateway as code. #AzureOpenAI #AzureAI'
+- id: policy
+  youtube_short_title: 'One gateway policy: per-team token limits and metrics #Shorts'
+  instagram_reel:
+    caption: |
+      The gateway policy does four things. The token limit counts per subscription, so per team: over 2,000 tokens a minute returns 429 with retry-after, over the monthly quota returns 403. Token metrics go to Application Insights by subscription. The caller's key is removed and the gateway's own token is added.
+
+      Full episode: link in bio
+
+      #APIManagement #AzureOpenAI #AzureAI
+    cover_text: PER-TEAM TOKEN LIMITS
+  tiktok:
+    caption: 'Gateway policy: per-team token limit (429 over the minute, 403 over the monthly quota),
+      metrics by subscription, caller key swapped for the gateway''s token. #APIManagement #AzureAI'
+- id: gotcha
+  youtube_short_title: 'The retry trap: one call becomes nine #Shorts'
+  instagram_reel:
+    caption: |
+      The OpenAI SDK retries 429 twice by default, so one call becomes three requests. Put a gateway retry of two behind that and one click can become nine calls to the model, all counting against your quota. Retry in one place. Ours does one fast retry to reach the other region, and the app adds no loop.
+
+      Full episode: link in bio
+
+      #AzureOpenAI #AzureAI #Bicep
+    cover_text: ONE CALL BECOMES NINE
+  tiktok:
+    caption: 'The OpenAI SDK retries 429s twice. Add a gateway retry of two and one call can become nine
+      against your quota. Retry in one place. #AzureOpenAI #AzureAI'
