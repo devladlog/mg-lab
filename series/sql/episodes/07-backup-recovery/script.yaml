@@ -1,0 +1,189 @@
+# DEVLADLOG SQL — episode 07 (draft: screen scenes need the recording described in demo.md)
+episode: 7
+slug: backup-recovery
+series_label: "SQL"
+series_name: "DEVLADLOG SQL"
+file_prefix: "sql"
+title: "Backup & Recovery"
+subtitle: "Full, differential and log backups, and a point-in-time restore into a copy"
+voice: am_michael
+thumbnail_text: "ONE UPDATE\nNO WHERE\nFREE BIKES"
+youtube:
+  title: "SQL Server Backup and Recovery: Point-in-Time Restore Into a Copy, Verified | DEVLADLOG SQL #7"
+  tags: [SQL Server, SQL Server backup, SQL Server restore, point in time recovery, transaction log backup, differential backup, RESTORE VERIFYONLY, DBCC CHECKDB, disaster recovery, T-SQL]
+sources:
+  - https://www.devladlog.com/articles/sql/2025-08-07-backup-recovery-complete-guide-2025/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "One UPDATE without a WHERE made every bike free."
+    sub: "Backup and recovery on SQL Server 2022, with a restore you have actually run"
+    short: hook
+    narration: >
+      Somebody ran an update without a where clause, and every product in the shop now costs zero. And a good
+      order arrived right after it. Can you get the prices back without losing that order? Today we back up a
+      database properly, break it on purpose, and restore it to the minute before.
+
+  - id: plan
+    type: bullets
+    heading: "One database, four backup files"
+    bullets:
+      - "ContosoBikesBackup: episode 5's tables, FULL recovery"
+      - "Full, differential, two log backups"
+      - "Restore into a copy, never over production"
+      - "Every step checked against an expected file"
+    narration: >
+      The lab database holds episode five's tables, in the full recovery model. We take a full backup, a
+      differential, and log backups. After the accident we restore into a copy next to the live database, and
+      every step is compared with an expected result.
+
+  - id: gotcha-screen
+    type: screen
+    heading: "Gotcha: full recovery protects nothing yet"
+    image: screens/b01-log-before-full.jpg
+    bar: "SSMS · CON-SQL01 · master · b01-log-before-full.sql"
+    short: gotcha
+    demo: "SSMS connected to CON-SQL01 (masked), right after the runner's --setup. Run src/sql/b01-log-before-full.sql. Messages tab: Msg 4214, 'BACKUP LOG cannot be performed because there is no current database backup.' followed by 'BACKUP LOG is terminating abnormally'. Keep the BACKUP LOG line visible in the query window."
+    narration: >
+      First, the honest gotcha. The database is in full recovery, so surely a log backup works. It does not.
+      Error four two one four: there is no current database backup. Full recovery only starts to protect you
+      after the first full backup. Until then, you have nothing.
+
+  - id: full
+    type: code
+    heading: "The full backup: checksum, compression"
+    lang: sql
+    code: |
+      DECLARE @file nvarchar(300) = @dir + N'MGLab_ContosoBikesBackup_Full.bak';
+      BACKUP DATABASE ContosoBikesBackup TO DISK = @file WITH INIT, CHECKSUM, COMPRESSION, STATS = 50;
+    narration: >
+      So the first full backup. Checksum makes SQL Server verify each page as it reads it and store a checksum
+      for the whole backup, so a restore can verify it later. The folder comes from a server property, so the
+      script has no hard coded paths. If a page fails its checksum, the backup stops by default, which is what you want. This full backup is also the base of every differential.
+
+  - id: diff-log
+    type: code
+    heading: "Differential, then log"
+    lang: sql
+    code: |
+      BACKUP DATABASE ContosoBikesBackup TO DISK = @file WITH DIFFERENTIAL, INIT, CHECKSUM, COMPRESSION, STATS = 50;
+      -- ... d02 adds one more order ...
+      BACKUP LOG ContosoBikesBackup TO DISK = @file WITH INIT, CHECKSUM, COMPRESSION, STATS = 50;
+    narration: >
+      The differential holds only what changed since the full, and at restore time you need just the latest
+      one. The log backup holds every log record not yet backed up, and that is what makes a restore to a point
+      in time possible. Microsoft also recommends keeping log backups on a different volume than the database backups.
+
+  - id: history-screen
+    type: screen
+    heading: "msdb remembers every backup"
+    image: screens/b04-backup-history.jpg
+    bar: "SSMS · CON-SQL01 · msdb · msdb-history.sql"
+    demo: "SSMS, after the runner has run steps b01 to b04 (use --step for each, or stop the run after b04). Run src/sql/msdb-history.sql. Grid, three rows ordered by start time: type D (full), I (differential), L (log), each with first_lsn and last_lsn, is_copy_only 0 and a physical_device_name ending in MGLab_ContosoBikesBackup_Full.bak, _Diff.bak and _Log1.trn."
+    narration: >
+      Every backup is recorded in msdb. A full, a differential, a log, with their log sequence numbers and
+      file names. That history is what a restore plan is built from, and it lives in msdb, so back up msdb as well. Learn recommends doing that frequently, or you lose the map to your own backups.
+
+  - id: incident
+    type: code
+    heading: "The accident, and a good order after it"
+    lang: sql
+    code: |
+      INSERT INTO dbo.RecoveryMarks (Name, MarkTime) VALUES (N'before-bad-update', GETDATE());
+      UPDATE Sales.Products SET ListPrice = 0;
+      INSERT INTO Sales.Orders (OrderId, CustomerId, OrderDate, Status) VALUES
+          (1012, 4, '2025-05-20', N'Placed');
+      BACKUP LOG ContosoBikesBackup TO DISK = @file WITH INIT, CHECKSUM, COMPRESSION, STATS = 50;
+    narration: >
+      Now the accident. We write down the time just before it, which a real incident would not hand you, you
+      would read it from the application log. Then the update with no where clause, then a legitimate order,
+      and a second log backup that contains all of it. The live database stays online the whole time, so we do not even need a tail log backup.
+
+  - id: restore
+    type: code
+    heading: "Restore into a copy, stopped before the UPDATE"
+    lang: sql
+    code: |
+      (1, CONCAT(N'RESTORE DATABASE ContosoBikesRecovered FROM DISK = ', @q, @bak, N'MGLab_ContosoBikesBackup_Full.bak', @q,
+                 N' WITH MOVE N''ContosoBikesBackup'' TO ', @mdf, N', MOVE N''ContosoBikesBackup_log'' TO ', @ldf,
+                 N', NORECOVERY, CHECKSUM, STOPAT = ', @stopText, N';')),
+      -- ... the differential and the two log backups, same options ...
+      (5, N'RESTORE DATABASE ContosoBikesRecovered WITH RECOVERY;');
+    narration: >
+      The restore goes into a new database, so production is never touched. Full, differential, and both logs,
+      all with no recovery and the same stop at time, then one separate step to recover. Learn calls that the
+      best practice, and it lets you stop and look before you commit. And the chain must be complete: if one log backup is lost or damaged, you can only restore the logs before the missing one.
+
+  - id: restore-screen
+    type: screen
+    heading: "The copy: prices back, order not there"
+    image: screens/b06-restore-copy.jpg
+    bar: "SSMS · CON-SQL01 · master · b06-restore-copy.sql"
+    short: restore
+    demo: "SSMS, run src/sql/b06-restore-copy.sql after step b05 has run. Messages tab: the RESTORE progress lines for the full, differential and two log backups and 'RESTORE DATABASE successfully processed'. Grid, four rows: Recovered copy state / ONLINE; Products priced at 0 in the copy / 0; Orders in the copy / 11; Order 1012 in the copy / 0. Object Explorer refreshed so ContosoBikesRecovered is visible next to ContosoBikesBackup."
+    narration: >
+      The copy is online. No product is priced at zero. Eleven orders are there, but order one thousand and
+      twelve is not, because it came after the stop time. That is the price of a point in time restore, and the
+      reason we do not simply overwrite the live database.
+
+  - id: planner
+    type: code
+    heading: "A restore planner, with tests"
+    lang: python
+    code: |
+      candidates = [r for r in fulls if r.finish <= target]
+      full = max(candidates, key=lambda r: r.finish)
+      base = max(diffs, key=lambda r: r.finish) if diffs else full
+      steps = [full] + ([base] if base is not full else [])
+      logs = sorted((r for r in rows if r.kind == "L" and r.last_lsn > base.last_lsn), key=lambda r: r.first_lsn)
+    narration: >
+      Under pressure, picking files by hand is how mistakes happen. So a small Python planner reads the msdb
+      history and builds the sequence: the latest full before the target, the latest differential after it, then
+      the logs in order. Copy only backups never count, and a gap in the log chain is an error. The runner
+      checks the planner picks the same four files the script restored.
+
+  - id: verify
+    type: code
+    heading: "Verify the backup, and check the copy"
+    lang: sql
+    code: |
+      DBCC CHECKDB (N'ContosoBikesRecovered') WITH NO_INFOMSGS, ALL_ERRORMSGS;
+      RESTORE VERIFYONLY FROM DISK = @file WITH CHECKSUM;
+    narration: >
+      A successful restore is not proof of a healthy database. Run check d b on the copy. And verify only
+      reads the backup and checks its checksum. Microsoft is clear that it does not verify the structure of the
+      data inside, so it complements a real test restore, it does not replace one. Which is exactly what this whole lab is.
+
+  - id: repair-screen
+    type: screen
+    heading: "Repair the live database from the copy"
+    image: screens/b07-verify-and-repair.jpg
+    bar: "SSMS · CON-SQL01 · ContosoBikesBackup · b07-verify-and-repair.sql"
+    demo: "SSMS, run src/sql/b07-verify-and-repair.sql. Messages tab: DBCC CHECKDB finished without output (NO_INFOMSGS), 'The backup set on file 1 is valid.' from RESTORE VERIFYONLY, then '(5 rows affected)' for the repair. Grid, three rows: Products priced at 0 in the live database / 0; Prices equal to the copy / 5; Orders in the live database / 12."
+    narration: >
+      Then the repair. Copy the prices from the restored copy back into the live tables, with an update that
+      only touches the rows that differ. Five prices fixed, and twelve orders, including the good one that arrived
+      after the accident. Nothing was overwritten, and nothing was lost.
+
+  - id: recap
+    type: bullets
+    heading: "Five rules"
+    bullets:
+      - "Full recovery needs a full backup first"
+      - "Backup WITH CHECKSUM, and verify it"
+      - "Restore into a copy, same STOPAT everywhere"
+      - "CHECKDB the copy, then repair from it"
+      - "A backup you never restored is a hope"
+    narration: >
+      Five rules. Full recovery needs a full backup first. Back up with checksum, and verify. Restore into a copy,
+      with the same stop at time in every statement. Check the copy, then repair from it. And a backup you
+      never restored is only a hope.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The scripts, the planner and the tests are on GitHub, and the complete guide is on dev lad log dot com.
+      Next time: SQL Server performance tuning. This was dev lad log SQL, by Momento Galático.

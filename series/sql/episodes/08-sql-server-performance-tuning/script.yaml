@@ -1,0 +1,208 @@
+# DEVLADLOG SQL — episode 08 (draft: screen scenes need the recording described in demo.md)
+episode: 8
+slug: sql-server-performance-tuning
+series_label: "SQL"
+series_name: "DEVLADLOG SQL"
+file_prefix: "sql"
+title: "SQL Server Performance Tuning"
+subtitle: "Measure first: configuration, expensive queries, blocking and wait statistics"
+voice: am_michael
+thumbnail_text: "SLOW?\nMEASURE\nFIRST"
+youtube:
+  title: "SQL Server Performance Tuning: Find the Real Bottleneck With Waits and Blocking | DEVLADLOG SQL #8"
+  tags: [SQL Server, SQL Server performance tuning, wait statistics, sys.dm_os_wait_stats, blocking, READ_COMMITTED_SNAPSHOT, RCSI, dm_exec_query_stats, MAXDOP, cost threshold for parallelism, T-SQL]
+sources:
+  - https://www.devladlog.com/articles/sql/2025-07-13-sql-server-performance-tuning-complete-guide-2025/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "The app is slow. Where do you even start?"
+    sub: "SQL Server performance tuning: measure first, then change one thing"
+    short: hook
+    narration: >
+      The app is slow, and everybody has a theory. Add an index, add memory, restart the server. Most of
+      those theories are guesses. Today we measure instead: the configuration, the expensive queries, a
+      real blocking incident that we cause on purpose, and the wait statistics that prove what the server was
+      actually waiting for.
+
+  - id: plan
+    type: bullets
+    heading: "Four measurements, one fix"
+    bullets:
+      - "Configuration: memory, MAXDOP, cost threshold"
+      - "Top statements by logical reads"
+      - "A real blocking incident, diagnosed live"
+      - "Wait statistics as a difference of two snapshots"
+    narration: >
+      Episodes three and four already covered indexes and query plans, so this one is about the server around
+      them. The lab reuses the Contoso Bikes performance database, two hundred thousand orders, and every
+      result is compared with an expected file.
+
+  - id: config
+    type: code
+    heading: "Step one: what is this instance configured to do?"
+    lang: sql
+    code: |
+      WHEN N'max degree of parallelism' THEN 0
+      WHERE c.name IN (N'max server memory (MB)', N'max degree of parallelism', N'cost threshold for parallelism')
+      UNION ALL
+      SELECT 2, N'logical CPUs', CONVERT(nvarchar(20), i.cpu_count), NULL, NULL FROM sys.dm_os_sys_info AS i
+    narration: >
+      Start with three settings and the hardware. Max server memory defaults to practically unlimited. Max
+      degree of parallelism defaults to zero, which means up to sixty four processors, and Microsoft says that
+      is not the recommended value for most cases. Cost threshold defaults to five, and Learn calls that a
+      starting point, not a recommendation. The processor count and physical memory sit next to them, so the
+      numbers have context. Learn also says too low a threshold shows up as parallelism waits, too high as
+      scheduler yields.
+
+  - id: snapshots
+    type: code
+    heading: "Wait statistics: take a snapshot, then another"
+    lang: sql
+    code: |
+      INSERT INTO Tune.WaitSnapshot (Label, WaitType, WaitingTasks, WaitTimeMs, SignalWaitTimeMs)
+      SELECT @Label, wait_type, waiting_tasks_count, wait_time_ms, signal_wait_time_ms
+      FROM sys.dm_os_wait_stats
+      WHERE waiting_tasks_count > 0;
+    narration: >
+      The wait statistics view is cumulative since the instance started, so one look tells you almost nothing.
+      Learn recommends a snapshot before and after, and the difference. It also shows only waits that have
+      completed. So a small procedure stores a labelled snapshot, and a second one subtracts two of them.
+
+  - id: watchlist
+    type: code
+    heading: "A watch list, not an exclusion list"
+    lang: sql
+    code: |
+      e.WaitTimeMs - ISNULL(b.WaitTimeMs, 0) AS WaitTimeMsDelta,
+      AND (LEFT(e.WaitType, 6) = N'LCK_M_' OR LEFT(e.WaitType, 12) = N'PAGEIOLATCH_' OR LEFT(e.WaitType, 10) = N'PAGELATCH_'
+      OR e.WaitType IN (N'WRITELOG', N'SOS_SCHEDULER_YIELD', N'CXPACKET', N'CXCONSUMER', N'ASYNC_NETWORK_IO',
+      ORDER BY WaitTimeMsDelta DESC;
+    narration: >
+      Every server has dozens of background waits that add up to seconds in any window. So the ranking only
+      looks at waits worth acting on: locks, page latches and page reads, log writes, scheduler yields,
+      parallelism, network, and memory grants. A wait that did not change in the window drops out.
+
+  - id: top-queries
+    type: code
+    heading: "Which statements cost the most?"
+    lang: sql
+    code: |
+      SELECT CASE WHEN s.StatementText LIKE N'%mglab-w-scan%' THEN N'scan' ELSE N'seek' END AS Workload,
+             qs.execution_count AS Executions,
+             ROW_NUMBER() OVER (ORDER BY qs.total_logical_reads DESC) AS RankByReads,
+    narration: >
+      The lab runs three full scans and fifty single row lookups, then asks the query stats view. Its rows
+      live only as long as the plan stays cached, and it counts finished queries only. Query Store from
+      episode four keeps the same numbers across restarts, so use that for history and this for right now.
+
+  - id: top-screen
+    type: screen
+    heading: "Fewer executions, much higher cost"
+    image: screens/t02-top-queries.jpg
+    bar: "SSMS · CON-SQL01 · ContosoBikesPerf · t02-top-queries.sql"
+    demo: "SSMS connected to CON-SQL01 (masked), database ContosoBikesPerf, right after src/sql/w01-workload.sql has run. Run src/sql/t02-top-queries.sql. Grid, two rows: scan / 3 / 1 / and a large AvgLogicalReads, then seek / 50 / 2 / and a very small AvgLogicalReads (single digits). Keep the Executions and RankByReads columns visible."
+    narration: >
+      The scan ran three times and ranks first. The lookup ran fifty times and ranks second. If you sorted by
+      executions you would tune the wrong thing. Cost is executions times work per execution.
+
+  - id: blocker
+    type: code
+    heading: "Two windows: a writer that never commits, a reader"
+    lang: sql
+    code: |
+      BEGIN TRANSACTION;
+      UPDATE Sales.Orders SET Status = 'Cancelled' WHERE OrderId = 1;
+      -- ... window 2 ...
+      SELECT Status FROM Sales.Orders WHERE OrderId = 1 /* mglab-blocked-report */;
+    narration: >
+      Now a real incident. Window one changes an order and then does something slow before committing, like
+      calling a web service. The exclusive lock stays. Window two simply reads that one row. Under the default
+      read committed level it needs a shared lock, so it waits. Nothing is broken, it is just stuck.
+
+  - id: gotcha-screen
+    type: screen
+    heading: "Gotcha: the blocker is idle, not busy"
+    image: screens/t03c-diagnose.jpg
+    bar: "SSMS · CON-SQL01 · ContosoBikesPerf · t03c-diagnose.sql"
+    short: gotcha
+    demo: "SSMS, a third query window, while window 1 has the open UPDATE and window 2 is running the report query (spinning). Run src/sql/t03c-diagnose.sql. Grid, one row: BlockedSession is the reader's session, BlockerSession is the writer's, WaitType LCK_M_S, WaitMs counting up (about a second or more), BlockerOpenTransactions 1, BlockedStatement is the report SELECT with the mglab-blocked-report comment, BlockerLastStatement shows BEGIN TRANSACTION and the UPDATE. Session numbers and wait resource are masked."
+    narration: >
+      Here is the gotcha. The blocker is not running anything. It is idle, with an open transaction. The
+      requests view shows who waits, for how long, and which session blocks them, and the connections view
+      holds the blocker's last statement. And the wait statistics view would show nothing yet, because the
+      wait has not finished.
+
+  - id: fix
+    type: code
+    heading: "The fix on the server side: row versioning"
+    lang: sql
+    code: |
+      ALTER DATABASE ContosoBikesPerf SET READ_COMMITTED_SNAPSHOT ON WITH ROLLBACK IMMEDIATE;
+    narration: >
+      The real cure is a shorter transaction in the application. On the server, read committed snapshot lets
+      readers see the last committed version instead of waiting. Learn says no other connection may be open in
+      the database while it changes, so this disconnects them. Rows grow by up to fourteen bytes, and the
+      version store lives in tempdb. It is a trade, not a free lunch.
+
+  - id: rcsi-screen
+    type: screen
+    heading: "Same writer, same reader, no wait"
+    image: screens/t03-rcsi-reader.jpg
+    bar: "SSMS · CON-SQL01 · ContosoBikesPerf · t03b-reader.sql"
+    short: rcsi
+    demo: "SSMS, two query windows side by side after src/sql/t03e-enable-rcsi.sql has run. Left window: src/sql/t03a-blocker.sql executed, the UPDATE has run and the transaction is still open (status bar shows the open transaction). Right window: src/sql/t03b-reader.sql executed, it returns immediately with one row, Status = Shipped, execution time 00:00:00. Highlight that the value is the committed one, not Cancelled."
+    narration: >
+      Same writer, still holding its transaction. Same reader. This time it returns immediately, and it sees
+      shipped, the last committed value, not the cancelled one nobody has committed. The reader did not wait,
+      and it never saw uncommitted data.
+
+  - id: waits-screen
+    type: screen
+    heading: "The waits agree with the story"
+    image: screens/t04-wait-delta.jpg
+    bar: "SSMS · CON-SQL01 · ContosoBikesPerf · t04-wait-delta.sql"
+    demo: "SSMS, run src/sql/t04-wait-delta.sql, then src/sql/t04b-wait-delta-after-rcsi.sql. First grid: LCK_M_S at the top, WaitingTasksDelta 1, WaitTimeMsDelta in the thousands (the seconds the reader waited), followed by a few small waits such as WRITELOG. Second grid: no LCK_M_ row at all, only small waits. Keep the WaitType and WaitTimeMsDelta columns visible."
+    narration: >
+      And the waits agree. Without row versioning, the top wait in the window is a shared lock wait, for
+      the seconds the reader sat there. With row versioning, the lock wait is gone. The story we diagnosed
+      from the requests view, and the numbers from the snapshots, say the same thing.
+
+  - id: runner
+    type: code
+    heading: "Three connections, tested with a fake server"
+    lang: python
+    code: |
+      r.writer_spid = a.run_script("SELECT @@SPID;").rows[0][0]
+      run_one(a, "t03a-blocker")
+      th = threading.Thread(target=reader, daemon=True)
+      th.start()
+    narration: >
+      The runner plays all three roles with real threads: a writer, a reader, and a diagnoser polling until
+      the block appears. Then the writer rolls back, and everything is released. It switches the setting on only after every connection is closed, and the tests use
+      a fake server that really blocks, so the orchestration is checked without a server. Server behaviour is
+      checked on the lab machine.
+
+  - id: recap
+    type: bullets
+    heading: "Five rules"
+    bullets:
+      - "Measure first, change one thing"
+      - "Defaults are starting points, not answers"
+      - "Rank statements by total cost, not executions"
+      - "Diagnose blocking from the requests view"
+      - "Waits are a difference of two snapshots"
+    narration: >
+      Five rules. Measure first and change one thing. Defaults are starting points. Rank statements by total
+      cost, not executions. Diagnose blocking from the requests view, and remember the blocker may be idle.
+      And read wait statistics as a difference between two snapshots, never as a raw total.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      Every script, the runner and the tests are on GitHub, and the complete guide is on dev lad log dot com.
+      Links are in the description. Next time: high availability and disaster recovery. This was dev lad log SQL,
+      by Momento Galático.
