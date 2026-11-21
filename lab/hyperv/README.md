@@ -11,6 +11,8 @@ Real VMs for the DEVLADLOG demos (Windows Server, Active Directory, SQL Server),
 - All files go to `\MGLab` on the fixed drive with the most free space (change `LabRoot` in `lab.config.psd1`).
 
 ## Run it
+Easiest: double-click **`Run-MGLab.cmd`** and approve the administrator prompt. Or by hand:
+
 In **Windows PowerShell as Administrator** (right-click → Run as administrator):
 ```powershell
 cd D:\momento_galatico_kit\mg-lab-build\lab\hyperv
