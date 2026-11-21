@@ -1,0 +1,202 @@
+# DEVLADLOG AI — episode 12. Code scenes are real excerpts from src/.
+# Screen scenes: capture per demo.md. Narration describes what must be on screen without quoting live numbers;
+# after recording, adjust the sentences marked TODO to what the service really returned (including a failed gate).
+episode: 12
+slug: nlp-text-analytics
+series_label: "AI"
+series_name: "DEVLADLOG AI"
+file_prefix: "ai"
+title: "NLP and text analytics: read a thousand tickets without reading the personal data"
+subtitle: "Azure Language: language, PII, sentiment, key phrases, and a privacy gate"
+voice: am_michael
+thumbnail_text: "TICKETS\nWITHOUT\nTHE PII"
+youtube:
+  title: "NLP Text Analytics on Azure Language: PII Redaction, Sentiment, Key Phrases | DEVLADLOG AI #12"
+  tags: [NLP, text analytics, Azure Language, PII redaction, sentiment analysis, opinion mining, key phrase extraction, language detection, Microsoft Foundry, Python, Bicep]
+sources:
+  - https://www.devladlog.com/articles/ai/2025-03-05-nlp-text-analytics-complete-guide-2025/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Analyse the tickets. Keep the people out of it."
+    sub: "Azure Language, with the personal data removed first"
+    short: hook
+    narration: >
+      Every service desk sits on a pile of free text that could tell you what is breaking and who is unhappy. It is also
+      full of names, phone numbers and e-mail addresses. Today the Contoso Porto service desk runs that text through Azure
+      Language, and we make one rule hold: the analysis never sees the personal data. Welcome to DEVLADLOG AI.
+
+  - id: scenario
+    type: bullets
+    heading: "Thirteen fictional tickets, three languages"
+    bullets:
+      - "English, Portuguese and Spanish"
+      - "Names, phones, e-mails, a badge number"
+      - "One thread longer than the limit"
+      - "Everything here is made up"
+    narration: >
+      We have thirteen fictional tickets. English, Portuguese and Spanish. Some carry a name, a phone number or an e-mail
+      address, one carries a badge number that only Contoso understands, one is a long thread over the size limit, and one
+      is blank. The goal is a report with languages, sentiment and the main complaints, and a next step for every ticket.
+
+  - id: order
+    type: bullets
+    heading: "Redact first, analyse second"
+    bullets:
+      - "Detect the language"
+      - "Remove personal data, then our own patterns"
+      - "Only then: sentiment, key phrases, entities"
+      - "If redaction fails, nothing else runs"
+    narration: >
+      The order is the design. First the language, because every later call is better with it. Then the personal data is
+      removed by the service, and after that by a local pattern pass for identifiers only Contoso knows. Only the redacted
+      text goes on to sentiment, key phrases and entities. And if the redaction fails for a ticket, nothing else runs on
+      that raw text.
+
+  - id: limits-code
+    type: code
+    heading: "The limits are constants, not surprises"
+    lang: python
+    code: |
+      MAX_CHARS = 5120                       # synchronous call, per document
+      MAX_DOCS = {"language": 1000, "sentiment": 10, "key_phrases": 10, "entities": 5, "pii": 5}   # documents per request
+      RECORD_CHARS = 1000                    # pricing: "a text record is measured as 1000 characters"
+      F0_FREE_RECORDS_PER_MONTH = 5000       # Learn: the free tier covers 5,000 text records per month
+    narration: >
+      Learn documents the limits. A synchronous document can have five thousand one hundred twenty characters. A request
+      can carry a thousand documents for language detection, ten for sentiment and key phrases, and only five for entities
+      and for personal data. So the code splits long tickets, batches every feature by its own limit, and counts text
+      records, which are a thousand characters each, against the free tier of five thousand a month.
+
+  - id: show-screen
+    type: screen
+    heading: "One ticket, step by step"
+    image: screens/show.jpg
+    bar: "Terminal · python -m ticketnlp show"
+    demo: "Terminal: PYTHONPATH=src python -m ticketnlp show --endpoint $LANG --id en-neg-vpn. The 'original' line with the fictional name, phone number and e-mail, then 'redacted' with asterisks in their place, 'PII removed' with the categories, sentiment with scores, 'aspects', key phrases, entities and the 'next step' line."
+    narration: >
+      Here is one ticket, live. The original has a name, a phone number and an e-mail address. The redacted line has
+      asterisks instead, and the categories that were removed are listed. Sentiment, key phrases and entities were computed
+      on the redacted text, and the last line is the next step for this ticket.
+    # TODO after recording: read the sentiment, the aspect and the next step exactly as printed.
+
+  - id: pii-code
+    type: code
+    heading: "Fail closed"
+    lang: python
+    code: |
+      v = pii[f"{rid}#{i}"]
+      if isinstance(v, Err):
+          results[rid].errors.append(f"pii: {v.code}")
+          ok = False
+          break
+      text, hits = backstop.redact(v.redacted)
+      out.append(text)
+      cats.update(v.categories)
+      results[rid].backstop_hits += hits
+    short: pii
+    narration: >
+      This is the loop that matters. If the personal data call returns an error for a ticket, that ticket is marked
+      blocked, and its raw text is never sent anywhere else. If it works, the service redaction is followed by our own
+      pattern pass, for things like a Contoso badge number. Learn says this feature redacts every entity it detects,
+      whatever the confidence, so the real risk is the entity it does not detect, and the gate in a minute looks for those.
+
+  - id: resource-screen
+    type: screen
+    heading: "Free tier, no keys"
+    image: screens/resource.jpg
+    bar: "Azure portal · Language resource"
+    demo: "Azure portal > the Language resource in rg-mglab-ai-12: Overview (pricing tier Free F0, region West Europe, endpoint with the custom subdomain, masked), then Keys and Endpoint / Identity view showing local authentication disabled, then Access control (IAM) showing the Cognitive Services Language Reader assignment for the lab account. Mask subscription, tenant, user and the resource-name suffix."
+    narration: >
+      The Bicep file created one Language resource. The free tier, West Europe, a custom sub domain, and local
+      authentication disabled, because Microsoft Entra I D only works against the custom sub domain. The developer holds
+      the Language Reader role, which Learn lists as able to run the analyze text call and nothing that changes the resource.
+    # TODO after recording: say whether the Language Reader role was enough, or whether a broader role was needed.
+
+  - id: sentiment-code
+    type: code
+    heading: "Sentiment, and what it is about"
+    lang: python
+    code: |
+      def conv(r):
+          aspects = [(op.target.text, op.target.sentiment) for s in r.sentences for op in (s.mined_opinions or [])]
+          c = r.confidence_scores
+          return Sent(r.sentiment, {"positive": c.positive, "neutral": c.neutral, "negative": c.negative}, aspects)
+      return self._run("sentiment", self.client.analyze_sentiment, items, conv, show_opinion_mining=True)
+    narration: >
+      Sentiment alone says a ticket is negative. Opinion mining says what it is negative about. With one flag, the
+      service links each opinion to a target, like the V P N or the battery, and that is what turns a pile of complaints
+      into a list of things to fix. A long ticket is analysed in chunks, and we merge them with a rule of our own, which the
+      code states: weighted by length, and mixed when the chunks disagree.
+
+  - id: analyze-screen
+    type: screen
+    heading: "The report: no ticket text, no personal data"
+    image: screens/analyze.jpg
+    bar: "Terminal · python -m ticketnlp analyze"
+    demo: "Terminal: PYTHONPATH=src python -m ticketnlp analyze --endpoint $LANG --out build/report.md, which prints the Markdown report: language and sentiment tables, next-step table, PII categories removed, top key phrases and negative aspects, tickets not analysed, the requests sent per feature, and the text-record estimate."
+    narration: >
+      Thirteen tickets in, one report out. The languages, the sentiment, the next step per ticket, which kinds of personal
+      data were removed, and the main phrases in the negative tickets. There is no ticket text in it. At the bottom, the
+      requests that were sent, and an estimate of the text records, against the free tier.
+    # TODO after recording: name the top negative aspect and the largest next-step group as printed.
+
+  - id: route-code
+    type: code
+    heading: "Next step: plain rules with a reason"
+    lang: python
+    code: |
+      if a.skipped or a.errors:
+          return "manual-review", [a.skipped or "; ".join(a.errors)]
+      if a.language_uncertain:
+          return "manual-review", [f"language uncertain ({a.language}, {a.language_confidence:.2f})"]
+      if a.language not in HANDLED_LANGUAGES:
+          return "translate-first", [f"language {a.language} has no support queue"]
+      neg = a.sentiment_scores.get("negative", 0.0)
+      if a.sentiment == "negative" and neg >= NEGATIVE_ESCALATION:
+          return "priority-review", [f"negative {neg:.2f} >= {NEGATIVE_ESCALATION}"]
+      if a.sentiment == "positive":
+          return "feedback-log", ["positive"]
+      return "standard", [a.sentiment or "no sentiment"]
+    narration: >
+      What happens next is a handful of rules, in a fixed order, each with its reason. Errors and uncertain languages go to
+      a person. A language with no queue goes to translation. A strongly negative ticket in a supported language is
+      reviewed first. The threshold is ours, zero point eight five, and you should tune it on your own tickets, not on
+      ours.
+
+  - id: evaluate-screen
+    type: screen
+    heading: "The gate: does any personal data survive?"
+    image: screens/evaluate.jpg
+    bar: "Terminal · python -m ticketnlp evaluate --compare"
+    demo: "Terminal: PYTHONPATH=src python -m ticketnlp evaluate --endpoint $LANG --compare ; echo exit=$?. The table with two rows, 'redact first' and 'analyse raw text': language and sentiment accuracy, PII leaks, requests per feature; the problem, mismatch and LEAK lines; the RESULT line; the exit code."
+    narration: >
+      The gate. Every case has the personal strings we planted, and the check looks for them in everything the pipeline
+      produced: the redacted text, the key phrases, the entities, the aspects. One run redacts first, and a second run
+      analyses the raw text, to show what that leaks. The gate fails on a single surviving string, and also on language
+      or sentiment accuracy below modest thresholds.
+    # TODO after recording: say how many strings leaked in each mode, which ones, and whether the gate passed.
+
+  - id: gotcha
+    type: bullets
+    heading: "The honest gotcha: redaction is not a guarantee"
+    bullets:
+      - "It removes what the service detects, nothing more"
+      - "A planted-string test is only as good as the plants"
+      - "Language and sentiment labels here are ours"
+      - "Thirteen tickets prove plumbing, not accuracy"
+    short: gotcha
+    narration: >
+      The honest part. Redaction removes what the service recognises, and nothing else, so a phone number in an unusual
+      format, or a name in a language it handles less well, can survive. Our gate only finds the strings we planted, so it
+      is a regression test, not a proof. The language and sentiment labels are ours, and thirteen tickets show that the
+      plumbing works, not that the service is accurate on your data. Run your own anonymised tickets, many more.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The batching, the redaction pipeline, the routing rules and the gate are on GitHub, and the complete N L P and text
+      analytics guide is on devladlog dot com. Links are in the description. This was DEVLADLOG AI, by Momento Galático.

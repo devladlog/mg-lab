@@ -31,7 +31,8 @@
         @{ Name = 'CON-SRV02'; Role = 'Member'; Image = 'Desktop'; vCPU = 2; StartupGB = 2; MaxGB = 3; DiskGB = 60;  IP = 22 }
         @{ Name = 'CON-CLI01'; Role = 'Member'; Image = 'Core';    vCPU = 1; StartupGB = 1; MaxGB = 1.5; DiskGB = 60; IP = 41 }
         # Windows 11 Enterprise eval client for the Intune episode: boots into Windows setup for a real Entra join.
-        @{ Name = 'CON-W11-01'; Role = 'Client'; Image = 'Win11'; vCPU = 2; StartupGB = 4; MaxGB = 4; DiskGB = 64; IP = 42; Switch = 'Default Switch' }
+        @{ Name = 'CON-W11-01'; Role = 'Client'; Image = 'Win11'; vCPU = 2; StartupGB = 4; MaxGB = 4; DiskGB = 64; IP = 49; Switch = 'Default Switch' }   # IP unused (DHCP)
+        @{ Name = 'CON-SQL02'; Role = 'SQL';    Image = 'Core';    vCPU = 2; StartupGB = 2; MaxGB = 6; DiskGB = 100; IP = 42 }   # Always On AG secondary (SQL ep 10)
         @{ Name = 'CON-SQL01'; Role = 'SQL';    Image = 'Core';    vCPU = 2; StartupGB = 2; MaxGB = 6; DiskGB = 100; IP = 30 }
     )
 }

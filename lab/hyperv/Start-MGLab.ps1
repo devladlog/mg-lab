@@ -367,8 +367,8 @@ if (-not $NoDomain -and ($vms.Name -contains $dcCfg.Name -or (Get-VM $dcCfg.Name
 }
 
 # ---------------------------------------------------------------- SQL Server
-$sqlCfg = $vms | Where-Object Role -eq 'SQL' | Select-Object -First 1
-if ($sqlCfg -and -not $NoSql) {
+$sqlVms = @($vms | Where-Object Role -eq 'SQL')
+foreach ($sqlCfg in $(if ($NoSql) { @() } else { $sqlVms })) {
     Write-Stage "SQL Server 2022 Developer on $($sqlCfg.Name)"
     $sqlCred = Get-GuestCred $sqlCfg.Name
     $installed = Invoke-Command -VMName $sqlCfg.Name -Credential $sqlCred -ScriptBlock { [bool](Get-Service MSSQLSERVER -ErrorAction SilentlyContinue) }
@@ -406,6 +406,7 @@ if ($sqlCfg -and -not $NoSql) {
         Write-Ok "SQL Server running on $($sw.Prefix).$($sqlCfg.IP),1433 (logins: sa or $($cfg.NetBIOS)\Administrator)"
     }
 }
+$sqlCfg = $sqlVms | Select-Object -First 1
 
 # ---------------------------------------------------------------- summary
 Write-Stage 'MG Lab ready'

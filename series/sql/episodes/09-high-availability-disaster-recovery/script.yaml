@@ -1,0 +1,216 @@
+# DEVLADLOG SQL — episode 09 (draft: screen scenes need the recording described in demo.md)
+episode: 9
+slug: high-availability-disaster-recovery
+series_label: "SQL"
+series_name: "DEVLADLOG SQL"
+file_prefix: "sql"
+title: "High Availability & Disaster Recovery"
+subtitle: "Log shipping by hand, a failover drill with a stopwatch, and an RPO report"
+voice: am_michael
+thumbnail_text: "FAIL OVER\nWITH A\nSTOPWATCH"
+youtube:
+  title: "SQL Server HA and Disaster Recovery: Log Shipping, Failover Drill, RPO | DEVLADLOG SQL #9"
+  tags: [SQL Server, high availability, disaster recovery, log shipping, failover, RPO, RTO, tail-log backup, RESTORE WITH STANDBY, SQL Server 2022, T-SQL]
+sources:
+  - https://www.devladlog.com/articles/sql/2025-08-11-high-availability-disaster-recovery-complete-guide-2025/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "If the database dies at noon, how much do you lose?"
+    sub: "High availability and disaster recovery on SQL Server 2022, with a failover you have actually run"
+    short: hook
+    narration: >
+      If your database died right now, how much data would you lose, and how long until the shop is selling again?
+      Most teams guess. Today we measure it. We build a standby copy by hand, break it twice on purpose, fail over
+      with a stopwatch running, and then ask the server how exposed we really are.
+
+  - id: plan
+    type: bullets
+    heading: "A primary, a standby, a stopwatch"
+    bullets:
+      - "ContosoBikesHA: episode 5's tables, FULL recovery"
+      - "ContosoBikesHA_Standby: restored, readable, one log behind"
+      - "Ship logs, break the chain, repair it, fail over"
+      - "Every step compared with an expected file"
+    narration: >
+      Two databases on our lab server. The primary holds episode five's tables in full recovery. The standby is
+      a restored copy that we keep readable and feed with log backups. That is log shipping, built by hand so you
+      see every move. Every step is compared with an expected result.
+
+  - id: rpo
+    type: code
+    heading: "RPO: minutes since the last backup that counts"
+    lang: sql
+    code: |
+      DATEDIFF(MINUTE,
+               GREATEST(b.LastFull, b.LastDiff, CASE WHEN d.recovery_model_desc <> N'SIMPLE' THEN b.LastLog END),
+               GETDATE())             AS MinutesAtRisk
+      FROM sys.databases AS d
+      OUTER APPLY (SELECT MAX(CASE WHEN bs.type = 'D' THEN bs.backup_finish_date END) AS LastFull,
+                          MAX(CASE WHEN bs.type = 'I' THEN bs.backup_finish_date END) AS LastDiff,
+                          MAX(CASE WHEN bs.type = 'L' THEN bs.backup_finish_date END) AS LastLog
+      WHERE d.database_id > 4
+    narration: >
+      First the question that matters. The recovery point objective is how much data you can afford to lose, as
+      time. The server already knows. Its backup history in the system database msdb gives the newest full,
+      differential and log backup of every database. Greatest ignores nulls, and log backups only count when the
+      database is not in simple recovery. Before any backup, our primary shows nothing. That is the honest answer.
+
+  - id: standby
+    type: code
+    heading: "The standby: restore WITH STANDBY"
+    lang: sql
+    code: |
+      BACKUP DATABASE ContosoBikesHA TO DISK = @full WITH INIT, CHECKSUM, COMPRESSION, STATS = 50;
+      DECLARE @sql nvarchar(max) = CONCAT(N'RESTORE DATABASE ContosoBikesHA_Standby FROM DISK = ', @q, @full, @q,
+          N' WITH MOVE N''ContosoBikesHA'' TO ', @mdf, N', MOVE N''ContosoBikesHA_log'' TO ', @ldf,
+          N', STANDBY = ', @undo, N', CHECKSUM, STATS = 50;');
+      EXEC sys.sp_executesql @sql;
+    narration: >
+      A full backup, with checksum, and a restore with standby. Standby leaves the copy readable between log
+      restores, and keeps an undo file so the next log can continue. The move clause only takes string literals,
+      so that one statement is built as text, with the standby's own file names.
+
+  - id: ship
+    type: code
+    heading: "One shipping cycle: back up the log, restore it"
+    lang: sql
+    code: |
+      BACKUP LOG ContosoBikesHA TO DISK = @file WITH INIT, CHECKSUM, COMPRESSION, STATS = 50;
+      RESTORE LOG ContosoBikesHA_Standby FROM DISK = @file WITH STANDBY = @undo, CHECKSUM, STATS = 50;
+    narration: >
+      One cycle is two statements. Back up the log of the primary, restore it on the standby, still with standby.
+      Real log shipping runs this with three agent jobs and a monitor. Order one thousand nine was committed
+      first, and now the standby has it too, nine orders on each side.
+
+  - id: standby-screen
+    type: screen
+    heading: "The standby is readable"
+    image: screens/h03-standby-readable.jpg
+    bar: "SSMS · CON-SQL01 · master · h03-ship-log.sql"
+    demo: "SSMS connected to CON-SQL01 (masked). After running h02, d01 and h03: the result grid shows Orders on the primary 9, Orders on the standby 9, Log backups restored on the standby 1; Object Explorer, refreshed, shows ContosoBikesHA_Standby with the label (Standby / Read-Only)."
+    narration: >
+      And here it is. Nine orders on the primary, nine on the standby, one log restored. In Object Explorer the
+      standby carries the read only label. You can run reports against it between restores.
+
+  - id: readonly
+    type: code
+    heading: "Gotcha one: you cannot write to a standby"
+    lang: sql
+    code: |
+      INSERT INTO ContosoBikesHA_Standby.Sales.Orders (OrderId, CustomerId, OrderDate, Status)
+      VALUES (9999, 1, '2025-06-01', N'Placed');
+    narration: >
+      Gotcha one. Somebody tries to fix a row on the standby. It fails with error three nine zero six, the
+      database is read only, and the count does not move. The standby only moves forward by restoring log
+      backups from the primary.
+
+  - id: gotcha-screen
+    type: screen
+    heading: "Gotcha two: someone took a log backup"
+    image: screens/h06-chain-broken.jpg
+    bar: "SSMS · CON-SQL01 · master · h06-ship-log-fails.sql"
+    short: gotcha
+    demo: "SSMS, after running d02 and h05, then d03 and h06-ship-log-fails.sql. Messages tab: Msg 4305, 'The log in this backup set begins at LSN ..., which is too recent to apply to the database. An earlier log backup that includes LSN ... can be restored.' followed by 'RESTORE LOG is terminating abnormally.' Result grid: primary 11, standby 9, log backups restored on the standby 1."
+    narration: >
+      Gotcha two, the honest one. A colleague takes an extra log backup of the primary, to a file the shipping job
+      never sees. The next cycle fails with error four three zero five. The log is too recent to apply, an earlier
+      log backup is missing. Nothing is corrupt. The chain simply has a hole, and the standby is stuck at nine.
+
+  - id: repair
+    type: code
+    heading: "The fix: the missing log first, then the failed one"
+    lang: sql
+    code: |
+      RESTORE LOG ContosoBikesHA_Standby FROM DISK = @rogue WITH STANDBY = @undo, CHECKSUM, STATS = 50;
+      RESTORE LOG ContosoBikesHA_Standby FROM DISK = @next WITH STANDBY = @undo, CHECKSUM, STATS = 50;
+    narration: >
+      The fix is boring, which is good. Find the missing file in the backup history, restore it first, then
+      restore the one that failed. Eleven orders on both sides, and three logs restored. Lesson: one log backup
+      chain, one owner. Every other tool must use copy only backups, or stay away.
+
+  - id: failover
+    type: code
+    heading: "Failover: tail-log backup, then restore WITH RECOVERY"
+    lang: sql
+    code: |
+      BACKUP LOG ContosoBikesHA TO DISK = @tail WITH NORECOVERY, INIT, CHECKSUM, COMPRESSION, STATS = 50;
+      RESTORE LOG ContosoBikesHA_Standby FROM DISK = @tail WITH RECOVERY, CHECKSUM, STATS = 50;
+    narration: >
+      Now the drill. Order one thousand twelve is committed after the last shipped log, so only the tail of the
+      log holds it. A tail log backup with norecovery captures it and leaves the old primary in the restoring state,
+      so nobody can write there by mistake. Restoring that tail on the standby with recovery makes it a normal,
+      writable database.
+
+  - id: failover-screen
+    type: screen
+    heading: "Failover, with a stopwatch"
+    image: screens/h08-failover.jpg
+    bar: "Terminal + SSMS · CON-SQL01 · h08-failover.sql"
+    short: failover
+    demo: "Split screen. Left: the terminal running py src/ha_lab.py --engine sqlserver --step h08-failover, showing 'step took N s (limit 60 s)' and '=> OK'. Right: SSMS with the h08 result grid: Old primary state RESTORING, Promoted copy state ONLINE, Orders on the promoted copy 12, Order 1012 on the promoted copy 1. Object Explorer shows ContosoBikesHA as (Restoring...)."
+    narration: >
+      Here is the drill with a stopwatch. The old primary is restoring. The promoted copy is online, with twelve
+      orders, and order one thousand twelve is there. Zero data lost, because the tail was taken from a primary that
+      was still running. The runner prints how long the step took, and fails it above sixty seconds, our own target for this drill.
+
+  - id: report
+    type: code
+    heading: "The RPO report knows who not to judge"
+    lang: python
+    code: |
+      if e.state != "ONLINE":
+          return Verdict(e.name, SKIPPED, f"{e.state}: backups are taken from the database that is ONLINE")
+      if e.is_standby:
+          return Verdict(e.name, SKIPPED, "read-only standby copy: back up the primary")
+      if e.last_full is None or e.minutes_at_risk is None:
+    narration: >
+      A small Python report turns that query into verdicts. A restoring database or a read only standby is
+      skipped, because backups come from the live one. A database with no full backup is flagged, even if a log
+      backup exists, because a log alone cannot be restored. Everything else is compared with your target.
+
+  - id: rpo-screen
+    type: screen
+    heading: "After the failover, who is protected?"
+    image: screens/h10-rpo-after.jpg
+    bar: "Terminal · ha_lab.py --report --rpo 15"
+    demo: "Terminal on the laptop, py src/ha_lab.py --engine sqlserver --report --rpo 15 (connection string never shown). Output: ContosoBikesHA SKIPPED (RESTORING), ContosoBikesHA_Standby NO BACKUP (no full backup in msdb history). Optional second shot: the h10-rpo-after step table with the times visible."
+    narration: >
+      And the surprise. After the failover, the promoted copy has no backup history of its own. The report says no
+      backup. Failing over is not the end of the job. Back up the new primary, and start the chain again.
+
+  - id: scope
+    type: bullets
+    heading: "What this drill does not cover"
+    bullets:
+      - "Two databases, one server: a bad database, not a dead server"
+      - "Real log shipping: agent jobs, another server, a monitor"
+      - "Availability groups: automatic failover, next episode"
+      - "Secondaries are not backups, and a test is the only proof"
+    narration: >
+      Be honest about the limits. Two databases on one server cover a damaged database, not a dead machine.
+      Real log shipping automates backup, copy and restore with agent jobs on a second server, and a failover is
+      always manual. Availability groups add automatic failover, and that is the next episode. None of them replace
+      a tested backup.
+
+  - id: recap
+    type: bullets
+    heading: "Five rules"
+    bullets:
+      - "Know your RPO and RTO as numbers"
+      - "One log backup chain, one owner"
+      - "Tail-log backup before you fail over"
+      - "Back up the new primary after the failover"
+      - "Run the drill before you need it"
+    narration: >
+      Five rules. Know your recovery point and recovery time as numbers. One log backup chain, one owner. Take a
+      tail log backup before you fail over. Back up the new primary. And run the drill before you need it.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The scripts, the report and the tests are on GitHub, and the complete guide is on dev lad log dot com.
+      Next time: Always On availability groups. This was dev lad log SQL, by Momento Galático.

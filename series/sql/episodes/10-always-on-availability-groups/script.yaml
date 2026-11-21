@@ -1,0 +1,224 @@
+# DEVLADLOG SQL — episode 10 (draft: screen scenes need the recording described in demo.md)
+episode: 10
+slug: always-on-availability-groups
+series_label: "SQL"
+series_name: "DEVLADLOG SQL"
+file_prefix: "sql"
+title: "Always On Availability Groups"
+subtitle: "A real two-node group on a Windows cluster, automatic failover, and the secondary you cannot read yet"
+voice: am_michael
+thumbnail_text: "KILL THE\nPRIMARY.\nKEEP SELLING."
+youtube:
+  title: "SQL Server Always On Availability Groups: Build, Fail Over, Read the Secondary | DEVLADLOG SQL #10"
+  tags: [SQL Server, Always On, availability groups, high availability, failover, WSFC, automatic seeding, readable secondary, listener, SQL Server 2022, T-SQL]
+sources:
+  - https://www.devladlog.com/articles/sql/2025-08-22-always-on-availability-groups-complete-guide-2025/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "What if the primary just dies?"
+    sub: "Always On availability groups on SQL Server 2022, built on two real servers"
+    short: hook
+    narration: >
+      Last time we failed over by hand, with a stopwatch, and the old server had to be told what to do. This time
+      the server is allowed to die. We build an availability group on two real machines and a Windows cluster, watch
+      the data stream across by itself, trip over one classic error, and then switch roles with no data lost.
+
+  - id: plan
+    type: bullets
+    heading: "Two nodes, one group, one database"
+    bullets:
+      - "CON-SQL01 and a new CON-SQL02, one Windows cluster"
+      - "ag_contoso: synchronous commit, automatic failover"
+      - "ContosoBikesAG: episode 5's tables, seeded automatically"
+      - "Every step checked against an expected file"
+    narration: >
+      The lab gets a second SQL Server, joined to the same domain and the same cluster. One group, named ag contoso,
+      holds one throwaway database with episode five's tables. Both replicas commit synchronously, so nothing is
+      lost, and failover is automatic. Every step is compared with an expected result.
+
+  - id: prereqs
+    type: code
+    heading: "Prerequisites: ask the instance"
+    lang: sql
+    code: |
+      SELECT CONVERT(nvarchar(60), SERVERPROPERTY(N'ServerName'))                  AS Node,
+             CONVERT(int, SERVERPROPERTY(N'IsHadrEnabled'))                         AS HadrEnabled,
+             CONVERT(nvarchar(128), SERVERPROPERTY(N'Collation'))                   AS Collation,
+             CONVERT(nvarchar(32), SERVERPROPERTY(N'ProductVersion'))               AS ProductVersion,
+             (SELECT TOP (1) quorum_state_desc FROM sys.dm_hadr_cluster)            AS QuorumState,
+             (SELECT COUNT(*) FROM sys.dm_hadr_cluster_members
+              WHERE member_type_desc = N'CLUSTER_NODE' AND member_state_desc = N'UP') AS NodesUp;
+    narration: >
+      Before any group exists, ask both instances. Is Always On switched on, which needs a service restart? Do they
+      share the same collation and the same version? Is the cluster in quorum, and how many nodes are up? The
+      cluster views need the server performance state permission in SQL Server twenty twenty two. Two matching rows,
+      or we stop here.
+
+  - id: endpoint
+    type: code
+    heading: "The endpoint the replicas talk through"
+    lang: sql
+    code: |
+      CREATE ENDPOINT Hadr_endpoint
+          STATE = STARTED
+          AS TCP (LISTENER_PORT = 5022)
+          FOR DATABASE_MIRRORING (ROLE = ALL, AUTHENTICATION = WINDOWS NEGOTIATE, ENCRYPTION = REQUIRED ALGORITHM AES);
+      CREATE LOGIN [CONTOSO\CON-SQL02$] FROM WINDOWS;
+      GRANT CONNECT ON ENDPOINT::Hadr_endpoint TO [CONTOSO\CON-SQL02$];
+    narration: >
+      Each instance gets one database mirroring endpoint, on port fifty fifty twenty two, with windows
+      authentication and A E S encryption. The peer connects as its computer account, so that account needs a login
+      and permission to connect to the endpoint. If your services run under a domain account, use that name instead.
+
+  - id: create
+    type: code
+    heading: "One statement creates the group"
+    lang: sql
+    code: |
+      CREATE AVAILABILITY GROUP ag_contoso
+      WITH (CLUSTER_TYPE = WSFC, DB_FAILOVER = ON)
+      FOR DATABASE ContosoBikesAG
+      REPLICA ON
+          'CON-SQL01' WITH (ENDPOINT_URL = 'TCP://CON-SQL01.lab.contoso.com:5022',
+                            AVAILABILITY_MODE = SYNCHRONOUS_COMMIT, FAILOVER_MODE = AUTOMATIC,
+                            SEEDING_MODE = AUTOMATIC, SECONDARY_ROLE (ALLOW_CONNECTIONS = NO)),
+          'CON-SQL02' WITH (ENDPOINT_URL = 'TCP://CON-SQL02.lab.contoso.com:5022',
+                            AVAILABILITY_MODE = SYNCHRONOUS_COMMIT, FAILOVER_MODE = AUTOMATIC,
+                            SEEDING_MODE = AUTOMATIC, SECONDARY_ROLE (ALLOW_CONNECTIONS = NO));
+    narration: >
+      Here is the group. Synchronous commit and automatic failover on both replicas. Database failover on, so a
+      database that goes offline also triggers a failover. Automatic seeding, so SQL Server streams the database to
+      the secondary and nobody restores a backup by hand. And readable secondary is written out as no, which matters
+      in a minute.
+
+  - id: join
+    type: code
+    heading: "The secondary joins and may create the database"
+    lang: sql
+    code: |
+      ALTER AVAILABILITY GROUP ag_contoso JOIN;
+      ALTER AVAILABILITY GROUP ag_contoso GRANT CREATE ANY DATABASE;
+    narration: >
+      On the second server, two statements. Join attaches the replica to the group. Grant create any database lets
+      the group create the seeded copy. Forget the grant, and the secondary just sits there with no database.
+
+  - id: health-screen
+    type: screen
+    heading: "Synchronized and healthy"
+    image: screens/a07-health.jpg
+    bar: "SSMS · CON-SQL01 · master · a07-health.sql"
+    demo: "SSMS connected to CON-SQL01 (masked), a07-health.sql after the seed has finished. Result grid, two rows: CON-SQL01 PRIMARY and CON-SQL02 SECONDARY, both SYNCHRONOUS_COMMIT and AUTOMATIC, both CONNECTED, SyncState SYNCHRONIZED, SyncHealth HEALTHY, IsSuspended 0. Optional second shot: the Always On High Availability dashboard for ag_contoso, all green."
+    narration: >
+      And here it is. Two rows. One primary, one secondary, both connected, synchronized and healthy, nothing
+      suspended. That is the state that makes a failover safe, and the dashboard in management studio says the same
+      thing in green.
+
+  - id: verdict
+    type: code
+    heading: "A small report that says yes or no"
+    lang: python
+    code: |
+      if r.availability_mode != "SYNCHRONOUS_COMMIT":
+          return Verdict(r.name, LOSS, "asynchronous commit: a failover can only be forced and can lose data")
+      if r.sync_state != "SYNCHRONIZED":
+          return Verdict(r.name, LOSS, f"{r.sync_state}: not synchronized yet, a failover now could lose data")
+      if r.failover_mode == "AUTOMATIC":
+          return Verdict(r.name, AUTO, "synchronous commit, synchronized, healthy: no data loss")
+    narration: >
+      A few lines of Python turn those rows into a verdict. Asynchronous commit means a failover can lose data.
+      Not yet synchronized means the same. Synchronous, synchronized, healthy and automatic gets the best verdict,
+      automatic failover ready. The runner prints it after every step that matters.
+
+  - id: read-code
+    type: code
+    heading: "Gotcha: the secondary will not answer"
+    lang: sql
+    code: |
+      SELECT COUNT(*) AS Orders FROM ContosoBikesAG.Sales.Orders;
+    narration: >
+      Now the classic trap. A colleague runs a report against the secondary, to take load off the primary. Error
+      nine seven six. The database is in an availability group and is not accessible for queries.
+
+  - id: gotcha-screen
+    type: screen
+    heading: "Error 976, and a one line fix"
+    image: screens/a08-error-976.jpg
+    bar: "SSMS · CON-SQL02 · master · a08-secondary-read-fails.sql"
+    short: gotcha
+    demo: "SSMS connected to CON-SQL02 (masked), a08-secondary-read-fails.sql. Messages tab: Msg 976, Level 14, 'The target database, ContosoBikesAG, is participating in an availability group and is currently not accessible for queries. Either data movement is suspended or the availability replica is not enabled for read access.' Then the same query after a09-allow-read.sql: Orders 8, role SECONDARY."
+    narration: >
+      The honest gotcha. Nothing is broken. Data movement is fine. The replica was simply created with readable
+      secondary set to no. The fix is one statement per replica, modify replica, allow connections all. No restart,
+      no new seeding. Do both replicas, because after a failover the other one becomes the secondary.
+
+  - id: fix
+    type: code
+    heading: "The fix: allow reads on both replicas"
+    lang: sql
+    code: |
+      ALTER AVAILABILITY GROUP ag_contoso MODIFY REPLICA ON 'CON-SQL01' WITH (SECONDARY_ROLE (ALLOW_CONNECTIONS = ALL));
+      ALTER AVAILABILITY GROUP ag_contoso MODIFY REPLICA ON 'CON-SQL02' WITH (SECONDARY_ROLE (ALLOW_CONNECTIONS = ALL));
+    narration: >
+      Here is the fix. A synchronous commit hardens the log on the secondary before the primary commits, but redo,
+      applying it to the data pages, is asynchronous. So a read may lag a commit by a moment. Our runner polls
+      until the new order shows up.
+
+  - id: failover-code
+    type: code
+    heading: "Planned failover: run it on the new primary"
+    lang: sql
+    code: |
+      ALTER AVAILABILITY GROUP ag_contoso FAILOVER;
+    narration: >
+      The planned failover is one line, and you run it on the replica that should become the primary. It needs
+      synchronous commit and a synchronized secondary, so nothing is lost. Do not use the cluster manager to fail
+      over an availability group. The statement returns early, and recovery continues in the background.
+
+  - id: failover-screen
+    type: screen
+    heading: "Roles swapped, nothing lost"
+    image: screens/a12-failover.jpg
+    bar: "Terminal + SSMS · CON-SQL02 · a12-failover.sql"
+    short: failover
+    demo: "Split screen. Left: the terminal running py src/ag_lab.py --engine sqlserver --step a12-failover, showing 'step took N s (limit 60 s)' and '=> OK'. Right: SSMS connected to CON-SQL02 (masked) with the a12 health grid: CON-SQL02 PRIMARY and CON-SQL01 SECONDARY, both SYNCHRONIZED and HEALTHY, then the order count on CON-SQL02: 9, order 1009 present. Object Explorer shows ag_contoso with CON-SQL02 as (Primary)."
+    narration: >
+      Here is the swap. The second server is now the primary, it has all nine orders, including order one thousand
+      nine committed just before, and it accepts writes. The first server became the secondary and keeps synchronizing. The runner
+      times the step and fails it above sixty seconds, our own target for this lab.
+
+  - id: scope
+    type: bullets
+    heading: "What this lab does not prove"
+    bullets:
+      - "Automatic failover timing: optional drill, our own 120 s target"
+      - "The listener: optional, needs a cluster IP and DNS"
+      - "Backups: an availability group is not one"
+      - "Two nodes in one lab, not two sites"
+    narration: >
+      Limits, honestly. We time an automatic failover only in an optional drill, and our target of two minutes is our
+      own number, not a promise. The listener is optional, because it needs an address and a computer object in
+      active directory. And an availability group is not a backup. A bad delete replicates to both copies.
+
+  - id: recap
+    type: bullets
+    heading: "Five rules"
+    bullets:
+      - "Same version, same collation, same cluster"
+      - "Synchronous plus synchronized means no data loss"
+      - "Grant create any database, or seeding waits"
+      - "Allow reads on both replicas"
+      - "Fail over on purpose before it happens by accident"
+    narration: >
+      Five rules. Same version, same collation, same cluster. Synchronous and synchronized means no data loss. Grant
+      create any database, or seeding waits forever. Allow reads on both replicas. And fail over on purpose, before
+      it happens by accident.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The scripts, the health report and the tests are on GitHub, and the complete guide is on dev lad log dot com.
+      This was dev lad log SQL, by Momento Galático.

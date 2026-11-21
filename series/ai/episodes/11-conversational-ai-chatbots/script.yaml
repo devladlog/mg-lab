@@ -1,0 +1,221 @@
+# DEVLADLOG AI — episode 11. Code scenes are real excerpts from src/.
+# Screen scenes: capture per demo.md. Narration describes what must be on screen without quoting live numbers;
+# after recording, adjust the sentences marked TODO to what the service really returned (including a failed gate).
+episode: 11
+slug: conversational-ai-chatbots
+series_label: "AI"
+series_name: "DEVLADLOG AI"
+file_prefix: "ai"
+title: "Conversational AI: a service-desk chatbot that remembers, acts and steps aside"
+subtitle: "Memory, tools, streaming and a human handoff on Azure OpenAI"
+voice: am_michael
+thumbnail_text: "CHATBOT\nMEMORY\n+ HANDOFF"
+youtube:
+  title: "Conversational AI on Azure OpenAI: Memory, Tool Calls, Streaming, Human Handoff | DEVLADLOG AI #11"
+  tags: [conversational AI, chatbot, Azure OpenAI, gpt-4.1-mini, function calling, streaming, conversation memory, human handoff, Microsoft Foundry, Python, Bicep]
+sources:
+  - https://www.devladlog.com/articles/ai/2025-04-05-conversational-ai-complete-guide-2025/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "A chatbot demo is easy. Turn nine is not."
+    sub: "Memory, actions, and knowing when to step aside"
+    short: hook
+    narration: >
+      A chatbot demo is easy. The hard part starts at turn nine, when the user asks for a person, or gives an e-mail
+      address that is not theirs, or asks what their name was. Today the Contoso Porto service desk gets a chatbot on
+      Azure OpenAI, and we test what it remembers, what it does, and when it steps aside. Welcome to DEVLADLOG AI.
+
+  - id: scenario
+    type: bullets
+    heading: "One bot, one job: open the right ticket"
+    bullets:
+      - "Employees chat in English or Portuguese"
+      - "Four slots: product, symptom, urgency, e-mail"
+      - "A person takes over when asked"
+      - "Everything here is fictional"
+    narration: >
+      Employees write to the bot in English or Portuguese. It gives first line advice, and when it has four things, the
+      product, the symptom, the urgency and a work e-mail, it opens a ticket. When someone wants a person, a person
+      takes over. The names, the products and the dialogues are all made up.
+
+  - id: stateless
+    type: bullets
+    heading: "The model remembers nothing"
+    bullets:
+      - "Every request carries the history it needs"
+      - "The session keeps the full history for audit"
+      - "Request = summary + newest whole turns"
+      - "The window is huge: the budget is for cost"
+    narration: >
+      The chat API is stateless. Each request carries everything the model should know. Our session keeps the full
+      history for audit, and each request carries a summary plus the newest whole turns that fit a budget. Learn lists
+      a window of more than a million tokens for gpt four point one mini, and three hundred thousand on Standard
+      deployments, so this budget is about cost and latency, not about fitting.
+
+  - id: memory-code
+    type: code
+    heading: "Drop whole turns, never half a turn"
+    lang: python
+    code: |
+      turns = split_turns(messages)
+      fixed = estimate_tokens(summary) if summary else 0
+      sizes = [sum(message_tokens(m) for m in t) for t in turns]
+      first = 0
+      while first < len(turns) - keep_last_turns and fixed + sum(sizes[first:]) > budget:
+          first += 1
+      keep = [m for t in turns[first:] for m in t]
+      folded = [m for t in turns[:first] for m in t]
+    narration: >
+      A turn starts at a user message and runs up to the next one, so a tool call is never separated from its result.
+      While the summary and the history are over budget, we drop the oldest whole turn, and the newest two always stay.
+      Dropped turns are not thrown away. One extra model call merges them into a running summary of at most one
+      hundred twenty words.
+
+  - id: ticket-screen
+    type: screen
+    heading: "Slots filled over three turns"
+    image: screens/ticket.jpg
+    bar: "Terminal · python -m helpbot chat"
+    demo: "Terminal: PYTHONPATH=src python -m helpbot chat --endpoint $AOAI --script data/dialog-ticket.txt. Three 'you>' lines (VPN dropping; product and urgency; the e-mail), each followed by a streamed 'bot>' answer and a status line [calls=… prompt_tokens=… est=… folded=… state=bot]. After the third turn the bot quotes the ticket id, and the closing line 'ticket INC-1001: high · … · alex.demo@contoso.com' is shown."
+    narration: >
+      Here is slot filling. The employee says the VPN keeps dropping, and the bot asks for what is missing, one thing at
+      a time. Only when it has all four does it open the ticket, and the ticket number in the answer is the one the tool
+      returned. The status line under each answer shows the model calls and the billed prompt tokens.
+    # TODO after recording: say what the bot asked for first, and whether it chose high urgency by itself.
+
+  - id: tool-code
+    type: code
+    heading: "The model proposes. The code decides."
+    lang: python
+    code: |
+      missing = [k for k in ("product", "symptom", "urgency", "contact") if not str(args.get(k, "")).strip()]
+      errors: list[str] = []
+      if "urgency" not in missing and args["urgency"] not in URGENCIES:
+          errors.append(f"urgency must be one of {list(URGENCIES)}")
+      if "contact" not in missing and not EMAIL_RE.match(args["contact"].strip()):
+          errors.append("contact must be a work address ending in @contoso.com")
+      if "symptom" not in missing and len(args["symptom"].strip()) < 10:
+          errors.append("symptom is too short to be useful")
+      if "product" not in missing and len(args["product"].strip()) > 80:
+          errors.append("product is too long")
+      if missing or errors:
+          return {"ok": False, "missing": missing, "errors": errors}
+    narration: >
+      The tool arguments are model output, and Learn says to validate them, because the model can return invalid
+      J S O N or parameters you never defined. So every slot is checked in code. The urgency must be in the list, the
+      contact must end in contoso dot com, a repeated request returns the same ticket, and one conversation can open
+      three tickets at most. An instruction in the chat cannot change any of that.
+
+  - id: deployments-screen
+    type: screen
+    heading: "One deployment, no keys"
+    image: screens/deployments.jpg
+    bar: "Microsoft Foundry · Models + endpoints"
+    demo: "Foundry portal (or Azure portal > the Azure OpenAI resource > Deployments, resource group rg-mglab-ai-11): one deployment 'chat' (gpt-4.1-mini 2025-04-14, Standard). Then the resource's authentication view showing local (key) authentication disabled. Resource-name suffix masked."
+    narration: >
+      This is what the Bicep file created. One Standard deployment of gpt four point one mini in Sweden Central, with
+      local authentication disabled. The developer holds the OpenAI User role, which is enough to call the model and
+      nothing more.
+
+  - id: handoff-code
+    type: code
+    heading: "A person is a rule, not a prompt"
+    lang: python
+    code: |
+      # a person owns it now: store the message, no model call
+      if session.state == "handoff":
+          session.messages += [{"role": "user", "content": text}, {"role": "assistant", "content": WAITING_REPLY}]
+          return Reply(WAITING_REPLY, handoff=True, notes=["handoff active: no model call"])
+      if wants_human(text) or session.user_turns >= self.max_user_turns:
+          why = "employee asked for a person" if wants_human(text) else f"turn limit ({self.max_user_turns}) reached"
+          start_handoff(session, why)
+          session.messages += [{"role": "user", "content": text}, {"role": "assistant", "content": HANDOFF_REPLY}]
+          return Reply(HANDOFF_REPLY, handoff=True, notes=[f"handoff by rule: {why}"])
+    short: handoff
+    narration: >
+      When someone asks for a person, we do not wait for the model. A plain phrase check, in English and in
+      Portuguese, hands the conversation over with zero model calls. After that the bot stores what the employee writes
+      for the colleague, and never answers. The model can also ask for a handoff through a tool, but the rule is the
+      safety net.
+
+  - id: handoff-screen
+    type: screen
+    heading: "Portuguese in, a person out"
+    image: screens/handoff.jpg
+    bar: "Terminal · python -m helpbot chat"
+    demo: "Terminal: PYTHONPATH=src python -m helpbot chat --endpoint $AOAI --script data/dialog-pessoa.txt. First 'you>' line about Outlook (Portuguese), answered by the model in Portuguese with calls=1. Second line asking for a person: the handoff text and the status line with calls=0, state=handoff and the note 'handoff by rule'."
+    narration: >
+      A question about Outlook in Portuguese, answered in Portuguese. Then the employee asks for a person. The status
+      line shows zero model calls and the state handoff. The handoff came from the rule, not from the model.
+    # TODO after recording: say whether the first answer was in Portuguese, as the system message asks.
+
+  - id: memory-screen
+    type: screen
+    heading: "Seven turns later: what is my name?"
+    image: screens/memory.jpg
+    bar: "Terminal · python -m helpbot chat --history-budget 450"
+    demo: "Terminal: PYTHONPATH=src python -m helpbot chat --endpoint $AOAI --history-budget 450 --script data/dialog-memory.txt. Show the status lines with 'N turn(s) folded into the summary' appearing from some turn on, the last answer to 'what is my name?', and the printed 'summary:' line at the end. Run once more with --memory window and show only the last answer."
+    narration: >
+      Now memory. The name was given in the first message, then come six short questions, and the budget is small on
+      purpose. From some turn on the status line says turns were folded into the summary, and at the end the bot is asked
+      for the name. In window mode, the same budget simply drops the old turns.
+    # TODO after recording: say what each mode answered, and what the summary line contained.
+
+  - id: stream-code
+    type: code
+    heading: "Streaming with usage, capped, deterministic"
+    lang: python
+    code: |
+      stream = self.client.chat.completions.create(
+          model=self.deployment,
+          messages=[self.system_message(session), *session.active],
+          tools=TOOLS,
+          stream=True,
+          stream_options={"include_usage": True},
+          max_completion_tokens=self.max_completion_tokens,
+          temperature=0,
+      )
+    narration: >
+      Streaming sends tokens as they arrive. Learn says the usage numbers come in a final chunk only if you ask for
+      them, and that an interrupted stream may never deliver it. A prompt blocked by the content filter is an error with
+      the code content filter. We answer politely and remove that message from the history, so it cannot poison the next
+      turn. Learn also says a filtered request is still billed.
+
+  - id: evaluate-screen
+    type: screen
+    heading: "Seven dialogues, two memory modes"
+    image: screens/evaluate.jpg
+    bar: "Terminal · python -m helpbot evaluate"
+    demo: "Terminal: PYTHONPATH=src python -m helpbot evaluate --endpoint $AOAI ; echo exit=$?. The table with one row per scenario and mode (result, model calls, billed prompt tokens, estimate error), any problem lines, the RESULT line and the exit code. About two minutes of calls; cut the wait."
+    narration: >
+      Seven scripted dialogues, run in both memory modes. The checks look at what the bot did: the tickets it opened, the
+      handoff, whether it quoted the id the tool returned, and whether it kept an invented salary out of the answer. The
+      gate fails if any scenario fails in summary mode. The last column compares our token estimate with what the service
+      billed.
+    # TODO after recording: say which scenarios failed, if any, and how far the estimate was from the billed tokens.
+
+  - id: gotcha
+    type: bullets
+    heading: "The honest gotcha: the summary is a paraphrase"
+    bullets:
+      - "A model wrote it: it can drop or bend a fact"
+      - "It and the session file hold personal data"
+      - "Window mode forgets, summary mode may distort"
+      - "Seven dialogues prove plumbing, not quality"
+    short: gotcha
+    narration: >
+      The honest part. The summary is written by a model, so it can drop a detail or bend one, and the bot then repeats
+      the bend with confidence. The summary and the stored session are personal data, so they need an expiry and a
+      proper store, not a folder of J S O N files. And seven dialogues show that the plumbing works, not that the bot is
+      good. Run your own conversations, many more, before real employees do.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The memory plan, the tools, the handoff rules, the streaming loop and the dialogue evaluation are on GitHub, and
+      the complete conversational A I guide is on devladlog dot com. Links are in the description. This was DEVLADLOG
+      AI, by Momento Galático.
