@@ -1,0 +1,127 @@
+{
+  "note": "Live-session recording of the screen scenes (series/tools/rec). prepare/teardown run on the laptop, not recorded; commands are typed and run for real in Git Bash scripts via 'bash'.",
+  "prepare": [
+    "# laptop toolchain for the bash scripts: Git Bash first on PATH, python3 and zip shims in %TEMP% (the laptop has neither)",
+    "$shim = Join-Path $env:TEMP 'mgshim'; New-Item -ItemType Directory -Force $shim | Out-Null; [IO.File]::WriteAllText(\"$shim\\python3\", \"#!/bin/bash`nexec python `\"`$@`\"`n\"); [IO.File]::WriteAllText(\"$shim\\zip.py\", \"import sys,os,zipfile`nz=zipfile.ZipFile(os.path.abspath(sys.argv[-2]),'w',zipfile.ZIP_DEFLATED)`n[z.write(os.path.join(r,n),os.path.relpath(os.path.join(r,n),'.').replace(os.sep,'/')) for r,d,f in os.walk('.') for n in f]`nz.close()`n\"); [IO.File]::WriteAllText(\"$shim\\zip\", \"#!/bin/bash`nexec python `\"`$(dirname `\"`$0`\")/zip.py`\" `\"`$@`\"`n\")",
+    "$env:PATH = \"$shim;C:\\Program Files\\Git\\bin;$env:USERPROFILE\\.azure\\bin;$env:LOCALAPPDATA\\Microsoft\\WinGet\\Links;$env:PATH\"",
+    "az account show --query name -o none 2>$null; if ($LASTEXITCODE -ne 0) { az login --use-device-code }   # owner signs in as labadmin",
+    "# the deployment itself is the first screen (recorded), so nothing is deployed here; set CLIENT_IP yourself if the laptop's outbound IP differs (VPN)",
+    "az account show --query name -o none   # confirms the lab subscription is the active one"
+  ],
+  "screens": [
+    {
+      "name": "deploy-free-tier",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\azure\\episodes\\07-azure-storage-databases",
+      "prompt": "PS 07-azure-storage-databases> ",
+      "commands": [
+        "bash infra/deploy.sh rg-mglab-azure-07 westeurope | Select-Object -Last 14",
+        "#pause 6"
+      ],
+      "mask": [
+        "subscription ID",
+        "server FQDN suffix",
+        "object ID and UPN (the what-if lines are cut off by Select-Object -Last)"
+      ],
+      "maxMinutes": 20,
+      "note": "Shows the end of the deployment: the free tier check table (GP_S_Gen5, useFreeLimit True, AutoPause, Online) and 'Schema created.'. If --create-schema fails with a login error wait a minute and rerun only that step."
+    },
+    {
+      "name": "smoke",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\azure\\episodes\\07-azure-storage-databases",
+      "prompt": "PS 07-azure-storage-databases> ",
+      "commands": [
+        "bash infra/smoke.sh",
+        "#pause 10"
+      ],
+      "prepare": [
+        "$null = Start-Process 'C:\\Program Files\\Git\\bin\\bash.exe' -ArgumentList 'infra/run-api.sh' -WorkingDirectory (Get-Location).Path -WindowStyle Hidden -RedirectStandardOutput \"$env:TEMP\\ep07-api.log\" -RedirectStandardError \"$env:TEMP\\ep07-api.err\"   # the API on http://localhost:5199 as the az-login identity (the second terminal of the demo)",
+        "for ($i = 0; $i -lt 120 -and -not (Test-NetConnection localhost -Port 5199 -WarningAction SilentlyContinue).TcpTestSucceeded; $i++) { Start-Sleep -Seconds 2 }",
+        "curl.exe -s --max-time 120 http://localhost:5199/healthz   # first request may wait for the serverless database to resume"
+      ],
+      "mask": [
+        "nothing secret is printed; the storage account name is in no output line"
+      ],
+      "maxMinutes": 8,
+      "note": "Expected: 201, replay 200 with Idempotent-Replay, 409, two pages, 412/200/412, SAS fields sp=r sr=b spr=https, download 200, tampered 403, 'All checks passed.'"
+    },
+    {
+      "name": "query-editor",
+      "kind": "browser",
+      "url": "https://portal.azure.com/#browse/Microsoft.Sql%2Fservers",
+      "account": "labadmin",
+      "steps": [
+        "Open rg-mglab-azure-07 > SQL database sqldb-orders > Query editor (preview)",
+        "Sign in with Microsoft Entra authentication (the only option that works); if asked for a firewall rule it is the laptop IP, already allowed",
+        "Paste db/demo-queries.sql and run queries 1 and 2: signed_in_as = the lab admin, service_objective GP_S_Gen5_2, the smoke test's orders (customer alex-demo-<run>, one Cancelled)",
+        "Run query 4 to show the query editor's own session",
+        "CLOSE the query editor afterwards (open sessions keep the database from pausing, which the next screen needs)"
+      ],
+      "mask": [
+        "subscription ID and name",
+        "tenant name/domain in the top bar and account menu",
+        "random suffixes in resource names",
+        "*.azurewebsites.net host names",
+        "tenant domain in the UPN",
+        "server name"
+      ]
+    },
+    {
+      "name": "resume-40613",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\azure\\episodes\\07-azure-storage-databases",
+      "prompt": "PS 07-azure-storage-databases> ",
+      "commands": [
+        "az sql db show -g rg-mglab-azure-07 -s $env:SQL_SERVER -n sqldb-orders --query status -o tsv",
+        "Start-Process bash -ArgumentList 'infra/run-api.sh' -NoNewWindow",
+        "curl.exe -s --retry 30 --retry-delay 3 --retry-connrefused --max-time 120 http://localhost:5199/healthz",
+        "#pause 12"
+      ],
+      "prepare": [
+        "Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -match 'run-api|Contoso.Orders.Api' -and $_.ProcessId -ne $PID } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }   # stop the API from the smoke screen",
+        "$env:SQL_SERVER = ((Get-Content \"$HOME\\.contoso-orders-data\\outputs.json\" | ConvertFrom-Json).sqlServerFqdn.value).Split('.')[0]",
+        "for ($i = 0; $i -lt 45 -and (az sql db show -g rg-mglab-azure-07 -s $env:SQL_SERVER -n sqldb-orders --query status -o tsv) -ne 'Paused'; $i++) { Start-Sleep -Seconds 60 }   # free tier auto-pauses after 15 minutes without sessions; the query editor must be closed"
+      ],
+      "mask": [
+        "server and database names inside the error text"
+      ],
+      "maxMinutes": 15,
+      "note": "Expect Paused, then EF Core retry lines ('A transient exception occurred ...', error 40613 'is not currently available') in this window, then {\"status\":\"ok\"}. If the database was still Online, look for a lingering session. If no 40613 shows, say so in the narration."
+    },
+    {
+      "name": "lifecycle",
+      "kind": "browser",
+      "url": "https://portal.azure.com/#browse/Microsoft.Storage%2FStorageAccounts",
+      "account": "labadmin",
+      "steps": [
+        "Open rg-mglab-azure-07 > storage account > Data management > Lifecycle management",
+        "Open rule invoices-age-out (list or code view): prefix invoices/, Cool after 30, Cold after 90, delete after 3650 days since creation",
+        "Settings > Configuration: Allow storage account key access = Disabled",
+        "Data storage > Containers > invoices: the 2026/11/<id>.json blobs"
+      ],
+      "mask": [
+        "subscription ID and name",
+        "tenant name/domain in the top bar and account menu",
+        "random suffixes in resource names",
+        "*.azurewebsites.net host names",
+        "storage account name"
+      ],
+      "note": "Capture composited side by side: lifecycle rule, Configuration blade, invoices container."
+    }
+  ],
+  "teardown": [
+    "Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -match 'run-api|Contoso.Orders.Api' -and $_.ProcessId -ne $PID } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }",
+    "bash infra/teardown.sh rg-mglab-azure-07   # also frees the free-tier database slot",
+    "Remove-Item Env:SQL_SERVER -ErrorAction SilentlyContinue",
+    "az group exists --name rg-mglab-azure-07   # false after a few minutes"
+  ],
+  "needs": [
+    "azure",
+    "tenant",
+    "tool:dotnet10"
+  ]
+}

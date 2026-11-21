@@ -1,0 +1,127 @@
+{
+  "note": "Live-session recording of the screen scenes (series/tools/rec). prepare/teardown run on the laptop, not recorded; commands are typed and run for real in Git Bash scripts via 'bash'. The AKS node bills by the hour: the last screen deletes the cluster straight after the capture.",
+  "prepare": [
+    "# laptop toolchain for the bash scripts: Git Bash first on PATH, python3 and zip shims in %TEMP% (the laptop has neither)",
+    "$shim = Join-Path $env:TEMP 'mgshim'; New-Item -ItemType Directory -Force $shim | Out-Null; [IO.File]::WriteAllText(\"$shim\\python3\", \"#!/bin/bash`nexec python `\"`$@`\"`n\"); [IO.File]::WriteAllText(\"$shim\\zip.py\", \"import sys,os,zipfile`nz=zipfile.ZipFile(os.path.abspath(sys.argv[-2]),'w',zipfile.ZIP_DEFLATED)`n[z.write(os.path.join(r,n),os.path.relpath(os.path.join(r,n),'.').replace(os.sep,'/')) for r,d,f in os.walk('.') for n in f]`nz.close()`n\"); [IO.File]::WriteAllText(\"$shim\\zip\", \"#!/bin/bash`nexec python `\"`$(dirname `\"`$0`\")/zip.py`\" `\"`$@`\"`n\")",
+    "$env:PATH = \"$shim;C:\\Program Files\\Git\\bin;$env:USERPROFILE\\.azure\\bin;$env:LOCALAPPDATA\\Microsoft\\WinGet\\Links;$env:PATH\"",
+    "az account show --query name -o none 2>$null; if ($LASTEXITCODE -ne 0) { az login --use-device-code }   # owner signs in as labadmin",
+    "if (-not (Get-Command kubectl -ErrorAction SilentlyContinue)) { az aks install-cli --install-location \"$env:USERPROFILE\\.azure-kubectl\\kubectl.exe\" --kubelogin-install-location \"$env:USERPROFILE\\.azure-kubectl\\kubelogin.exe\" }",
+    "$env:PATH = \"$env:USERPROFILE\\.azure-kubectl;$env:PATH\"",
+    "# no Docker needed: push-image.sh builds with the .NET SDK. AKS needs 4 free vCPUs of the Standard DASv5 family in West Europe (deploy-aks.sh checks and stops early)"
+  ],
+  "screens": [
+    {
+      "name": "deploy-aca",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\azure\\episodes\\08-container-apps-aks",
+      "prompt": "PS 08-container-apps-aks> ",
+      "commands": [
+        "bash infra/deploy-aca.sh rg-mglab-azure-08 westeurope",
+        "#pause 6"
+      ],
+      "mask": [
+        "subscription ID",
+        "registry and app host names"
+      ],
+      "maxMinutes": 25,
+      "note": "Shows 'phase 1', the push of 1.0.0 with the tag table, the what-if for the container app, then GET / with platform container-apps, a revision ending --v1-0-0, version 1.0.0. A slow first GET is the cold start from zero replicas (the script retries for 5 minutes)."
+    },
+    {
+      "name": "scale-out",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\azure\\episodes\\08-container-apps-aks",
+      "prompt": "PS 08-container-apps-aks> ",
+      "commands": [
+        "Start-Process bash -ArgumentList 'infra/replicas.sh','rg-mglab-azure-08','13' -NoNewWindow",
+        "python infra/load.py $env:APP_URL 24 90",
+        "#pause 600"
+      ],
+      "prepare": [
+        "$env:APP_URL = (Get-Content \"$HOME\\.contoso-orders-containers\\url\").Trim()"
+      ],
+      "mask": [
+        "app host name"
+      ],
+      "maxMinutes": 20,
+      "companion": {
+        "kind": "browser",
+        "url": "https://portal.azure.com/#browse/resourcegroups",
+        "steps": [
+          "Optional: container app > Revisions and replicas > the replica count under load"
+        ]
+      },
+      "note": "Left terminal (load.py) and right terminal (replicas.sh, a line every 30 s) share one window here. Expect 0 or 1, then 3 under load, then 0 about five minutes after the load ends (about 12 minutes in total: cut the wait in the edit, never fake it). If it only reaches 2 raise the workers (load.py $env:APP_URL 48 90) rather than changing the rule, and say the number reached. status must show only 200; anything else is a finding."
+    },
+    {
+      "name": "revisions-split",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\azure\\episodes\\08-container-apps-aks",
+      "prompt": "PS 08-container-apps-aks> ",
+      "commands": [
+        "bash infra/release-v2.sh rg-mglab-azure-08 20",
+        "bash infra/split.sh $env:APP_URL 100",
+        "curl.exe -si \"$env:APP_URL/\" | Select-String -Pattern 'x-app-version'",
+        "#pause 6"
+      ],
+      "prepare": [
+        "$env:APP_URL = (Get-Content \"$HOME\\.contoso-orders-containers\\url\").Trim()"
+      ],
+      "mask": [
+        "app host name"
+      ],
+      "maxMinutes": 15,
+      "companion": {
+        "kind": "browser",
+        "url": "https://portal.azure.com/#browse/resourcegroups",
+        "steps": [
+          "Optional: container app > Revisions and replicas with both revisions active and their weights"
+        ]
+      },
+      "note": "The split is random: about 1.0.0 80 and 1.1.0 20, show what came out."
+    },
+    {
+      "name": "aks-pods",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\azure\\episodes\\08-container-apps-aks",
+      "prompt": "PS 08-container-apps-aks> ",
+      "commands": [
+        "bash infra/deploy-aks.sh rg-mglab-azure-08",
+        "#pause 8",
+        "bash infra/teardown.sh rg-mglab-azure-08 --aks-only",
+        "#pause 4"
+      ],
+      "mask": [
+        "external IP",
+        "registry name",
+        "node names if they contain the group name"
+      ],
+      "maxMinutes": 30,
+      "companion": {
+        "kind": "browser",
+        "url": "https://portal.azure.com/#browse/resourcegroups",
+        "steps": [
+          "Optional: AKS cluster > Node pools (1 node, Standard_D4as_v5) and Overview showing the Free tier, before the teardown command runs"
+        ]
+      },
+      "note": "The AKS clock starts here (about 0.23 EUR per hour). Start the capture after the cluster step; deploy-aks.sh stops early if the DASv5 quota is below 4 vCPUs. teardown --aks-only follows immediately. Afterwards confirm az aks list -g rg-mglab-azure-08 -o table is empty."
+    }
+  ],
+  "teardown": [
+    "bash infra/teardown.sh rg-mglab-azure-08 --aks-only   # no-op if already deleted",
+    "bash infra/teardown.sh rg-mglab-azure-08",
+    "Remove-Item Env:APP_URL -ErrorAction SilentlyContinue",
+    "az aks list -g rg-mglab-azure-08 -o table   # empty",
+    "az group exists --name rg-mglab-azure-08   # false after a few minutes (the MC_ group goes with the cluster)"
+  ],
+  "needs": [
+    "azure",
+    "tenant",
+    "tool:dotnet10",
+    "tool:kubectl",
+    "quota:4 vCPU Standard DASv5 family in westeurope"
+  ]
+}

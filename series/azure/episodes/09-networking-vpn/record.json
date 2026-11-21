@@ -1,0 +1,125 @@
+{
+  "note": "Live-session recording of the screen scenes (series/tools/rec). prepare/teardown run on the laptop, not recorded; commands are typed and run for real in Git Bash scripts via 'bash'. The VPN gateway bills by the hour (about 4.5 EUR a day): tear down the same day. The Azure VPN Client profile and the Connect click are done by the owner.",
+  "prepare": [
+    "# laptop toolchain for the bash scripts: Git Bash first on PATH, python3 and zip shims in %TEMP% (the laptop has neither)",
+    "$shim = Join-Path $env:TEMP 'mgshim'; New-Item -ItemType Directory -Force $shim | Out-Null; [IO.File]::WriteAllText(\"$shim\\python3\", \"#!/bin/bash`nexec python `\"`$@`\"`n\"); [IO.File]::WriteAllText(\"$shim\\zip.py\", \"import sys,os,zipfile`nz=zipfile.ZipFile(os.path.abspath(sys.argv[-2]),'w',zipfile.ZIP_DEFLATED)`n[z.write(os.path.join(r,n),os.path.relpath(os.path.join(r,n),'.').replace(os.sep,'/')) for r,d,f in os.walk('.') for n in f]`nz.close()`n\"); [IO.File]::WriteAllText(\"$shim\\zip\", \"#!/bin/bash`nexec python `\"`$(dirname `\"`$0`\")/zip.py`\" `\"`$@`\"`n\")",
+    "$env:PATH = \"$shim;C:\\Program Files\\Git\\bin;$env:USERPROFILE\\.azure\\bin;$env:LOCALAPPDATA\\Microsoft\\WinGet\\Links;$env:PATH\"",
+    "az account show --query name -o none 2>$null; if ($LASTEXITCODE -ne 0) { az login --use-device-code }   # owner signs in as labadmin",
+    "if (-not (Get-Command jq -ErrorAction SilentlyContinue)) { winget install --id jqlang.jq -e --silent --accept-source-agreements --accept-package-agreements }",
+    "if (ipconfig | Select-String '10\\.60\\.0\\.|10\\.61\\.0\\.|172\\.16\\.201\\.') { throw 'a laptop network overlaps the lab plan (10.60.0.0/24, 10.61.0.0/24, 172.16.201.0/24)' }",
+    "# owner: install the Azure VPN Client from the Microsoft Store (once)",
+    "$pw = [guid]::NewGuid().ToString('N'); [Environment]::SetEnvironmentVariable('PFX_PASSWORD', $pw, 'Process')   # random, process-only, never printed or stored",
+    "New-Item -ItemType Directory -Force \"$HOME\\.contoso-net\" | Out-Null; Remove-Item \"$HOME\\.contoso-net\\certs\" -Recurse -Force -ErrorAction SilentlyContinue",
+    "bash infra/certs.sh \"$HOME/.contoso-net/certs\" labadmin | Out-Null   # certificates made off camera so the password is never on screen; deploy.sh then skips this step",
+    "Import-PfxCertificate -FilePath \"$HOME\\.contoso-net\\certs\\labadmin.pfx\" -CertStoreLocation Cert:\\CurrentUser\\My -Password (ConvertTo-SecureString $pw -AsPlainText -Force) | Out-Null"
+  ],
+  "screens": [
+    {
+      "name": "netplan",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\azure\\episodes\\09-networking-vpn",
+      "prompt": "PS 09-networking-vpn> ",
+      "commands": [
+        "python src/netplan/netplan.py check src/netplan/plan.json",
+        "python src/netplan/netplan.py check src/netplan/plan-overlap.json",
+        "#pause 8"
+      ],
+      "mask": [],
+      "maxMinutes": 3,
+      "note": "Runs anywhere. Expect one OK line (59 usable addresses, VM gets 10.61.0.4), then three ERROR lines."
+    },
+    {
+      "name": "deploy",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\azure\\episodes\\09-networking-vpn",
+      "prompt": "PS 09-networking-vpn> ",
+      "commands": [
+        "bash infra/deploy.sh rg-mglab-azure-09 westeurope",
+        "#pause 6"
+      ],
+      "mask": [
+        "subscription ID",
+        "gateway public IP and host name",
+        "tenant name"
+      ],
+      "maxMinutes": 90,
+      "companion": {
+        "kind": "browser",
+        "url": "https://portal.azure.com/#browse/resourcegroups",
+        "steps": [
+          "Open rg-mglab-azure-09: the gateway, public IP, two virtual networks and the VM",
+          "Open vgw-hub > Point-to-site configuration: pool 172.16.201.0/24, tunnel type IKEv2 and OpenVPN, authentication Azure certificate, root certificate contoso-p2s-root"
+        ]
+      },
+      "note": "The wait is 45 minutes or more: record the real elapsed time in a caption and cut the wait in the edit, never fake it. Shows the plan OK line, certificates step (skipped), the what-if table (nine Create rows) and the start of the deployment."
+    },
+    {
+      "name": "connect",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\azure\\episodes\\09-networking-vpn",
+      "prompt": "PS 09-networking-vpn> ",
+      "commands": [
+        "python infra/probe.py 10.61.0.4 --expect closed --timeout 3",
+        "$LASTEXITCODE",
+        "# now connect the 'contoso lab' profile in the Azure VPN Client",
+        "#pause 60",
+        "python infra/probe.py 10.61.0.4",
+        "#pause 6"
+      ],
+      "prepare": [
+        "bash infra/vpnclient.sh rg-mglab-azure-09   # downloads the client package to ~/.contoso-net/client (run again after any peering or topology change)",
+        "# owner: Azure VPN Client > Add > Import the azurevpnconfig_cert.xml from $HOME\\.contoso-net\\client\\unzipped\\AzureVPN, name it 'contoso lab', pick the labadmin client certificate, Save. Leave it DISCONNECTED before the scene; click Connect during the pause"
+      ],
+      "mask": [
+        "gateway host name in the client window",
+        "certificate password (never shown)"
+      ],
+      "maxMinutes": 6,
+      "companion": {
+        "kind": "app",
+        "app": "Azure VPN Client",
+        "steps": [
+          "Show the profile 'contoso lab' with status Connected"
+        ]
+      },
+      "note": "Expect first reachable false with a timeout and exit code 0, then after connecting reachable true, status 200, service contoso-orders-internal, host vm-orders-int and a client address from 172.16.201.0/24. If client differs or the probe times out, that is the finding (NSG source prefix; client package installed after the peering existed)."
+    },
+    {
+      "name": "diagnose",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\azure\\episodes\\09-networking-vpn",
+      "prompt": "PS 09-networking-vpn> ",
+      "commands": [
+        "$env:VPN_CLIENT_IP",
+        "bash infra/diagnose.sh rg-mglab-azure-09 $env:VPN_CLIENT_IP",
+        "#pause 10"
+      ],
+      "prepare": [
+        "$env:VPN_CLIENT_IP = (python infra/probe.py 10.61.0.4 | ConvertFrom-Json).client   # the VPN must still be connected"
+      ],
+      "mask": [
+        "subscription ID"
+      ],
+      "maxMinutes": 6,
+      "note": "Show exactly what comes back, even if a next hop type differs from the comments in the script. The VM must be running. If it complains about Network Watcher: az network watcher configure -g NetworkWatcherRG -l westeurope --enabled true."
+    }
+  ],
+  "teardown": [
+    "bash infra/teardown.sh rg-mglab-azure-09   # also deletes ~/.contoso-net (keys, pfx, client package)",
+    "Get-ChildItem Cert:\\CurrentUser\\My | Where-Object Subject -like '*@contoso.example' | Remove-Item",
+    "[Environment]::SetEnvironmentVariable('PFX_PASSWORD', $null, 'Process'); Remove-Item Env:VPN_CLIENT_IP -ErrorAction SilentlyContinue",
+    "# owner: delete the 'contoso lab' profile in the Azure VPN Client",
+    "az group exists --name rg-mglab-azure-09   # false when done"
+  ],
+  "needs": [
+    "azure",
+    "tenant",
+    "tool:azure-vpn-client",
+    "tool:jq",
+    "owner:vpn-client-profile-and-connect"
+  ]
+}
