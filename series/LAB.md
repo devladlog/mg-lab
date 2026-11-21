@@ -4,6 +4,7 @@ All demos are recorded for real. Use these shared resources before asking for ne
 
 ## Cloud tenant (Momento Galático lab tenant)
 - Microsoft 365 E5 trial (25 licences, until 20 Dec 2026): includes Entra ID P2, Purview, Defender, Teams, SharePoint.
+  Not included: SharePoint Advanced Management (needs a Microsoft 365 Copilot licence in the org or the SAM add-on).
 - Entra ID Governance add-on trial (until 20 Dec 2026): lifecycle workflows, entitlement management, access reviews.
 - Power Automate process mining 90-day trial in `DEV` (started 21 Nov 2026, until ~19 Feb 2027).
 - Power Apps Premium, Microsoft 365 Business Standard, Fabric + Power BI 60-day trial (West Europe capacity).
