@@ -2,6 +2,9 @@
 # API are replaced by Pester mocks, which is only for these automated tests. The real run is on the recording laptop (demo.md).
 # The DPAPI round trip needs Windows and is skipped elsewhere.
 
+# -Skip is evaluated during discovery, so the platform flag must exist then (BeforeAll runs later).
+BeforeDiscovery { $script:IsWin = [Environment]::OSVersion.Platform -eq 'Win32NT' }
+
 BeforeAll {
     $script:Script = Join-Path $PSScriptRoot '..' 'setup' 'New-LabBusinessCentral.ps1'
     . $script:Script            # dot-sourcing only defines the functions: the main block is skipped

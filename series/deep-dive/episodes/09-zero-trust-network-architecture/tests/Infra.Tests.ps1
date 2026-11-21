@@ -70,8 +70,13 @@ Describe 'Workload VM' {
 }
 
 Describe 'Scripts' {
-    It 'vm-check.sh is valid bash' {
-        & bash -n (Join-Path (Split-Path $PSScriptRoot -Parent) 'scripts/vm-check.sh')
+    # On Windows use Git Bash (bash.exe on PATH there is usually the WSL launcher); skip if neither exists.
+    BeforeDiscovery {
+        $script:BashExe = if ($IsWindows) { $g = Join-Path $env:ProgramFiles 'Git\bin\bash.exe'; if (Test-Path $g) { $g } } else { (Get-Command bash -ErrorAction SilentlyContinue).Source }
+    }
+    It 'vm-check.sh is valid bash' -Skip:(-not $script:BashExe) {
+        $bash = if ($IsWindows) { Join-Path $env:ProgramFiles 'Git\bin\bash.exe' } else { 'bash' }
+        & $bash -n (Join-Path (Split-Path $PSScriptRoot -Parent) 'scripts/vm-check.sh')
         $LASTEXITCODE | Should -Be 0
     }
     It 'Test-PrivateAccess.ps1 -PrintOnly prints the two az commands and runs nothing' {

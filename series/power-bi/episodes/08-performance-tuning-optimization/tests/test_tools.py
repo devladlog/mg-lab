@@ -75,7 +75,7 @@ def test_no_real_names_and_no_guids():
         if p.suffix in {".csv", ".png", ".jpg"} or p.name == "test_tools.py":
             continue
         text = p.read_text(encoding="utf-8", errors="ignore")
-        if p.name in {"README.md", "script.yaml", "demo.md"}:               # the blog URL is a reference by design
+        if p.name in {"README.md", "script.yaml", "demo.md", "social.yaml"}:  # the blog URL and brand are references by design
             text = text.replace("https://www.devladlog.com/articles/power-bi/2025-07-09-performance-tuning-complete-guide-2025/", "")
             text = text.replace("devladlog/mg-lab", "").replace("devladlog.com", "").replace("DEVLADLOG", "").replace("Momento Galático", "")
         assert not bad.search(text), p.relative_to(ROOT)

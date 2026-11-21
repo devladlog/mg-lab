@@ -57,7 +57,7 @@ bash -n deploy.sh run-api.sh smoke.sh teardown.sh
 ```
 
 Verified in this container (.NET SDK 10.0.115, EF Core 10.0.15, Azure.Storage.Blobs 12.27.0, Bicep 0.49.2,
-Azurite 3.38.0 via `npx`, node 22, openssl): 47 passed. The `InvoiceStoreTests` start Azurite themselves
+Azurite 3.38.0 via `npx`, node 22; the test certificate is made in .NET, no openssl): 47 passed. The `InvoiceStoreTests` start Azurite themselves
 (`npx --yes --package azurite@3.38.0 azurite-blob … --oauth basic` with a throw-away self-signed certificate) and
 sign in with an unsigned test JWT: Azurite's basic OAuth mode checks the claims and **verifies the user delegation SAS
 signature**, so the SAS tests are real, only the token isn't. The API also ran locally on SQLite and

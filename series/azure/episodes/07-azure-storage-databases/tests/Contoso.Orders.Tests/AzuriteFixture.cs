@@ -1,6 +1,8 @@
 using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
+using System.Security.Cryptography;
+using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Text.Json;
 using Azure.Core;
@@ -12,7 +14,7 @@ namespace Contoso.Orders.Tests;
 /// <summary>
 /// Starts Azurite (the Blob Storage emulator) over HTTPS with OAuth enabled, so the tests exercise the
 /// real Entra-token flow: GetUserDelegationKey needs a bearer token, and Azurite checks the
-/// user delegation SAS signature. Needs node/npx and openssl; downloads azurite@3.38.0 once.
+/// user delegation SAS signature. Needs node/npx (Windows, macOS or Linux); downloads azurite@3.38.0 once.
 /// </summary>
 public sealed class AzuriteFixture : IAsyncLifetime
 {
@@ -36,10 +38,10 @@ public sealed class AzuriteFixture : IAsyncLifetime
 
     public async Task InitializeAsync()
     {
-        Run("openssl", $"req -x509 -newkey rsa:2048 -nodes -keyout key.pem -out cert.pem -days 1 -subj /CN=127.0.0.1 -addext subjectAltName=IP:127.0.0.1");
+        WriteSelfSignedCertificate();
         var port = FreePort();
         ServiceUri = new Uri($"https://127.0.0.1:{port}/{Account}");
-        _azurite = Process.Start(new ProcessStartInfo("npx",
+        _azurite = Process.Start(new ProcessStartInfo(OperatingSystem.IsWindows() ? "npx.cmd" : "npx",
             $"--yes --package azurite@3.38.0 azurite-blob --blobHost 127.0.0.1 --blobPort {port} " +
             $"--cert cert.pem --key key.pem --oauth basic --inMemoryPersistence --silent --skipApiVersionCheck")
         {
@@ -63,11 +65,17 @@ public sealed class AzuriteFixture : IAsyncLifetime
         return Task.CompletedTask;
     }
 
-    private void Run(string file, string args)
+    /// <summary>A one-day self-signed certificate for 127.0.0.1, written as cert.pem and key.pem (no openssl needed).</summary>
+    private void WriteSelfSignedCertificate()
     {
-        using var p = Process.Start(new ProcessStartInfo(file, args) { WorkingDirectory = _dir, RedirectStandardError = true })!;
-        p.WaitForExit();
-        if (p.ExitCode != 0) throw new InvalidOperationException($"{file} failed: {p.StandardError.ReadToEnd()}");
+        using var rsa = RSA.Create(2048);
+        var req = new CertificateRequest("CN=127.0.0.1", rsa, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+        var san = new SubjectAlternativeNameBuilder();
+        san.AddIpAddress(IPAddress.Loopback);
+        req.CertificateExtensions.Add(san.Build());
+        using var cert = req.CreateSelfSigned(DateTimeOffset.UtcNow.AddMinutes(-5), DateTimeOffset.UtcNow.AddDays(1));
+        File.WriteAllText(Path.Combine(_dir, "cert.pem"), cert.ExportCertificatePem());
+        File.WriteAllText(Path.Combine(_dir, "key.pem"), rsa.ExportPkcs8PrivateKeyPem());
     }
 
     private static int FreePort()

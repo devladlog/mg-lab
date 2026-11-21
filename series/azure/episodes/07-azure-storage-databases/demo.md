@@ -34,7 +34,7 @@ Licences: none beyond the subscription.
 
 ```bash
 cd series/azure/episodes/07-azure-storage-databases
-dotnet test tests/Contoso.Orders.Tests          # 47 passed, before anything else (needs node/npx + openssl for Azurite)
+dotnet test tests/Contoso.Orders.Tests          # 47 passed, before anything else (needs node/npx for Azurite)
 az login                                        # as labadmin
 az account set --subscription "<lab subscription>"
 infra/deploy.sh rg-mglab-azure-07 westeurope    # ~5 min: what-if, deploy, free-tier check, "Schema created."

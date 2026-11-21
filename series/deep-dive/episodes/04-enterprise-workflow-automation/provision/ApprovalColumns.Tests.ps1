@@ -50,7 +50,8 @@ Describe 'Install-ApprovalColumns' {
     }
     It 'adds only the missing columns' {
         Mock -ModuleName ApprovalColumns Get-PnPList { [pscustomobject]@{ Title = 'Invoices Inbox' } }
-        Mock -ModuleName ApprovalColumns Get-PnPField { if ($Identity -eq 'InvApprovalStatus') { [pscustomobject]@{} } }
+        # With PnP.PowerShell installed, -Identity arrives as a FieldPipeBind (its .Name holds the text), not a string.
+        Mock -ModuleName ApprovalColumns Get-PnPField { $n = if ($Identity -is [string]) { $Identity } else { $Identity.Name }; if ($n -eq 'InvApprovalStatus') { [pscustomobject]@{} } }
         Mock -ModuleName ApprovalColumns Add-PnPFieldFromXml { }
         $result = Install-ApprovalColumns -Contract $script:Contract
         ($result | Where-Object Result -eq 'Exists').Column | Should -Be 'InvApprovalStatus'
