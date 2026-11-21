@@ -8,7 +8,7 @@
       PowerShell Direct without an elevated window (takes effect after you sign out and in once);
    2. installs ffmpeg with winget (Gyan.FFmpeg) if it is missing - you accept winget's source/package agreements;
    3. sets a large, readable font for the console window the recorder opens (HKCU\Console, pwsh only);
-   4. writes .vscode\tasks.json with the lab, verification and recording tasks.
+   4. writes .vscode\tasks.json with the lab, verification and recording tasks (MG 1-2, MG R1-R4).
 #>
 $ErrorActionPreference = 'Stop'
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..\..\..')).Path
@@ -47,6 +47,7 @@ $tasks = @{ version = '2.0.0'; tasks = @(
     (T 'MG R1: lab - start VMs' "& '`${workspaceFolder}\series\tools\rec\Start-LabVMs.ps1'")
     (T 'MG R2: record the queue (recordings\queue.txt)' "New-Item -ItemType Directory -Force '`${workspaceFolder}\recordings' | Out-Null; Start-Transcript '`${workspaceFolder}\recordings\transcript.txt' -Force | Out-Null; try { & '`${workspaceFolder}\series\tools\rec\Invoke-RecordingQueue.ps1' } finally { Stop-Transcript | Out-Null }")
     (T 'MG R3: lab - stop VMs' "& '`${workspaceFolder}\series\tools\rec\Start-LabVMs.ps1' -Stop")
+    (T 'MG R4: record a window (recordings\window.json)' "& '`${workspaceFolder}\series\tools\rec\Record-Window.ps1'")
 ) }
 New-Item -ItemType Directory -Force -Path (Join-Path $root '.vscode'), (Join-Path $root 'recordings') | Out-Null
 $tasks | ConvertTo-Json -Depth 6 | Set-Content (Join-Path $root '.vscode\tasks.json') -Encoding utf8
