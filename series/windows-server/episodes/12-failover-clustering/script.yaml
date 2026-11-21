@@ -1,0 +1,231 @@
+# DEVLADLOG Windows Server - episode 12 (draft: the screen scenes need the lab recording, see demo.md)
+episode: 12
+slug: failover-clustering
+series_label: "WINDOWS SERVER"
+series_name: "DEVLADLOG Windows Server"
+file_prefix: "windows-server"
+title: "Failover Clustering"
+subtitle: "Check the nodes, read the plan, build it, then measure the failover"
+voice: am_michael
+thumbnail_text: "TWO NODES\nONE VOTE\nSHORT"
+youtube:
+  title: "Failover Clustering on Windows Server 2025: Build It, Drain It, Measure the Downtime | DEVLADLOG Windows Server #12"
+  tags: [Failover Clustering, Windows Server 2025, quorum, file share witness, New-Cluster, Test-Cluster, PowerShell, high availability, sysadmin, Pester]
+sources:
+  - https://www.devladlog.com/articles/windows-server/2025-09-20-failover-clustering-complete-guide-2025/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Two servers, and one vote short"
+    sub: "A cluster that cannot lose a node is not a cluster"
+    short: hook
+    narration: >
+      Two servers do not make a failover cluster that survives a server dying. Count the votes and you find out why.
+      Today we check two nodes before building anything, read the plan, and build a cluster with a witness. Then we
+      pause one node, and a small prober measures how long the website really went away.
+
+  - id: why
+    type: bullets
+    heading: "What a cluster is for"
+    bullets:
+      - "Nodes: the servers that run the role"
+      - "A clustered role has one owner at a time"
+      - "Quorum: who is allowed to keep running"
+      - "A witness is the tie-breaker vote"
+    narration: >
+      A failover cluster is a group of servers called nodes. A clustered role lives on one node at a time, and moves
+      when that node fails or is paused. Quorum decides which part of the cluster may keep running, so two halves
+      never both think they are in charge. A witness is an extra vote that breaks ties. In this lab the clustered role is a plain web site, which is enough to see
+      every moving part without a shared disk.
+
+  - id: quorum
+    type: code
+    heading: "The arithmetic, before the build"
+    lang: text
+    code: |
+      Nodes Witness Votes QuorumNeeded SurvivesOneNodeLoss
+          2 False       2            2 False
+          2 True        3            2 True
+      # static count; Dynamic Quorum can do better
+    narration: >
+      Two nodes, no witness, two votes. Quorum needs both, so losing one node stops the cluster. Add a file share
+      witness and there are three votes, quorum needs two, and one node can go. The check prints this sum for your
+      configuration, and says it is a static count, because Dynamic Quorum adjusts votes on its own.
+
+  - id: before
+    type: screen
+    heading: "Check the nodes first"
+    image: screens/ready-before.jpg
+    bar: "Lab · CON-NODE01 · Invoke-ClusterReadiness.ps1"
+    demo: >
+      On CON-NODE01, elevated Windows PowerShell in C:\lab\ep12\src: .\Invoke-ClusterReadiness.ps1 -FactsFile
+      .\facts-before.json -OutFile .\ready-before.md -PlanOnly. Show the node table, the findings and the build plan.
+    narration: >
+      On the real lab. Rewrite this to what the check found on the two new Server Core nodes. The collector only
+      reads: build, domain, clock, addresses, whether the feature is installed, and whether the witness share is
+      visible. Then the plan appears as a table.
+
+  - id: rules
+    type: code
+    heading: "One rule: the clocks"
+    lang: powershell
+    code: |
+      $times = @($reached | ForEach-Object { ([datetime]$_.TimeUtc).ToUniversalTime() })
+      if ($times.Count -ge 2) {
+          $spread = (($times | Measure-Object -Maximum).Maximum -
+                     ($times | Measure-Object -Minimum).Minimum).TotalSeconds
+          if ($spread -gt $maxSkew) {
+              Add-F $cname High 'ClockSkew' ("Node clocks differ by {0:N0} s; Kerberos tolerates 5 minutes ..." -f $spread)
+          }
+      }
+    narration: >
+      One of the rules. Cluster nodes authenticate with Kerberos, and Kerberos tolerates five minutes of clock
+      difference by default. So the check measures the spread between the nodes, and marks it high when it is too
+      big. Not joined to the domain, different domains, and an address that is not on the node network are high too.
+
+  - id: plan
+    type: code
+    heading: "The plan, in order"
+    lang: text
+    code: |
+      Order Id               Cmdlet                         LocalOnly
+          7 TestCluster      Test-Cluster                       False
+          8 NewCluster       New-Cluster                         True
+          9 WitnessShare     (share on CON-SRV01)               False
+         10 SetQuorum        Set-ClusterQuorum                   True
+         11 AddRole          Add-ClusterGenericServiceRole       True
+      # a node that already runs the cluster service skips 7 and 8
+    short: plan
+    narration: >
+      The plan, from sample data. Validate first, then create the cluster, then the witness share, then the quorum,
+      then the role. The share comes after the cluster on purpose, because the cluster account has to exist before it
+      can get access. A machine that already runs the cluster service never gets a second cluster.
+
+  - id: build
+    type: screen
+    heading: "Build it, with What if first"
+    image: screens/build.jpg
+    bar: "Lab · CON-NODE01 · Deploy-ClusterLab.ps1 -Step Build"
+    demo: >
+      On the console of CON-NODE01: .\Deploy-ClusterLab.ps1 -Step Build -WhatIf, then .\Deploy-ClusterLab.ps1 -Step
+      Build. If a node asks for a restart after the feature install, restart it and re-run the same command. Show
+      Get-ClusterNode, Get-ClusterGroup and Get-ClusterQuorum at the end.
+    narration: >
+      What If first, then the real build. Rewrite this to what happened: restarts, how the plan shrank on the second
+      run, and what the cluster looks like at the end. Both nodes up, the role online on one of them, and the quorum
+      showing the file share witness.
+
+  - id: witness
+    type: bullets
+    heading: "The witness share, in four facts"
+    bullets:
+      - "On a Windows server in the same forest"
+      - "Not on a cluster node"
+      - "Not a DFS share"
+      - "The cluster account needs access"
+    narration: >
+      Four facts about the witness, all from Learn. The share lives on a Windows server in the same forest, physically
+      separate from the nodes. A DFS share is not supported. And the cluster name object needs change access on the
+      share and modify on the folder. Our config refuses a witness on a node before anything runs.
+
+  - id: drain
+    type: screen
+    heading: "A planned failover, measured"
+    image: screens/drain.jpg
+    bar: "Lab · CON-SRV02 + CON-NODE01 · Watch-ClusterRole.ps1, Drain"
+    demo: >
+      On CON-SRV02: .\Watch-ClusterRole.ps1 -Url http://10.50.0.61/ -DurationSec 90 -OutFile .\drain.jsonl. On
+      CON-NODE01 during the run: .\Deploy-ClusterLab.ps1 -Step Drain. Show the Served by line change from one node to
+      the other and the outage table at the end of the prober.
+    narration: >
+      The role runs the website on one node. The prober asks the clustered address every half second and records who
+      answered. Then the drain: pause the node that owns the role, move it to the other one, and resume the node
+      without failing back. Rewrite this to what the prober really measured, including the outage.
+
+  - id: probe
+    type: code
+    heading: "What the prober saw"
+    lang: text
+    code: |
+      Samples: 26   failed: 2   server changes: 1
+      Served by CON-NODE01: 12 request(s)
+      Served by CON-NODE02: 12 request(s)
+
+      Start               End                 Seconds FailedRequests
+      11/25/2026 10:05:06 11/25/2026 10:05:10    4.00              2
+      # sample data
+    narration: >
+      Sample data, shaped like the real output. Twelve answers from the first node, a gap, then twelve from the
+      second. The outage runs from the first failed request to the next good one. A planned failover is not zero
+      downtime. It is short, and now it has a number.
+
+  - id: crash
+    type: screen
+    heading: "Now stop a node the hard way"
+    image: screens/crash.jpg
+    bar: "Lab · Hyper-V host + CON-SRV02 · hard stop"
+    demo: >
+      Optional. Run the prober again. On the Hyper-V host: Stop-VM CON-NODE01 -TurnOff for the node that owns the role.
+      Show the role come up on CON-NODE02 and the longer outage in the summary. Start the VM again afterwards.
+    narration: >
+      Optional, on the host. Turn the owning node off as if the power failed. Rewrite this to what happened: how long
+      the role took to come up on the other node, and how the outage compares with the drain.
+
+  - id: gotcha
+    type: code
+    heading: "Gotcha: not remotely"
+    lang: text
+    code: |
+      Learn: New-Cluster, Add-ClusterGenericServiceRole and
+      Remove-Cluster cannot be run remotely without CredSSP.
+      -> the lab runs them ON a node (the console of CON-NODE01).
+         Deploy-ClusterLab.ps1 stops at once on any other machine:
+         "Run it ON a cluster node"
+    short: gotcha
+    narration: >
+      The gotcha. We wanted to build the cluster from the management server, like every other episode. Learn says the
+      cluster creation, the role creation and the removal cannot run remotely without CredSSP, and CredSSP hands out
+      your credentials. So the script runs those steps on a node, and stops before changing anything anywhere else.
+
+  - id: tests
+    type: code
+    heading: "Fifty-two tests, no cluster"
+    lang: text
+    code: |
+      Describing Get-ClfQuorumMath
+        [+] two nodes with a witness can lose one node
+      Describing Get-ClfBuildPlan
+        [+] does not create a second cluster when the nodes already run the cluster service
+      Describing Invoke-ClfPlan
+        [+] refuses to start on a machine that is not a node, before changing anything
+      Describing Invoke-ClfProbe
+        [+] records who answered and writes JSON lines
+
+      Tests Passed: 52, Failed: 0
+    narration: >
+      Fifty two Pester tests run on Linux with the cluster cmdlets mocked. They check the vote arithmetic, the plan
+      order, the node-only guard, the allow list, and the outage maths. The prober is even tested against a throwaway
+      local web server.
+
+  - id: recap
+    type: bullets
+    heading: "Five rules for a cluster"
+    bullets:
+      - "Count the votes before you build"
+      - "Check clocks and domain first"
+      - "Plan as a table, order matters"
+      - "Run cluster steps on a node"
+      - "Measure the failover"
+    narration: >
+      Five rules. Count the votes before you build. Check the clocks and the domain first. Read the plan as a table,
+      because the order matters. Run the cluster steps on a node. And measure the failover, because a number beats
+      a feeling. Check, plan, build, measure: the same loop as every episode in this series, now with two servers.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The module, the check, the deploy script, the prober and the tests are on GitHub, and the complete guide to
+      Failover Clustering is on devladlog dot com. Subscribe so you don't miss the next episode.

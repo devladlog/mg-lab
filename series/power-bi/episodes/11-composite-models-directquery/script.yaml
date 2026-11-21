@@ -1,0 +1,211 @@
+episode: 11
+slug: composite-models-directquery
+series_label: "POWER BI"
+series_name: "DEVLADLOG Power BI"
+file_prefix: "power-bi"
+title: "Composite Models & DirectQuery"
+subtitle: "Import, DirectQuery and Dual in one model, and aggregations that decide who answers"
+voice: am_michael
+thumbnail_text: "IMPORT\n+\nDIRECT\nQUERY"
+youtube:
+  title: "Power BI Composite Models: DirectQuery, Dual and Aggregations Explained | DEVLADLOG Power BI #11"
+  tags: [Power BI, composite models, DirectQuery, Dual storage mode, aggregations, user-defined aggregations, TMDL, Tabular Object Model, SQL Server, semantic model, Power BI Desktop]
+sources:
+  - https://www.devladlog.com/articles/power-bi/2026-03-31-composite-models-complete-guide-2026/
+  - https://learn.microsoft.com/en-us/power-bi/transform-model/desktop-composite-models
+  - https://learn.microsoft.com/en-us/power-bi/transform-model/desktop-storage-mode
+  - https://learn.microsoft.com/en-us/power-bi/transform-model/aggregations-advanced
+  - https://learn.microsoft.com/en-us/power-bi/connect-data/desktop-directquery-datasets-azure-analysis-services
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Who answers the query?"
+    sub: "Composite models, DirectQuery and aggregations"
+    short: hook
+    narration: >
+      Until now every Contoso Bikes model imported its data. That works until the fact table has two million rows and
+      nobody wants to wait for a refresh. This time the big table stays in SQL Server. A small summary table sits in the
+      model, and the engine decides, query by query, who answers.
+
+  - id: plan
+    type: bullets
+    heading: "The plan"
+    bullets:
+      - "Sales in DirectQuery, the dimensions in Dual"
+      - "A hidden Import table as the aggregation"
+      - "Watch SQL Server to see who answered"
+      - "Add a budget file with a composite model"
+    narration: >
+      We keep the sales lines in DirectQuery and make the dimensions Dual. We add an imported aggregation table. Then we
+      look at SQL Server itself, to see which queries still reach it. And last, we add a budget from a file, which is what
+      a composite model was invented for.
+
+  - id: directquery
+    type: code
+    heading: "The detail table stays in SQL Server"
+    lang: text
+    code: |
+      partition Sales = m
+      mode: directQuery
+      Data = Source{[Schema = "dbo", Item = "FactSales"]}[Data]
+    narration: >
+      The sales table is one line of mode. Direct query means the model stores no rows, and every visual becomes a query
+      to the SQL Server in the lab. The server and database are parameters, so the same project opens against any copy of
+      the warehouse.
+
+  - id: dual
+    type: code
+    heading: "Dimensions in Dual mode"
+    lang: text
+    code: |
+      partition Date = m
+      mode: dual
+      Data = Source{[Schema = "dbo", Item = "DimDate"]}[Data]
+    narration: >
+      The dimensions are Dual. A Dual table keeps its rows in memory, and can also act as a DirectQuery table when a
+      query needs it. That is what keeps the relationships regular. An Import dimension next to a DirectQuery fact would
+      make a limited relationship, and then the aggregation could not be used.
+
+  - id: aggregation
+    type: code
+    heading: "Mapping the aggregation to the detail table"
+    lang: text
+    code: |
+      column Units
+      dataType: int64
+      summarizeBy: sum
+      sourceColumn: Units
+      alternateOf
+      summarization: sum
+      baseColumn: Sales.Quantity
+      summarization: count
+      baseTable: Sales
+    short: aggregation
+    narration: >
+      The aggregation is a hidden Import table at the grain of date, product and store. Each column says what it is an
+      alternate of. Units is the sum of the quantity. The order lines column is a count of the rows of the sales table.
+      The engine reads these mappings, and a query that only needs them never leaves the model.
+
+  - id: view
+    type: code
+    heading: "The aggregation is just a view"
+    lang: sql
+    code: |
+      CREATE OR ALTER VIEW dbo.vwSalesAgg AS
+      SELECT f.OrderDate, f.ProductKey, f.StoreKey,
+      CAST(SUM(f.Quantity) AS int) AS Units,
+      CAST(SUM(f.LineAmount) AS decimal(18,2)) AS LineAmount,
+      COUNT_BIG(*) AS OrderLines
+      FROM dbo.FactSales AS f
+      GROUP BY f.OrderDate, f.ProductKey, f.StoreKey;
+    narration: >
+      On the SQL side it is a view that groups the sales lines. In the scale up script the detail table grows to over two
+      million rows, and the view stays at three thousand nine hundred forty seven rows, with the same totals. I checked
+      that logic on SQLite here, and the real T SQL runs on the lab server.
+
+  - id: model
+    type: screen
+    heading: "Storage modes in Model view"
+    image: screens/model-view.jpg
+    bar: "Power BI Desktop · Model view · ContosoSalesComposite"
+    demo: "Model view with the properties pane: Sales shows DirectQuery, Sales Agg shows Import and is hidden, Date, Product, Customer and Store show Dual. Show the Manage aggregations dialog for Sales Agg."
+    narration: >
+      In Model view the storage mode shows on each table header. Sales is Direct query, the aggregation is Import, and the
+      four dimensions are Dual. The Manage aggregations dialog shows the same mapping as the project files, so you can
+      check what the engine will use.
+
+  - id: observe
+    type: screen
+    heading: "Which queries reach SQL Server?"
+    image: screens/sql-observe.jpg
+    bar: "SSMS · CON-SQL01 · ContosoBikesDW · dm_exec_query_stats"
+    demo: "Run sql/07-clear-plan-cache.sql, then the HIT query (queries/01) in DAX query view, then sql/06-observe-directquery.sql: no row for it. Then the MISS query (queries/02) and run 06 again: one statement over FactSales and DimCustomer."
+    narration: >
+      The proof is on the server. We clear the plan cache of the database, run a query by year and category, and look at the
+      statements SQL Server saw. If the aggregation answered, there is nothing. Then we run a query by customer country.
+      Customers are not in the aggregation, so this one arrives as a single group by over the fact table.
+
+  - id: miss
+    type: code
+    heading: "A deliberate miss"
+    lang: dax
+    code: |
+      EVALUATE
+      SUMMARIZECOLUMNS(
+      'Customer'[Country],
+      "Sales Amount", [Sales Amount]
+      )
+      ORDER BY 'Customer'[Country]
+    narration: >
+      This query asks for the same sales amount, but grouped by an attribute the aggregation does not have. Customer is
+      left out on purpose, so the model can show a miss. A visual that mixes a hit measure with a miss measure runs as two
+      queries, and only one of them goes to the server.
+
+  - id: lint
+    type: bullets
+    heading: "Predict it before you run it"
+    bullets:
+      - "Composite lint loads the TMDL with the Tabular Object Model"
+      - "Checks modes, relationships and the alternateOf mappings"
+      - "Predicts hit or miss per measure and per table"
+    narration: >
+      Before opening Desktop, a small check loads the project with the Tabular Object Model. It flags limited
+      relationships, an aggregation that is not hidden, and mappings that cannot work. With the explain option it
+      predicts which measures hit, using the rules on Learn. It is a prediction, and the engine has the last word.
+
+  - id: budget
+    type: screen
+    heading: "Sales against a budget file"
+    image: screens/budget-composite.jpg
+    bar: "Power BI Desktop · Live connection to ContosoSales · Add a local model"
+    demo: "Open a report on the published ContosoSales semantic model, choose Make changes to this model, add data from data/budget/budget.csv as Import, relate Budget to Store and Date, and show the matrix of Sales Amount against Budget Amount for 2025."
+    narration: >
+      Now the use case. A report connects to the published sales model, and we add a small budget file next to it. The
+      budget is its own source group, so the relationships to the shared dimensions are limited, and the model shows that
+      with a different line. The matrix compares sales to the budget by store, without copying the model.
+
+  - id: limits
+    type: bullets
+    heading: "What a limited relationship costs"
+    bullets:
+      - "Related values are not pushed down across source groups"
+      - "Chains of at most three models"
+      - "Build permission on every model in the chain"
+    narration: >
+      A limited relationship works, but it is evaluated in the model, not at the source. Chaining models has a ceiling of
+      three, and you need build permission on each of them. The budget is tiny, so none of this hurts here. With a large
+      table on the other side it would.
+
+  - id: gotcha
+    type: code
+    heading: "Gotcha: one measure breaks the hit"
+    lang: dax
+    code: |
+      measure Orders = DISTINCTCOUNT(Sales[Order Number])
+    short: gotcha
+    narration: >
+      The honest gotcha. A distinct count of order numbers looks harmless, but the aggregation has no column for it. Every
+      visual with that measure goes to SQL Server, whatever else is on it. Adding a group by order number to the
+      aggregation would make it as big as the table. So it stays a miss, and we decide that with open eyes.
+
+  - id: recap
+    type: bullets
+    heading: "Recap"
+    bullets:
+      - "DirectQuery for the big table, Dual for the dimensions"
+      - "A hidden Import aggregation answers the common queries"
+      - "SQL Server shows who really answered"
+      - "Composite models also join a local file to a published model"
+    narration: >
+      So, the large table stays at the source, the dimensions are Dual, and a small hidden table answers the questions
+      people ask every day. SQL Server tells you when it was wrong. The next episode builds paginated reports, for the
+      documents that must print exactly as designed.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The project, the SQL scripts and the composite lint are on GitHub, and the complete guide to composite models is on
+      dev lad log dot com. Links in the description. This was DEVLADLOG Power BI, by Momento Galático.

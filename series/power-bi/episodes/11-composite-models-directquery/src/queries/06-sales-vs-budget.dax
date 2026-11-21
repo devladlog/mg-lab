@@ -1,0 +1,14 @@
+// Part B (needs the composite model on the published ContosoSales semantic model plus the imported Budget table, see demo.md).
+// Budget is Import (its own source group); Sales Amount comes from the remote semantic model. The relationships are limited.
+DEFINE
+    MEASURE 'Sales'[Budget Amount] = SUM('Budget'[Budget Amount])
+    MEASURE 'Sales'[Sales vs Budget %] = DIVIDE([Sales Amount] - [Budget Amount], [Budget Amount])
+EVALUATE
+SUMMARIZECOLUMNS(
+    'Store'[Store],
+    FILTER(VALUES('Date'[Year]), 'Date'[Year] = 2025),
+    "Sales Amount", [Sales Amount],
+    "Budget Amount", [Budget Amount],
+    "Sales vs Budget %", [Sales vs Budget %]
+)
+ORDER BY 'Store'[Store]

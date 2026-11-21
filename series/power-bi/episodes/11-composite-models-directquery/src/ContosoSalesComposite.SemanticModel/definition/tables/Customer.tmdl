@@ -1,0 +1,39 @@
+/// Customer dimension. Key -1 is the explicit "Unknown customer" row for guest orders. Dual so its relationship to the DirectQuery fact stays regular.
+table Customer
+
+	column CustomerKey
+		dataType: int64
+		isHidden
+		isKey
+		formatString: 0
+		summarizeBy: none
+		sourceColumn: CustomerKey
+
+	column 'Customer Code'
+		dataType: string
+		summarizeBy: none
+		sourceColumn: CustomerCode
+
+	column Customer
+		dataType: string
+		summarizeBy: none
+		sourceColumn: Customer
+
+	column City
+		dataType: string
+		summarizeBy: none
+		sourceColumn: City
+
+	column Country
+		dataType: string
+		summarizeBy: none
+		sourceColumn: Country
+
+	partition Customer = m
+		mode: dual
+		source =
+				let
+				    Source = Sql.Database(SqlServer, SqlDatabase, [CreateNavigationProperties = false]),
+				    Data = Source{[Schema = "dbo", Item = "DimCustomer"]}[Data]
+				in
+				    Data

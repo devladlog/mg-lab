@@ -1,0 +1,84 @@
+/// User-defined aggregation of Sales at the grain Order Date x Product x Store. Import mode, hidden: reports never see it,
+/// the engine answers from it when a query only needs these columns (see the alternateOf blocks).
+/// Customer is not here on purpose: a visual by customer misses the aggregation and goes to SQL Server.
+table 'Sales Agg'
+	isHidden
+
+	column 'Order Date'
+		dataType: dateTime
+		formatString: yyyy-mm-dd
+		summarizeBy: none
+		sourceColumn: OrderDate
+
+		alternateOf
+			summarization: groupBy
+			baseColumn: Sales.'Order Date'
+
+	column ProductKey
+		dataType: int64
+		formatString: 0
+		summarizeBy: none
+		sourceColumn: ProductKey
+
+		alternateOf
+			summarization: groupBy
+			baseColumn: Sales.ProductKey
+
+	column StoreKey
+		dataType: int64
+		formatString: 0
+		summarizeBy: none
+		sourceColumn: StoreKey
+
+		alternateOf
+			summarization: groupBy
+			baseColumn: Sales.StoreKey
+
+	column Units
+		dataType: int64
+		formatString: #,0
+		summarizeBy: sum
+		sourceColumn: Units
+
+		alternateOf
+			summarization: sum
+			baseColumn: Sales.Quantity
+
+	column 'Line Amount'
+		dataType: decimal
+		formatString: #,0.00
+		summarizeBy: sum
+		sourceColumn: LineAmount
+
+		alternateOf
+			summarization: sum
+			baseColumn: Sales.'Line Amount'
+
+	column 'Line Cost'
+		dataType: decimal
+		formatString: #,0.00
+		summarizeBy: sum
+		sourceColumn: LineCost
+
+		alternateOf
+			summarization: sum
+			baseColumn: Sales.'Line Cost'
+
+	column 'Order Lines'
+		dataType: int64
+		formatString: #,0
+		summarizeBy: sum
+		sourceColumn: OrderLines
+
+		alternateOf
+			summarization: count
+			baseTable: Sales
+
+	partition 'Sales Agg' = m
+		mode: import
+		source =
+				let
+				    Source = Sql.Database(SqlServer, SqlDatabase, [CreateNavigationProperties = false]),
+				    Data = Source{[Schema = "dbo", Item = "vwSalesAgg"]}[Data]
+				in
+				    Data

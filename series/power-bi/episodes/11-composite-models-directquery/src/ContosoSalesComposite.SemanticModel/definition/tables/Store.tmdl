@@ -1,0 +1,34 @@
+/// Store dimension (physical stores and the online shop). Dual: filters the DirectQuery fact and the Import aggregation.
+table Store
+
+	column StoreKey
+		dataType: int64
+		isHidden
+		isKey
+		formatString: 0
+		summarizeBy: none
+		sourceColumn: StoreKey
+
+	column Store
+		dataType: string
+		summarizeBy: none
+		sourceColumn: Store
+
+	column Country
+		dataType: string
+		summarizeBy: none
+		sourceColumn: Country
+
+	column Channel
+		dataType: string
+		summarizeBy: none
+		sourceColumn: Channel
+
+	partition Store = m
+		mode: dual
+		source =
+				let
+				    Source = Sql.Database(SqlServer, SqlDatabase, [CreateNavigationProperties = false]),
+				    Data = Source{[Schema = "dbo", Item = "DimStore"]}[Data]
+				in
+				    Data

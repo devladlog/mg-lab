@@ -1,0 +1,212 @@
+episode: 12
+slug: paginated-reports
+series_label: "POWER BI"
+series_name: "DEVLADLOG Power BI"
+file_prefix: "power-bi"
+title: "Paginated Reports"
+subtitle: "Pixel-perfect statements, from a semantic model to a checked PDF"
+voice: am_michael
+thumbnail_text: "PAGINATED\nREPORTS\nRDL"
+youtube:
+  title: "Power BI Paginated Reports: RDL, DAX Parameters and PDF Export by REST API | DEVLADLOG Power BI #12"
+  tags: [Power BI, paginated reports, RDL, Power BI Report Builder, DAX, PDF export, Power BI REST API, ExportTo, semantic model, PowerShell, Pester, Fabric]
+sources:
+  - https://www.devladlog.com/articles/power-bi/2025-05-07-paginated-reports-complete-guide-2025/
+  - https://learn.microsoft.com/en-us/power-bi/paginated-reports/report-builder-power-bi
+  - https://learn.microsoft.com/en-us/power-bi/guidance/report-paginated-blank-page
+  - https://learn.microsoft.com/en-us/rest/api/power-bi/reports/export-to-file-in-group
+  - https://learn.microsoft.com/en-us/rest/api/power-bi/imports/post-import-in-group
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Same numbers. Exactly on paper."
+    sub: "Paginated reports, from RDL to a checked PDF"
+    short: hook
+    narration: >
+      Power BI reports are made for screens. But some documents have to print exactly as designed, with a header on every
+      page, a page number in the corner, and one store per sheet. That is a paginated report. This time Contoso Bikes gets
+      a monthly statement for each store, and a script that checks the PDF.
+
+  - id: plan
+    type: bullets
+    heading: "The plan"
+    bullets:
+      - "Read the ContosoSales model with a DAX query"
+      - "One page per store, headers that repeat"
+      - "Upload the R D L and export it with the REST A P I"
+      - "Check the PDF against the numbers in the CSV files"
+    narration: >
+      We connect a report to the sales model from episode one. We lay it out so each store gets its own page. We upload the
+      file and export a PDF with the REST A P I. And then we check what came out, against numbers computed from the
+      source files.
+
+  - id: source
+    type: code
+    heading: "The data source: a semantic model by name"
+    lang: xml
+    code: |
+      <DataProvider>OLEDB-MD</DataProvider>
+      <ConnectString>Data Source=powerbi://api.powerbi.com/v1.0/myorg/Contoso Sales (Lab);Initial Catalog=ContosoSales</ConnectString>
+      <rd:SecurityType>None</rd:SecurityType>
+    narration: >
+      A paginated report is a file in Report Definition Language. Its data source here is the published semantic model,
+      addressed by workspace name and model name, with the Analysis Services provider. There is no dataset identifier in the
+      file, so the same file works in any copy of the workspace. And no credentials either.
+
+  - id: dax
+    type: code
+    heading: "One DAX query, one parameter"
+    lang: dax
+    code: |
+      EVALUATE
+      SUMMARIZECOLUMNS(
+      'Store'[Store],
+      'Date'[Month Number],
+      'Date'[Month],
+      FILTER(VALUES('Date'[Year]), 'Date'[Year] = @Year),
+      "Sales Amount", [Sales Amount],
+      "Units", [Units],
+      "Margin %", [Margin %]
+      )
+    narration: >
+      The dataset is a DAX query. It asks the model for the measures it already has, by store and month. The at Year in the
+      filter is a query parameter, and Report Builder binds it to a report parameter. So the user picks a year, and the
+      measures stay defined in one place, the model.
+
+  - id: page
+    type: code
+    heading: "The page, and a body that fits it"
+    lang: xml
+    code: |
+      <PageHeight>11.69in</PageHeight>
+      <PageWidth>8.27in</PageWidth>
+      <LeftMargin>0.75in</LeftMargin>
+      <RightMargin>0.75in</RightMargin>
+      <Width>6.5in</Width>
+    narration: >
+      The page is A four. Eight point two seven inches wide, with three quarters of an inch of margin on each side. The body
+      is six and a half inches, so it fits in the usable width of six point seven seven. That is not a detail. It decides
+      whether the PDF has blank pages.
+
+  - id: repeat
+    type: code
+    heading: "One store per page, headers that repeat"
+    lang: xml
+    code: |
+      <Group Name="Store">
+      <BreakLocation>Between</BreakLocation>
+      <KeepWithGroup>After</KeepWithGroup>
+      <RepeatOnNewPage>true</RepeatOnNewPage>
+    narration: >
+      The table is grouped by store, with a page break between the groups. The title row and the column header row are static
+      members, with keep with group set to after and repeat on new page set to true. Those are the two properties that
+      Learn names for repeating headers. Twelve months fit on a page, but if a store grew, the headers would follow it.
+
+  - id: builder
+    type: screen
+    heading: "Open it in Report Builder"
+    image: screens/report-builder.jpg
+    bar: "Power BI Report Builder · ContosoStoreStatement.rdl"
+    demo: "Power BI Report Builder, open src/report/ContosoStoreStatement.rdl. Report Data pane: data source ContosoSales, dataset StoreSales, parameter Year. Run: the first page is Contoso Lisboa, year 2025, with the page number in the footer. Note anything Report Builder changes on opening."
+    narration: >
+      In Power BI Report Builder, the file opens with the data source, the dataset and the year parameter in the Report Data
+      pane. Run shows the first store, the repeated headers, and the footer. I wrote this file from a script, not in the
+      designer, so this is the first time a real tool reads it.
+
+  - id: upload
+    type: code
+    heading: "Upload the file"
+    lang: powershell
+    code: |
+      $url = 'groups/{0}/imports?datasetDisplayName={1}&nameConflict={2}' -f $WorkspaceId, [uri]::EscapeDataString($Name), $NameConflict
+      $body = New-PbiMultipartFile -Path $Path -OutFile $tmp
+      $started = Invoke-PbiApi -Method Post -Url $url -InFile $body.Path -ContentType $body.ContentType
+      Wait-PbiImport -WorkspaceId $WorkspaceId -ImportId $started.id -IntervalSeconds $IntervalSeconds
+    narration: >
+      Publishing is the Imports call. The display name is the file name with the extension, and for a report definition file
+      the name conflict can only be abort or overwrite. The file goes up as multipart form data, and the import is
+      asynchronous, so the function polls until it succeeds or fails. The tests check this request against a mock.
+
+  - id: preview
+    type: screen
+    heading: "The report in the service"
+    image: screens/service-preview.jpg
+    bar: "Power BI service · Contoso Sales (Lab) · ContosoStoreStatement"
+    demo: "Workspace Contoso Sales (Lab): the uploaded ContosoStoreStatement (paginated report icon). Open it, pick Year 2025 and View report. Show store pages with the footer Page n of 5, then switch to 2024."
+    narration: >
+      In the workspace the paginated report shows up with its own icon. Opening it asks for a year, and the numbers come from
+      the semantic model, not from the file. Whether the service accepts the uploaded file as it is, is the first thing
+      the recording will tell us.
+
+  - id: export
+    type: code
+    heading: "Export: format, parameters, identity"
+    lang: powershell
+    code: |
+      $body = [ordered]@{ format = $Format }
+      $config.parameterValues = @($Parameter.GetEnumerator() | Sort-Object Name | ForEach-Object { [ordered]@{ name = [string]$_.Name; value = [string]$_.Value } })
+      $config.identities = @($identity)
+      $url = "groups/$WorkspaceId/reports/$ReportId/ExportTo"
+    short: rest
+    narration: >
+      The export is a post to export to, with a format and a paginated report configuration. Parameter values are name and
+      value pairs, and the values are strings. Learn says an identity is required when the report uses a Power BI semantic
+      model, so the function can add one. Then the job is polled, and the file is downloaded when it succeeds.
+
+  - id: verify
+    type: code
+    heading: "Trust, then verify the PDF"
+    lang: python
+    code: |
+      if not re.search(rf"Page {i} of {len(texts)}\b", text):
+      pattern = r"\s+".join(re.escape(m[k]) for k in ("month", "sales_amount", "units", "margin_pct"))
+      if not re.search(rf"^{pattern}\s*$", text, re.M):
+    narration: >
+      A file that downloads is not a file that is right. The verify script reads each page of the PDF and expects the store
+      name, the footer, and one line per month with the four values in order. The expected values come from the CSV files,
+      not from the report. In the tests the PDF is simulated, and a changed figure or a blank page is reported.
+
+  - id: pdf
+    type: screen
+    heading: "The exported PDF, and the check"
+    image: screens/pdf-verify.jpg
+    bar: "statement-2025.pdf · verify_pdf.py"
+    demo: "Run Invoke-StatementRun.ps1 for 2025 with the lab workspace and report ids, then open out/statement-2025.pdf: five pages, one store each. In the terminal show the verify output. If it reports mismatches, show them as they are and say why."
+    narration: >
+      Here is the PDF the service produced, five pages, one store on each, and the script's verdict. If a figure differs,
+      it names the page, the store and the month. Rounding is the likely reason, since the contract is computed in Python and
+      the report formats its own numbers.
+
+  - id: gotcha
+    type: code
+    heading: "Gotcha: blank pages"
+    lang: python
+    code: |
+      elif body_w + left + right > page_w + 1e-9:
+    short: gotcha
+    narration: >
+      The honest gotcha. If the body is wider than the page minus both margins, every page is followed by a blank one in the
+      PDF. Learn gives the formula, and the lint applies it before you upload. Reports also grow when you drag things around,
+      so check it again after every edit. And with a premium per user license, the export A P I allows one request in five
+      minutes.
+
+  - id: recap
+    type: bullets
+    heading: "Recap"
+    bullets:
+      - "R D L file, DAX dataset, the model keeps the measures"
+      - "Body width, page break and repeating headers are design decisions"
+      - "Upload and export are two REST calls, plus polling"
+      - "Check the PDF against numbers from the source"
+    narration: >
+      So, the report reads the model, the layout is set so that it prints cleanly, and two REST calls publish and export it.
+      Then the check compares the PDF to the source files. The next episode is about embedded analytics.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The report file, the build script, the PowerShell module and the PDF check are on GitHub, and the complete guide to
+      paginated reports is on dev lad log dot com. Links in the description. This was DEVLADLOG Power BI, by Momento Galático.

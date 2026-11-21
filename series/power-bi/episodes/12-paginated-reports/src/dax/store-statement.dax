@@ -1,0 +1,14 @@
+// Dataset 'StoreSales' of the paginated report ContosoStoreStatement: one row per store and month of the chosen year.
+// @Year is the query parameter that Report Builder maps to the report parameter Year.
+// Measures come from the published semantic model ContosoSales (episode 1).
+EVALUATE
+SUMMARIZECOLUMNS(
+    'Store'[Store],
+    'Date'[Month Number],
+    'Date'[Month],
+    FILTER(VALUES('Date'[Year]), 'Date'[Year] = @Year),
+    "Sales Amount", [Sales Amount],
+    "Units", [Units],
+    "Margin %", [Margin %]
+)
+ORDER BY 'Store'[Store], 'Date'[Month Number]

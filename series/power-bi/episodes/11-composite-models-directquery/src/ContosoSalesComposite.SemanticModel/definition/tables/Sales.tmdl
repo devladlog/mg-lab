@@ -1,0 +1,117 @@
+/// Fact table, DirectQuery: every report query that the aggregation can't answer goes to SQL Server (dbo.FactSales).
+/// Measures sum real columns (Line Amount, Line Cost are persisted computed columns in SQL) so each one can be mapped by an aggregation.
+table Sales
+
+	measure 'Sales Amount' = SUM(Sales[Line Amount])
+		formatString: #,0.00
+		displayFolder: Sales
+
+	measure 'Total Cost' = SUM(Sales[Line Cost])
+		formatString: #,0.00
+		displayFolder: Sales
+
+	measure Margin = [Sales Amount] - [Total Cost]
+		formatString: #,0.00
+		displayFolder: Margin
+
+	measure 'Margin %' = DIVIDE([Margin], [Sales Amount])
+		formatString: 0.0%
+		displayFolder: Margin
+
+	measure Units = SUM(Sales[Quantity])
+		formatString: #,0
+		displayFolder: Sales
+
+	measure 'Order Lines' = COUNTROWS(Sales)
+		formatString: #,0
+		displayFolder: Sales
+
+	/// Not covered by the aggregation on purpose: DISTINCTCOUNT only hits an aggregation when the column has a GroupBy entry.
+	measure Orders = DISTINCTCOUNT(Sales[Order Number])
+		formatString: #,0
+		displayFolder: Sales
+
+	/// Degenerate dimension: kept on the fact table for filtering by order.
+	column 'Order Number'
+		dataType: string
+		summarizeBy: none
+		sourceColumn: OrderNumber
+
+	column 'Line Number'
+		dataType: int64
+		isHidden
+		formatString: 0
+		summarizeBy: none
+		sourceColumn: LineNumber
+
+	column 'Order Date'
+		dataType: dateTime
+		isHidden
+		formatString: yyyy-mm-dd
+		summarizeBy: none
+		sourceColumn: OrderDate
+
+	column CustomerKey
+		dataType: int64
+		isHidden
+		formatString: 0
+		summarizeBy: none
+		sourceColumn: CustomerKey
+
+	column ProductKey
+		dataType: int64
+		isHidden
+		formatString: 0
+		summarizeBy: none
+		sourceColumn: ProductKey
+
+	column StoreKey
+		dataType: int64
+		isHidden
+		formatString: 0
+		summarizeBy: none
+		sourceColumn: StoreKey
+
+	column Quantity
+		dataType: int64
+		isHidden
+		formatString: #,0
+		summarizeBy: none
+		sourceColumn: Quantity
+
+	column 'Unit Price'
+		dataType: decimal
+		isHidden
+		formatString: #,0.00
+		summarizeBy: none
+		sourceColumn: UnitPrice
+
+	column 'Unit Cost'
+		dataType: decimal
+		isHidden
+		formatString: #,0.00
+		summarizeBy: none
+		sourceColumn: UnitCost
+
+	column 'Line Amount'
+		dataType: decimal
+		isHidden
+		formatString: #,0.00
+		summarizeBy: none
+		sourceColumn: LineAmount
+
+	column 'Line Cost'
+		dataType: decimal
+		isHidden
+		formatString: #,0.00
+		summarizeBy: none
+		sourceColumn: LineCost
+
+	partition Sales = m
+		mode: directQuery
+		source =
+				let
+				    Source = Sql.Database(SqlServer, SqlDatabase, [CreateNavigationProperties = false]),
+				    Data = Source{[Schema = "dbo", Item = "FactSales"]}[Data]
+				in
+				    Data

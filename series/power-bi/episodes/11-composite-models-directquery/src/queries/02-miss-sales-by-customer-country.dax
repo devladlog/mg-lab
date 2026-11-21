@@ -1,0 +1,8 @@
+// MISS. Customer is not in the aggregation, so the engine can't answer from Sales Agg: the query goes to SQL Server as one
+// GROUP BY over dbo.FactSales joined to dbo.DimCustomer (Customer is Dual, so the relationship is regular and the join is pushed down).
+EVALUATE
+SUMMARIZECOLUMNS(
+    'Customer'[Country],
+    "Sales Amount", [Sales Amount]
+)
+ORDER BY 'Customer'[Country]

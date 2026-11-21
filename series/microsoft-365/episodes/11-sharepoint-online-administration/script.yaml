@@ -1,0 +1,240 @@
+# DEVLADLOG Microsoft 365 — episode 11 (draft: code and tests are real; screen scenes still need the lab recording)
+episode: 11
+slug: sharepoint-online-administration
+series_label: "MICROSOFT 365"
+series_name: "DEVLADLOG Microsoft 365"
+file_prefix: "microsoft-365"
+title: "SharePoint Online Administration"
+subtitle: "A tenant baseline, a site audit, and a change you can undo"
+voice: am_michael
+thumbnail_text: "IS YOUR\nSHAREPOINT\nTO BASELINE?"
+youtube:
+  title: "SharePoint Online Administration: Baseline, Site Audit and Rollback | DEVLADLOG Microsoft 365 #11"
+  tags: [SharePoint Online administration, SharePoint admin, SharePoint settings, Microsoft Graph, external sharing, site governance, inactive sites, storage quota, PowerShell, Microsoft 365 admin]
+sources:
+  - https://www.devladlog.com/articles/office-365/2025-03-04-sharepoint-online-admin-complete-guide-2025/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Is your SharePoint to baseline?"
+    sub: "A tenant baseline, a site audit, and a change you can undo"
+    short: hook
+    narration: >
+      Somebody changes a sharing setting in the SharePoint admin center, and nobody writes it down. In this episode we
+      write down what the tenant should look like, ask Microsoft Graph what it really looks like, and list the sites that
+      are idle, full, or without an owner. Then we fix one setting, with a way back. Everything runs against our real lab
+      tenant.
+
+  - id: two-jobs
+    type: bullets
+    heading: "Two jobs: the tenant and the sites"
+    bullets:
+      - "Tenant settings: sharing, site creation, legacy auth"
+      - "Site hygiene: idle, nearly full, no owner"
+      - "Read first, change only what you allowed"
+      - "Every change records the old value"
+    narration: >
+      A SharePoint administrator has two jobs. The tenant settings, like external sharing and who can create sites. And
+      the sites themselves, which pile up. We read first. A change happens only for a setting you named on purpose, and
+      the old value is written down before anything moves.
+
+  - id: policy-screen
+    type: screen
+    heading: "The sharing policy today"
+    image: screens/sharing-policy.jpg
+    bar: "SharePoint admin center > Policies > Sharing (lab tenant, masked)"
+    demo: >
+      Setup (demo.md): SharePoint admin center as labadmin, Policies > Sharing. Show the External sharing level for SharePoint, then expand
+      More external sharing settings and tick Allow guests to share items they don't own, then Save. This creates the drift the audit finds.
+      Rewrite the narration to the real level. Mask the tenant name.
+    narration: >
+      This is the sharing policy in the SharePoint admin center. The external sharing level is here, and under more
+      external sharing settings there is a box that lets guests share items they do not own. I tick it, and I save. Nothing
+      records that this changed, so let us make the tenant tell us.
+
+  - id: baseline-code
+    type: code
+    heading: "The baseline is a file"
+    lang: json
+    code: |
+      "settings": {
+        "sharingCapability": "externalUserSharingOnly",
+        "isResharingByExternalUsersEnabled": false,
+        "isRequireAcceptingUserToMatchInvitedUserEnabled": true,
+        "isLegacyAuthProtocolsEnabled": false,
+        "sharingDomainRestrictionMode": "none"
+      },
+      "remediate": {
+        "allowedSettings": []
+      }
+    narration: >
+      The baseline is a small file. Each name is a property of the tenant settings in Microsoft Graph, and a name that is
+      not one is an error, so a typo cannot silently check nothing. The values are yours. They are not Microsoft's
+      recommendation. And the list of settings the tool may change is empty by default.
+
+  - id: read-code
+    type: code
+    heading: "One call for the whole tenant"
+    lang: powershell
+    code: |
+      try { Invoke-MgGraphRequest -Method GET -Uri "$script:Graph/admin/sharepoint/settings" -OutputType PSObject -ErrorAction Stop }
+      catch {
+          $details = if ($_.ErrorDetails) { $_.ErrorDetails.Message } else { '' }
+          if ("$($_.Exception.Message) $details" -match 'Forbidden|403|Authorization') {
+              throw "Microsoft Graph refused the SharePoint settings. It needs SharePointTenantSettings.Read.All and the SharePoint Administrator or Global Reader role. Original error: $($_.Exception.Message)"
+          }
+          throw
+      }
+    narration: >
+      One get request returns the tenant settings for SharePoint and OneDrive. Reading needs the SharePoint tenant
+      settings read permission, and the SharePoint Administrator or Global Reader role. If Graph refuses, the message
+      names both, so you do not have to guess.
+
+  - id: audit-screen
+    type: screen
+    heading: "The audit, on the real tenant"
+    image: screens/audit.jpg
+    bar: "PowerShell on the lab Windows desktop (lab tenant, masked)"
+    demo: >
+      Setup (demo.md): sharepoint-baseline.lab.json with short site thresholds (the lab is days old; production default is 90 days). First run
+      ./Invoke-SharePointAdmin.ps1 -BaselineFile ./sharepoint-baseline.lab.json while the report is still concealed and show the warning
+      naming the Reports setting. Then clear Conceal user, group, and site names in all reports (Microsoft 365 admin center > Settings > Org
+      settings > Services > Reports), wait a few minutes, run again with -OutFile ./report.lab.md. Show the findings table: the sharing drift,
+      then the real site findings. Rewrite the narration to the real rows. Mask site URLs and UPN domains.
+    narration: >
+      Here is the audit. The first run stops with a warning. Microsoft hides site names in usage reports by default, and a
+      hashed list is useless, so the tool refuses and says which setting to change. After a global administrator clears
+      it, the second run works. The tenant settings that drifted come first. Then the sites, with the rule that fired for
+      each one.
+
+  - id: direction-code
+    type: code
+    heading: "Drift has a direction"
+    lang: powershell
+    code: |
+      if ($name -eq 'sharingCapability') {
+          $ra = $script:SharingOrder.IndexOf([string]$actual); $re = $script:SharingOrder.IndexOf([string]$expected)
+          if ($ra -ge 0 -and $re -ge 0) {
+              if ($ra -gt $re) { $detail = "is $actual, more permissive than the baseline ($expected)." }
+              else { $sev = 'Low'; $detail = "is $actual, stricter than the baseline ($expected)." }
+          }
+      }
+    narration: >
+      A drift is not always bad news. The sharing level has an order, from only people in your organization to anyone. If
+      the tenant is wider than the baseline, the finding keeps its high severity. If it is narrower, it is reported as
+      low, because somebody locked something down.
+
+  - id: sites-code
+    type: code
+    heading: "Site rules on the usage report"
+    lang: powershell
+    code: |
+      $age = [int]($today - $s.LastActivity).TotalDays
+      if ($age -ge $inactive) { Get-SPAFindingRecord 'Medium' 'InactiveSite' $s.Url "Last activity $($s.LastActivity.ToString('yyyy-MM-dd')), $age days ago (limit $inactive)." }
+      if ($null -ne $s.UsedPercent -and $s.UsedPercent -ge $near) { Get-SPAFindingRecord 'High' 'NearQuota' $s.Url "Uses $($s.UsedPercent) percent of its allocated storage (limit $near percent)." }
+      if ([string]::IsNullOrWhiteSpace($s.Owner)) { Get-SPAFindingRecord 'Medium' 'NoOwner' $s.Url 'The report shows no owner principal name for this site.' }
+    narration: >
+      The site rules read the SharePoint site usage report. A site idle for longer than your limit. A site that uses
+      most of its storage. A site with no owner in the report. Deleted sites are left out. The list of all sites from
+      Graph is not used, because it works only with application permissions, and this report works with a signed in admin.
+
+  - id: gotcha
+    type: code
+    heading: "The gotcha: hashed site names"
+    lang: powershell
+    short: gotcha
+    code: |
+      function Test-SPAConcealedReport {
+          param([AllowEmptyCollection()][object[]]$Rows)
+          $urls = @($Rows | ForEach-Object { Get-SPAProp $_ 'Site URL' } | Where-Object { $_ })
+          if ($urls.Count -eq 0) { return $false }
+          @($urls | Where-Object { $_ -notmatch '^https?://' }).Count -eq $urls.Count
+      }
+    narration: >
+      Here is the gotcha. Since September twenty twenty one, usage reports hide user, group and site names by default, and
+      the setting applies to site addresses too. The report still downloads. It is just a list of hashes. So the tool checks
+      whether the addresses are real addresses, and if not, it stops instead of printing a table nobody can use.
+
+  - id: limits
+    type: bullets
+    heading: "What this report cannot tell you"
+    bullets:
+      - "No creation date: a new site looks idle"
+      - "No site-level sharing or labels in the Graph report"
+      - "The report has a refresh date: check it"
+      - "Advanced Management is not in the lab"
+    narration: >
+      Be honest about the limits. The report has no creation date, so a brand new site can look idle. The Graph version of the
+      report has no column for the sharing setting of each site, or for its sensitivity label. The data has a refresh date,
+      so look at it. And SharePoint Advanced Management is not part of our lab licences, so this episode does not use it.
+
+  - id: remediate-code
+    type: code
+    heading: "One property per request, old value first"
+    lang: powershell
+    short: remediate
+    code: |
+      $body = ConvertTo-Json -InputObject @{ $p.Setting = $p.Expected } -Depth 5 -Compress
+      Invoke-MgGraphRequest -Method PATCH -Uri "$script:Graph/admin/sharepoint/settings" -Body $body -ContentType 'application/json' -ErrorAction Stop | Out-Null
+      $rollback.Add([pscustomobject]@{ setting = $p.Setting; previous = $(if ($before) { $before.Value } else { $null }); applied = $p.Expected; changedAt = [datetimeoffset]::UtcNow.ToString('o') })
+      ConvertTo-Json -InputObject @($rollback.ToArray()) -Depth 6 | Set-Content -LiteralPath $RollbackFile -Encoding utf8
+    narration: >
+      A change is a patch to the same address, with only the property you name in the body. Microsoft documents that
+      properties left out keep their value. Right after each success, the previous value goes into a rollback file. The
+      function re reads the tenant first and skips a setting that already matches. If one change fails, it stops, and
+      the file holds exactly what changed. It supports what if, and never overwrites an old rollback file.
+
+  - id: change-screen
+    type: screen
+    heading: "Preview, change, check"
+    image: screens/remediate.jpg
+    bar: "PowerShell + SharePoint admin center (lab tenant, masked)"
+    demo: >
+      Setup (demo.md): sharepoint-baseline.lab.json allows only isResharingByExternalUsersEnabled. Run -Remediate -RollbackFile ./rollback.lab.json -WhatIf
+      (nothing happens, show Test-Path false), then without -WhatIf and answer Yes at the prompt. Reload SharePoint admin center > Policies > Sharing >
+      More external sharing settings: the Allow guests to share items they don't own box is cleared. Show rollback.lab.json (previous: true, applied: false).
+      Rewrite the narration to what really happened. Mask the tenant name.
+    narration: >
+      First with what if. It lists the one change and sends nothing. Then for real, with a confirmation. In the admin
+      center the box is cleared, and the rollback file says what the value was before.
+
+  - id: restore-screen
+    type: screen
+    heading: "The way back"
+    image: screens/restore.jpg
+    bar: "PowerShell + SharePoint admin center (lab tenant, masked)"
+    demo: >
+      Run ./Invoke-SharePointAdmin.ps1 -Restore ./rollback.lab.json and show Restored. Reload Policies > Sharing > More external sharing settings: the box is
+      ticked again. Then untick it by hand (tear-down) so the lab ends clean. If the restore says Skipped, read the message on camera: it means someone changed
+      the setting after us. Rewrite the narration to what really happened.
+    narration: >
+      And the way back. The restore command reads the rollback file and puts the old value back, newest change first,
+      but only when the setting still has the value we applied. If somebody changed it since, it is skipped, not
+      overwritten.
+
+  - id: tests
+    type: code
+    heading: "Fifty three tests, no tenant"
+    lang: text
+    code: |
+      $ Invoke-Pester ./tests
+      Describing Collection (fake Graph tenant)
+        [+] only sends GET while auditing (the audit changes nothing)
+      Describing Invoke-SPARemediation and Restore-SPARemediation (fake Graph tenant)
+        [+] -WhatIf sends nothing and writes no rollback file
+        [+] changes one property per PATCH, with only that property in the body
+        [+] does not overwrite a setting that someone changed after the remediation
+
+      Tests Passed: 53, Failed: 0, Skipped: 0
+    narration: >
+      Fifty three Pester tests run without a tenant, against a fake Graph. They prove that the audit only reads, that
+      what if sends nothing, that one request changes one property, and that a restore never overwrites a newer change.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      Code, tests and the shot list are on GitHub, and the complete SharePoint administration guide is on dev lad log dot
+      com. Next episode: OneDrive for Business, and the sync app on the user's PC.

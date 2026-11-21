@@ -1,0 +1,230 @@
+# DEVLADLOG Microsoft 365 — episode 12 (draft: code and tests are real; screen scenes still need the lab recording)
+episode: 12
+slug: onedrive-for-business
+series_label: "MICROSOFT 365"
+series_name: "DEVLADLOG Microsoft 365"
+file_prefix: "microsoft-365"
+title: "OneDrive for Business"
+subtitle: "Tenant settings, an account audit, and the sync app on a real PC"
+voice: am_michael
+thumbnail_text: "WHERE ARE\nTHE USERS'\nFILES?"
+youtube:
+  title: "OneDrive for Business Admin: Audit, Known Folder Move, Rollback | DEVLADLOG Microsoft 365 #12"
+  tags: [OneDrive for Business, OneDrive administration, Known Folder Move, Files On-Demand, OneDrive sync app, OneDrive storage, OneDrive retention, Microsoft Graph, PowerShell, Microsoft 365 admin]
+sources:
+  - https://www.devladlog.com/articles/office-365/2025-02-03-onedrive-business-complete-guide-2025/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Where are your users' files?"
+    sub: "Tenant settings, an account audit, and the sync app on a real PC"
+    short: hook
+    narration: >
+      Every user has a OneDrive, and nobody looks at them until the storage runs out or somebody leaves. In this
+      episode we check the tenant's OneDrive settings against a baseline, audit the accounts from the usage report, and
+      then do the part that really protects files: pushing the sync app policies to a Windows PC, so Desktop, Documents and
+      Pictures move to OneDrive by themselves. With a way back. It runs on our real lab tenant and a real Windows eleven machine.
+
+  - id: three-places
+    type: bullets
+    heading: "Three places OneDrive is managed"
+    bullets:
+      - "Tenant settings: storage default, retention, sync"
+      - "Accounts: full, idle, never used, deleted"
+      - "The PC: silent sign-in, Files On-Demand, Known Folder Move"
+    narration: >
+      OneDrive is managed in three places. The tenant settings, like the default storage limit and how long a deleted
+      user's files are kept. The accounts themselves, which fill up or sit idle. And the sync app on the user's computer,
+      where policies decide whether the files are protected at all.
+
+  - id: settings-screen
+    type: screen
+    heading: "The tenant settings today"
+    image: screens/settings.jpg
+    bar: "SharePoint admin center > Settings (lab tenant, masked)"
+    demo: >
+      Setup (demo.md): SharePoint admin center as labadmin > Settings. Open OneDrive Storage limit (default), Retention (days to retain a deleted user's
+      OneDrive) and Sync. Show the real values, do not change them. Rewrite the narration to the real values (the default retention is documented as 30 days).
+      Mask the tenant name.
+    narration: >
+      This is where the settings live in the SharePoint admin center. The default storage limit. The retention for a
+      deleted user's OneDrive, which Microsoft documents as thirty days by default. And the sync settings. These same
+      values are also available from Microsoft Graph, so a script can compare them with what we decided.
+
+  - id: drift-code
+    type: code
+    heading: "Compare with the baseline"
+    lang: powershell
+    code: |
+      if (Test-ODAValueEqual $actual $expected) { continue }
+      $detail = "is $(Format-ODAValue $actual), the baseline says $(Format-ODAValue $expected)."
+      if ($name -eq 'isUnmanagedSyncAppForTenantRestricted' -and $expected -eq $true) { $detail += ' Without it, users can sync on any PC, not only on PCs joined to specific domains.' }
+      Get-ODAFindingRecord $spec.Severity 'SettingDrift' $name $detail $name $actual $expected
+    narration: >
+      The baseline names the OneDrive settings you care about, and every name must be a real property of the Graph
+      tenant settings. A value that differs becomes a finding with a severity. This episode only reads the tenant. The
+      only thing it writes is on the PC.
+
+  - id: report-code
+    type: code
+    heading: "The account report"
+    lang: powershell
+    code: |
+      $tmp = [IO.Path]::GetTempFileName()
+      try {
+          Invoke-MgGraphRequest -Method GET -Uri "$script:Graph/reports/getOneDriveUsageAccountDetail(period='$Period')" -OutputFilePath $tmp -ErrorAction Stop
+          @(Import-Csv -LiteralPath $tmp)
+      }
+      finally { Remove-Item -LiteralPath $tmp -ErrorAction SilentlyContinue }
+    narration: >
+      The accounts come from the OneDrive usage report. Graph answers with a redirect to a short lived download, and the
+      file is read as a table. The report has the owner, the last activity date, the number of files, and the storage
+      used and allocated. It only includes users who have a valid OneDrive licence, and the same concealed names
+      setting from the last episode applies.
+
+  - id: audit-screen
+    type: screen
+    heading: "The audit, on real accounts"
+    image: screens/audit.jpg
+    bar: "PowerShell on the lab Windows desktop (lab tenant, masked)"
+    demo: >
+      Setup (demo.md): onedrive-baseline.lab.json with short account thresholds (the lab is days old; production default 180 days) and the lab usage report
+      not concealed. Run ./Invoke-OneDriveAudit.ps1 -BaselineFile ./onedrive-baseline.lab.json -OutFile ./report.lab.md. Show the settings drift first
+      (retention 30 against the baseline), then the account findings (the lab users that really are idle, never used or nearly full, see demo.md).
+      Rewrite the narration to the real rows. Mask UPN domains.
+    narration: >
+      Here is the audit on the lab. The settings that differ from the baseline come first. Then the accounts, each with the
+      rule that fired. Thresholds are short because the lab is only days old. In production the default is a hundred
+      eighty days of inactivity.
+
+  - id: rules-code
+    type: code
+    heading: "Idle, full, never used"
+    lang: powershell
+    code: |
+      if ($a.Files -eq 0) { Get-ODAFindingRecord 'Low' 'NeverUsed' $who 'No files and no activity recorded: the OneDrive was provisioned but never used.' }
+      $age = [int]($today - $a.LastActivity).TotalDays
+      if ($age -ge $inactive) { Get-ODAFindingRecord 'Medium' 'InactiveOneDrive' $who "Last activity $($a.LastActivity.ToString('yyyy-MM-dd')), $age days ago (limit $inactive)." }
+      if ($null -ne $a.UsedPercent -and $a.UsedPercent -ge $near) { Get-ODAFindingRecord 'High' 'NearFull' $who "Uses $($a.UsedPercent) percent of its storage limit (limit $near percent)." }
+    narration: >
+      Three simple rules. A OneDrive with no files and no activity was provisioned and never used. One idle longer than
+      your limit. And one that uses most of its storage limit. The default limit is one terabyte for most plans, and an
+      admin can raise it up to five, according to the Microsoft documentation.
+
+  - id: gotcha
+    type: bullets
+    heading: "The gotcha: deleting starts the clock"
+    short: gotcha
+    bullets:
+      - "Retention starts when the account is deleted"
+      - "Blocking sign-in or removing the licence does not start it"
+      - "Unlicensed OneDrive is archived on its 93rd unlicensed day"
+      - "Then 93 more days in the recycle bin"
+    narration: >
+      Here is the gotcha. The retention period for a deleted user's OneDrive starts when the account is deleted from
+      Microsoft Entra ID. Blocking sign in does not start it, and neither does removing the licence. And a OneDrive without
+      a valid licence is archived automatically on its ninety third unlicensed day. After the retention period, the
+      OneDrive stays another ninety three days in the recycle bin, where only a SharePoint administrator can restore it.
+
+  - id: policies
+    type: bullets
+    heading: "Three policies on the PC"
+    bullets:
+      - "Silent sign-in on Microsoft Entra joined PCs"
+      - "Files On-Demand: files online until opened"
+      - "Known Folder Move: Desktop, Documents, Pictures"
+      - "Existing PCs: 1,000 a day, 4,000 a week"
+    narration: >
+      On the PC, three policies do the work. Silent sign in, for computers joined to Microsoft Entra ID. Files On Demand,
+      which Microsoft recommends keeping on. And silent Known Folder Move, which redirects Desktop, Documents and Pictures.
+      Microsoft recommends rolling it out to existing devices at no more than one thousand a day. Once a folder has moved,
+      the policy does not touch it again.
+
+  - id: plan-code
+    type: code
+    heading: "The registry values, as a plan"
+    lang: powershell
+    code: |
+      & $add 'SilentAccountConfig' 'DWord' 1
+      & $add 'FilesOnDemandEnabled' 'DWord' 1
+      & $add 'KFMSilentOptIn' 'String' $TenantId.ToLowerInvariant()
+      & $add 'KFMSilentOptInWithNotification' 'DWord' $(if ($Notify) { 1 } else { 0 })
+      foreach ($f in $folders) { & $add "KFMSilentOptIn$f" 'DWord' 1 }
+      if ($BlockOptOut) { & $add 'KFMBlockOptOut' 'DWord' 1 }
+    narration: >
+      Each policy is a registry value under the OneDrive policies key. Silent Known Folder Move takes your tenant id as
+      a string, and one value per folder. The function only builds the plan, and checks that the tenant id is a real
+      identifier. Nothing is written yet.
+
+  - id: rollback-code
+    type: code
+    heading: "Record what was there, then write"
+    lang: powershell
+    code: |
+      ConvertTo-Json -InputObject ([pscustomobject]@{ root = $Root; writtenAt = [datetimeoffset]::UtcNow.ToString('o'); items = @($before) }) -Depth 6 | Set-Content -LiteralPath $RollbackFile -Encoding utf8
+      if (-not (Test-Path -LiteralPath $Root)) { New-Item -Path $Root -Force | Out-Null }
+      foreach ($p in $plan) {
+          New-ItemProperty -LiteralPath $Root -Name $p.Name -Value $p.Value -PropertyType $p.Type -Force -ErrorAction Stop | Out-Null
+          [pscustomobject]@{ Name = $p.Name; Status = 'Written'; Value = $p.Value }
+      }
+    narration: >
+      Before the first value is written, the current values go into a rollback file, including the ones that did not
+      exist. If the write fails half way, that file is already on disk. The restore command puts old values back and
+      removes the ones that were not there. It supports what if, and it never overwrites an old rollback file.
+
+  - id: apply-screen
+    type: screen
+    heading: "Preview, write, check"
+    image: screens/apply.jpg
+    bar: "CON-W11-01 console, elevated PowerShell (lab VM)"
+    demo: >
+      Setup (demo.md): VMConnect to CON-W11-01 (Windows 11 Enterprise evaluation, Microsoft Entra joined as alex.demo, already in the lab from episode 7), elevated PowerShell,
+      src folder copied to the VM. Run ./Set-OneDriveSyncPolicy.ps1 -TenantId <lab tenant id> -WhatIf (nothing written), then with -RollbackFile .\onedrive-policy.rollback.json,
+      then -Check: every row Compliant. Rewrite the narration to what happened. Mask the tenant id in every capture.
+    narration: >
+      This is the real Windows machine, joined to our tenant. First with what if. It lists the seven values it would write
+      and writes nothing. Then for real, in an elevated shell. The check command reads the registry back, and every value
+      says compliant.
+
+  - id: result-screen
+    type: screen
+    heading: "The folders move by themselves"
+    image: screens/result.jpg
+    bar: "CON-W11-01 console + OneDrive on the web (lab VM and lab tenant, masked)"
+    short: kfm
+    demo: >
+      Setup (demo.md): on CON-W11-01 as alex.demo, start OneDrive (it signs in silently with the Windows account, SilentAccountConfig). Show File Explorer: Desktop,
+      Documents and Pictures now under the OneDrive folder, with the OneDrive status icons. Then the browser on the lab tenant: OneDrive for alex.demo shows the same
+      folders and files. If nothing moves within a few minutes, say so on camera and show what the Sync Activity Center says: do not cut it. Rewrite the narration to
+      what really happened.
+    narration: >
+      Now the user signs in. OneDrive picks up the Windows account without asking for a password, and the known folders
+      are redirected into OneDrive. In File Explorer, Desktop, Documents and Pictures are now inside the OneDrive folder,
+      and the same files show up in the browser. The user did nothing.
+
+  - id: tests
+    type: code
+    heading: "Forty seven tests, no tenant, no registry"
+    lang: text
+    code: |
+      $ Invoke-Pester ./tests
+      Describing Collection (fake Graph tenant)
+        [+] only ever sends GET: the tenant side is read-only
+      Describing Set-ODASyncPolicy, Get-ODASyncPolicyState and Restore-ODASyncPolicy (fake registry)
+        [+] -WhatIf writes nothing and creates no rollback file
+        [+] writes the rollback file before the first value, so a failure half way can still be undone
+
+      Tests Passed: 47, Failed: 0, Skipped: 0
+    narration: >
+      Forty seven Pester tests run without a tenant and without touching a registry. They prove that the tenant side only
+      reads, that what if writes nothing, and that the rollback file exists before the first value is written. The real
+      registry is what the demo is for.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      Code, tests and the shot list are on GitHub, and the complete OneDrive guide is on dev lad log dot com. Next
+      episode: Microsoft three sixty five Apps deployment.
