@@ -1,0 +1,66 @@
+{
+  "properties": {
+    "connectionParameters": {
+      "username": {
+        "type": "securestring",
+        "uiDefinition": {
+          "displayName": "GitHub user name",
+          "description": "The GitHub account that owns the fine-grained token.",
+          "tooltip": "Your GitHub login",
+          "constraints": {
+            "tabIndex": 2,
+            "clearText": true,
+            "required": "true"
+          }
+        }
+      },
+      "password": {
+        "type": "securestring",
+        "uiDefinition": {
+          "displayName": "Fine-grained personal access token",
+          "description": "Token for the selected repositories only, with Webhooks and Issues read and write.",
+          "tooltip": "Repository permissions: Webhooks (read and write), Issues (read and write)",
+          "constraints": {
+            "tabIndex": 3,
+            "clearText": false,
+            "required": "true"
+          }
+        }
+      }
+    },
+    "iconBrandColor": "#24292f",
+    "capabilities": [],
+    "policyTemplateInstances": [
+      {
+        "templateId": "setheader",
+        "title": "Pin the GitHub REST API version",
+        "parameters": {
+          "x-ms-apimTemplateParameter.name": "X-GitHub-Api-Version",
+          "x-ms-apimTemplateParameter.value": "2022-11-28",
+          "x-ms-apimTemplateParameter.existsAction": "override",
+          "x-ms-apimTemplate-policySection": "Request"
+        }
+      },
+      {
+        "templateId": "setheader",
+        "title": "Ask for GitHub's JSON media type",
+        "parameters": {
+          "x-ms-apimTemplateParameter.name": "Accept",
+          "x-ms-apimTemplateParameter.value": "application/vnd.github+json",
+          "x-ms-apimTemplateParameter.existsAction": "override",
+          "x-ms-apimTemplate-policySection": "Request"
+        }
+      },
+      {
+        "templateId": "setheader",
+        "title": "User-Agent when none is sent",
+        "parameters": {
+          "x-ms-apimTemplateParameter.name": "User-Agent",
+          "x-ms-apimTemplateParameter.value": "Contoso-IT-GitHub-connector",
+          "x-ms-apimTemplateParameter.existsAction": "skip",
+          "x-ms-apimTemplate-policySection": "Request"
+        }
+      }
+    ]
+  }
+}

@@ -1,0 +1,424 @@
+{
+  "swagger": "2.0",
+  "info": {
+    "title": "Contoso IT GitHub",
+    "version": "1.0.0",
+    "description": "Turns new GitHub issues in Contoso IT repositories into IT requests, and comments back on the issue.",
+    "contact": {
+      "name": "Contoso IT automation",
+      "email": "it-automation@contoso.com"
+    }
+  },
+  "host": "api.github.com",
+  "basePath": "/",
+  "schemes": [
+    "https"
+  ],
+  "consumes": [
+    "application/json"
+  ],
+  "produces": [
+    "application/json"
+  ],
+  "securityDefinitions": {
+    "basic_auth": {
+      "type": "basic"
+    }
+  },
+  "security": [
+    {
+      "basic_auth": []
+    }
+  ],
+  "paths": {
+    "/repos/{owner}/{repo}/hooks": {
+      "x-ms-notification-content": {
+        "description": "The issues event GitHub sends when an issue is opened.",
+        "schema": {
+          "$ref": "#/definitions/IssuesEvent"
+        }
+      },
+      "post": {
+        "operationId": "WhenAnIssueIsOpened",
+        "summary": "When an issue is opened",
+        "description": "Creates a repository webhook for issues events, so the flow runs when someone opens an issue.",
+        "x-ms-trigger": "single",
+        "x-ms-trigger-hint": "To see it work, open an issue in the repository.",
+        "x-ms-visibility": "important",
+        "parameters": [
+          {
+            "name": "owner",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "x-ms-summary": "Repository owner",
+            "description": "The account that owns the repository, for example contoso.",
+            "x-ms-url-encoding": "single"
+          },
+          {
+            "name": "repo",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "x-ms-summary": "Repository name",
+            "description": "The repository name without .git, for example it-automation.",
+            "x-ms-url-encoding": "single"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/HookRequest"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "The webhook was created.",
+            "schema": {
+              "$ref": "#/definitions/Hook"
+            }
+          },
+          "default": {
+            "description": "GitHub returned an error."
+          }
+        }
+      }
+    },
+    "/repos/{owner}/{repo}/hooks/{hook_id}": {
+      "delete": {
+        "operationId": "DeleteIssueWebhook",
+        "summary": "Delete the webhook",
+        "description": "Deletes the repository webhook the trigger created. Power Automate calls it with the Location header from the create response.",
+        "x-ms-visibility": "internal",
+        "parameters": [
+          {
+            "name": "owner",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "x-ms-summary": "Repository owner",
+            "description": "The account that owns the repository, for example contoso.",
+            "x-ms-url-encoding": "single"
+          },
+          {
+            "name": "repo",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "x-ms-summary": "Repository name",
+            "description": "The repository name without .git, for example it-automation.",
+            "x-ms-url-encoding": "single"
+          },
+          {
+            "name": "hook_id",
+            "in": "path",
+            "required": true,
+            "type": "integer",
+            "x-ms-summary": "Webhook ID",
+            "description": "The ID of the webhook to delete."
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "The webhook was deleted."
+          },
+          "default": {
+            "description": "GitHub returned an error."
+          }
+        }
+      }
+    },
+    "/repos/{owner}/{repo}/issues/{issue_number}/comments": {
+      "post": {
+        "operationId": "AddIssueComment",
+        "summary": "Add a comment to an issue",
+        "description": "Posts a comment on a GitHub issue, for example the IT request number it's tracked under.",
+        "x-ms-visibility": "important",
+        "parameters": [
+          {
+            "name": "owner",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "x-ms-summary": "Repository owner",
+            "description": "The account that owns the repository, for example contoso.",
+            "x-ms-url-encoding": "single"
+          },
+          {
+            "name": "repo",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "x-ms-summary": "Repository name",
+            "description": "The repository name without .git, for example it-automation.",
+            "x-ms-url-encoding": "single"
+          },
+          {
+            "name": "issue_number",
+            "in": "path",
+            "required": true,
+            "type": "integer",
+            "x-ms-summary": "Issue number",
+            "description": "The number of the issue, as shown after # on GitHub."
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/CommentRequest"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "The comment was created.",
+            "schema": {
+              "$ref": "#/definitions/Comment"
+            }
+          },
+          "default": {
+            "description": "GitHub returned an error."
+          }
+        }
+      }
+    },
+    "/user": {
+      "get": {
+        "operationId": "GetAuthenticatedUser",
+        "summary": "Get the current GitHub user",
+        "description": "Returns the GitHub account the connection's token belongs to. Power Automate calls it to test a new connection.",
+        "x-ms-visibility": "internal",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "The signed-in user.",
+            "schema": {
+              "$ref": "#/definitions/User"
+            }
+          },
+          "default": {
+            "description": "GitHub returned an error."
+          }
+        }
+      }
+    }
+  },
+  "definitions": {
+    "HookRequest": {
+      "type": "object",
+      "required": [
+        "config",
+        "events"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "default": "web",
+          "x-ms-visibility": "internal",
+          "x-ms-summary": "Name",
+          "description": "Always web for a repository webhook."
+        },
+        "active": {
+          "type": "boolean",
+          "default": true,
+          "x-ms-visibility": "internal",
+          "x-ms-summary": "Active",
+          "description": "Send deliveries."
+        },
+        "events": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "issues"
+          ],
+          "x-ms-visibility": "internal",
+          "x-ms-summary": "Events",
+          "description": "GitHub's default is push; this trigger needs issues."
+        },
+        "config": {
+          "type": "object",
+          "required": [
+            "url",
+            "content_type"
+          ],
+          "x-ms-visibility": "internal",
+          "properties": {
+            "url": {
+              "type": "string",
+              "x-ms-notification-url": true,
+              "x-ms-visibility": "internal",
+              "x-ms-summary": "Callback URL",
+              "description": "Filled in by Power Automate with the flow's callback URL."
+            },
+            "content_type": {
+              "type": "string",
+              "default": "json",
+              "x-ms-visibility": "internal",
+              "x-ms-summary": "Content type",
+              "description": "GitHub's default is form; the flow needs json."
+            },
+            "insecure_ssl": {
+              "type": "string",
+              "default": "0",
+              "x-ms-visibility": "internal",
+              "x-ms-summary": "Insecure SSL",
+              "description": "0 means GitHub verifies the certificate."
+            }
+          }
+        }
+      }
+    },
+    "Hook": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "integer",
+          "x-ms-summary": "Webhook ID",
+          "description": "The webhook ID."
+        },
+        "events": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "x-ms-summary": "Events",
+          "description": "Events delivered."
+        },
+        "active": {
+          "type": "boolean",
+          "x-ms-summary": "Active",
+          "description": "Whether deliveries are sent."
+        }
+      }
+    },
+    "IssuesEvent": {
+      "type": "object",
+      "properties": {
+        "action": {
+          "type": "string",
+          "x-ms-summary": "Action",
+          "description": "What happened: opened, edited, closed, labeled and so on."
+        },
+        "issue": {
+          "type": "object",
+          "x-ms-summary": "Issue",
+          "description": "The issue.",
+          "properties": {
+            "number": {
+              "type": "integer",
+              "x-ms-summary": "Issue number",
+              "description": "The number shown after #."
+            },
+            "title": {
+              "type": "string",
+              "x-ms-summary": "Issue title",
+              "description": "The title of the issue."
+            },
+            "body": {
+              "type": "string",
+              "x-ms-summary": "Issue body",
+              "description": "The description, in Markdown."
+            },
+            "html_url": {
+              "type": "string",
+              "x-ms-summary": "Issue URL",
+              "description": "Link to the issue on GitHub."
+            },
+            "user": {
+              "type": "object",
+              "x-ms-summary": "Opened by",
+              "description": "Who opened the issue.",
+              "properties": {
+                "login": {
+                  "type": "string",
+                  "x-ms-summary": "Opened by (login)",
+                  "description": "GitHub login of who opened the issue."
+                }
+              }
+            },
+            "labels": {
+              "type": "array",
+              "x-ms-summary": "Labels",
+              "description": "Labels on the issue.",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "x-ms-summary": "Label name",
+                    "description": "The label."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "repository": {
+          "type": "object",
+          "x-ms-summary": "Repository",
+          "description": "The repository.",
+          "properties": {
+            "full_name": {
+              "type": "string",
+              "x-ms-summary": "Repository full name",
+              "description": "owner/name."
+            }
+          }
+        }
+      }
+    },
+    "CommentRequest": {
+      "type": "object",
+      "required": [
+        "body"
+      ],
+      "properties": {
+        "body": {
+          "type": "string",
+          "x-ms-summary": "Comment",
+          "description": "The comment text, in Markdown."
+        }
+      }
+    },
+    "Comment": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "integer",
+          "x-ms-summary": "Comment ID",
+          "description": "The comment ID."
+        },
+        "html_url": {
+          "type": "string",
+          "x-ms-summary": "Comment URL",
+          "description": "Link to the comment."
+        }
+      }
+    },
+    "User": {
+      "type": "object",
+      "properties": {
+        "login": {
+          "type": "string",
+          "x-ms-summary": "Login",
+          "description": "The GitHub login of the account."
+        },
+        "id": {
+          "type": "integer",
+          "x-ms-summary": "User ID",
+          "description": "The numeric GitHub user ID."
+        }
+      }
+    }
+  },
+  "x-ms-capabilities": {
+    "testConnection": {
+      "operationId": "GetAuthenticatedUser"
+    }
+  }
+}

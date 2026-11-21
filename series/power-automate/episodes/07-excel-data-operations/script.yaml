@@ -1,0 +1,264 @@
+# DEVLADLOG Power Automate — episode 07 (draft: material built and tested locally, demo still to record)
+episode: 7
+slug: excel-data-operations
+series_label: "POWER AUTOMATE"
+series_name: "DEVLADLOG Power Automate"
+file_prefix: "power-automate"
+title: "400 prices in, 256 imported"
+subtitle: "Excel tables, data operations and one Office Script instead of a loop"
+voice: am_michael
+thumbnail_text: "400 ROWS\n256 IMPORTED\nONE SCRIPT"
+youtube:
+  title: "Power Automate + Excel: Read Every Row, Write in One Office Script | DEVLADLOG Power Automate #7"
+  tags: [Power Automate, Excel Online, Office Scripts, List rows present in a table, pagination, Select, Filter array, Create CSV table, data operations, Power Platform]
+sources:
+  - https://www.devladlog.com/articles/power-automate/2026-06-04-excel-data-operations-complete-guide-2026/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "The supplier sent 400 prices. The flow imported 256."
+    sub: "Excel in Power Automate, without silent truncation or a slow loop"
+    short: hook
+    narration: >
+      Our supplier sent four hundred prices. The flow ran green, emailed a summary, and imported two hundred and
+      fifty-six. Nobody noticed for a month. In this episode we read every row of an Excel table, reject the bad
+      ones with a reason, and write the whole price list in one Office Script call.
+
+  - id: scenario
+    type: bullets
+    heading: "Fabrikam's price list, every month"
+    bullets:
+      - "A workbook lands in the Price lists library"
+      - "Table Prices: item number, description, price, valid from"
+      - "Check every row, explain the rejects"
+      - "Update the purchasing catalogue in one call"
+      - "One summary email to purchasing"
+    narration: >
+      Contoso purchasing gets a workbook from Fabrikam every month. It lands in the price lists library. The flow
+      checks every row, saves the rejected ones with a reason, updates the purchasing catalogue, and sends one
+      summary email. Excel Online Business is a standard connector, so no premium licence is needed, but the file
+      must hold a real Excel table, not just a range of cells.
+
+  - id: read
+    type: code
+    heading: "Read every row: pagination on"
+    lang: json
+    code: |
+      "List_price_rows": {
+        "type": "OpenApiConnection",
+        "runtimeConfiguration": { "paginationPolicy": { "minimumItemCount": 5000 } },
+        "inputs": { "host": { "operationId": "GetItems" },
+          "parameters": { "file": "@triggerBody()?['{Identifier}']", "table": "Prices",
+                          "dateTimeFormat": "ISO 8601" } } },
+
+      "Too_many_rows": { "type": "If",
+        "expression": "length(body('List_price_rows')?['value']) >= 5000",
+        "actions": { "Stop_not_all_rows_read": { "type": "Terminate",
+          "inputs": { "runStatus": "Failed", "runError": { "code": "TooManyRows" } } } } }
+    narration: >
+      List rows present in a table returns up to two hundred and fifty-six rows by default. That's the opening bug.
+      Turn on pagination in the action's settings and give it a threshold; we use five thousand. And if five
+      thousand rows or more come back, the file may be bigger than that, so the run fails instead of importing
+      part of it.
+
+  - id: library
+    type: screen
+    heading: "The price list arrives"
+    image: screens/library.jpg
+    bar: "SharePoint · Purchasing · Price lists"
+    demo: >
+      SharePoint, Purchasing site, Price lists library: "Fabrikam price list 2026-12.xlsx" just uploaded by Jordan
+      Demo. Insert: the workbook open in Excel on the web, table Prices with columns Item No., Description, Unit
+      price, Valid from, scrolled to the bottom showing 400 rows and the four bad rows (empty item number, n/a,
+      12,50, -3.2). Mask the tenant name.
+    narration: >
+      Here's the file in the library: a real Excel table, four hundred rows. Notice the last few. One has no item
+      number, one says n slash a, one price was typed as text with a comma, and one is negative.
+
+  - id: shape
+    type: code
+    heading: "One Select checks every row"
+    lang: json
+    code: |
+      "Shape_rows": { "type": "Select", "inputs": {
+        "from": "@body('List_price_rows')?['value']",
+        "select": {
+          "sku":       "@toUpper(trim(coalesce(item()?['Item No_x002e_'], '')))",
+          "priceText": "@trim(coalesce(item()?['Unit price'], ''))",
+          "validFrom": "@take(coalesce(item()?['Valid from'], ''), 10)",
+          "problem":   "@if(empty(sku), 'Missing item number',
+                         if(contains(price, ','), 'Price has a comma: use a number cell',
+                         if(not(isFloat(price)), 'Price is not a number',
+                         if(lessOrEquals(float(...), 0), 'Price must be more than zero', ''))))" } } }
+
+      "Valid_rows":    { "type": "Query", "where": "@empty(item()?['problem'])" }
+      "Rejected_rows": { "type": "Query", "where": "@not(empty(item()?['problem']))" }
+    narration: >
+      No apply to each. One select shapes all four hundred rows and writes a problem for each bad one. Then two
+      filter array actions split valid and rejected rows. Look at the item number: it's item no underscore x002e.
+      More on that in a moment.
+
+  - id: comma
+    type: code
+    heading: "Why a comma is rejected"
+    lang: text
+    code: |
+      Learn, expression functions reference (invariant culture):
+        isFloat('10,000.00')       ->  true
+        float('10,000.333')        ->  10000.333
+
+      So a price typed as text, the Portuguese way:
+        isFloat('12,50')           ->  true
+        float('12,50')             ->  1250
+
+      Rejected:  FAB-0397  12,50  Price has a comma: use a number cell
+    short: comma
+    narration: >
+      Why reject a comma? Learn's own examples: in the invariant culture, the comma is a thousands separator. So a
+      price typed as text the Portuguese way, twelve comma fifty, is a valid number, and float makes it twelve
+      hundred and fifty. One typo, a hundred times the price. The flow asks for a number cell instead.
+
+  - id: script
+    type: code
+    heading: "One Office Script call writes everything"
+    lang: typescript
+    code: |
+      function main(workbook: ExcelScript.Workbook, prices: PriceRow[], supplier: string,
+                    sourceFile: string, changeThreshold: number = 0.2): ImportResult {
+        const table = workbook.getTable("Catalogue");
+        if (!table) { throw new Error("Table 'Catalogue' wasn't found in this workbook."); }
+        prices.forEach((p, i) => { if (p.price <= 0) throw new Error(`Row ${i + 1}: ...`); });
+
+        const values = table.getRangeBetweenHeaderAndTotal().getValues();   // read once
+        // ...update every row with a matching SKU in memory, collect new SKUs...
+
+        if (changed) { body.setValues(values); }                 // write once
+        if (newRows.length > 0) { table.addRows(-1, newRows); }  // append once
+        return result;   // inserted, updated, unchanged, bigChanges
+      }
+    narration: >
+      The valid rows go to an Office Script with run script from SharePoint library. It validates everything first,
+      and a throw stops the script and the flow before anything is written. Then it reads the catalogue once,
+      updates in memory, and makes two writes, whatever the number of rows. What it returns is dynamic content in
+      the flow, called result.
+
+  - id: run
+    type: screen
+    heading: "One run, every row"
+    image: screens/run.jpg
+    bar: "Power Automate · Supplier price list import · Run history"
+    demo: >
+      Run details of the real run for "Fabrikam price list 2026-12.xlsx": all actions green, Too many rows false,
+      Stop not all rows read skipped. List price rows output panel showing 400 items (pagination on, threshold 5000
+      in the action's settings). Upsert catalogue output expanded: result with inserted 15, updated 288, unchanged
+      92, duplicatesInFile 1, duplicateRowsInCatalogue 1, bigChanges with FAB-0100, FAB-0200, FAB-0300.
+    narration: >
+      Here's the real run. Four hundred rows read, the script added fifteen new items, updated two hundred and
+      eighty-eight prices, and left ninety-two unchanged. It also noticed an item listed twice in the file, and an
+      item pasted twice in the catalogue.
+
+  - id: loop
+    type: code
+    heading: "The loop we threw away"
+    lang: text
+    code: |
+      $ python -m excelfake --row-by-row      (Apply to each: Get a row, then Update or Add a row)
+      Excel connector calls: 794 (at 100 per minute per connection: at least 8 min)
+      Power Platform requests: 1200
+      FAB-0007, pasted twice in the catalogue: one copy updated (Update a row: first match only)
+
+      $ python -m excelfake                   (one Run script call)
+      Excel connector calls: 3 (two pages of rows, one script)
+      Power Platform requests: 12
+    short: loop
+    narration: >
+      Our second draft looped: get a row, then update or add it. The Excel connector allows one hundred calls per
+      connection per minute, and this made seven hundred and ninety-four. Every action in a loop also counts as a
+      Power Platform request: twelve hundred for one file. And update a row only changes the first match, so the
+      duplicated item stayed half updated. The script version: three connector calls.
+
+  - id: catalogue
+    type: screen
+    heading: "The catalogue after the run"
+    image: screens/catalogue.jpg
+    bar: "Excel on the web · Purchasing catalogue.xlsx"
+    demo: >
+      Purchasing catalogue.xlsx in Excel on the web, table Catalogue: rows FAB-0005 (new price), both FAB-0007 rows
+      with the same new price, and the last rows FAB-0381 to FAB-0395 appended, Valid from 2026-12-01 shown as a
+      date, Source "Fabrikam price list 2026-12.xlsx". Optional insert: Automate tab, the Upsert prices script in
+      the Code Editor.
+    narration: >
+      And the catalogue: new prices, both copies of the duplicated item updated, fifteen new rows at the end, and
+      valid from written as a real date, because Excel stores dates as serial numbers.
+
+  - id: gotchas
+    type: bullets
+    heading: "Three more Excel traps"
+    bullets:
+      - "Item No. comes back as Item No_x002e_"
+      - "Dates arrive as serial numbers unless you ask for ISO 8601"
+      - "Text starting with = + or - becomes a formula"
+      - "Run script: 3 calls per 10 seconds, 1,600 a day"
+      - "Our fake can't promise Excel's exact text formats"
+    narration: >
+      Three more traps. Column names with a dot, an at sign, a colon or a hash come back encoded, so a hand typed
+      expression gets null. Set the date time format, or dates arrive as numbers. And text that starts with equals,
+      plus or minus is written as a formula, so the script escapes it. Run script also has limits: three calls per
+      ten seconds and sixteen hundred a day. To be honest, the exact text formats are checked in the tenant, not in
+      our fake.
+
+  - id: email
+    type: screen
+    heading: "Rejects and a summary"
+    image: screens/email.jpg
+    bar: "Outlook · Purchasing mailbox"
+    demo: >
+      Signed in as the purchasing mailbox owner (Lab Admin): email "Price list Fabrikam price list 2026-12.xlsx: 288
+      updated, 15 new, 4 rejected" with the counts and the HTML table of FAB-0100, FAB-0200, FAB-0300. Insert: the
+      file Price lists/Rejected/Fabrikam price list 2026-12-rejected.csv opened in Excel, four rows with the Problem
+      column.
+    narration: >
+      Purchasing gets one email: the counts, and the three price changes over twenty percent to check. The four
+      rejected rows are saved next to the file as a CSV, each with its problem.
+
+  - id: tests
+    type: code
+    heading: "Thirty-nine tests, no tenant"
+    lang: text
+    code: |
+      $ npm run typecheck          (TypeScript 4.0.3, the version Office Scripts uses)
+      $ python -m pytest
+      39 passed in 7.0s
+
+      test_without_pagination_only_256_of_400_rows_are_read_and_nothing_says_so
+      test_row_by_row_needs_794_excel_calls_and_misses_the_duplicate
+      test_an_invalid_row_stops_the_script_before_anything_is_written
+      test_comma_is_a_thousands_separator_in_the_invariant_culture
+    narration: >
+      Thirty-nine tests run the flow against an in-memory Excel connector with the documented behaviours: the two
+      hundred and fifty-six row default, encoded names, first match only. The Office Script really runs, in Node,
+      against an in-memory workbook. It's also type checked with TypeScript four point oh, the version Office
+      Scripts uses.
+
+  - id: recap
+    type: bullets
+    heading: "Five rules for Excel flows"
+    bullets:
+      - "Turn on pagination, and fail past the threshold"
+      - "Shape and filter with data operations, not loops"
+      - "Write in bulk with one Office Script"
+      - "Validate first, throw before writing"
+      - "Use encoded column names and ISO dates"
+    narration: >
+      Five rules. Turn on pagination and fail past the threshold. Shape and filter with data operations, not loops.
+      Write in bulk with one Office Script. Validate first and throw before writing. And use encoded column names
+      and ISO dates.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The solution, the Office Script, the in-memory Excel connector and all thirty-nine tests are on GitHub, and the
+      complete guide is on dev lad log dot com. Next in the series: custom connectors. Subscribe so you don't miss it.

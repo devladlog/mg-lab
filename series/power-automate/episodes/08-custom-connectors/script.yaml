@@ -1,0 +1,267 @@
+# DEVLADLOG Power Automate — episode 08 (draft: material built and tested locally, demo still to record)
+episode: 8
+slug: custom-connectors
+series_label: "POWER AUTOMATE"
+series_name: "DEVLADLOG Power Automate"
+file_prefix: "power-automate"
+title: "A GitHub issue becomes an IT request"
+subtitle: "A custom connector from three files: webhook trigger, basic auth and policies"
+voice: am_michael
+thumbnail_text: "CUSTOM\nCONNECTOR\nWEBHOOK TRIGGER"
+youtube:
+  title: "Power Automate Custom Connector: Webhook Trigger, Auth, Policies | DEVLADLOG Power Automate #8"
+  tags: [Power Automate, custom connector, OpenAPI, Swagger, webhook trigger, GitHub, policy templates, pac connector, Power Platform]
+sources:
+  - https://www.devladlog.com/articles/power-automate/2025-03-04-custom-connectors-complete-guide-2025/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Our first flow created an IT request called just GitHub"
+    sub: "Custom connectors: the part nobody tells you about webhooks"
+    short: hook
+    narration: >
+      Our first version of this flow created an IT request out of nothing. The title was just the word GitHub, and
+      there was no issue behind it. Every time. In this episode we build a custom connector with a webhook trigger,
+      turn new GitHub issues into IT requests, and find out where that ghost request came from.
+
+  - id: scenario
+    type: bullets
+    heading: "GitHub issue in, IT request out"
+    bullets:
+      - "Someone opens an issue in the IT repository"
+      - "The flow creates a request in the IT Requests list"
+      - "The flow comments back on the issue with the request link"
+      - "No HTTP actions: a connector with a trigger and an action"
+      - "Needs a premium or trial licence"
+    narration: >
+      Contoso IT takes requests from the IT Requests list we built in episode one. Some people live in GitHub, so
+      a new issue should become a request, and the issue should get a comment with the link. We could do this with
+      HTTP actions, but a custom connector gives us a real trigger, a named action, and one place to keep the
+      credentials. A flow that uses a custom connector needs a premium or trial licence, so we run on the trial.
+
+  - id: files
+    type: code
+    heading: "Headers GitHub needs, as policies"
+    lang: json
+    code: |
+      "policyTemplateInstances": [
+        { "templateId": "setheader",
+          "parameters": {
+            "x-ms-apimTemplateParameter.name": "X-GitHub-Api-Version",
+            "x-ms-apimTemplateParameter.value": "2022-11-28",
+            "x-ms-apimTemplateParameter.existsAction": "override",
+            "x-ms-apimTemplate-policySection": "Request" } },
+        { "templateId": "setheader",
+          "parameters": {
+            "x-ms-apimTemplateParameter.name": "User-Agent",
+            "x-ms-apimTemplateParameter.value": "Contoso-IT-GitHub-connector",
+            "x-ms-apimTemplateParameter.existsAction": "skip",
+            "x-ms-apimTemplate-policySection": "Request" } } ]
+    narration: >
+      The connector is three files: an Open A P I two point oh definition, an A P I properties file, and a
+      settings file. Authentication is basic, with a fine grained GitHub token as the password, as Learn's own
+      webhook tutorial does. The properties file also holds policies. GitHub rejects requests without a user agent,
+      so a set header policy adds one, and another pins the A P I version.
+
+  - id: connector
+    type: screen
+    heading: "The connector in the portal"
+    image: screens/connector.jpg
+    bar: "Power Automate · Custom connectors · Contoso IT GitHub"
+    demo: >
+      make.powerautomate.com, environment DEV, solution GitHubIntake, the custom connector "Contoso IT GitHub"
+      opened for edit on the Definition page: the trigger "When an issue is opened" and the action "Add a comment to
+      an issue" listed, the Policies section with the three Set HTTP header policies. Insert (second capture, same
+      scene): the Security page with Basic authentication and the labels "GitHub user name" and "Fine-grained
+      personal access token". Mask the environment URL and the account in the top bar.
+    narration: >
+      Created from the files with pac connector create into a solution, this is what the portal shows. One trigger,
+      one action, three policies, basic authentication. Nothing here was clicked together.
+
+  - id: trigger
+    type: code
+    heading: "A webhook trigger, in the definition"
+    lang: json
+    code: |
+      "/repos/{owner}/{repo}/hooks": {
+        "x-ms-notification-content": { "schema": { "$ref": "#/definitions/IssuesEvent" } },
+        "post": { "operationId": "WhenAnIssueIsOpened", "x-ms-trigger": "single", ... } }
+
+      // HookRequest: fields the maker never sees
+      "events":       { "default": ["issues"], "x-ms-visibility": "internal" },
+      "content_type": { "default": "json",     "x-ms-visibility": "internal" },
+      "url":          { "x-ms-notification-url": true, "x-ms-visibility": "internal" }
+    narration: >
+      The trigger is a post to GitHub's create webhook endpoint. X M S trigger single makes it a trigger.
+      X M S notification content describes what GitHub will send back. X M S notification URL marks the field
+      where the platform puts the flow's callback address. And the defaults matter: GitHub's own defaults are the
+      push event and form encoding, so we set issues and json ourselves, as internal fields.
+
+  - id: unsubscribe
+    type: code
+    heading: "How the webhook goes away"
+    lang: text
+    code: |
+      "/repos/{owner}/{repo}/hooks/{hook_id}": { "delete": {
+          "operationId": "DeleteIssueWebhook", "x-ms-visibility": "internal", ... } }
+
+      Learn: the create response must include a Location header
+      with the path to use with DELETE.
+
+      flow turned off or deleted  ->  DELETE <Location>, same connection
+      no delete operation         ->  the webhook stays on GitHub
+    short: unsubscribe
+    narration: >
+      A webhook is created on GitHub, so it has to be removed there. Learn says the platform deletes it when you
+      edit or delete the flow, using the Location header from the create response, and that the delete operation
+      must be in the definition. Skip it, and the webhook outlives the flow. Our validator refuses a trigger
+      without one.
+
+  - id: webhook
+    type: screen
+    heading: "Turning the flow on creates the webhook"
+    image: screens/webhook.jpg
+    bar: "GitHub · Repository settings · Webhooks"
+    demo: >
+      GitHub, the throwaway repository, Settings, Webhooks, right after the flow was turned on: one webhook, event
+      "Issues", content type application/json, and Recent Deliveries with a single delivery of event ping, response
+      200. Mask the GitHub account name and the callback URL (it carries a signature).
+    narration: >
+      Turn the flow on, and GitHub shows one new webhook for issues events. And one delivery already: a ping.
+
+  - id: ping
+    type: code
+    heading: "The ghost request: a ping is not an issue"
+    lang: text
+    code: |
+      GitHub docs: "GitHub will send you a simple ping event"
+
+      $ python -m githubfake --no-condition
+      delivery: ping                 -> 200
+      flow runs: ['Failed', 'Succeeded', 'Succeeded', 'Succeeded']
+      IT request #41: '[GitHub] '
+      IT request #44: '[GitHub] Need a second monitor (27 inch)'
+
+      "conditions": [{ "expression":
+        "@equals(triggerBody()?['action'], 'opened')" }]
+    short: ping
+    narration: >
+      Here is the ghost. When a webhook is created, GitHub sends a ping. Without a trigger condition, the ping
+      ran the flow, and created an IT request titled just GitHub. The same trigger also gets edited and labeled
+      actions, so editing an issue created a duplicate request. One trigger condition on the action field fixes
+      both.
+
+  - id: flow
+    type: code
+    heading: "The flow: one request, one comment"
+    lang: json
+    code: |
+      "Create_IT_request": { "type": "OpenApiConnection", "inputs": {
+        "host": { "operationId": "PostItem", ... },
+        "parameters": {
+          "item/Title": "@take(concat('[GitHub] ', coalesce(triggerBody()?['issue']?['title'], '')), 255)",
+          "item/Priority/Value": "@if(outputs('Is_urgent'), 'High', 'Normal')" } } },
+      "Comment_on_issue": { "type": "OpenApiConnection", "inputs": {
+        "host": { "operationId": "AddIssueComment", ... },
+        "parameters": {
+          "issue_number": "@triggerBody()?['issue']?['number']",
+          "body/body": "Thanks, ... tracking this as IT request #@{body('Create_IT_request')?['ID']}" } } }
+    narration: >
+      The flow itself is short. A label called urgent makes the request high priority. The title is cut to two
+      hundred and fifty-five characters, the length of a SharePoint title. Then the custom connector's action
+      comments on the issue with the request number and link.
+
+  - id: run
+    type: screen
+    heading: "A real issue, a real run"
+    image: screens/run.jpg
+    bar: "Power Automate · GitHub issue to IT request · Run history"
+    demo: >
+      Run details of the run started by the issue "Laptop won't boot before a client demo" (labels hardware and
+      urgent): trigger output expanded showing action opened and the issue title, Create IT request green, Comment
+      on issue green with the output showing the new comment URL. Mask the environment URL and the GitHub account.
+    narration: >
+      I open an issue with the urgent label, and the run appears. The trigger output is GitHub's payload, with
+      dynamic content from the schema we declared.
+
+  - id: result
+    type: screen
+    heading: "The request, and the comment on the issue"
+    image: screens/result.jpg
+    bar: "SharePoint IT Requests · GitHub issue"
+    demo: >
+      Split view. Left: SharePoint IT Requests list with the new item "[GitHub] Laptop won't boot before a client
+      demo", Priority High, Status New, Source link set. Right: the GitHub issue with the comment from the token's
+      account: "Thanks, ... Contoso IT is tracking this as IT request #..." with the link. Mask tenant name and
+      GitHub account name.
+    narration: >
+      The request is in the list, priority high, with a link back to the issue. And the issue has the comment.
+
+  - id: off
+    type: screen
+    heading: "Turn the flow off: the webhook disappears"
+    image: screens/off.jpg
+    bar: "GitHub · Repository settings · Webhooks"
+    demo: >
+      Two captures in one scene. First the flow's page with the Turn off button pressed (status Off), then GitHub
+      Settings, Webhooks after a refresh: the list is empty. Mask the GitHub account name.
+    narration: >
+      Turn the flow off and refresh GitHub. The webhook is gone, removed through the delete operation.
+
+  - id: gotchas
+    type: bullets
+    heading: "Traps we hit, and ones to check"
+    bullets:
+      - "No body defaults: GitHub uses push and form, flow stays silent"
+      - "No User-Agent policy: GitHub answers 403"
+      - "Token without Webhooks permission: 404 when you turn on"
+      - "A failed comment, then Resubmit: a second request"
+      - "Learn lists two request limits: 500 or 10,000 per minute"
+    narration: >
+      More traps, each one a test. Without the body defaults, GitHub uses push events and form encoding, the setup
+      looks green, and nothing ever arrives. Without a user agent, GitHub answers four oh three. A token without
+      the webhooks permission gets a four oh four. If the comment fails after the request was created, resubmitting
+      creates the request again. And on limits, Learn lists five hundred requests per minute per connection on one
+      page and ten thousand on another, so check before you design for volume.
+
+  - id: tests
+    type: code
+    heading: "Seventy-one tests, no tenant"
+    lang: text
+    code: |
+      $ python -m pytest
+      71 passed in 6.9s
+
+      test_the_validator_catches[no delete operation]
+      test_draft_2_without_a_delete_operation_the_webhook_outlives_the_flow
+      test_draft_3_without_a_trigger_condition_the_ping_creates_a_junk_request_and_fails
+      test_every_connector_operation_and_input_the_flow_uses_exists_in_the_definition
+    narration: >
+      Seventy-one tests check the connector files against the Open A P I schema and Learn's rules, build every
+      request the way the docs describe, and run the real flow against a fake GitHub. One test even checks that
+      every parameter the flow passes exists in the connector definition. The fake GitHub is only for the tests;
+      the demo you saw was the real thing.
+
+  - id: recap
+    type: bullets
+    heading: "Five rules for custom connectors"
+    bullets:
+      - "Build from files, keep them in Git"
+      - "Webhook trigger: notification URL, delete operation, Location header"
+      - "Set internal fields with defaults, never leave GitHub's"
+      - "Filter the trigger: ping and edits are events too"
+      - "Headers and API version as policies"
+    narration: >
+      Five rules. Build the connector from files and keep them in Git. For a webhook trigger you need the
+      notification URL, a delete operation, and the Location header. Set the internal fields yourself. Filter the
+      trigger, because pings and edits are events too. And put headers and the A P I version in policies.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The connector files, the flow solution, the validator and all seventy-one tests are on GitHub, and the
+      complete guide is on dev lad log dot com. Next in the series: A L M and solution management. Subscribe so you
+      don't miss it.

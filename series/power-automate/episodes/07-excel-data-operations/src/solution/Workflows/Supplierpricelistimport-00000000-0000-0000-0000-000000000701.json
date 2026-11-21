@@ -1,0 +1,406 @@
+{
+  "properties": {
+    "connectionReferences": {
+      "shared_sharepointonline": {
+        "runtimeSource": "embedded",
+        "connection": {
+          "connectionReferenceLogicalName": "cts_sharedsharepointonline_pricelists"
+        },
+        "api": {
+          "name": "shared_sharepointonline"
+        }
+      },
+      "shared_excelonlinebusiness": {
+        "runtimeSource": "embedded",
+        "connection": {
+          "connectionReferenceLogicalName": "cts_sharedexcelonlinebusiness_pricelists"
+        },
+        "api": {
+          "name": "shared_excelonlinebusiness"
+        }
+      },
+      "shared_office365": {
+        "runtimeSource": "embedded",
+        "connection": {
+          "connectionReferenceLogicalName": "cts_sharedoffice365_pricelists"
+        },
+        "api": {
+          "name": "shared_office365"
+        }
+      }
+    },
+    "definition": {
+      "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+      "contentVersion": "1.0.0.0",
+      "parameters": {
+        "$connections": {
+          "defaultValue": {},
+          "type": "Object"
+        },
+        "$authentication": {
+          "defaultValue": {},
+          "type": "SecureObject"
+        },
+        "Purchasing site URL (cts_PurchasingSiteUrl)": {
+          "defaultValue": "https://contoso.sharepoint.com/sites/Purchasing",
+          "type": "String",
+          "metadata": {
+            "schemaName": "cts_PurchasingSiteUrl",
+            "description": "Purchasing site, no trailing slash"
+          }
+        },
+        "Price lists library (cts_PriceListsLibrary)": {
+          "defaultValue": "Price lists",
+          "type": "String",
+          "metadata": {
+            "schemaName": "cts_PriceListsLibrary",
+            "description": "Library where suppliers' workbooks are saved"
+          }
+        },
+        "Price lists drive ID (cts_PriceListsDriveId)": {
+          "defaultValue": "b!00000000000000000000000000000000000000000000000000000701",
+          "type": "String",
+          "metadata": {
+            "schemaName": "cts_PriceListsDriveId",
+            "description": "Drive ID of the Price lists library (Excel connector Document Library value)"
+          }
+        },
+        "Documents drive ID (cts_DocumentsDriveId)": {
+          "defaultValue": "b!00000000000000000000000000000000000000000000000000000702",
+          "type": "String",
+          "metadata": {
+            "schemaName": "cts_DocumentsDriveId",
+            "description": "Drive ID of the Documents library with the catalogue and the Scripts folder"
+          }
+        },
+        "Upsert prices script (cts_UpsertScriptId)": {
+          "defaultValue": "Upsert prices.osts",
+          "type": "String",
+          "metadata": {
+            "schemaName": "cts_UpsertScriptId",
+            "description": "Office Script file (.osts) in the Documents library, Scripts folder"
+          }
+        },
+        "Purchasing mailbox (cts_PurchasingMailbox)": {
+          "defaultValue": "purchasing@contoso.com",
+          "type": "String",
+          "metadata": {
+            "schemaName": "cts_PurchasingMailbox",
+            "description": "Where the import summary goes"
+          }
+        }
+      },
+      "triggers": {
+        "When_a_price_list_is_added": {
+          "type": "OpenApiConnection",
+          "recurrence": {
+            "interval": 5,
+            "frequency": "Minute"
+          },
+          "splitOn": "@triggerOutputs()?['body/value']",
+          "conditions": [
+            {
+              "expression": "@and(endsWith(toLower(triggerBody()?['{FilenameWithExtension}']), '.xlsx'), not(equals(triggerBody()?['{IsFolder}'], true)))"
+            }
+          ],
+          "inputs": {
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+              "connectionName": "shared_sharepointonline",
+              "operationId": "GetOnNewFileItems"
+            },
+            "parameters": {
+              "dataset": "@parameters('Purchasing site URL (cts_PurchasingSiteUrl)')",
+              "table": "@parameters('Price lists library (cts_PriceListsLibrary)')"
+            },
+            "authentication": "@parameters('$authentication')"
+          }
+        }
+      },
+      "actions": {
+        "List_price_rows": {
+          "type": "OpenApiConnection",
+          "runAfter": {},
+          "runtimeConfiguration": {
+            "paginationPolicy": {
+              "minimumItemCount": 5000
+            }
+          },
+          "inputs": {
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_excelonlinebusiness",
+              "connectionName": "shared_excelonlinebusiness",
+              "operationId": "GetItems"
+            },
+            "parameters": {
+              "source": "@parameters('Purchasing site URL (cts_PurchasingSiteUrl)')",
+              "drive": "@parameters('Price lists drive ID (cts_PriceListsDriveId)')",
+              "file": "@triggerBody()?['{Identifier}']",
+              "table": "Prices",
+              "dateTimeFormat": "ISO 8601"
+            },
+            "authentication": "@parameters('$authentication')"
+          }
+        },
+        "Too_many_rows": {
+          "type": "If",
+          "runAfter": {
+            "List_price_rows": [
+              "Succeeded"
+            ]
+          },
+          "expression": {
+            "and": [
+              {
+                "greaterOrEquals": [
+                  "@length(body('List_price_rows')?['value'])",
+                  5000
+                ]
+              }
+            ]
+          },
+          "actions": {
+            "Stop_not_all_rows_read": {
+              "type": "Terminate",
+              "inputs": {
+                "runStatus": "Failed",
+                "runError": {
+                  "code": "TooManyRows",
+                  "message": "@{length(body('List_price_rows')?['value'])} rows read: the pagination threshold is 5000, the file may have more. Split the file."
+                }
+              }
+            }
+          },
+          "else": {
+            "actions": {}
+          }
+        },
+        "Shape_rows": {
+          "type": "Select",
+          "runAfter": {
+            "Too_many_rows": [
+              "Succeeded"
+            ]
+          },
+          "inputs": {
+            "from": "@body('List_price_rows')?['value']",
+            "select": {
+              "sku": "@toUpper(trim(coalesce(item()?['Item No_x002e_'], '')))",
+              "description": "@trim(coalesce(item()?['Description'], ''))",
+              "priceText": "@trim(coalesce(item()?['Unit price'], ''))",
+              "validFrom": "@take(coalesce(item()?['Valid from'], ''), 10)",
+              "problem": "@if(empty(toUpper(trim(coalesce(item()?['Item No_x002e_'], '')))), 'Missing item number', if(contains(trim(coalesce(item()?['Unit price'], '')), ','), 'Price has a comma: use a number cell', if(not(isFloat(trim(coalesce(item()?['Unit price'], '')))), 'Price is not a number', if(lessOrEquals(float(if(isFloat(trim(coalesce(item()?['Unit price'], ''))), trim(coalesce(item()?['Unit price'], '')), '0')), 0), 'Price must be more than zero', if(not(equals(indexOf(take(coalesce(item()?['Valid from'], ''), 10), '-'), 4)), 'Valid from is not a date', '')))))"
+            }
+          }
+        },
+        "Valid_rows": {
+          "type": "Query",
+          "runAfter": {
+            "Shape_rows": [
+              "Succeeded"
+            ]
+          },
+          "inputs": {
+            "from": "@body('Shape_rows')",
+            "where": "@empty(item()?['problem'])"
+          }
+        },
+        "Rejected_rows": {
+          "type": "Query",
+          "runAfter": {
+            "Shape_rows": [
+              "Succeeded"
+            ]
+          },
+          "inputs": {
+            "from": "@body('Shape_rows')",
+            "where": "@not(empty(item()?['problem']))"
+          }
+        },
+        "Prices_for_script": {
+          "type": "Select",
+          "runAfter": {
+            "Valid_rows": [
+              "Succeeded"
+            ]
+          },
+          "inputs": {
+            "from": "@body('Valid_rows')",
+            "select": {
+              "sku": "@item()?['sku']",
+              "description": "@item()?['description']",
+              "price": "@float(item()?['priceText'])",
+              "validFrom": "@item()?['validFrom']"
+            }
+          }
+        },
+        "Upsert_catalogue": {
+          "type": "OpenApiConnection",
+          "runAfter": {
+            "Prices_for_script": [
+              "Succeeded"
+            ]
+          },
+          "inputs": {
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_excelonlinebusiness",
+              "connectionName": "shared_excelonlinebusiness",
+              "operationId": "RunScriptProdV2"
+            },
+            "parameters": {
+              "source": "@parameters('Purchasing site URL (cts_PurchasingSiteUrl)')",
+              "drive": "@parameters('Documents drive ID (cts_DocumentsDriveId)')",
+              "file": "Purchasing catalogue.xlsx",
+              "scriptSource": "@parameters('Purchasing site URL (cts_PurchasingSiteUrl)')",
+              "scriptDrive": "@parameters('Documents drive ID (cts_DocumentsDriveId)')",
+              "scriptId": "@parameters('Upsert prices script (cts_UpsertScriptId)')",
+              "ScriptParameters/prices": "@body('Prices_for_script')",
+              "ScriptParameters/supplier": "Fabrikam",
+              "ScriptParameters/sourceFile": "@triggerBody()?['{FilenameWithExtension}']"
+            },
+            "authentication": "@parameters('$authentication')"
+          }
+        },
+        "Any_rejected": {
+          "type": "If",
+          "runAfter": {
+            "Upsert_catalogue": [
+              "Succeeded"
+            ],
+            "Rejected_rows": [
+              "Succeeded"
+            ]
+          },
+          "expression": {
+            "and": [
+              {
+                "greater": [
+                  "@length(body('Rejected_rows'))",
+                  0
+                ]
+              }
+            ]
+          },
+          "actions": {
+            "Rejected_csv": {
+              "type": "Table",
+              "runAfter": {},
+              "inputs": {
+                "from": "@body('Rejected_rows')",
+                "format": "CSV",
+                "columns": [
+                  {
+                    "header": "Item No.",
+                    "value": "@item()?['sku']"
+                  },
+                  {
+                    "header": "Description",
+                    "value": "@item()?['description']"
+                  },
+                  {
+                    "header": "Unit price",
+                    "value": "@item()?['priceText']"
+                  },
+                  {
+                    "header": "Valid from",
+                    "value": "@item()?['validFrom']"
+                  },
+                  {
+                    "header": "Problem",
+                    "value": "@item()?['problem']"
+                  }
+                ]
+              }
+            },
+            "Save_rejected_rows": {
+              "type": "OpenApiConnection",
+              "runAfter": {
+                "Rejected_csv": [
+                  "Succeeded"
+                ]
+              },
+              "inputs": {
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                  "connectionName": "shared_sharepointonline",
+                  "operationId": "CreateFile"
+                },
+                "parameters": {
+                  "dataset": "@parameters('Purchasing site URL (cts_PurchasingSiteUrl)')",
+                  "folderPath": "/Price lists/Rejected",
+                  "name": "@{triggerBody()?['{Name}']}-rejected.csv",
+                  "body": "@body('Rejected_csv')"
+                },
+                "authentication": "@parameters('$authentication')"
+              }
+            }
+          },
+          "else": {
+            "actions": {}
+          }
+        },
+        "Big_changes_table": {
+          "type": "Table",
+          "runAfter": {
+            "Upsert_catalogue": [
+              "Succeeded"
+            ]
+          },
+          "inputs": {
+            "from": "@body('Upsert_catalogue')?['result']?['bigChanges']",
+            "format": "HTML",
+            "columns": [
+              {
+                "header": "SKU",
+                "value": "@item()?['sku']"
+              },
+              {
+                "header": "Description",
+                "value": "@item()?['description']"
+              },
+              {
+                "header": "Old price",
+                "value": "@item()?['oldPrice']"
+              },
+              {
+                "header": "New price",
+                "value": "@item()?['newPrice']"
+              },
+              {
+                "header": "Change %",
+                "value": "@item()?['changePercent']"
+              }
+            ]
+          }
+        },
+        "Send_summary": {
+          "type": "OpenApiConnection",
+          "runAfter": {
+            "Any_rejected": [
+              "Succeeded"
+            ],
+            "Big_changes_table": [
+              "Succeeded"
+            ]
+          },
+          "inputs": {
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365",
+              "connectionName": "shared_office365",
+              "operationId": "SendEmailV2"
+            },
+            "parameters": {
+              "emailMessage/To": "@parameters('Purchasing mailbox (cts_PurchasingMailbox)')",
+              "emailMessage/Subject": "Price list @{triggerBody()?['{FilenameWithExtension}']}: @{body('Upsert_catalogue')?['result']?['updated']} updated, @{body('Upsert_catalogue')?['result']?['inserted']} new, @{length(body('Rejected_rows'))} rejected",
+              "emailMessage/Body": "<p>@{length(body('List_price_rows')?['value'])} rows read from <a href=\"@{triggerBody()?['{Link}']}\">@{triggerBody()?['{FilenameWithExtension}']}</a>.</p><ul><li>New: @{body('Upsert_catalogue')?['result']?['inserted']}</li><li>Updated: @{body('Upsert_catalogue')?['result']?['updated']}</li><li>Unchanged: @{body('Upsert_catalogue')?['result']?['unchanged']}</li><li>Listed twice in the file (last row used): @{body('Upsert_catalogue')?['result']?['duplicatesInFile']}</li><li>Extra catalogue rows with the same SKU (all updated): @{body('Upsert_catalogue')?['result']?['duplicateRowsInCatalogue']}</li><li>Rejected (see Price lists/Rejected): @{length(body('Rejected_rows'))}</li></ul><p>Price changes over 20 %, please check:</p>@{body('Big_changes_table')}",
+              "emailMessage/Importance": "Normal"
+            },
+            "authentication": "@parameters('$authentication')"
+          }
+        }
+      }
+    },
+    "templateName": ""
+  },
+  "schemaVersion": "1.0.0.0"
+}

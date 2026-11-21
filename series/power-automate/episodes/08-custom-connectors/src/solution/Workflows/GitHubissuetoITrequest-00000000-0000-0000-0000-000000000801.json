@@ -1,0 +1,152 @@
+{
+  "properties": {
+    "connectionReferences": {
+      "shared_sharepointonline": {
+        "runtimeSource": "embedded",
+        "connection": {
+          "connectionReferenceLogicalName": "cts_sharedsharepointonline_githubintake"
+        },
+        "api": {
+          "name": "shared_sharepointonline"
+        }
+      },
+      "shared_contoso-5fit-5fgithub-5f0000000000000801": {
+        "runtimeSource": "embedded",
+        "connection": {
+          "connectionReferenceLogicalName": "cts_sharedcontosoitgithub_githubintake"
+        },
+        "api": {
+          "name": "shared_contoso-5fit-5fgithub-5f0000000000000801"
+        }
+      }
+    },
+    "definition": {
+      "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+      "contentVersion": "1.0.0.0",
+      "parameters": {
+        "$connections": {
+          "defaultValue": {},
+          "type": "Object"
+        },
+        "$authentication": {
+          "defaultValue": {},
+          "type": "SecureObject"
+        },
+        "IT Helpdesk site URL (cts_HelpdeskSiteUrl)": {
+          "defaultValue": "https://contoso.sharepoint.com/sites/ITHelpdesk",
+          "type": "String",
+          "metadata": {
+            "schemaName": "cts_HelpdeskSiteUrl",
+            "description": "Site that holds the IT Requests list (same variable as episode 6)"
+          }
+        },
+        "GitHub owner (cts_GitHubOwner)": {
+          "defaultValue": "contoso",
+          "type": "String",
+          "metadata": {
+            "schemaName": "cts_GitHubOwner",
+            "description": "Account or organization that owns the repository"
+          }
+        },
+        "GitHub repository (cts_GitHubRepo)": {
+          "defaultValue": "it-automation",
+          "type": "String",
+          "metadata": {
+            "schemaName": "cts_GitHubRepo",
+            "description": "Repository whose new issues become IT requests"
+          }
+        }
+      },
+      "triggers": {
+        "When_an_issue_is_opened": {
+          "type": "OpenApiConnectionWebhook",
+          "conditions": [
+            {
+              "expression": "@equals(triggerBody()?['action'], 'opened')"
+            }
+          ],
+          "inputs": {
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_contoso-5fit-5fgithub-5f0000000000000801",
+              "connectionName": "shared_contoso-5fit-5fgithub-5f0000000000000801",
+              "operationId": "WhenAnIssueIsOpened"
+            },
+            "parameters": {
+              "owner": "@parameters('GitHub owner (cts_GitHubOwner)')",
+              "repo": "@parameters('GitHub repository (cts_GitHubRepo)')"
+            },
+            "authentication": "@parameters('$authentication')"
+          }
+        }
+      },
+      "actions": {
+        "Label_names": {
+          "type": "Select",
+          "runAfter": {},
+          "inputs": {
+            "from": "@coalesce(triggerBody()?['issue']?['labels'], createArray())",
+            "select": "@item()?['name']"
+          }
+        },
+        "Is_urgent": {
+          "type": "Compose",
+          "runAfter": {
+            "Label_names": [
+              "Succeeded"
+            ]
+          },
+          "inputs": "@contains(body('Label_names'), 'urgent')"
+        },
+        "Create_IT_request": {
+          "type": "OpenApiConnection",
+          "runAfter": {
+            "Is_urgent": [
+              "Succeeded"
+            ]
+          },
+          "inputs": {
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+              "connectionName": "shared_sharepointonline",
+              "operationId": "PostItem"
+            },
+            "parameters": {
+              "dataset": "@parameters('IT Helpdesk site URL (cts_HelpdeskSiteUrl)')",
+              "table": "IT Requests",
+              "item/Title": "@take(concat('[GitHub] ', coalesce(triggerBody()?['issue']?['title'], '')), 255)",
+              "item/Category/Value": "Other",
+              "item/Priority/Value": "@if(outputs('Is_urgent'), 'High', 'Normal')",
+              "item/Status/Value": "New",
+              "item/SourceLink": "@triggerBody()?['issue']?['html_url']"
+            },
+            "authentication": "@parameters('$authentication')"
+          }
+        },
+        "Comment_on_issue": {
+          "type": "OpenApiConnection",
+          "runAfter": {
+            "Create_IT_request": [
+              "Succeeded"
+            ]
+          },
+          "inputs": {
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_contoso-5fit-5fgithub-5f0000000000000801",
+              "connectionName": "shared_contoso-5fit-5fgithub-5f0000000000000801",
+              "operationId": "AddIssueComment"
+            },
+            "parameters": {
+              "owner": "@split(triggerBody()?['repository']?['full_name'], '/')[0]",
+              "repo": "@split(triggerBody()?['repository']?['full_name'], '/')[1]",
+              "issue_number": "@triggerBody()?['issue']?['number']",
+              "body/body": "Thanks, @{triggerBody()?['issue']?['user']?['login']}. Contoso IT is tracking this as IT request #@{body('Create_IT_request')?['ID']}: @{body('Create_IT_request')?['{Link}']}"
+            },
+            "authentication": "@parameters('$authentication')"
+          }
+        }
+      }
+    },
+    "templateName": ""
+  },
+  "schemaVersion": "1.0.0.0"
+}
