@@ -33,6 +33,8 @@ All demos are recorded for real. Use these shared resources before asking for ne
   deleted inside the episode.
 
 ## Local Hyper-V lab (on the recording laptop, built by `lab/hyperv/Start-MGLab.ps1`)
+**Built and running since 21 Nov 2026** on `E:\MGLab` (laptop: Core Ultra 9, 24 threads, 191 GB RAM, so RAM is not a
+constraint). Lab users' passwords are set and `labadmin` is Global Administrator.
 Internal NAT network `10.50.0.0/24`, host = `10.50.0.1`, domain `lab.contoso.com` (NetBIOS `CONTOSO`).
 
 | VM | OS | Role | IP | vCPU / RAM |
