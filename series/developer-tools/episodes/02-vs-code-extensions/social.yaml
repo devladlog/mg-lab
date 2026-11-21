@@ -1,0 +1,86 @@
+episode: 2
+series: "DEVLADLOG Dev Tools"
+status: draft-hold-for-review
+ai_label: true
+youtube_url: "{YOUTUBE_URL}"
+linkedin_company:
+  text: |
+    Five developers, five different VS Codes: two formatters fighting over one file, a linter only half the team has, and an extension nobody remembers installing.
+
+    Episode 2 of DEVLADLOG Dev Tools fixes that with files in the repo:
+    - .vscode/extensions.json for workspace recommendations, short and per repository
+    - Workspace settings with one default formatter per language
+    - An audit script that compares code --list-extensions with the file and installs what is missing
+    - The security controls VS Code gives you: publisher trust and the extensions.allowed setting
+
+    When no marketplace extension matched our commit rules, we built one in TypeScript. It asks four questions and writes a Conventional Commit header into the commit box, keeping any body you already typed. The same rules are tested against the Git hook from episode 1.
+
+    The gotcha: extensions.json is not strict JSON, so a plain JSON parser fails on it, and a regex that strips comments also eats half of every URL.
+
+    Watch the episode: {YOUTUBE_URL}
+    Code: {REPO_URL}
+    Guide: {BLOG_URL}
+
+    Narration uses an AI voice.
+
+    #VSCode #TypeScript #DevTools #ConventionalCommits
+linkedin_personal:
+  text: |
+    A small bug from this episode that is worth knowing about: VS Code's own .vscode/extensions.json is not valid JSON. It allows comments and trailing commas, so Python's json.load fails on the first line.
+
+    The quick fix is a regex that deletes everything after two slashes. That also deletes half of every URL inside a string. The audit script instead walks the text, skips comments only outside strings, then drops trailing commas, and there are tests for both cases.
+
+    The rest of the episode covers recommendations, workspace settings and a small extension we build ourselves.
+
+    {YOUTUBE_URL}
+
+    Narration uses an AI voice.
+
+    #VSCode #DevTools
+facebook:
+  text: |
+    Does everyone on your team use the same VS Code setup? Probably not.
+
+    In this DEVLADLOG episode we put the extension list and one formatter per language into the repo, write a script that checks a machine and installs what is missing, and build a small extension of our own in TypeScript.
+
+    Watch it here: {YOUTUBE_URL}
+
+    Narration uses an AI voice.
+
+    #VSCode #DevTools
+shorts:
+  - id: hook
+    youtube_short_title: "Five developers, five different VS Codes. Fix it with files in the repo #Shorts"
+    instagram_reel:
+      caption: |
+        Five developers, five different VS Codes. Two formatters fighting over the same file, a linter only half the team has, and an extension nobody remembers installing.
+        The fix is files in the repo: recommendations in .vscode/extensions.json, one formatter per language in workspace settings, and a small audit script.
+        Full episode: link in bio.
+        #VSCode #DevTools #Extensions #TypeScript
+      cover_text: "One VS Code for the team"
+    tiktok:
+      caption: "Five developers, five different VS Codes. Two formatters fighting over one file. The fix lives in the repo: extensions.json, workspace settings and an audit script. #VSCode #DevTools"
+  - id: gotcha
+    youtube_short_title: "VS Code's extensions.json is not valid JSON. json.load fails #Shorts"
+    instagram_reel:
+      caption: |
+        VS Code creates extensions.json with a comment at the top, so a plain JSON parser fails on the first line.
+        The quick fix, a regex that deletes everything after two slashes, also deletes half of every URL.
+        The audit script walks the text, skips comments only outside strings, and removes trailing commas. Tests cover both cases.
+        Full episode: link in bio.
+        #VSCode #JSON #Python #DevTools
+      cover_text: "extensions.json isn't JSON"
+    tiktok:
+      caption: "VS Code's extensions.json has comments, so json.load fails. A regex that strips // also eats half of every URL. Skip comments only outside strings. #VSCode #Python #DevTools"
+  - id: live
+    youtube_short_title: "A VS Code extension that writes commit messages your Git hook accepts #Shorts"
+    instagram_reel:
+      caption: |
+        We could not find a marketplace extension that matched our commit rules, so we built one in TypeScript.
+        It asks for type, scope, breaking change and subject, then writes the header into the commit box above any body you already typed.
+        The repository has the commit-msg hook from episode 1 installed, and it accepts the message, because both sides use the same rules. A test proves it.
+        Full episode: link in bio.
+        #VSCode #TypeScript #ConventionalCommits #DevTools
+      cover_text: "feat(orders): add paging"
+    tiktok:
+      caption: "We built a VS Code extension in TypeScript that writes a Conventional Commit header into the commit box. The Git hook accepts it, same rules both sides. #VSCode #TypeScript #DevTools"

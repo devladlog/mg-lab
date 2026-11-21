@@ -1,0 +1,85 @@
+episode: 6
+series: "DEVLADLOG Dev Tools"
+status: draft-hold-for-review
+ai_label: true
+youtube_url: "{YOUTUBE_URL}"
+linkedin_company:
+  text: |
+    If a human reviewer is the one pointing out an unused import, a missing cancellation token or a wrong indent, your quality bar depends on someone's mood.
+
+    Episode 6 of DEVLADLOG Dev Tools moves those rules into the build and the pipeline, on a .NET 10 orders API:
+    - Directory.Build.props switches on analysis level 10 and makes warnings errors; .editorconfig holds the rules with a severity each
+    - dotnet format fixes locally and only reports in CI: it repairs seven of the eight findings in our demo file, and the culture rule needs a human
+    - Ruff for the Python tools, pinned to an exact version so a new release cannot turn a green pipeline red overnight
+    - A coverage gate on the lines you changed, not just the total
+
+    That last one matters. Our example pull request has 91 percent total coverage, so a total-only gate passes, yet only 5 of its 13 changed lines ran in a test. The diff gate fails it.
+
+    Watch the episode: {YOUTUBE_URL}
+    Code: {REPO_URL}
+    Guide: {BLOG_URL}
+
+    Narration uses an AI voice.
+
+    #DotNet #CodeQuality #Ruff #GitHubActions #DevTools
+linkedin_personal:
+  text: |
+    Coverage totals lie. In this episode a pull request adds a tested CSV export and a discount method with no test. Total coverage is 91.4 percent, so a gate on the total passes.
+
+    But only 5 of the 13 lines the pull request changed ran in a test. That is 38.5 percent, and the gate set at 80 percent on changed lines fails it, listing the exact lines that no test covers.
+
+    Measuring the lines you touched means the review asks for the missing test, instead of someone hunting through a coverage report.
+
+    {YOUTUBE_URL}
+
+    Narration uses an AI voice.
+
+    #DotNet #CodeQuality
+facebook:
+  text: |
+    Should a human reviewer be the one telling you about an unused import or a wrong indent?
+
+    In this DEVLADLOG episode we move those rules into the build and the pipeline for a .NET API: analyzers in editorconfig, dotnet format, Ruff for the Python code, and a coverage gate on the lines you changed.
+
+    Watch it here: {YOUTUBE_URL}
+
+    Narration uses an AI voice.
+
+    #DotNet #DevTools
+shorts:
+  - id: hook
+    youtube_short_title: "Code review shouldn't be a linter #Shorts"
+    instagram_reel:
+      caption: |
+        If a human reviewer is the one telling you about an unused import, a missing cancellation token or a wrong indent, your quality bar depends on someone's mood.
+        We move those rules into the build and the pipeline for a .NET orders API: in the editor while you type, in the build so it cannot be ignored, and on the pull request with an annotation on the exact line.
+        Then the review can be about design.
+        Full episode: link in bio.
+        #DotNet #CodeQuality #CodeReview #DevTools
+      cover_text: "Review isn't a linter"
+    tiktok:
+      caption: "If a human tells you about an unused import or a wrong indent, your quality bar depends on someone's mood. Put the rules in the build and the pipeline. #DotNet #CodeQuality #DevTools"
+  - id: autofix
+    youtube_short_title: "dotnet format fixes 7 of 8 findings. The 8th needs you #Shorts"
+    instagram_reel:
+      caption: |
+        dotnet format has two modes. In the pipeline, verify-no-changes only reports and exits non-zero. On your machine, plain dotnet format fixes.
+        On our demo file it repaired the namespace, the using, the unused field, the token and the indent.
+        One rule, CA1305, has no automatic fix, because only you know which culture you mean. So it stays an error, and you fix that one yourself.
+        Full episode: link in bio.
+        #DotNet #DotNetFormat #CodeQuality #DevTools
+      cover_text: "7 of 8 fixed for you"
+    tiktok:
+      caption: "dotnet format fixed 7 of 8 findings. The last one, CA1305 culture, has no auto-fix: only you know which culture you mean. Report in CI, fix locally. #DotNet #CodeQuality #DevTools"
+  - id: diffcov
+    youtube_short_title: "91% coverage and the gate still fails: coverage on changed lines #Shorts"
+    instagram_reel:
+      caption: |
+        Coverage is where totals lie. This pull request adds a tested CSV export and a discount method with no test.
+        Product code coverage is 91.4 percent, so a total-only gate passes. But only 5 of the 13 changed lines ran in a test, which is 38.5 percent, and the gate set at 80 fails.
+        It also lists the lines no test covers, so you know which test to add.
+        Full episode: link in bio.
+        #DotNet #CodeCoverage #CodeQuality #DevTools
+      cover_text: "91% total, 38.5% diff"
+    tiktok:
+      caption: "Total coverage 91.4%, gate passes. But only 5 of 13 changed lines ran in a test, 38.5%. Gate on diff coverage and the PR fails, with the exact lines listed. #DotNet #CodeCoverage #DevTools"

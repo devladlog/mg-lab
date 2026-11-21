@@ -1,0 +1,83 @@
+episode: 4
+series: "DEVLADLOG Dev Tools"
+status: draft-hold-for-review
+ai_label: true
+youtube_url: "{YOUTUBE_URL}"
+linkedin_company:
+  text: |
+    Your first Dockerfile builds, the container runs, the demo works. It also ships the whole SDK, runs as root, bakes a password into the image and downloads every package again when you change one line.
+
+    Episode 4 of DEVLADLOG Dev Tools fixes that for a .NET 10 orders API:
+    - A small linter that flags the naive Dockerfile: 10 errors and 2 warnings
+    - A multi-stage build with restore as its own layer, pinned by tag and digest
+    - A chiseled final image that runs as the non-root app user on port 8080
+    - Compose with SQL Server: the API starts only when the database is healthy, and the password comes from a required .env value
+
+    The gotcha: the SQL client encrypts by default, the dev SQL Server container has a self-signed certificate, and the connection fails until you add TrustServerCertificate. Microsoft Learn says that is for controlled development environments only, never production.
+
+    Watch the episode: {YOUTUBE_URL}
+    Code: {REPO_URL}
+    Guide: {BLOG_URL}
+
+    Narration uses an AI voice.
+
+    #Docker #DockerCompose #DotNet #SQLServer #DevTools
+linkedin_personal:
+  text: |
+    One detail from this episode that I think more people should know: a chiseled .NET image has no shell. docker exec into the API fails, by design. That is the point. No shell, no package manager, non-root by default.
+
+    The other change that pays off every day is ordering. Copy only the project file, restore, then copy the source. Edit one .cs file and the restore layer comes from cache.
+
+    The episode builds the fixed Dockerfile and a Compose stack with SQL Server, and checks both with tests that need no Docker daemon.
+
+    {YOUTUBE_URL}
+
+    Narration uses an AI voice.
+
+    #Docker #DotNet
+facebook:
+  text: |
+    Your first Dockerfile probably runs as root, ships the whole SDK and rebuilds every package when you change a line.
+
+    In this DEVLADLOG episode we fix that for a .NET API: a multi-stage build, a chiseled non-root image, and a Compose stack with a real SQL Server that the API waits for.
+
+    Watch it here: {YOUTUBE_URL}
+
+    Narration uses an AI voice.
+
+    #Docker #DevTools
+shorts:
+  - id: hook
+    youtube_short_title: "Your first Dockerfile works. That's the problem. #Shorts"
+    instagram_reel:
+      caption: |
+        Your first Dockerfile builds, the container runs, the demo works. It also ships the whole SDK, runs as root, bakes a password into the image and downloads every package again when you change one line.
+        We fix all of that for a .NET orders API, then run it next to a real SQL Server with one command.
+        Full episode: link in bio.
+        #Docker #DotNet #DockerCompose #DevTools
+      cover_text: "Your first Dockerfile"
+    tiktok:
+      caption: "Your first Dockerfile works. It also ships the SDK, runs as root, bakes in a password and re-downloads every package on each edit. Here is the fix. #Docker #DotNet #DevTools"
+  - id: naive
+    youtube_short_title: "The Dockerfile we all wrote first: 10 errors from one linter #Shorts"
+    instagram_reel:
+      caption: |
+        We built a small linter and ran the Dockerfile most of us wrote first through it. Ten errors.
+        Latest tag. One stage, so the SDK ships. Runs as root. Source copied before restore, so every edit downloads packages again. A password in an environment variable, which stays in the image history. A shell form entry point that never passes the stop signal to the app.
+        Full episode: link in bio.
+        #Docker #Dockerfile #DotNet #DevTools
+      cover_text: "10 errors, 1 Dockerfile"
+    tiktok:
+      caption: "The first Dockerfile most of us write: latest tag, one stage, root, password in ENV, shell-form entrypoint. Our linter finds 10 errors. #Docker #Dockerfile #DevTools"
+  - id: sdk
+    youtube_short_title: "Build a .NET container image with no Dockerfile and no Docker daemon #Shorts"
+    instagram_reel:
+      caption: |
+        The .NET SDK can build the container image itself. No Dockerfile, and to an archive without any Docker daemon.
+        Set the repository and the chiseled family in the project, then run dotnet publish with the PublishContainer target. We ran it on a build machine with no Docker at all.
+        Same chiseled base, user 1654, port 8080. The catch: there is no build stage to create a data folder, so for SQLite in a volume we keep the Dockerfile.
+        Full episode: link in bio.
+        #DotNet #Docker #ContainerImages #DevTools
+      cover_text: "No Dockerfile needed"
+    tiktok:
+      caption: "dotnet publish can build a chiseled container image with no Dockerfile and no Docker daemon. Same base, non-root, port 8080. We ran it on a machine without Docker. #DotNet #Docker #DevTools"

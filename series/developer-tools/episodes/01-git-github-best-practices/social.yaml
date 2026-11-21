@@ -1,0 +1,84 @@
+episode: 1
+series: "DEVLADLOG Dev Tools"
+status: draft-hold-for-review
+ai_label: true
+youtube_url: "{YOUTUBE_URL}"
+linkedin_company:
+  text: |
+    Every team has a Git best practices page. Every team also has a main branch full of commits called "fix" and "updated stuff".
+
+    In episode 1 of DEVLADLOG Dev Tools we turn that page into checks that actually run, in three layers:
+    - Local hooks: Conventional Commit messages, no commits on main, no staged secrets, no oversized files
+    - CI: the same Python module re-checks every tracked file and the pull request title on the server
+    - A GitHub ruleset, kept as JSON in the repo: pull request required, one approval including code owners, squash only, the three CI jobs required
+
+    One honest finding: hooks are optional. git commit --no-verify skips them, token and all, so the layer that really catches it is CI. We also reproduce a hook that breaks on Windows line endings and show the .gitattributes fix.
+
+    The kit comes with 54 pytest tests, most of them making real git commits in throwaway repos.
+
+    Watch the episode: {YOUTUBE_URL}
+    Code: {REPO_URL}
+    Guide: {BLOG_URL}
+
+    Narration uses an AI voice.
+
+    #Git #GitHub #GitHubActions #ConventionalCommits #DevTools
+linkedin_personal:
+  text: |
+    A best practices page only works if something checks it. For this episode I built one small Python module that backs a local hook, a CI job and a GitHub ruleset, so the rule you see locally is the rule the server enforces.
+
+    The lesson worth spelling out: hooks are only fast feedback. git commit --no-verify skips them completely, including the secret check. A test in the kit proves it: the --no-verify commit with a token succeeds locally, and the CI scan fails on it.
+
+    Full walkthrough: {YOUTUBE_URL}
+
+    Narration uses an AI voice.
+
+    #Git #DevTools
+facebook:
+  text: |
+    How do you make a team follow its Git rules without nagging anyone? Put the rules in checks.
+
+    In this DEVLADLOG episode we set up commit hooks, a CI check and a GitHub ruleset that all say the same thing. We also show why hooks alone are not enough: --no-verify skips them, so CI catches what they miss.
+
+    Watch it here: {YOUTUBE_URL}
+
+    Narration uses an AI voice.
+
+    #Git #GitHub
+shorts:
+  - id: hook
+    youtube_short_title: "Your Git best practices page isn't enforced by anything #Shorts"
+    instagram_reel:
+      caption: |
+        Every team has a Git best practices page. Every team also has a main branch full of commits called "fix" and "updated stuff".
+        In this series we turn that page into checks that run in three places: on your laptop as hooks, in CI on the server, and on GitHub itself as a ruleset.
+        One small Python module sits behind all three, so the rule you see locally is the rule the server enforces.
+        Full episode: link in bio.
+        #Git #GitHub #DevTools #ConventionalCommits
+      cover_text: "Rules nobody can skip"
+    tiktok:
+      caption: "Every team has a Git best practices page. And a main branch full of 'fix' commits. Here is how to turn the page into checks that run. Full episode on YouTube. #Git #GitHub #DevTools"
+  - id: commit
+    youtube_short_title: "A commit hook that rejects 'updated stuff' and tells you why #Shorts"
+    instagram_reel:
+      caption: |
+        Run the setup script once after cloning, because Git does not copy hooks when you clone.
+        Then commit with the message "updated stuff": rejected, with the reason and three examples. Commit with "feat(orders): add paging" and it goes in. Your message is kept, so nothing is lost.
+        The rule is Conventional Commits, with a header limit of 72 characters.
+        Full episode: link in bio.
+        #Git #ConventionalCommits #GitHooks #DevTools
+      cover_text: "updated stuff: rejected"
+    tiktok:
+      caption: "Commit 'updated stuff' and the hook says no, with the reason and three examples. Commit 'feat(orders): add paging' and it passes. Conventional Commits, enforced. #Git #GitHooks #DevTools"
+  - id: gotcha
+    youtube_short_title: "git commit --no-verify skips every hook. So what catches the secret? #Shorts"
+    instagram_reel:
+      caption: |
+        Local Git hooks are optional. git commit --no-verify skips pre-commit and commit-msg, and the commit goes in, token and all.
+        So hooks are only the fast feedback layer. The same module runs in CI: scan-tree checks every tracked file, not just the diff, and the pull request title gets the commit rule too.
+        That is where the token gets caught.
+        Full episode: link in bio.
+        #Git #GitHubActions #DevSecOps #DevTools
+      cover_text: "Hooks are optional"
+    tiktok:
+      caption: "git commit --no-verify skips every local hook, secret check included. That is why the same checks run again in CI. Hooks for speed, CI for truth. #Git #GitHubActions #DevTools"

@@ -1,0 +1,84 @@
+episode: 3
+series: "DEVLADLOG Dev Tools"
+status: draft-hold-for-review
+ai_label: true
+youtube_url: "{YOUTUBE_URL}"
+linkedin_company:
+  text: |
+    A new developer joins the team. Day one is installing the right SDK, the right Python for the Git hooks, the GitHub CLI and the extensions, then asking why the tests fail only on their machine.
+
+    Episode 3 of DEVLADLOG Dev Tools turns that list into one file in the repository:
+    - A .NET 10 dev container image on Ubuntu, with Features for Python and the GitHub CLI
+    - A forwarded port, a NuGet cache volume and the team's extensions
+    - A post-create script that installs the Git hooks and restores packages, safe to run twice
+    - 45 pytest tests that check the configuration without a Docker daemon
+
+    The gotcha: we pinned the image with a major version of 1. When the image moved to its next major, that tag stopped being rebuilt, and it was still serving a release candidate SDK. Nothing failed. So we wrote a small check that compares the pinned and floating tags in the registry and exits with an error when the pin falls behind.
+
+    Watch the episode: {YOUTUBE_URL}
+    Code: {REPO_URL}
+    Guide: {BLOG_URL}
+
+    Narration uses an AI voice.
+
+    #DevContainers #VSCode #DotNet #Docker #DevTools
+linkedin_personal:
+  text: |
+    Pinning a dev container image to a major version sounds like the safe choice. It was not, for us.
+
+    We pinned mcr.microsoft.com/devcontainers/dotnet to the 1-10.0-noble tag. When the image moved on to its next major, that tag simply stopped being rebuilt. Our pin was last built in October 2025 and still carried a release candidate SDK. No error, no warning.
+
+    A small script now reads both tags from the registry and fails when the pin falls behind. No Docker needed to run it.
+
+    Pin majors, and check that the pin still moves: {YOUTUBE_URL}
+
+    Narration uses an AI voice.
+
+    #DevContainers #DotNet
+facebook:
+  text: |
+    What if a new developer could clone the repo, click Reopen in Container, and have the right SDK, tools and extensions with the tests passing?
+
+    In this DEVLADLOG episode we put the whole .NET 10 dev environment into one devcontainer.json, plus a post-create script and tests. We also show a version pin that quietly froze.
+
+    Watch it here: {YOUTUBE_URL}
+
+    Narration uses an AI voice.
+
+    #DevContainers #DevTools
+shorts:
+  - id: hook
+    youtube_short_title: "Clone. Reopen in Container. Code. The whole dev setup in one file #Shorts"
+    instagram_reel:
+      caption: |
+        A new developer joins the team. Day one is installing the right SDK, the right Python for the Git hooks, the GitHub CLI and the extensions, then asking why the tests fail only on their machine.
+        A dev container turns that whole list into one file in the repository. Clone, reopen in container, and the tests pass.
+        Full episode: link in bio.
+        #DevContainers #VSCode #DotNet #DevTools
+      cover_text: "Clone. Reopen. Code."
+    tiktok:
+      caption: "New dev, day one: SDK, Python, GitHub CLI, extensions, 'works on my machine'. A dev container makes it one file in the repo. Clone, reopen, code. #DevContainers #VSCode #DevTools"
+  - id: postcreate
+    youtube_short_title: "A dev container post-create script that is safe to run twice #Shorts"
+    instagram_reel:
+      caption: |
+        Our post-create script does three things. Docker creates a new named volume owned by root, and the tools run as the vscode user, so it takes ownership once.
+        Then it installs the Git hooks, because git clone never copies hooks. Then it restores packages.
+        It runs again after every rebuild, so every step is safe to repeat, and a failed restore stops it.
+        Full episode: link in bio.
+        #DevContainers #Docker #DotNet #DevTools
+      cover_text: "Safe to run twice"
+    tiktok:
+      caption: "A dev container post-create script: fix the root-owned volume, install Git hooks (clone never copies them), restore packages. Safe to repeat, fails loudly. #DevContainers #Docker #DevTools"
+  - id: gotcha
+    youtube_short_title: "The dev container image pin that silently froze #Shorts"
+    instagram_reel:
+      caption: |
+        We pinned our dev container image with a 1 in front of the tag. Reasonable: no surprise breaking changes.
+        But when the image moved to its next major, that tag stopped being rebuilt. Ours was last built in October 2025, with a release candidate .NET SDK. Nothing failed.
+        So we wrote a small check that reads both tags from the registry, no Docker needed, and exits with an error when the pin falls behind.
+        Full episode: link in bio.
+        #DevContainers #DotNet #Docker #DevTools
+      cover_text: "The pin that froze"
+    tiktok:
+      caption: "We pinned our dev container image to major 1. The image moved on, the tag stopped updating, and we still had a release candidate SDK. Nothing failed. Check your pins. #DevContainers #DotNet #DevTools"

@@ -1,0 +1,84 @@
+episode: 8
+series: "DEVLADLOG Dev Tools"
+status: draft-hold-for-review
+ai_label: true
+youtube_url: "{YOUTUBE_URL}"
+linkedin_company:
+  text: |
+    Your API tests pass and the pipeline is green. How many assertions actually ran? A Postman collection with no tests exits with success, and nobody notices.
+
+    Episode 8 of DEVLADLOG Dev Tools builds API tests that can fail, for a .NET 10 orders API:
+    - The API publishes its own OpenAPI document; we commit a snapshot so a contract change shows up in a pull request
+    - A Postman collection that checks status, validates the body against a strict schema, and follows a create-then-read flow
+    - A data file that drives six invalid orders through one request, each rejected for the right field
+    - Newman runs the same collection headless in GitHub Actions, with JUnit reports
+
+    Two gotchas: the generated schema lets an integer also be a string, so we write a strict one by hand; and with every test removed, 9 requests ran, 0 assertions, exit code 0. A small gate counts assertions and fails.
+
+    Watch the episode: {YOUTUBE_URL}
+    Code: {REPO_URL}
+    Guide: {BLOG_URL}
+
+    Narration uses an AI voice.
+
+    #Postman #APITesting #OpenAPI #GitHubActions #DevTools
+linkedin_personal:
+  text: |
+    Nothing to fail is not the same as everything passed.
+
+    For this episode I removed every test from a Postman collection and ran it with Newman. Nine requests, zero assertions, exit code 0. A green build proving nothing.
+
+    A small script now reads the JUnit report and fails unless at least the expected number of assertions ran. A linter also rejects any request that has no tests of its own.
+
+    If you run API tests in CI, count what ran, not just what failed: {YOUTUBE_URL}
+
+    Narration uses an AI voice.
+
+    #Postman #APITesting #DevTools
+facebook:
+  text: |
+    Can an API test pass when it checks nothing? Yes.
+
+    In this DEVLADLOG episode we build Postman tests that can fail for a .NET API, run them in GitHub Actions, and show a collection with no tests that still exits with success. Then we add a check that counts the assertions.
+
+    Watch it here: {YOUTUBE_URL}
+
+    Narration uses an AI voice.
+
+    #Postman #DevTools
+shorts:
+  - id: hook
+    youtube_short_title: "All green. How many API tests actually ran? #Shorts"
+    instagram_reel:
+      caption: |
+        Your API tests pass. The pipeline is green. Now answer one question: how many assertions actually ran?
+        Because a Postman collection with no tests exits with success, and nobody notices.
+        We build API tests that can fail for a .NET orders API, from the OpenAPI contract to a gate in CI.
+        Full episode: link in bio.
+        #Postman #APITesting #OpenAPI #DevTools
+      cover_text: "How many tests ran?"
+    tiktok:
+      caption: "API tests pass, pipeline green. How many assertions actually ran? A Postman collection with no tests exits with success. Build tests that can fail. #Postman #APITesting #DevTools"
+  - id: data
+    youtube_short_title: "One Postman request, six invalid orders, data-driven #Shorts"
+    instagram_reel:
+      caption: |
+        Negative cases belong in data, not in copies of a request. One object per row in a JSON file, and the values are JSON literals, so null and an empty string can be sent too.
+        The same request runs once per row, and each test says which row it is. Six invalid orders, each rejected for the right field: 6 iterations, 24 assertions.
+        Full episode: link in bio.
+        #Postman #Newman #APITesting #DevTools
+      cover_text: "6 invalid orders, 1 request"
+    tiktok:
+      caption: "One Postman request, a JSON data file, six invalid orders. Values are JSON literals so null works too. 6 iterations, 24 assertions, each rejected for the right field. #Postman #Newman #DevTools"
+  - id: zero
+    youtube_short_title: "Newman with zero tests exits 0. Green, and nothing tested #Shorts"
+    instagram_reel:
+      caption: |
+        I removed every test from the collection and ran it with Newman. Nine requests, zero assertions, exit code 0. Green.
+        The fix is a gate that counts assertions in the JUnit report and wants at least the number we expect. A linter also rejects any request without tests of its own.
+        Nothing to fail is not the same as everything passed.
+        Full episode: link in bio.
+        #Newman #Postman #APITesting #DevTools
+      cover_text: "0 tests. Exit code 0."
+    tiktok:
+      caption: "Removed every test from the Postman collection. Newman: 9 requests, 0 assertions, exit code 0. Green. Count assertions in CI. #Newman #Postman #APITesting #DevTools"

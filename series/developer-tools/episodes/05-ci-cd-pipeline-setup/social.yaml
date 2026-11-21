@@ -1,0 +1,87 @@
+episode: 5
+series: "DEVLADLOG Dev Tools"
+status: draft-hold-for-review
+ai_label: true
+youtube_url: "{YOUTUBE_URL}"
+linkedin_company:
+  text: |
+    The pipeline is green and the deploy step says succeeded. Which commit is running in production right now? If the pipeline itself cannot answer that, it is not finished.
+
+    Episode 5 of DEVLADLOG Dev Tools builds one GitHub Actions workflow with five jobs for a .NET 10 API:
+    - Guardrails from episode 1, then build and test with actions pinned to commits and packages restored in locked mode
+    - An end-to-end job that runs episode 4's Compose stack with a real SQL Server and a smoke test of the container
+    - Publish on main only: one image, tagged with the full commit, with a signed build provenance attestation
+    - A deploy job behind a required approval, using OIDC instead of a stored password, that is done only when the live app reports your commit
+
+    The trap we cover: when there is no database, the SQL Server tests skip, dotnet test exits with zero, and the job is green with nothing proven. Our gate counts tests that ran.
+
+    91 tests check the workflow, scripts and Bicep.
+
+    Watch the episode: {YOUTUBE_URL}
+    Code: {REPO_URL}
+    Guide: {BLOG_URL}
+
+    Narration uses an AI voice.
+
+    #GitHubActions #CICD #DotNet #Docker #DevTools
+linkedin_personal:
+  text: |
+    A skipped test is not a passing test, and dotnet test will not tell you the difference.
+
+    In this episode the SQL Server tests have no database to talk to. All four are skipped, dotnet test exits with zero, and the job is green. Even the .trx counters show zero not executed.
+
+    The fix is small: a script reads the report, demands at least four tests that actually passed, and fails if any were skipped. Count tests that ran, not tests that did not fail.
+
+    The rest of the pipeline is in the episode: {YOUTUBE_URL}
+
+    Narration uses an AI voice.
+
+    #GitHubActions #DotNet #CICD
+facebook:
+  text: |
+    A green pipeline does not mean your tests ran.
+
+    In this DEVLADLOG episode we build a GitHub Actions pipeline for a .NET API with a real SQL Server in CI, and show how skipped tests can still exit with zero. Then we add a check that counts the tests that actually ran.
+
+    Watch it here: {YOUTUBE_URL}
+
+    Narration uses an AI voice.
+
+    #GitHubActions #DevTools
+shorts:
+  - id: hook
+    youtube_short_title: "The pipeline is green. Which commit is live? #Shorts"
+    instagram_reel:
+      caption: |
+        The pipeline is green, the deploy step says succeeded. So which commit is running in production right now?
+        If you cannot answer that from the pipeline itself, the pipeline is not finished.
+        In this episode we build a GitHub Actions workflow for a .NET API, from pull request to a deploy that is only done when the live app reports the commit you merged.
+        Full episode: link in bio.
+        #GitHubActions #CICD #DotNet #DevTools
+      cover_text: "Which commit is live?"
+    tiktok:
+      caption: "The pipeline is green and the deploy says succeeded. Which commit is running in production? If the pipeline can't tell you, it isn't finished. #GitHubActions #CICD #DevTools"
+  - id: skipped
+    youtube_short_title: "Skipped tests, exit code 0, green build. Nothing was tested #Shorts"
+    instagram_reel:
+      caption: |
+        When there is no database, our four SQL Server tests skip and dotnet test exits with zero. Green. Even the test report's counters say zero not executed.
+        So the CI job counts the tests that ran and demands four of them. Only 0 passed, expected at least 4: exit code 1.
+        A test that did not run is not a passing test.
+        Full episode: link in bio.
+        #DotNet #CICD #GitHubActions #DevTools
+      cover_text: "Skipped is not passed"
+    tiktok:
+      caption: "No database, so 4 SQL Server tests skip. dotnet test exits 0. Green build, nothing proven. Our gate wants 4 tests that actually passed. #DotNet #CICD #DevTools"
+  - id: oidc
+    youtube_short_title: "The GitHub OIDC subject changed format in 2026. Is your trust broken? #Shorts"
+    instagram_reel:
+      caption: |
+        Most guides show the OIDC subject for a GitHub environment as repo, owner slash name, colon environment.
+        Repositories created, renamed or transferred after 15 July 2026 get a new format with the numeric owner and repository IDs.
+        A wrong subject is accepted when you create the federated credential and only fails at login. The error message prints the subject GitHub actually sent, and a small script builds the right one from the repository API.
+        Full episode: link in bio.
+        #GitHubActions #OIDC #CICD #DevTools
+      cover_text: "OIDC subject changed"
+    tiktok:
+      caption: "GitHub's OIDC subject format changed for repos created after 15 July 2026. A wrong subject saves fine and fails at login. The error shows what GitHub sent. #GitHubActions #OIDC #DevTools"
