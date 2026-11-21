@@ -1,0 +1,95 @@
+$ node --version
+v22.23.5
+
+$ npm test
+# tests 14
+# pass 14
+# fail 0
+
+$ node demo/one-run-benchmark.js
+run  1:   43.41 ms
+run  2:   20.75 ms
+run  3:   82.10 ms
+run  4:    1.59 ms
+run  5:   22.89 ms
+run  6:    1.36 ms
+run  7:   22.15 ms
+run  8:    6.49 ms
+run  9:   17.80 ms
+run 10:    7.62 ms
+run 11:   23.70 ms
+run 12:    8.82 ms
+first run 43.41 ms, median 19.28 ms, min 1.36 ms
+first run is 2.3x the median: the first number you see is not the speed of the code
+
+$ node src/cli.js bench --rows 2000 --runs 7
+2000 requests, 7 timed runs after 3 warm-up runs (ms)
+slow  median    425.3   min    326.8   p95    535.0
+fast  median      1.2   min      0.9   p95     28.8
+
+$ node src/cli.js profile slow --rows 3000
+slow: 3000 requests -> profiles/slow.cpuprofile
+total sampled time: 836 ms
+  self ms  self %  total ms  function
+    624.2   74.7%     777.8  buildReportSlow  report.js:25
+    153.6   18.4%     153.6  (anonymous)  report.js:30
+     36.8    4.4%      36.8  post  node:inspector:118
+     21.1    2.5%      21.1  (garbage collector)
+      0.0    0.0%      36.8  (anonymous)  util:477
+      0.0    0.0%      36.8  fn  util:476
+
+  self ms  self %  line
+    385.1   46.1%  report.js:36  line.budgetText = request.budget.toLocaleString("en-IE", { style: "currency", currency: "EUR", maximumFractionDigits: 0 });
+    372.8   44.6%  report.js:30  if (seen.some((s) => s.code === request.code)) {
+      6.6    0.8%  report.js:29  for (const request of requests) {
+      6.6    0.8%  report.js:31  duplicates.push(request.code);
+
+$ node src/cli.js profile fast --rows 30000    # ten times the rows
+fast: 30000 requests -> profiles/fast.cpuprofile
+total sampled time: 282 ms
+  self ms  self %  total ms  function
+    214.5   76.0%     225.7  buildReportFast  report.js:46
+     45.1   16.0%      45.1  (garbage collector)
+     11.2    4.0%      11.2  totals  report.js:10
+     10.4    3.7%      10.4  post  node:inspector:118
+      1.2    0.4%     226.9  (anonymous)  cli.js:46
+      0.0    0.0%      10.4  (anonymous)  util:477
+
+  self ms  self %  line
+     99.0   35.1%  report.js:56  lines.push({ ...request, budgetText: euro.format(request.budget), priority: priorityOf(request.budget) });
+     82.5   29.2%  report.js:51  if (seen.has(request.code)) {
+     16.5    5.8%  report.js:58  return { lines, duplicates, byDepartment: totals(lines) };
+     16.5    5.8%  report.js:55  seen.add(request.code);
+
+$ node src/cli.js lag slow --rows 3000
+slow: 3000 requests built in 662 ms; event loop delay max 680 ms, p99 680 ms, mean 95 ms (timer every 10 ms)
+
+$ node src/cli.js lag fast --rows 3000
+fast: 3000 requests built in 3 ms; event loop delay max 14 ms, p99 14 ms, mean 11 ms (timer every 10 ms)
+
+$ node --expose-gc src/cli.js memory
+150000 distinct keys through each cache (heap in use after a forced collection)
+unbounded: 150000 entries, +52.8 MB
+lru(1000): 1000 entries, +0.4 MB
+
+$ node --cpu-prof --cpu-prof-dir=cpuprof src/run-report.js slow 3000
+slow: 2930 lines, 70 duplicates, 505 ms
+
+$ ls cpuprof    # the name holds a timestamp and the process id
+CPU.<date>.<time>.<pid>.0.001.cpuprofile
+
+$ node src/cli.js top cpuprof/CPU.*.cpuprofile
+total sampled time: 650 ms
+  self ms  self %  total ms  function
+    457.3   70.3%     487.4  buildReportSlow  report.js:25
+     61.9    9.5%      61.9  (anonymous)  report.js:1
+     30.2    4.6%      30.2  (anonymous)  report.js:30
+     26.2    4.0%      26.2  (garbage collector)
+     13.3    2.0%      13.3  (program)
+      8.8    1.4%       8.8  generateRequests  data.js:19
+
+  self ms  self %  line
+    307.5   47.3%  report.js:36  line.budgetText = request.budget.toLocaleString("en-IE", { style: "currency", currency: "EUR", maximumFractionDigits: 0 });
+    160.2   24.6%  report.js:30  if (seen.some((s) => s.code === request.code)) {
+     61.9    9.5%  report.js:43  const euro = new Intl.NumberFormat("en-IE", { style: "currency", currency: "EUR", maximumFractionDigits: 0 });
+     15.8    2.4%  report.js:35  const line = JSON.parse(JSON.stringify(request));

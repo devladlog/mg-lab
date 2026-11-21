@@ -1,0 +1,85 @@
+$ node --version
+v22.23.5
+
+$ npm test
+# tests 26
+# pass 26
+# fail 0
+
+$ npm run -s gotchas
+1. after forEach(async): saved = 0
+   a moment later:       saved = 3
+   Promise.all(map):     saved = 3   <- waited
+2. floating promise: child exit code 1, stderr says "Error: disk full"
+3. fetch error: "fetch failed", but error.cause.code is "ECONNREFUSED"
+4. readline: iterate at once = 15 lines; after an await = 0 lines, and the loop never finishes
+
+# terminal 1:  node src/cli.js serve --port 5090 --latency 300 --fail-first operations
+# terminal 2:
+$ node src/cli.js intake samples/requests.csv --concurrency 1 --no-cache
+9 ready, 5 rejected, 0 failed -> out/packs.ndjson
+concurrency 1, no cache, 3641 ms
+
+$ node src/cli.js intake samples/requests.csv --concurrency 5 --no-cache
+9 ready, 5 rejected, 0 failed -> out/packs.ndjson
+concurrency 5, no cache, 711 ms
+
+$ node src/cli.js intake samples/requests.csv --concurrency 5
+9 ready, 5 rejected, 0 failed -> out/packs.ndjson
+concurrency 5, cache: 5 API calls, 5 shared, 691 ms
+
+$ head -4 out/packs.ndjson
+{"row":2,"status":"ready","code":"PR-2026-0301","title":"Laptop refresh","department":"IT","budget":12000,"priority":"Standard","route":["Alex Demo","Sam Demo"]}
+{"row":5,"status":"ready","code":"PR-2026-0304","title":"Data platform","department":"IT","budget":300000,"priority":"Board","route":["Alex Demo","Sam Demo","Taylor Demo"]}
+{"row":7,"status":"ready","code":"PR-2026-0306","title":"Service desk licences","department":"IT","budget":75000,"priority":"High","route":["Alex Demo","Sam Demo"]}
+{"row":9,"status":"rejected","errors":["row 9: budget: \"abc\" is not a number"]}
+
+$ grep -c . out/packs.ndjson
+14
+
+$ grep rejected out/packs.ndjson | head -3
+{"row":9,"status":"rejected","errors":["row 9: budget: \"abc\" is not a number"]}
+{"row":10,"status":"rejected","errors":["row 10: budget: must be greater than zero"]}
+{"row":11,"status":"rejected","errors":["row 11: code: \"REQ-77\" does not look like PR-YYYY-NNNN"]}
+--- server log ---
+approvals API on http://127.0.0.1:5090 (latency 300 ms). Ctrl+C to stop.
+it: 200 after 300 ms
+operations: 503 (first call fails on purpose)
+operations: 200 after 300 ms
+marketing: 200 after 300 ms
+it: 200 after 300 ms
+hr: 200 after 300 ms
+it: 200 after 300 ms
+operations: 200 after 300 ms
+legal: 404
+marketing: 200 after 300 ms
+hr: 200 after 300 ms
+it: 200 after 300 ms
+operations: 200 after 300 ms
+marketing: 200 after 300 ms
+it: 200 after 300 ms
+hr: 200 after 300 ms
+it: 200 after 300 ms
+operations: 200 after 300 ms
+legal: 404
+marketing: 200 after 300 ms
+hr: 200 after 300 ms
+it: 200 after 300 ms
+operations: 200 after 300 ms
+marketing: 200 after 300 ms
+hr: 200 after 300 ms
+legal: 404
+SIGINT: closing, 26 calls served, 0 aborted by clients
+
+# Ctrl+C while the lookups are running (API latency 1000 ms)
+$ node src/cli.js intake samples/requests.csv --api http://127.0.0.1:5091 --concurrency 5 --no-cache    # then Ctrl+C
+stopped: interrupted (Ctrl+C)
+exit code 130
+--- API log ---
+approvals API on http://127.0.0.1:5091 (latency 1000 ms). Ctrl+C to stop.
+hr: ABORTED by the client
+it: ABORTED by the client
+marketing: ABORTED by the client
+operations: ABORTED by the client
+it: ABORTED by the client
+SIGINT: closing, 5 calls served, 5 aborted by clients

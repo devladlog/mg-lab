@@ -1,0 +1,249 @@
+# DEVLADLOG Code - episode 09 (draft; screens are local captures on the recording laptop, see demo.md)
+episode: 9
+slug: javascript-node-js-patterns
+series_label: "CODE"
+series_name: "DEVLADLOG Code"
+file_prefix: "programming-languages"
+title: "Node.js patterns that survive production"
+subtitle: "Streams, bounded concurrency, AbortSignal, retry, promise cache"
+voice: am_michael
+thumbnail_text: "NODE.JS\nPATTERNS\nZERO DEPS"
+youtube:
+  title: "JavaScript and Node.js Patterns: Streams, Concurrency Limits, AbortSignal, Retry | DEVLADLOG Code #9"
+  tags: [Node.js, JavaScript, Node.js 22, async await, streams, stream pipeline, AbortSignal, AbortController, fetch, node:test, concurrency, retry, backoff, ES modules]
+sources:
+  - https://www.devladlog.com/articles/programming-languages/2025-06-14-javascriptnodejs-patterns-complete-guide-2025/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Node.js patterns that survive production"
+    sub: "No framework. No dependencies. Node 22."
+    short: hook
+    narration: >
+      Most Node tutorials end where the trouble starts. The happy path works, the file is small, the API answers
+      instantly. Then a real file arrives, the API gets slow, somebody presses Control C, and the script does
+      something nobody planned. Today the Contoso project requests meet a real HTTP service, with zero npm packages.
+      Twenty six tests, and four traps I walked into myself. Welcome to DEVLADLOG Code.
+
+  - id: plan
+    type: bullets
+    heading: "What we're building"
+    bullets:
+      - "CSV of project requests in, approval packs out"
+      - "Each department looked up on an approvals API"
+      - "Streams, a concurrency limit, a promise cache"
+      - "Deadline, cancel and retry with AbortSignal"
+      - "Tests with node:test, nothing to install"
+    narration: >
+      Same Contoso requests as before. A CSV goes in, one approval pack per request comes out, and each pack needs
+      the approvers for its department from a small HTTP service. Around that we use five patterns: streams, a
+      concurrency limit, a promise cache, deadlines and cancellation, and retries. No dependencies at all. Just Node
+      twenty two and the test runner that ships with it.
+
+  - id: streams
+    type: code
+    heading: "Stream it, don't slurp it"
+    lang: javascript
+    code: |
+      export async function runIntake({ file, out, client, concurrency, useCache, signal }) {
+        const counts = { ready: 0, rejected: 0, failed: 0 };
+        await mkdir(dirname(out), { recursive: true });
+        await pipeline(
+          Readable.from(buildPacks(readLines(file), { client, concurrency, useCache, signal, stats })),
+          async function* toNdjson(records) {
+            for await (const record of records) {
+              counts[record.status]++;
+              yield `${JSON.stringify(record)}\n`;
+            }
+          },
+          createWriteStream(out),
+          { signal },
+        );
+      }
+    narration: >
+      First, the file. We never read it whole. Lines flow through async generators: parse, validate, look up,
+      write. The glue is stream pipeline from node colon stream slash promises. It handles backpressure, closes
+      everything when something fails, and takes an abort signal. A bad row becomes a rejected record and the batch
+      keeps going.
+
+  - id: pool
+    type: code
+    heading: "A concurrency limit, by hand"
+    lang: javascript
+    code: |
+      while (!exhausted && running.size < limit) {
+        signal?.throwIfAborted();
+        const next = await iterator.next();
+        if (next.done) { exhausted = true; break; }
+        const id = index++;
+        running.set(id, Promise.resolve()
+          .then(() => fn(next.value, { index: id, signal: callSignal }))
+          .then((value) => ({ id, value }), (error) => ({ id, error, failed: true })));
+      }
+      if (running.size === 0) return;
+      const settled = await Promise.race(running.values());
+      running.delete(settled.id);
+      if (settled.failed) throw settled.error;
+      yield settled.value;
+    narration: >
+      Promise all on ten thousand rows starts ten thousand lookups at once. So we write map limit. It pulls from the
+      source only while fewer than the limit are running, and races the running ones. Every call is wrapped, so a
+      rejection arrives through the race and never as an unhandled rejection. The first failure stops the pool and
+      aborts the signal that the other calls received.
+
+  - id: timings
+    type: screen
+    heading: "One at a time, five at a time, shared"
+    image: screens/timings.jpg
+    bar: "Terminal · node src/cli.js intake"
+    demo: >
+      Two terminals side by side (dark theme, font 18 pt or larger). Left: node src/cli.js serve --port 5090 --latency
+      300 --fail-first operations, scrolling its log. Right: intake with --concurrency 1 --no-cache (about 3.6 s),
+      then --concurrency 5 --no-cache (about 0.7 s), then --concurrency 5 with the cache (5 API calls, 5 shared).
+      Reference: demo/expected-output.txt.
+    narration: >
+      Here it is against the real service, which takes three hundred milliseconds per lookup. One at a time: three
+      and a half seconds. Five at a time: seven tenths of a second. And with the promise cache, only five calls
+      reach the service, one per department, because the other five rows share a call that is already in flight.
+      Same output file in all three runs.
+
+  - id: cache
+    type: code
+    heading: "Cache the promise, not the value"
+    lang: javascript
+    code: |
+      export function createPromiseCache(load) {
+        const entries = new Map();
+        const stats = { hits: 0, misses: 0 };
+        return {
+          stats,
+          get(key, ...rest) {
+            const existing = entries.get(key);
+            if (existing) { stats.hits++; return existing; }
+            stats.misses++;
+            const pending = load(key, ...rest);
+            entries.set(key, pending);
+            pending.catch(() => { if (entries.get(key) === pending) entries.delete(key); });
+            return pending;
+          },
+        };
+      }
+    narration: >
+      The cache stores the promise, not the answer. Two rows for the same department, in flight at the same time,
+      share one call. And a failure is removed, so the next caller tries again instead of inheriting an error.
+      A test proves both: one call for two concurrent gets, and a second real call after a failure.
+
+  - id: client
+    type: code
+    heading: "A deadline, and Control C, on every call"
+    lang: javascript
+    code: |
+      async #once(department, callerSignal) {
+        const deadline = AbortSignal.timeout(this.timeoutMs);
+        const signal = callerSignal ? AbortSignal.any([callerSignal, deadline]) : deadline;
+        let response;
+        try {
+          response = await fetch(`${this.baseUrl}/approvers/${encodeURIComponent(department)}`, { signal });
+        } catch (error) {
+          if (callerSignal?.aborted) throw error;   // the caller cancelled: not our failure
+          if (deadline.aborted) throw new ApiError(`timeout after ${this.timeoutMs} ms`, { retryable: true, cause: error });
+          throw new ApiError(`network error: ${error.cause?.code ?? error.message}`, { retryable: true, cause: error });
+        }
+      }
+    narration: >
+      Every call has a deadline from abort signal timeout, combined with the caller's signal using abort signal any.
+      Whichever fires first cancels the request. The catch tells the cases apart: a caller cancel is passed through
+      and never retried, a deadline is a retryable error, and a network error keeps its real cause. Retries use
+      exponential backoff with jitter, and give up after two.
+
+  - id: ctrlc
+    type: screen
+    heading: "Control C reaches the server"
+    image: screens/ctrlc.jpg
+    bar: "Terminal · Ctrl+C during a run"
+    short: ctrlc
+    demo: >
+      Two terminals. Left: serve with --latency 1000. Right: intake with --concurrency 5 --no-cache, then Ctrl+C
+      about half a second in. Visible on the right: stopped: interrupted (Ctrl+C), exit code 130 (echo $? or
+      $LASTEXITCODE). Visible on the left: five lines "ABORTED by the client". Reference: end of demo/expected-output.txt.
+    narration: >
+      Now the proof. The service is slow, five lookups are running, and I press Control C. The client stops with exit
+      code one thirty. And on the server side, five lines: aborted by the client. The requests were really cancelled,
+      the server stopped waiting, nothing is left running. That is what passing the signal down buys you.
+
+  - id: gotcha
+    type: code
+    heading: "Gotcha: readline loses lines"
+    short: gotcha
+    lang: javascript
+    code: |
+      // demo/gotchas.js
+      const late = createInterface({ input: createReadStream(sample) });
+      await sleep(50);                 // any await between creating and iterating
+      for await (const line of late) { ... }   // 0 lines, and the loop never finishes
+
+      // src/pipeline.js: create and iterate in the same step
+      export async function* readLines(file) {
+        const rl = createInterface({ input: createReadStream(file, { encoding: "utf8" }), crlfDelay: Infinity });
+        yield* rl;
+      }
+    narration: >
+      Here is the one that cost me an afternoon. My tests passed, then failed every few runs. Readline starts
+      emitting lines the moment it exists. I created the interface, awaited a directory creation, and only then
+      started iterating. The lines were already gone, and the loop waited forever for an end that had already
+      happened. The fix: create it and iterate it in the same step.
+
+  - id: gotchas
+    type: screen
+    heading: "Four traps, one script"
+    image: screens/gotchas.jpg
+    bar: "Terminal · npm run gotchas"
+    demo: >
+      Terminal running npm run -s gotchas. Visible: the four numbered results. 1: saved = 0 right after
+      forEach(async), 3 later, 3 with Promise.all(map). 2: child exit code 1, stderr says "Error: disk full".
+      3: "fetch failed" but error.cause.code is "ECONNREFUSED". 4: readline 15 lines at once, 0 lines after an await.
+      Reference: demo/expected-output.txt.
+    narration: >
+      The script shows four traps. One: for each does not wait for an async callback, so saved is zero when it
+      returns. Use promise all with map. Two: a promise nobody awaits that rejects ends the process with exit code
+      one. Three: fetch failed tells you nothing, the real reason is one level down in error dot cause. And four,
+      the readline loss. Each is a test in the project, so none of them can come back quietly.
+
+  - id: tests
+    type: screen
+    heading: "Tests without installing anything"
+    image: screens/tests.jpg
+    bar: "Terminal · npm test"
+    demo: >
+      Terminal running npm test (node --test "tests/**/*.test.js"). Visible: the summary tests 26, pass 26, fail 0.
+      Then VS Code with tests/client.test.js open at the test "a caller abort is passed through untouched and never
+      retried". Reference: demo/expected-output.txt.
+    narration: >
+      Twenty six tests, run with node test. No jest, no mocks of the network: the tests start the real approvals
+      service on a free port, and assert on what the server saw. How many calls arrived, how many were in flight,
+      how many were aborted. One more lesson from the flaky runs: never sleep and hope. Wait until the server has
+      seen the call, then abort.
+
+  - id: recap
+    type: bullets
+    heading: "Five patterns"
+    bullets:
+      - "Streams and generators, with stream pipeline"
+      - "A concurrency limit that reads lazily"
+      - "Cache the promise, drop failures"
+      - "AbortSignal.timeout plus AbortSignal.any on every call"
+      - "Tests against a real server, no sleeping"
+    narration: >
+      Five patterns. Streams and generators, joined by stream pipeline. A concurrency limit that reads lazily.
+      A cache of promises that forgets failures. A deadline and a cancel signal on every call. And tests that run
+      against a real server and wait for facts, not for time.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The project and all twenty six tests are on GitHub, and the full guide is on devladlog dot com. Links are in
+      the description. Next time: performance profiling, where we find out why this kind of code is slow, with a
+      profiler instead of a guess. Subscribe so you don't miss it. This was DEVLADLOG Code, by Momento Galático.

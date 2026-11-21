@@ -1,0 +1,230 @@
+# DEVLADLOG Code - episode 10 (draft; screens are local captures on the recording laptop, see demo.md)
+episode: 10
+slug: performance-profiling
+series_label: "CODE"
+series_name: "DEVLADLOG Code"
+file_prefix: "programming-languages"
+title: "Performance profiling: measure, don't guess"
+subtitle: "Benchmarks, CPU profile, event loop delay, heap"
+voice: am_michael
+thumbnail_text: "DON'T GUESS\nPROFILE IT\nNODE.JS"
+youtube:
+  title: "Performance Profiling in Node.js: CPU Profile, Benchmarks, Event Loop Delay | DEVLADLOG Code #10"
+  tags: [performance, profiling, Node.js, CPU profile, cpuprofile, --cpu-prof, benchmark, event loop, monitorEventLoopDelay, memory leak, LRU cache, JavaScript, VS Code]
+sources:
+  - https://www.devladlog.com/articles/programming-languages/2025-07-06-performance-profiling-complete-guide-2025/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Performance profiling: measure, don't guess"
+    sub: "One slow report, three guesses, one profiler"
+    short: hook
+    narration: >
+      Here is a report that takes a noticeable fraction of a second to build, for just three thousand rows. Ask five developers why, and you get
+      five answers. Probably the sorting. Probably the clone. Maybe garbage collection. Today we stop guessing. We
+      measure with a proper benchmark, a CPU profile, the event loop delay and the heap, and the profiler names the
+      guilty lines. Welcome to DEVLADLOG Code.
+
+  - id: plan
+    type: bullets
+    heading: "What we're measuring"
+    bullets:
+      - "A report over Contoso project requests"
+      - "Slow version and fast version, same output"
+      - "Benchmark with warm-up and a median"
+      - "CPU profile with line-level ticks"
+      - "Event loop delay, and a cache that leaks"
+    narration: >
+      The subject is the Contoso approval report. It takes project requests, finds duplicate codes, formats the
+      budgets and totals them by department. There is a slow version and a fast version, and a test proves they
+      produce exactly the same report. Around them we build the tools: a benchmark, a profile reader, an event loop
+      monitor and a memory check. Plain Node twenty two, no packages.
+
+  - id: onerun
+    type: screen
+    heading: "One timing proves nothing"
+    image: screens/onerun.jpg
+    bar: "Terminal · node demo/one-run-benchmark.js"
+    demo: >
+      Terminal running node demo/one-run-benchmark.js (dark theme, font 18 pt or larger). Visible: twelve lines
+      "run N: X ms" for the same code on the same data, with clearly different values, and the last two summary lines
+      comparing the first run with the median. Reference: demo/expected-output.txt (the exact numbers will differ).
+    narration: >
+      First rule: one timing proves nothing. This is the fast version, same code, same data, twelve runs in a row.
+      The first run is slow, because the engine is still warming up. Some later runs jump up again, from garbage
+      collection or other work on the machine. The first number you see is not the speed of the code.
+
+  - id: harness
+    type: code
+    heading: "Warm up, repeat, take the median"
+    lang: javascript
+    code: |
+      export function bench(fn, { warmup = 3, runs = 11 } = {}) {
+        for (let i = 0; i < warmup; i++) sink = fn();
+        const times = [];
+        for (let i = 0; i < runs; i++) {
+          const start = performance.now();
+          sink = fn();
+          times.push(performance.now() - start);
+        }
+        return stats(times);
+      }
+    narration: >
+      So the harness does three things. Warm-up runs first, so the compiler has done its work. Then many timed runs.
+      And it reports the median, the minimum and the ninety fifth percentile, never a single number. Every result is
+      stored in a variable, so the engine cannot throw the work away as dead code.
+
+  - id: profile
+    type: screen
+    heading: "The profiler names the lines"
+    image: screens/profile.jpg
+    bar: "Terminal · node src/cli.js profile slow"
+    short: hotline
+    demo: >
+      Terminal running node src/cli.js profile slow --rows 3000. Visible: the function table with buildReportSlow
+      at the top by self time, then the hot-lines table: report.js line 36 (toLocaleString) first, report.js line 30
+      (seen.some) second, JSON.parse line third and small. Reference: demo/expected-output.txt (percentages will differ a
+      little; check the top two lines are the same before recording the narration).
+    narration: >
+      Now the CPU profile. This runs the slow report under the V8 profiler and prints two tables. The function view
+      says almost everything happens inside the report function itself. Not helpful. The line view is. A little over
+      half the time is one line: the budget formatting with to locale string. About a third is the duplicate check
+      with some. The JSON clone everybody suspected? A few percent.
+
+  - id: vscode
+    type: screen
+    heading: "Open the .cpuprofile in VS Code"
+    image: screens/vscode-profile.jpg
+    bar: "VS Code · slow.cpuprofile"
+    demo: >
+      VS Code, dark theme. In the Explorer, open profiles/slow.cpuprofile (written by node src/cli.js profile slow).
+      Visible: the profile viewer listing functions with their time, buildReportSlow at the top. Then, in a terminal,
+      show how to get the same kind of file with no code of ours: node --cpu-prof --cpu-prof-dir=cpuprof
+      src/run-report.js slow 3000 and the file that appears in cpuprof. Needs the recording laptop (VS Code is not
+      available in the build container).
+    narration: >
+      You do not need our tool to get a profile. Node writes one if you start it with dash dash cpu dash prof. The
+      file is a dot cpuprofile, and VS Code opens it directly and lists the functions with their time. Chrome developer tools opens
+      the same file. Our tool reads the same format, which is how we get the line view.
+
+  - id: slowcode
+    type: code
+    heading: "The three habits in the slow version"
+    lang: javascript
+    code: |
+      for (const request of requests) {
+        if (seen.some((s) => s.code === request.code)) {      // line 30: linear search, every row
+          duplicates.push(request.code);
+          continue;
+        }
+        seen.push(request);
+        const line = JSON.parse(JSON.stringify(request));     // line 35: deep copy through JSON
+        line.budgetText = request.budget.toLocaleString("en-IE",    // line 36: formatter built per row
+          { style: "currency", currency: "EUR", maximumFractionDigits: 0 });
+        line.priority = priorityOf(request.budget);
+        lines.push(line);
+      }
+    narration: >
+      Here are the lines. The duplicate check scans every earlier row, so its cost grows with the square of the row
+      count. The formatting call builds a new number formatter for every single row. And the JSON copy is real waste,
+      but small. The profile ranked the three, and not in the order the team had guessed.
+
+  - id: gotcha
+    type: code
+    heading: "Gotcha: the callback is not in the profile"
+    short: gotcha
+    lang: javascript
+    code: |
+      // function view:  (anonymous)  report.js:30      13 %
+      //                 buildReportSlow  report.js:25   82 %   <- the callback's time lands here
+      // V8 inlines small callbacks into their caller. Use the line ticks instead:
+      for (const node of nodes) {
+        const ticks = node.positionTicks ?? [];      // [{ line, ticks }, ...]
+        const sum = ticks.reduce((a, t) => a + t.ticks, 0);
+        for (const t of ticks) {
+          row.selfMs += (ms * t.ticks) / sum;         // share the node's time by line
+        }
+      }
+    narration: >
+      The gotcha. I expected the some callback to show up as its own hot function. It mostly does not. The compiler
+      inlines small callbacks into the function that calls them, and built in calls like to locale string have no
+      frame at all, so their time lands on the caller. Eighty percent in one function tells you nothing. Every
+      profile node also carries position ticks, a count of samples per line. Read those, and the guilty line appears.
+
+  - id: fix
+    type: code
+    heading: "The fix: a Set and one formatter"
+    lang: javascript
+    code: |
+      const euro = new Intl.NumberFormat("en-IE", { style: "currency", currency: "EUR", maximumFractionDigits: 0 });
+
+      export function buildReportFast(requests) {
+        const lines = [];
+        const duplicates = [];
+        const seen = new Set();
+        for (const request of requests) {
+          if (seen.has(request.code)) { duplicates.push(request.code); continue; }
+          seen.add(request.code);
+          lines.push({ ...request, budgetText: euro.format(request.budget), priority: priorityOf(request.budget) });
+        }
+        return { lines, duplicates, byDepartment: totals(lines) };
+      }
+    narration: >
+      The fix is small. A Set for the duplicates, one shared formatter built once, and an object spread instead of a
+      JSON copy. And the first thing we check is not speed, it is that the output is identical. A test builds both
+      reports from the same data, with several sizes and seeds, and compares them deeply. A faster wrong answer is not
+      an optimisation.
+
+  - id: after
+    type: screen
+    heading: "Before and after, with numbers"
+    image: screens/after.jpg
+    bar: "Terminal · bench and lag"
+    demo: >
+      Terminal running, one after another: node src/cli.js bench --rows 2000 --runs 7 (slow median in the hundreds
+      of milliseconds, fast median about a millisecond or two); node src/cli.js lag slow --rows 3000 and
+      node src/cli.js lag fast --rows 3000 (event loop delay max in the hundreds of milliseconds for slow, tens at most
+      for fast). Reference: demo/expected-output.txt.
+    narration: >
+      Now the numbers. The benchmark says the median went from hundreds of milliseconds to a millisecond or two. But
+      speed is not the only thing a Node service cares about. The event loop delay monitor shows what the slow version
+      did to everybody else. While it ran, a timer that should fire every ten milliseconds fired six hundred late. For
+      that long, no request, no timer, nothing else could run. After the fix the delay is the idle background level.
+
+  - id: memory
+    type: screen
+    heading: "The cache that never forgets"
+    image: screens/memory.jpg
+    bar: "Terminal · node --expose-gc src/cli.js memory"
+    demo: >
+      Terminal running node --expose-gc src/cli.js memory. Visible: the line for 150000 distinct keys, then
+      "unbounded: 150000 entries, +NN MB" and "lru(1000): 1000 entries, +0.N MB". Reference: demo/expected-output.txt.
+    narration: >
+      One more tool, for memory. A cache keyed by something that is different on every call, never evicted, is a leak
+      with a friendly name. Push a hundred and fifty thousand distinct keys through it, force a collection, and look at
+      the heap: about fifty megabytes, and growing. The least recently used version holds a thousand entries and costs
+      under a megabyte. The rule: every cache needs a size limit, and a test that proves the limit holds.
+
+  - id: recap
+    type: bullets
+    heading: "Five rules"
+    bullets:
+      - "One timing proves nothing: warm up, repeat, median"
+      - "Profile first, then change code"
+      - "Read lines, not just functions"
+      - "Prove the output is identical"
+      - "Watch event loop delay and heap, not only speed"
+    narration: >
+      Five rules. One timing proves nothing. Profile first, then change code. Read lines, not only functions. Prove
+      the output is identical. And watch the event loop delay and the heap, not only the speed. Fourteen tests in the
+      project keep all of it honest.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The project and the fourteen tests are on GitHub, and the full guide is on devladlog dot com. Links are in the
+      description. Next time: modern language features. Subscribe so you don't miss it. This was DEVLADLOG Code, by
+      Momento Galático.
