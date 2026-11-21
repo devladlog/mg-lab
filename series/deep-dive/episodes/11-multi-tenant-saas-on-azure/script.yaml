@@ -1,0 +1,234 @@
+# DEVLADLOG Deep Dive: episode 11. Code and test scenes are real (from this folder); screen scenes need the lab
+# recording described in demo.md. Narration ~840 words.
+episode: 11
+slug: multi-tenant-saas-on-azure
+series_label: "DEEP DIVE"
+series_name: "DEVLADLOG Deep Dive"
+file_prefix: "deep-dive"
+title: "Multi-tenant SaaS on Azure"
+subtitle: "Entra tenants, a filter, and a database that says no"
+voice: am_michael
+thumbnail_text: "ONE APP\nMANY TENANTS\nZERO LEAKS"
+youtube:
+  title: "Multi-Tenant SaaS on Azure: Entra tid, Query Filters, Row-Level Security | DEVLADLOG Deep Dive #11"
+  tags: [multitenant SaaS, Microsoft Entra ID, tid claim, issuer validation, row-level security, SESSION_CONTEXT, Azure SQL, EF Core query filters, tenant isolation, App Service, Bicep, solution architecture]
+sources:
+  - https://www.devladlog.com/articles/deep-dive/2025-08-11-multi-tenant-saas-on-azure-architecture-identity-data-isolation/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "One forgotten WHERE clause"
+    sub: "is the whole difference between SaaS and a breach"
+    short: hook
+    narration: >
+      Contoso's purchase request platform works. Now other companies want it too. Northwind and Adventure Works will
+      share one app and one database. And somewhere in that code, one day, somebody will forget a where clause. In this
+      episode we build the system so that the mistake doesn't matter. This is the DEVLADLOG Deep Dive.
+
+  - id: architecture
+    type: diagram
+    heading: "One shared stamp, three locks"
+    nodes: ["Customer tenant", "Tenant API", "Query filter", "SQL policy"]
+    labels: ["Entra token, tid", "App Service", "EF Core", "Row-level security"]
+    narration: >
+      The customer signs in with their own Entra tenant, and the token carries the tenant id. The API takes the tenant
+      from that token and nowhere else. Entity Framework filters every query by it. And the database repeats the rule,
+      with row level security, for the day the filter is bypassed. Identity, application, data: three locks.
+
+  - id: models
+    type: bullets
+    heading: "Choose the isolation first"
+    bullets:
+      - "Single-tenant stamps: strongest isolation, highest cost"
+      - "Shared database: lowest cost, you own the isolation"
+      - "Mix them: stamps for the tenants who pay for it"
+      - "Plan the tenant to deployment mapping from day one"
+      - "Test isolation, not just features"
+    narration: >
+      First the choice. Microsoft's multitenant guidance describes a spectrum. A stamp per tenant gives the strongest
+      isolation and costs the most. A shared database is the cheapest, and the isolation becomes your job. Many
+      products mix both. Today we build the shared one, in a single stamp, and we test the isolation, not just the
+      features.
+
+  - id: issuer
+    type: code
+    heading: "Issuer validation for any tenant"
+    lang: csharp
+    code: |
+      if (!jwt.TryGetPayloadValue<string>("tid", out var tid) || !Guid.TryParse(tid, out var tenantId))
+          throw new SecurityTokenInvalidIssuerException("Token has no valid tid claim.") { InvalidIssuer = issuer };
+
+      if (!string.Equals(issuer, ExpectedIssuer(instance, tenantId), StringComparison.Ordinal))
+          throw new SecurityTokenInvalidIssuerException("Issuer does not match the token's tenant.") { InvalidIssuer = issuer };
+
+      // The provider's own staff sign in from the home tenant, which is not a customer and not in the catalog.
+      if (tenantId != homeTenantId && directory.Find(tenantId) is null)
+          throw new SecurityTokenInvalidIssuerException("Tenant is not onboarded.") { InvalidIssuer = issuer };
+    narration: >
+      The app registration is multitenant, so keys come from the organizations endpoint, and the standard issuer check
+      can't work. Learn is clear that the app must validate the issuer itself. So the token's issuer has to be exactly
+      the v two endpoint for its own tid, and that tenant must be onboarded in our catalog. A perfectly signed token
+      from a stranger is still a stranger.
+
+  - id: filter
+    type: code
+    heading: "The filter reads. The context writes."
+    lang: csharp
+    code: |
+      e.HasKey(p => new { p.TenantId, p.Id });
+      e.HasQueryFilter(p => p.TenantId == CurrentTenantId);
+
+      // and in SaveChanges, for every new row:
+      if (CurrentTenantId == Guid.Empty)
+          throw new CrossTenantWriteException("No tenant in context: refusing to write tenant data.");
+      if (entry.Entity.TenantId == Guid.Empty) entry.Entity.TenantId = CurrentTenantId;
+      else if (entry.Entity.TenantId != CurrentTenantId)
+          throw new CrossTenantWriteException("Refusing to write a row that belongs to another tenant.");
+    narration: >
+      In the data layer, the tenant is part of the key. A query filter limits every read to the current tenant, and
+      with no tenant at all, it returns nothing. On writes, the context stamps the tenant itself and refuses a row
+      that names another one. The caller never chooses.
+
+  - id: rls
+    type: code
+    heading: "The database repeats the rule"
+    short: rls
+    lang: sql
+    code: |
+      CREATE FUNCTION Security.fn_tenant_predicate (@TenantId uniqueidentifier)
+      RETURNS TABLE WITH SCHEMABINDING
+      AS RETURN SELECT 1 AS allowed
+         WHERE @TenantId = CAST(SESSION_CONTEXT(N'TenantId') AS uniqueidentifier);
+
+      CREATE SECURITY POLICY Security.TenantIsolation
+        ADD FILTER PREDICATE Security.fn_tenant_predicate(TenantId) ON dbo.PurchaseRequests,
+        ADD BLOCK  PREDICATE Security.fn_tenant_predicate(TenantId) ON dbo.PurchaseRequests AFTER INSERT,
+        ADD BLOCK  PREDICATE Security.fn_tenant_predicate(TenantId) ON dbo.PurchaseRequests AFTER UPDATE
+        WITH (STATE = ON, SCHEMABINDING = ON);
+
+      -- the app, when a connection opens:
+      EXEC sys.sp_set_session_context @key = N'TenantId', @value = @tenant, @read_only = 1;
+    narration: >
+      Here is the second lock. A predicate function compares each row's tenant to the tenant in the session context.
+      The policy filters reads and blocks writes. When a connection opens, the app stores the tenant read only, so
+      nothing can change it until the connection returns to the pool. No tenant in the session means no rows, even for
+      the database admin.
+
+  - id: tests
+    type: code
+    heading: "Isolation is a test, not a hope"
+    lang: text
+    code: |
+      $ dotnet test tests/TenantApi.Tests -m:1
+        IsolationTests.Each_tenant_lists_only_its_own_rows                                          Passed
+        IsolationTests.Headers_and_body_fields_cannot_choose_the_tenant                             Passed
+        AuthenticationTests.The_issuer_must_belong_to_the_tenant_in_the_tid_claim                   Passed
+        OnboardingTests.Platform_Admin_in_a_CUSTOMER_tenant_proves_nothing                          Passed
+        PlanTests.The_rate_limit_is_per_tenant_shared_by_its_users_and_does_not_touch_other_tenants Passed
+        SqlScriptTests.Every_tenant_scoped_table_has_a_filter_and_both_block_predicates_in_the_policy Passed
+      Passed!  - Failed: 0, Passed: 57, Skipped: 0, Total: 57
+    narration: >
+      Fifty seven tests run on a real token pipeline. Two tenants can't see each other, headers can't pick a tenant,
+      a forged issuer fails, and a customer's admin role proves nothing. The T S Q L is parsed with Microsoft's own
+      parser and compared with the E F model, so a new table can't ship without its policy.
+
+  - id: tokens-screen
+    type: screen
+    heading: "Two companies, two tenants"
+    image: screens/tokens.jpg
+    bar: "PowerShell 7 · lab laptop"
+    demo: >
+      Windows Terminal (PowerShell 7) on the lab laptop, real capture. After importing scripts/SaasLab.psm1: sign in with
+      Get-DeviceCodeToken as alex.demo (lab tenant, onboarded as Adventure Works) and as the user of the second free Entra
+      tenant (onboarded as Northwind Traders); then Get-TokenClaims for each token showing tid, iss (the v2.0 issuer with that
+      tid), scp Requests.ReadWrite and ver 2.0. Mask the middle of both tenant ids in the capture. Never show the tokens.
+    narration: >
+      The real thing. Two users, in two different Entra tenants, sign in to the same app with the device code flow.
+      Their tokens carry different tenant ids, and issuers to match. Adventure Works is our lab tenant. Northwind
+      signs in from a second tenant I created for this.
+
+  - id: isolation-screen
+    type: screen
+    heading: "Same endpoint, different worlds"
+    image: screens/isolation.jpg
+    bar: "PowerShell 7 · Invoke-SaasApi against Azure App Service"
+    demo: >
+      Windows Terminal, real calls against the deployed web app (hostname masked) using Invoke-SaasApi: Northwind POSTs two
+      requests and Adventure Works one; each GET /requests shows only its own rows; Adventure Works asks for a Northwind id
+      (404); Adventure Works sends X-Tenant-Id with Northwind's id and still gets only its own rows; a call with a valid
+      token from a tenant that is not onboarded (401); after PUT /admin/tenants/{id} with status suspended, the same call
+      returns 403. Keep the status codes visible in each line.
+    narration: >
+      Same endpoint, different worlds. Northwind creates two requests, Adventure Works one, and each sees only its own.
+      Asking for another tenant's id gives a four oh four, exactly like an id that doesn't exist. A tenant header is
+      ignored. A tenant we never onboarded gets four oh one. And once we suspend one, four oh three.
+
+  - id: rls-screen
+    type: screen
+    heading: "The database says no, even to the admin"
+    image: screens/rls.jpg
+    bar: "SSMS · Azure SQL Database"
+    demo: >
+      SQL Server Management Studio on the lab laptop, connected to the Azure SQL database as labadmin (Microsoft Entra MFA),
+      real data created through the API: SELECT COUNT(*) FROM dbo.PurchaseRequests returns 0; then EXEC sp_set_session_context
+      with Northwind's tenant id returns 2, with Adventure Works' returns 1; then sql/verify-rls.sql result sets, including
+      the cross-tenant insert failing with error 33504. Mask the server name and the tenant ids.
+    narration: >
+      And the third lock. In the Azure SQL portal tool, as the database administrator, a plain select returns zero
+      rows. Set the session context to Northwind, two rows. Adventure Works, one. And the script that tries to write a
+      Northwind row inside an Adventure Works session fails with error thirty three five oh four.
+
+  - id: limits-screen
+    type: screen
+    heading: "Plans and the noisy neighbour"
+    image: screens/limits.jpg
+    bar: "PowerShell 7 · starter plan limits"
+    demo: >
+      Windows Terminal, real calls as the starter-plan tenant: a loop of 26 POST /requests shows 201 for the first 25 and
+      409 (problem details, "Plan limit reached") on the 26th; a loop of 35 GET /me from two different users of the same
+      tenant (alex.demo and sam.demo) shows 200 and then 429 once the tenant's 30 calls per minute are used; immediately
+      after, the other tenant (business plan) still gets 200.
+    narration: >
+      Sharing a stamp also means sharing capacity. The starter plan allows twenty five requests, and the next one is a
+      four oh nine. The rate limit is per tenant, not per user. Two users of one company share thirty calls a minute,
+      and when they run out, the other company is not affected.
+
+  - id: gotcha
+    type: bullets
+    heading: "What bit us"
+    short: gotcha
+    bullets:
+      - "Platform admin role + customer tenant = not an admin"
+      - "The query filter is code: IgnoreQueryFilters skips it"
+      - "Row-level security applies to dbo and db_owner too"
+      - "The consent redirect's tenant value is not an identity"
+      - "The home tenant is not in the catalog: we forgot it"
+    narration: >
+      The gotchas. A customer's admin can assign our app roles to their own users, so Platform admin only counts from
+      the home tenant. The query filter is just code, and one call skips it, which is why the database repeats it.
+      Row level security even applies to the database owner. Learn warns that the tenant value on the consent redirect
+      must never be used to identify anyone. And our own tests caught that we had locked out our own staff, because the
+      home tenant isn't a customer.
+
+  - id: recap
+    type: bullets
+    heading: "What to take away"
+    bullets:
+      - "tid from a validated token is the only tenant source"
+      - "Validate the issuer yourself in multitenant APIs"
+      - "Filter in the app, enforce in the database"
+      - "Limits per tenant, not per user"
+      - "One shared stamp today, more stamps tomorrow"
+    narration: >
+      To recap. The tenant comes from the validated token and nowhere else. A multitenant API validates the issuer
+      itself. Filter in the app, and enforce in the database. Limit per tenant. And when a customer needs more
+      isolation, deploy another stamp: the same code, a different mapping.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The API, the T S Q L, the Bicep and the tests are on GitHub, and the full guide is on devladlog dot com. Next
+      time: a modern intranet with SharePoint, Viva and Teams. See you there.

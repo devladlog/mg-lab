@@ -1,0 +1,236 @@
+# DEVLADLOG Deep Dive: episode 12. Code and test scenes are real (from this folder); screen scenes need the lab
+# recording described in demo.md. Narration ~772 words.
+episode: 12
+slug: modern-intranet-platform-sharepoint-viva-teams-p
+series_label: "DEEP DIVE"
+series_name: "DEVLADLOG Deep Dive"
+file_prefix: "deep-dive"
+title: "Modern Intranet Platform"
+subtitle: "SharePoint hub, Viva Connections, Teams and an approval flow, as code"
+voice: am_michael
+thumbnail_text: "INTRANET\nAS CODE\nRUN IT TWICE"
+youtube:
+  title: "Intranet as Code: SharePoint Hub, Viva Connections, Teams, Flow | DEVLADLOG Deep Dive #12"
+  tags: [SharePoint hub site, Viva Connections, home site, PnP PowerShell, site design, site script, Power Automate approvals, Microsoft Teams, intranet, Pester, idempotent provisioning, Microsoft 365]
+sources:
+  - https://www.devladlog.com/articles/deep-dive/2025-01-13-modern-intranet-platform-sharepoint-viva-teams-power-platform/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Run it twice"
+    sub: "and the intranet is still the same intranet"
+    short: hook
+    narration: >
+      Contoso's intranet is a pile of one-off sites. H R has one, I T has one, and nobody can find either. Today we build
+      the front door: a SharePoint hub with the department sites under it, a home site that opens inside Teams as Viva
+      Connections, and a Power Automate approval for company news. And we build it as code, so one script can rebuild it on
+      any tenant, and run twice is the same as run once. This is the DEVLADLOG Deep Dive.
+
+  - id: architecture
+    type: diagram
+    heading: "One contract, six steps"
+    nodes: ["Contract", "Site design", "Hub + sites", "Home site", "Teams"]
+    labels: ["intranet.json", "News Requests list", "Navigation", "Viva Connections", "Approval flow"]
+    narration: >
+      One contract file describes the whole intranet. A PowerShell module reads it and builds in a fixed order: a site
+      design first, then the sites, then the hub, then the department associations, then the hub navigation, and last the
+      home site. Viva Connections is not a separate product to deploy. It is the home site, shown inside Teams. And the news
+      approval is a flow on a list that the site design creates.
+
+  - id: contract
+    type: code
+    heading: "The contract"
+    lang: json
+    code: |
+      },
+      "hub": {
+        "alias": "contoso-home",
+        "title": "Contoso Home",
+        "description": "The front door of the Contoso intranet"
+      },
+      "spokes": [
+        { "alias": "contoso-hr",  "title": "People and Culture", "description": "Policies, benefits, onboarding" },
+        { "alias": "contoso-it",  "title": "IT Help",            "description": "Support, devices, access" },
+        { "alias": "contoso-ops", "title": "Operations",         "description": "Facilities, purchasing, travel" }
+      ],
+      "hubNavigation": [
+        { "title": "People and Culture", "site": "contoso-hr" },
+        { "title": "IT Help",            "site": "contoso-it" },
+        { "title": "Operations",         "site": "contoso-ops" },
+        { "title": "Expenses",           "url": "https://expenses.contoso.example", "external": true }
+      ],
+    narration: >
+      Here is the contract. Names, aliases, navigation and statuses live in one file. The provisioning script, the health
+      check, the flow and the tests all read it. So when someone renames a department, the tests tell you what else has to
+      change, before a user does.
+
+  - id: sitedesign
+    type: code
+    heading: "The site design"
+    lang: json
+    code: |
+      "actions": [
+        {
+          "verb": "setSiteBranding",
+          "navigationLayout": "Megamenu",
+          "headerLayout": "Compact",
+          "headerBackground": "Neutral",
+          "showFooter": true
+        },
+        {
+          "verb": "setSiteExternalSharingCapability",
+          "capability": "Disabled"
+        },
+    narration: >
+      The site design is a JSON script, using verbs from Microsoft's schema. It sets the header and the mega menu, turns
+      external sharing off, creates a News Requests list with a status choice, and adds a navigation link. Note what is
+      missing: there is no join hub site verb. That verb carries a tenant specific hub id, so we associate sites from
+      PowerShell instead, and a test fails if anyone adds it.
+
+  - id: provision
+    type: code
+    heading: "Safe to run twice"
+    short: idempotent
+    lang: powershell
+    code: |
+      $children = @(Get-PnPHubSiteChild @conn -Identity $hubUrl -ErrorAction SilentlyContinue | ForEach-Object { ConvertTo-SiteUrl $_ })
+      foreach ($sp in $Contract.spokes) {
+          $url = Get-IntranetSiteUrl -TenantName $TenantName -Alias $sp.alias
+          if ($children -contains (ConvertTo-SiteUrl $url)) { [pscustomobject]@{ Step = 'Association'; Target = $url; Action = 'Exists' }; continue }
+          if ($PSCmdlet.ShouldProcess($url, "Associate with hub $hubUrl")) {
+              Add-PnPHubSiteAssociation @conn -Site $url -HubSite $hubUrl | Out-Null
+              [pscustomobject]@{ Step = 'Association'; Target = $url; Action = 'Associated' }
+          }
+          else { [pscustomobject]@{ Step = 'Association'; Target = $url; Action = 'WhatIf' } }
+      }
+    narration: >
+      The module is built to run twice. Before every step it asks whether the thing already exists. The hub is registered
+      once, and a department is associated only when it is missing. A second run reports Exists on every line and changes
+      nothing. With what if, a first run prints the plan and touches nothing.
+
+  - id: limits
+    type: bullets
+    heading: "Numbers from the planning guide"
+    bullets:
+      - "2,000 hub sites per tenant"
+      - "Hub registration changes: 2 to 4 hours"
+      - "Hub navigation: 100 links recommended"
+      - "Home site: a communication site"
+      - "One Viva Connections experience with E, F or A"
+    narration: >
+      Microsoft's planning guidance gives the numbers. Two thousand hub sites per tenant. A change to hub registration can
+      take two to four hours to show up. Recommended: at most a hundred hub navigation links, and no more than ninety nine
+      sites in the Sites web part. A home site must be a communication site, and one Viva Connections experience is included
+      with an E, F or A licence.
+
+  - id: tests
+    type: code
+    heading: "No tenant, real signatures"
+    lang: text
+    code: |
+      $ pwsh -NoProfile -c 'Invoke-Pester ./tests'
+        Provisioning builds everything from an empty tenant, in a safe order                      Passed
+        Provisioning is idempotent: a second run changes nothing but refreshes the site script... Passed
+        Provisioning completes a half-built intranet: only the missing department and link...     Passed
+        Provisioning -WhatIf changes nothing                                                      Passed
+        Health check fails for a department that left the hub, and for a site nobody planned      Passed
+        News approval flow uses standard connectors only                                          Passed
+      Tests Passed: 32, Failed: 0, Skipped: 0
+    narration: >
+      Thirty two Pester tests run with no tenant. The PnP module is imported, so every mock carries the real cmdlet
+      signature, and a wrong parameter name fails the test. They cover an empty tenant, a second run, a half built intranet,
+      what if, and a health check that fails when a department leaves the hub.
+
+  - id: provision-screen
+    type: screen
+    heading: "Build it, then build it again"
+    image: screens/provision.jpg
+    bar: "PowerShell 7 · lab laptop"
+    demo: >
+      Windows Terminal (PowerShell 7) on the lab laptop, real capture. ./provision/Initialize-Intranet.ps1 -TenantName
+      <tenant> -ClientId <app> -WhatIf (table of planned steps), then the same without -WhatIf (browser sign-in once per
+      connection, table with Created / Registered / Associated / Added / Set), then once more (every line Exists), then
+      ./provision/Test-Intranet.ps1 (all Pass). Mask the tenant name and the client id.
+    narration: >
+      The real run. First with what if, so we see the plan. Then for real, signed in as the lab admin: four sites, a hub,
+      three associations, four links, and the home site in draft mode. Then the same command again, and every line says
+      Exists.
+
+  - id: hub-screen
+    type: screen
+    heading: "The hub in the browser"
+    image: screens/hub.jpg
+    bar: "Edge · Contoso Home"
+    demo: >
+      Edge, real capture of the Contoso Home site: hub navigation across the top (People and Culture, IT Help, Operations,
+      Expenses), open People and Culture to show the same navigation there; then SharePoint admin center > Active sites
+      showing the hub and its three associated sites. Mask the tenant name in the address bar.
+    narration: >
+      And here it is in the browser. The hub navigation sits on top of the department sites, and the external link opens the
+      expenses system. Hub changes can take hours to appear, so we recorded after the wait.
+
+  - id: flow-screen
+    type: screen
+    heading: "News request to approval"
+    image: screens/flow.jpg
+    bar: "Power Automate · News request approval"
+    demo: >
+      Power Automate flow designer (the three actions), then the News Requests list with a new item (Submitted), the
+      approval in the Approvals app answered as the approver, and the item refreshed to Approved with the message filled.
+      Real capture, lab users only.
+    narration: >
+      Now a news request. An employee adds an item to the list. The flow starts an approval, the communications approver
+      answers it, and the flow writes Approved or Rejected back on the item. Only standard connectors, so nobody needs a
+      premium licence.
+
+  - id: viva-screen
+    type: screen
+    heading: "The home site, inside Teams"
+    image: screens/viva.jpg
+    bar: "Microsoft Teams · lab tenant"
+    demo: >
+      Teams admin center > Teams apps > Setup policies > Global > Pinned apps showing the app added; SharePoint admin center >
+      Settings > Home sites showing Contoso Home; then Teams desktop as alex.demo with the app pinned, opening the home site.
+      Real capture. Mask the tenant name.
+    narration: >
+      Last, Teams. The home site is in draft mode, so nobody sees it yet. We pin the app in the Teams admin center, take the
+      experience out of draft, and the same home page opens inside Teams.
+
+  - id: gotcha
+    type: bullets
+    heading: "What bit us"
+    short: gotcha
+    bullets:
+      - "-WhatIf leaks into helper functions"
+      - "ForEach-Object Name returns nothing under WhatIf"
+      - "A leading comma hid the health rows"
+      - "PnP PowerShell: bring your own app registration"
+      - "Hub changes take hours, not seconds"
+    narration: >
+      What bit us. First, the what if flag leaks into helper functions: a property shortcut in our validation returned
+      nothing under what if, so a valid contract looked broken. Second, a function that returned an array with a leading
+      comma hid every health check row from the pipeline. Third, PnP PowerShell needs your own app registration,
+      and you pass its client id. And the hub is not instant, so a check right after provisioning can fail for hours.
+
+  - id: recap
+    type: bullets
+    heading: "What to take away"
+    bullets:
+      - "One contract, many consumers"
+      - "Fixed order, every step repeatable"
+      - "Associate from PowerShell, not from the site script"
+      - "Viva Connections is the home site in Teams"
+      - "Mock with real signatures"
+    narration: >
+      To recap. One contract, many consumers. Build in a fixed order, and make every step safe to repeat. Associate sites
+      with the hub from PowerShell, not from the site script. Treat Viva Connections as the home site, inside Teams. And
+      test the provisioning with mocks that carry real signatures.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The module, the contract, the tests and the flow definition are on GitHub, and the full guide is on devladlog dot com.
+      Thanks for watching.

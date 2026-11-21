@@ -1,0 +1,119 @@
+{
+  "_comment": "Reference definition of the 'News request approval' cloud flow (standard connectors only: SharePoint and Approvals). Written by hand from the designer steps in demo.md and checked by tests/Flow.Tests.ps1; NOT yet imported. After the lab build, replace it with the exported definition and re-run the tests. The manager receives the approval in Teams (Approvals app) and in e-mail.",
+  "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "$connections": { "defaultValue": {}, "type": "Object" },
+    "$authentication": { "defaultValue": {}, "type": "SecureObject" },
+    "Hub site URL (mgl_HubSiteUrl)": {
+      "defaultValue": "https://contoso.sharepoint.com/sites/contoso-home",
+      "type": "String",
+      "metadata": { "schemaName": "mgl_HubSiteUrl" }
+    },
+    "News Requests list (mgl_NewsRequestsList)": {
+      "defaultValue": "00000000-0000-0000-0000-000000000000",
+      "type": "String",
+      "metadata": { "schemaName": "mgl_NewsRequestsList" }
+    },
+    "Communications approver (mgl_CommsApprover)": {
+      "defaultValue": "comms@contoso.example",
+      "type": "String",
+      "metadata": { "schemaName": "mgl_CommsApprover" }
+    }
+  },
+  "triggers": {
+    "When_an_item_is_created": {
+      "type": "OpenApiConnection",
+      "recurrence": { "interval": 1, "frequency": "Minute" },
+      "splitOn": "@triggerOutputs()?['body/value']",
+      "inputs": {
+        "host": {
+          "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+          "connectionName": "shared_sharepointonline",
+          "operationId": "GetOnNewItems"
+        },
+        "parameters": {
+          "dataset": "@parameters('Hub site URL (mgl_HubSiteUrl)')",
+          "table": "@parameters('News Requests list (mgl_NewsRequestsList)')"
+        },
+        "authentication": "@parameters('$authentication')"
+      }
+    }
+  },
+  "actions": {
+    "Start_and_wait_for_an_approval": {
+      "type": "OpenApiConnectionWebhook",
+      "runAfter": {},
+      "inputs": {
+        "host": {
+          "apiId": "/providers/Microsoft.PowerApps/apis/shared_approvals",
+          "connectionName": "shared_approvals",
+          "operationId": "StartAndWaitForAnApproval"
+        },
+        "parameters": {
+          "approvalType": "Basic",
+          "WebhookApprovalCreationInput/title": "News post: @{triggerOutputs()?['body/Title']} (@{triggerOutputs()?['body/Department']})",
+          "WebhookApprovalCreationInput/assignedTo": "@parameters('Communications approver (mgl_CommsApprover)')",
+          "WebhookApprovalCreationInput/details": "Summary:\n@{triggerOutputs()?['body/Summary']}\n\nRequested by: @{triggerOutputs()?['body/Author/DisplayName']}",
+          "WebhookApprovalCreationInput/itemLink": "@triggerOutputs()?['body/{Link}']",
+          "WebhookApprovalCreationInput/itemLinkDescription": "Open the news request",
+          "WebhookApprovalCreationInput/enableNotifications": true,
+          "WebhookApprovalCreationInput/enableReassignment": false
+        },
+        "authentication": "@parameters('$authentication')"
+      }
+    },
+    "Condition_approved": {
+      "type": "If",
+      "runAfter": { "Start_and_wait_for_an_approval": ["Succeeded"] },
+      "expression": {
+        "and": [ { "equals": ["@outputs('Start_and_wait_for_an_approval')?['body/outcome']", "Approve"] } ]
+      },
+      "actions": {
+        "Set_status_Approved": {
+          "type": "OpenApiConnection",
+          "runAfter": {},
+          "inputs": {
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+              "connectionName": "shared_sharepointonline",
+              "operationId": "PatchItem"
+            },
+            "parameters": {
+              "dataset": "@parameters('Hub site URL (mgl_HubSiteUrl)')",
+              "table": "@parameters('News Requests list (mgl_NewsRequestsList)')",
+              "id": "@triggerOutputs()?['body/ID']",
+              "item/NewsStatus/Value": "Approved",
+              "item/NewsMessage": "Approved by @{first(outputs('Start_and_wait_for_an_approval')?['body/responses'])?['responder/email']}: @{first(outputs('Start_and_wait_for_an_approval')?['body/responses'])?['comments']}"
+            },
+            "authentication": "@parameters('$authentication')"
+          }
+        }
+      },
+      "else": {
+        "actions": {
+          "Set_status_Rejected": {
+            "type": "OpenApiConnection",
+            "runAfter": {},
+            "inputs": {
+              "host": {
+                "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                "connectionName": "shared_sharepointonline",
+                "operationId": "PatchItem"
+              },
+              "parameters": {
+                "dataset": "@parameters('Hub site URL (mgl_HubSiteUrl)')",
+                "table": "@parameters('News Requests list (mgl_NewsRequestsList)')",
+                "id": "@triggerOutputs()?['body/ID']",
+                "item/NewsStatus/Value": "Rejected",
+                "item/NewsMessage": "Rejected by @{first(outputs('Start_and_wait_for_an_approval')?['body/responses'])?['responder/email']}: @{first(outputs('Start_and_wait_for_an_approval')?['body/responses'])?['comments']}"
+              },
+              "authentication": "@parameters('$authentication')"
+            }
+          }
+        }
+      }
+    }
+  },
+  "outputs": {}
+}

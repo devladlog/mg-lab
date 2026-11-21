@@ -1,0 +1,39 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/sp/site-design-script-actions.schema.json",
+  "version": 1,
+  "actions": [
+    {
+      "verb": "setSiteBranding",
+      "navigationLayout": "Megamenu",
+      "headerLayout": "Compact",
+      "headerBackground": "Neutral",
+      "showFooter": true
+    },
+    {
+      "verb": "setSiteExternalSharingCapability",
+      "capability": "Disabled"
+    },
+    {
+      "verb": "createSPList",
+      "listName": "News Requests",
+      "templateType": 100,
+      "subactions": [
+        { "verb": "setDescription", "description": "Ask the communications team to publish a news post. Approval runs in Power Automate." },
+        { "verb": "addSPField", "fieldType": "Note", "displayName": "Summary", "internalName": "Summary", "id": "00000000-0000-0000-0000-00000000c101", "isRequired": true, "addToDefaultView": true },
+        { "verb": "addSPField", "fieldType": "Text", "displayName": "Department", "internalName": "Department", "id": "00000000-0000-0000-0000-00000000c102", "isRequired": true, "addToDefaultView": true },
+        {
+          "verb": "addSPFieldXml",
+          "schemaXml": "<Field ID=\"{00000000-0000-0000-0000-00000000c103}\" Type=\"Choice\" DisplayName=\"News status\" Required=\"TRUE\" Format=\"Dropdown\" StaticName=\"NewsStatus\" Name=\"NewsStatus\"><Default>Submitted</Default><CHOICES><CHOICE>Submitted</CHOICE><CHOICE>Approved</CHOICE><CHOICE>Rejected</CHOICE></CHOICES></Field>",
+          "addToDefaultView": true
+        },
+        { "verb": "addSPField", "fieldType": "Note", "displayName": "News message", "internalName": "NewsMessage", "id": "00000000-0000-0000-0000-00000000c104", "isRequired": false, "addToDefaultView": true }
+      ]
+    },
+    {
+      "verb": "addNavLink",
+      "url": "/Lists/News Requests",
+      "displayName": "Request a news post",
+      "isWebRelative": true
+    }
+  ]
+}
