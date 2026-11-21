@@ -14,6 +14,30 @@ $wanted = if (Test-Path $queueFile) { @(Get-Content $queueFile | ForEach-Object 
 
 # "prepare: <episode>" / "teardown: <episode>" lines only run that episode's setup or cleanup, for app and browser
 # screens that are performed live while Record-Window.ps1 (MG R4) records; nothing is recorded by these lines
+# "window-recorder" keeps running and records one window per trigger: write recordings\window.json, then create
+# recordings\window.go to start; create recordings\stop to end that take; create recordings\window-recorder.quit to exit.
+# This lets app and browser scenes be performed in the app itself, with no trip back to VS Code between takes.
+if ($wanted -contains 'window-recorder') {
+    $rd = Join-Path $Root 'recordings'
+    $state = Join-Path $rd 'window-recorder.state'
+    Remove-Item (Join-Path $rd 'window.go'), (Join-Path $rd 'window-recorder.quit') -ErrorAction SilentlyContinue
+    Write-Host "Window recorder ready. Waiting for recordings\window.go ..." -ForegroundColor Cyan
+    while (-not (Test-Path (Join-Path $rd 'window-recorder.quit'))) {
+        Set-Content $state 'idle'
+        if (Test-Path (Join-Path $rd 'window.go')) {
+            Remove-Item (Join-Path $rd 'window.go')
+            Set-Content $state 'recording'
+            try { & (Join-Path $PSScriptRoot 'Record-Window.ps1') -Root $Root; Set-Content (Join-Path $rd 'window-recorder.last') 'ok' }
+            catch { Write-Host $_ -ForegroundColor Red; Set-Content (Join-Path $rd 'window-recorder.last') "error: $($_.Exception.Message)" }
+        }
+        Start-Sleep -Milliseconds 400
+    }
+    Set-Content $state 'stopped'
+    Remove-Item (Join-Path $rd 'window-recorder.quit') -ErrorAction SilentlyContinue
+    Write-Host "Window recorder stopped." -ForegroundColor Green
+    return
+}
+
 $actions = @($wanted | Where-Object { $_ -match '^(prepare|teardown):\s*(.+)$' })
 if ($actions) {
     foreach ($a in $actions) {

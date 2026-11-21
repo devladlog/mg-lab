@@ -71,9 +71,10 @@ function Set-RecordingWindow([IntPtr]$Handle, [int]$Width = 1600, [int]$Height =
     [void][MgRec.Win2]::SetForegroundWindow($Handle)
 }
 
-function Start-WindowCapture([string]$Ffmpeg, [string]$Title, [string]$OutFile) {
+function Start-WindowCapture([string]$Ffmpeg, [string]$Title, [string]$OutFile, [switch]$DrawMouse) {
     $psi = [Diagnostics.ProcessStartInfo]::new($Ffmpeg)
-    foreach ($a in @('-loglevel', 'error', '-y', '-f', 'gdigrab', '-framerate', '30', '-draw_mouse', '0', '-i', "title=$Title",
+    $mouse = if ($DrawMouse) { '1' } else { '0' }   # app and browser scenes show the pointer; terminals don't need it
+    foreach ($a in @('-loglevel', 'error', '-y', '-f', 'gdigrab', '-framerate', '30', '-draw_mouse', $mouse, '-i', "title=$Title",
             '-vf', 'crop=trunc(iw/2)*2:trunc(ih/2)*2', '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '18', '-pix_fmt', 'yuv420p',
             '-movflags', '+faststart', $OutFile)) { $psi.ArgumentList.Add($a) }
     $psi.RedirectStandardInput = $true
