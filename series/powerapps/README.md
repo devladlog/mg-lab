@@ -53,3 +53,15 @@ link all five in the episode description.
 - [ ] YouTube + LinkedIn page via Metricool (AI label on), then personal LinkedIn + Facebook with the YouTube link
 - [ ] Add to the `DEVLADLOG Power Apps` playlist, upload the exact `.srt`
 - [ ] Schedule the Shorts (YouTube Shorts, TikTok, Instagram Reel, LinkedIn) with AI labels
+
+
+## Build specials (long-form, added 21 Nov 2026)
+Full start-to-end builds, longer than the regular episodes (about 15-25 min, 30-40 scenes), recorded for real in the
+lab tenant (`DEV`). All three share one Dataverse solution, **ContosoInspections**, so episode 13 can connect both apps.
+
+| # | Topic | Format |
+|---|---|---|
+| 11 | Build a Canvas App from Start to End | long-form build |
+| 12 | Build a Model-Driven App from Start to End | long-form build |
+| 13 | Copilot Studio Agents inside Both Apps | integration |
+| 14 | AI Models in Both Apps: prompts, Azure AI Foundry and other models | integration |
