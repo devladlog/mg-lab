@@ -1,0 +1,84 @@
+episode: 2
+series: "DEVLADLOG Power Automate"
+status: draft-hold-for-review
+ai_label: true
+youtube_url: "{YOUTUBE_URL}"
+linkedin_company:
+  text: |
+    A purchase request goes out for approval. The manager is on holiday. Nothing happens, and the requester never hears back.
+
+    Episode 2 of DEVLADLOG Power Automate builds a purchase approval flow that always finishes: approved, rejected, or escalated to a person.
+
+    - Under 500 euros is approved by policy. Otherwise the manager decides, and finance decides after the manager from 5,000 euros.
+    - Every approval has a three-day timeout (P3D) and a step that handles it.
+    - No manager in Entra? The approval goes to the purchasing team instead of failing.
+    - A dry-run harness and 42 tests cover every path, with mocked approvals so nobody's inbox fills up.
+
+    The bug we hit: a handled timeout still marked the run Failed until we joined the branches.
+
+    Watch the episode: {YOUTUBE_URL}
+    Code: {REPO_URL}
+    Guide: {BLOG_URL}
+
+    Narration uses an AI voice.
+
+    #PowerAutomate #PowerPlatform #Approvals #Microsoft365
+linkedin_personal:
+  text: |
+    An approval with no timeout waits until the run hits its 30-day limit and times out with nobody told.
+
+    In episode 2 of DEVLADLOG Power Automate every approval gets a timeout (P3D) and its own step for the timed-out case. The part that surprised me: even with that handler, the run was marked Failed, because a branch ending on a skipped action takes the status of the action before it. One Compose that joins the branches fixed it.
+
+    I found it in a dry run, not in production. Episode: {YOUTUBE_URL}
+
+    #PowerAutomate #Approvals #PowerPlatform
+
+    Narration uses an AI voice.
+facebook:
+  text: |
+    What happens to an approval when the manager is on holiday? In many flows, nothing, for weeks.
+
+    Episode 2 of DEVLADLOG Power Automate builds a purchase approval flow with a three-day timeout, an escalation to the purchasing team, and a fallback when nobody has a manager. Every path is tested before anyone gets an email.
+
+    Watch: {YOUTUBE_URL}
+
+    #PowerAutomate #PowerPlatform
+
+    Narration uses an AI voice.
+shorts:
+  - id: hook
+    youtube_short_title: "The approval that never came back #Shorts"
+    instagram_reel:
+      caption: |
+        A purchase request goes out for approval. The manager is on holiday. Nothing happens for weeks, the run quietly dies, and the requester never hears a thing. This episode builds an approval flow that always finishes: approved, rejected, or escalated to a human.
+
+        Full episode: link in bio
+
+        #PowerAutomate #Approvals #PowerPlatform
+      cover_text: "Approvals that finish"
+    tiktok:
+      caption: "Manager on holiday, approval never answered, run quietly dies. An approval flow that always finishes. #PowerAutomate #Approvals #PowerPlatform"
+  - id: outcome
+    youtube_short_title: "Approve, not Approved: the Switch case that never matches #Shorts"
+    instagram_reel:
+      caption: |
+        The outcome of an approve or reject approval is Approve or Reject, and the comparison is case sensitive. Not Approved with a D. Get it wrong and every request falls through. That is why the default case terminates the run as Failed instead of doing nothing quietly.
+
+        Full episode: link in bio
+
+        #PowerAutomate #Approvals #PowerPlatform
+      cover_text: "Approve, not Approved"
+    tiktok:
+      caption: "Approval outcome is Approve or Reject, case sensitive. A Switch on Approved never matches. Make the default case fail loudly. #PowerAutomate #Approvals #PowerPlatform"
+  - id: gotcha
+    youtube_short_title: "A handled timeout still fails the run. Here is why #Shorts"
+    instagram_reel:
+      caption: |
+        Finance times out, the timeout handler runs, and still the whole condition fails and nobody is told. A branch that ends with a skipped action takes the status of the action before it: the timed out approval. The fix is one Compose that joins the branches after both record steps.
+
+        Full episode: link in bio
+
+        #PowerAutomate #Approvals #PowerPlatform
+      cover_text: "Handled, still failed"
+    tiktok:
+      caption: "Handled timeout, run still Failed. A branch ending on a skipped action inherits the previous status. Join branches with one Compose. #PowerAutomate #Approvals #PowerPlatform"

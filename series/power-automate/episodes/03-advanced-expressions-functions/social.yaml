@@ -1,0 +1,84 @@
+episode: 3
+series: "DEVLADLOG Power Automate"
+status: draft-hold-for-review
+ai_label: true
+youtube_url: "{YOUTUBE_URL}"
+linkedin_company:
+  text: |
+    Finance wants a Monday email: last week's approved purchases, the total, the total per cost centre, and the three biggest. Most flows do that with an Apply to each, a variable and a dozen steps.
+
+    Episode 3 of DEVLADLOG Power Automate does it with no loops.
+
+    - The week window in Lisbon time with convertFromUtc and convertToUtc, not UTC.
+    - One Select shapes every row and parses the cost centre from the title.
+    - The total comes from xpath, because xml() turns an array into repeated elements and XPath has a sum().
+    - Group by and top three, again without a loop.
+
+    The bug we wrote on purpose: formatting a local time with a Z looks like UTC. Tests pass in January and fail in July. 81 tests cover both seasons.
+
+    Watch the episode: {YOUTUBE_URL}
+    Code: {REPO_URL}
+    Guide: {BLOG_URL}
+
+    Narration uses an AI voice.
+
+    #PowerAutomate #PowerPlatform #Expressions #Microsoft365
+linkedin_personal:
+  text: |
+    A literal Z on the end of a local time does not make it UTC.
+
+    In episode 3 of DEVLADLOG Power Automate I build a weekly digest whose window starts Monday midnight in Lisbon. If you format that local time with a Z, every test passes in January, because Lisbon is on UTC. In July the window starts an hour late: one request drops out and next Monday's sneaks in. Always convertToUtc.
+
+    The episode also sums rows with one xpath expression instead of a loop. Episode: {YOUTUBE_URL}
+
+    #PowerAutomate #Expressions #PowerPlatform
+
+    Narration uses an AI voice.
+facebook:
+  text: |
+    Can you sum a list in Power Automate without a loop? Yes: wrap the rows in xml() and ask xpath for the sum.
+
+    Episode 3 of DEVLADLOG Power Automate builds a Monday purchasing digest with time zones, text parsing, group by and a top three, all without Apply to each. Plus the daylight saving bug that only shows up in summer.
+
+    Watch: {YOUTUBE_URL}
+
+    #PowerAutomate #PowerPlatform
+
+    Narration uses an AI voice.
+shorts:
+  - id: hook
+    youtube_short_title: "One expression instead of a loop #Shorts"
+    instagram_reel:
+      caption: |
+        Finance wants a Monday email: last week's approved purchases, the total, the total per cost centre and the three biggest requests. Most flows use an Apply to each, a variable and a dozen steps. This one uses no loops, a handful of expressions, and a test for each.
+
+        Full episode: link in bio
+
+        #PowerAutomate #PowerPlatform #Expressions
+      cover_text: "No loops needed"
+    tiktok:
+      caption: "Weekly finance digest with zero loops: a handful of expressions, each one tested. #PowerAutomate #PowerPlatform #Expressions"
+  - id: xpath
+    youtube_short_title: "There is no sum() in Power Automate. Use xpath #Shorts"
+    instagram_reel:
+      caption: |
+        There is no sum function. But xml accepts an object with one root property, and an array becomes repeated elements. Wrap the rows in root, convert to XML, and ask xpath for sum(/root/row/amount). One step, no loop. Both parts are examples in the functions reference.
+
+        Full episode: link in bio
+
+        #PowerAutomate #Expressions #PowerPlatform
+      cover_text: "Sum without a loop"
+    tiktok:
+      caption: "No sum() function? xml() plus xpath('sum(/root/row/amount)') gives the total in one step, no Apply to each. #PowerAutomate #Expressions #PowerPlatform"
+  - id: gotcha
+    youtube_short_title: "The Power Automate bug that only shows up in summer #Shorts"
+    instagram_reel:
+      caption: |
+        Format the Lisbon midnight with a Z and it looks like UTC, but it is not. In January Lisbon is on UTC, so every test passes. In July the window starts an hour late: Monday's first request disappears and next Monday's sneaks in. Always convert, never just add a Z.
+
+        Full episode: link in bio
+
+        #PowerAutomate #Expressions #PowerPlatform
+      cover_text: "Works in January only"
+    tiktok:
+      caption: "A Z suffix does not make a local time UTC. Tests pass in January, the July window starts an hour late. Use convertToUtc. #PowerAutomate #Expressions #PowerPlatform"
