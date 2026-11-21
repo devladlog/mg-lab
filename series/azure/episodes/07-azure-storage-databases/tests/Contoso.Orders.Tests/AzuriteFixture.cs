@@ -41,7 +41,7 @@ public sealed class AzuriteFixture : IAsyncLifetime
         WriteSelfSignedCertificate();
         var port = FreePort();
         ServiceUri = new Uri($"https://127.0.0.1:{port}/{Account}");
-        _azurite = Process.Start(new ProcessStartInfo(OperatingSystem.IsWindows() ? "npx.cmd" : "npx",
+        _azurite = Process.Start(new ProcessStartInfo(Npx(),
             $"--yes --package azurite@3.38.0 azurite-blob --blobHost 127.0.0.1 --blobPort {port} " +
             $"--cert cert.pem --key key.pem --oauth basic --inMemoryPersistence --silent --skipApiVersionCheck")
         {
@@ -63,6 +63,21 @@ public sealed class AzuriteFixture : IAsyncLifetime
         _azurite?.Dispose();
         Directory.Delete(_dir, recursive: true);
         return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// npx with a full path. On Windows the npx.cmd shim finds npm relative to its own folder, which breaks
+    /// when it is started by bare name from another working directory, so look it up on PATH first.
+    /// </summary>
+    private static string Npx()
+    {
+        if (!OperatingSystem.IsWindows()) return "npx";
+        foreach (var dir in (Environment.GetEnvironmentVariable("PATH") ?? "").Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
+        {
+            var candidate = Path.Combine(dir.Trim('"'), "npx.cmd");
+            if (File.Exists(candidate)) return candidate;
+        }
+        return "npx.cmd";
     }
 
     /// <summary>A one-day self-signed certificate for 127.0.0.1, written as cert.pem and key.pem (no openssl needed).</summary>
