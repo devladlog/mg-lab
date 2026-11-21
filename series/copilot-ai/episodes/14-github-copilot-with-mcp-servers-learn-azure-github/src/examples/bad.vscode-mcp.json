@@ -1,0 +1,19 @@
+{
+  "servers": {
+    "github": {
+      "type": "http",
+      "url": "https://api.githubcopilot.com/mcp/",
+      "headers": { "Authorization": "Bearer ghp_0123456789abcdefghijklmnopqrstuvwxyz" }
+    },
+    "db": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["server.js"],
+      "env": { "API_KEY": "${input:db_key}", "HOME_DIR": "$HOME" },
+      "sandboxEnabled": true
+    },
+    "legacy": { "type": "http", "url": "http://mcp.example.com/mcp" },
+    "vault": { "type": "stdio", "command": "az", "args": ["keyvault", "secret", "show", "--name", "${command:pickSecret}"] }
+  },
+  "inputs": [ { "type": "promptString", "id": "unused", "description": "never used" } ]
+}

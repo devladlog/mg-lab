@@ -1,0 +1,241 @@
+# DEVLADLOG Copilot & AI - episode 09 (draft: screen scenes need the recording described in demo.md)
+episode: 9
+slug: copilot-in-sharepoint-and-sharepoint-agents
+series_label: "COPILOT & AI"
+series_name: "DEVLADLOG Copilot & AI"
+file_prefix: "copilot-ai"
+title: "Copilot in SharePoint and SharePoint Agents"
+subtitle: "What is new, what is retiring, and an upgrade plan you can run"
+voice: am_michael
+thumbnail_text: "COPILOT IN\nSHAREPOINT\nAGENT FILES END"
+youtube:
+  title: "Copilot in SharePoint and SharePoint Agents: .agent Files Retire | DEVLADLOG Copilot & AI #9"
+  tags: [Copilot in SharePoint, SharePoint agents, .agent file, Agent Builder, SharePoint skills, Copilot Credits, Microsoft 365 Copilot, SharePoint Online, PnP PowerShell, Python]
+next_episode: "Azure Copilot and the Azure MCP Server"
+sources:
+  - "https://learn.microsoft.com/sharepoint/copilot-in-sharepoint-get-started"
+  - "https://learn.microsoft.com/sharepoint/upgrade-sharepoint-agents"
+  - "https://learn.microsoft.com/sharepoint/copilot-in-sharepoint-skills"
+  - "https://learn.microsoft.com/sharepoint/manage-access-agents-in-sharepoint"
+  - "https://learn.microsoft.com/sharepoint/sharepoint-agents-azure-billing"
+  - "https://learn.microsoft.com/sharepoint/monitor-agent-usage"
+  - "https://learn.microsoft.com/sharepoint/insights-on-sharepoint-agents"
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Copilot in SharePoint"
+    sub: "And the agent file format that stops working in 2027"
+    short: hook
+    narration: >
+      Contoso's vendor office has a SharePoint agent that answers policy questions. Microsoft now says that file
+      format stops responding after March twenty twenty seven. In this episode we look at what Copilot in SharePoint
+      really is, what it costs, what replaces dot agent files, and we build a small tool that tells you which of your
+      agents to upgrade first. Welcome to Dev Lad Log, Copilot and A I.
+
+  - id: three
+    type: bullets
+    heading: "Three things called agent"
+    bullets:
+      - "Copilot in SharePoint: chat on the site, needs a Copilot licence"
+      - ".agent files: the older agents, retiring"
+      - "Agent Builder agents: the replacement, used across Microsoft 365"
+      - "Copilot Studio agents published to SharePoint"
+    narration: >
+      Three things get called an agent in SharePoint. Copilot in SharePoint is the chat on the site. It started in
+      preview and general availability began rolling out on September thirtieth. The older agents are dot agent files
+      saved in a library. And from mid November, agents you create from SharePoint are built with Copilot Agent
+      Builder instead, and no longer saved as a file.
+
+  - id: licence
+    type: bullets
+    heading: "What it costs"
+    bullets:
+      - "Everyday Copilot in SharePoint: included with the Microsoft 365 Copilot licence"
+      - "Advanced work: Copilot Credits, through a spending policy"
+      - "Pay as you go for .agent files only: 12 messages per prompt"
+      - "Lab tenant: no Copilot licence, marked in demo.md"
+    narration: >
+      The money. Everyday use is included with the Microsoft 365 Copilot licence. Advanced work, like building whole
+      sites or working across large content sets, uses Copilot Credits through a spending policy. The old pay as you
+      go for dot agent files charges twelve messages for one complex prompt, and Learn says it does not apply to
+      Copilot in SharePoint. Our lab has no Copilot licence, so those screens are clearly marked.
+
+  - id: ask
+    type: screen
+    heading: "Ask the site"
+    image: screens/copilot-sharepoint.jpg
+    bar: "SharePoint · Contoso Vendor Management Office · Copilot"
+    short: live
+    demo: "NEEDS a Microsoft 365 Copilot licence on labadmin (see demo.md, owner decision). Browser on the lab tenant, signed in as labadmin, site contoso-vmo, Policies library. Open Copilot, ask: 'Which vendor requests above 25,000 euros need a security review, and who approves them?' Expected: finance director after a security review, from the onboarding policy. Record whatever really appears. Mask the tenant name. Without the licence, record what labadmin sees instead and say so."
+    narration: >
+      Here is Copilot on the vendor site. It answers from the site's own documents, as the signed in user. Above
+      twenty five thousand euros the finance director approves, after a security review. And because it reads as the
+      user, someone without access to a library does not get its content in the answer.
+
+  - id: siteai
+    type: screen
+    heading: "Site AI settings"
+    image: screens/site-ai.jpg
+    bar: "SharePoint · Settings · Site AI"
+    demo: "Site settings gear > Site AI, as labadmin on contoso-vmo. Show the three options: which agent opens from the header (Copilot in SharePoint or a custom agent), hide the Copilot button for visitors, advanced document processing. Do not change anything. If the panel is missing, record that and note the licence state."
+    narration: >
+      Site owners get one panel. Settings, Site A I. They choose which agent opens from the header, they can hide the
+      Copilot button for visitors, and they can switch on advanced document processing. The old PowerShell opt in
+      switches were honoured only until November first, so this panel is where availability lives now.
+
+  - id: change
+    type: bullets
+    heading: "What happens to .agent files"
+    bullets:
+      - "Existing files work until the end of March 2027"
+      - "Questions about the site: use Copilot in SharePoint"
+      - "Repeatable task on the site: convert to a skill"
+      - "Q and A across apps: Agent Builder"
+      - "Copilot Studio agent: publish to the Copilot app"
+    narration: >
+      So what do you do with an existing dot agent file? Learn gives four paths. If it mostly answers questions about
+      the site, use Copilot in SharePoint directly. If it performs a repeatable task, convert it to a skill. If it is a
+      named question and answer agent used elsewhere, upgrade it with Agent Builder. And a Copilot Studio agent is
+      published to the Copilot app, not rebuilt.
+
+  - id: collect
+    type: code
+    heading: "Find the agents you can see"
+    lang: powershell
+    code: |
+      $query = 'FileExtension:agent'
+      if ($SiteUrl) { $query += ' Path:"' + $SiteUrl.TrimEnd('/') + '"' }
+
+      Connect-PnPOnline -Url $TenantUrl -Interactive -ClientId $ClientId
+
+      $result = Submit-PnPSearchQuery -Query $query -All -SelectProperties $columns
+      # columns: Title, Path, Author, Created, LastModifiedTime,
+      # SPSiteUrl, SiteTitle, ViewsLifeTime, ViewsRecent, ...
+    narration: >
+      Learn says to start with an inventory, and that you can find agents by searching for files with the agent
+      extension. This pnp script does that, read only, and writes a csv. One honest limit: search returns only the
+      agents you have permission to see, so it is not an admin wide report.
+
+  - id: inventory
+    type: screen
+    heading: "The real inventory"
+    image: screens/inventory.jpg
+    bar: "PowerShell · Get-AgentFileInventory.ps1 · contoso-vmo"
+    demo: "Terminal (dark, 18 pt) on the recording laptop, signed in as labadmin through the PnP interactive prompt: run ./src/scripts/Get-AgentFileInventory.ps1 -TenantUrl <masked> -ClientId <masked> -OutFile out/agent-files.csv, then python -m agentfiles inventory out/agent-files.csv. Record the real result. If the tenant has no .agent files (no Copilot licence, or creation already moved to Agent Builder), record the 'No .agent files visible to you' line and say so on camera; do not fabricate files."
+    narration: >
+      Run against the lab tenant. This is what search really returns, and the summary says how many files, on how
+      many sites, how many were never viewed, and how many have no owner.
+
+  - id: plan
+    type: code
+    heading: "From inventory to plan"
+    lang: text
+    short: plan
+    code: |
+      $ python -m agentfiles plan agent-files.csv --triage triage.csv
+      Planning date: 2027-03-31 (130 days left)
+      | high   | Invoice Checker | cross-qa             | Upgrade with Microsoft Copilot Agent Builder |
+      | high   | Studio Bot      | studio-custom-engine | Publish the existing Copilot Studio agent ... |
+      | high   | Vendor Desk     | site-qa              | Use Copilot in SharePoint directly |
+      | medium | Renewals Helper | site-task            | Convert the agent to a skill |
+      | low    | Old Pilot       | (not triaged)        | Review for archival or deletion |
+      # sample data; priority = how many of Learn's seven factors apply
+    narration: >
+      Search cannot know what an agent is for, so the tool writes a sheet for the owners: role, audience, business
+      critical, custom instructions, pay as you go, Teams, placement. Then it applies Learn's table, and ranks by how
+      many of Learn's seven priority factors apply. This is sample data. Agents nobody uses and nobody owns are
+      suggested for deletion, as Learn recommends.
+
+  - id: skill
+    type: code
+    heading: "A site skill is a Markdown file"
+    lang: markdown
+    code: |
+      ---
+      name: vendor-intake-check
+      description: "Checks vendor requests in this library against the Contoso Vendor Onboarding Policy ..."
+      ---
+      Use this skill on the vendor request documents the user selected.
+      1. Find the vendor name, a category, the estimated yearly cost in euros
+         and a short business justification.
+      2. Work out the approver from the estimated yearly cost: ...
+    narration: >
+      A repeatable task becomes a skill. Learn says site skills are Markdown files in the site's Agent Assets
+      library, and that skills cannot connect to external systems or run custom code. This one checks vendor requests
+      against the onboarding policy and logs problems in a list.
+
+  - id: skills-page
+    type: screen
+    heading: "Upload and run the skill"
+    image: screens/site-skills.jpg
+    bar: "SharePoint · Settings · Site skills"
+    demo: "NEEDS a Microsoft 365 Copilot licence on labadmin. contoso-vmo > Settings > Site skills > Create or upload > Upload: choose src/skills/vendor-intake-check/SKILL.md. Show it in the list as enabled. Then in the Policies library select two sample vendor requests and ask Copilot: 'Run vendor-intake-check on the selected documents'. Record the real answer and the Vendor intake issues list it creates. If Upload rejects the file, record the error: it becomes the gotcha scene."
+    narration: >
+      We upload it on the Site skills page, select two vendor requests, and ask Copilot to run it. Whatever Copilot
+      really does with the list, we show. A skill can only do what the person running it is already allowed to do.
+
+  - id: lint
+    type: code
+    heading: "Lint before you upload"
+    lang: text
+    code: |
+      $ python -m agentfiles skill-lint skills/vendor-intake-check/SKILL.md
+      Result: 0 error(s), 0 warning(s) -> OK
+
+      $ python -m agentfiles skill-lint bad/SKILL.md
+      [ERROR] front-matter: Invalid YAML front matter. Quote values that
+      contain a colon, for example description: "My: skill" (CS)
+      Result: 1 error(s), 0 warning(s) -> FAIL
+    narration: >
+      A small linter checks the file first. And here is the honest part. Learn publishes no schema for SharePoint
+      skills, only that you must keep the format intact. So the rules come from the same skill file format in Copilot
+      Studio, Agent Builder and Visual Studio, and every message names its source. Clean here is not the same as
+      accepted by SharePoint. The tenant is the final test.
+
+  - id: gotchas
+    type: bullets
+    heading: "Gotchas"
+    bullets:
+      - "Agents never widen access: trimmed per user"
+      - "Upgraded agents are private until shared"
+      - "Search sees only what you can see"
+      - "Restricted Content Discovery hides Copilot on the site"
+      - "Blocking in Copilot Chat does not apply to SharePoint"
+    narration: >
+      Gotchas, all from Learn. An agent only returns what each user can already read. An upgraded agent is private
+      until its owner shares it, because sharing the file did not carry over. Search inventories only what you can
+      see. Restricted Content Discovery removes Copilot from a site, and blocking an agent in the admin center today
+      affects only Copilot Chat, not SharePoint.
+
+  - id: admin
+    type: screen
+    heading: "Admin: agents and billing"
+    image: screens/admin-agents.jpg
+    bar: "Microsoft 365 admin center · Copilot · Billing & usage"
+    demo: "Microsoft 365 admin center as labadmin: Copilot > Billing & usage > Pay-as-you-go services > Connect a service, showing SharePoint agents in the list (do not connect it, do not create a policy). Then Agents (Copilot Control System) inventory page. Read only. Record whatever the tenant shows, including empty states or missing pages."
+    narration: >
+      For admins, billing for the old agents lives under Copilot, Billing and usage, and the inventory of agents used
+      in Copilot Chat is under Agents. We only look, we do not connect anything.
+
+  - id: recap
+    type: bullets
+    heading: "Five steps"
+    bullets:
+      - "Inventory your .agent files now"
+      - "Ask each owner what the agent is for"
+      - "Pick one of Learn's four paths"
+      - "Delete what nobody uses"
+      - "Test with real users before March 2027"
+    narration: >
+      Five steps. Inventory your agent files now. Ask each owner what the agent is for. Pick one of the four paths.
+      Delete what nobody uses. And test with real users well before March. Next time: Azure Copilot and the Azure M C
+      P server.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The tool, the skill and the tests are on GitHub, and the Microsoft Learn pages are in the description. This was
+      Dev Lad Log, Copilot and A I, by Momento Galático.

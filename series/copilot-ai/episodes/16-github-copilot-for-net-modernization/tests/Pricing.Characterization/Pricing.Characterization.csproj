@@ -1,0 +1,51 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    One set of behaviour tests, three implementations of Contoso.Pricing:
+      -p:Impl=legacy  the .NET Framework sources as they are today (Newtonsoft.Json, System.Data.SqlClient)
+      -p:Impl=modern  the hand-written reference after the upgrade (System.Text.Json, Microsoft.Data.SqlClient)
+      -p:Impl=naive   legacy sources with a find-and-replace serializer (expected to fail: that is the point)
+      -p:Impl=agent -p:AgentDir=<folder>  a Contoso.Pricing project produced by the upgrade agent, referenced as a project
+    The legacy sources are plain C#, so they compile on modern .NET unchanged; that is what lets us characterise them
+    here. The ASP.NET (System.Web) project is not part of this harness. The harness uses Newtonsoft.Json 13.0.3 (the
+    test host itself needs 13.0.1 or later; the fixture's 12.0.3 has a known vulnerability): the serializer behaviour
+    under test is the same.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Impl Condition="'$(Impl)' == ''">modern</Impl>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+    <IsPackable>false</IsPackable>
+    <NoWarn>$(NoWarn);NU1903;CS8632</NoWarn>
+    <DefineConstants Condition="'$(Impl)' == 'modern'">$(DefineConstants);MODERN</DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(Impl)' == 'legacy' Or '$(Impl)' == 'naive'">
+    <Compile Include="..\..\src\legacy-contoso\Contoso.Pricing\*.cs" Exclude="..\..\src\legacy-contoso\Contoso.Pricing\QuoteSerializer.cs" />
+    <PackageReference Include="System.Data.SqlClient" Version="4.9.1" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(Impl)' == 'legacy'">
+    <Compile Include="..\..\src\legacy-contoso\Contoso.Pricing\QuoteSerializer.cs" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(Impl)' == 'naive'">
+    <Compile Include="..\..\src\naive-after\QuoteSerializer.cs" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(Impl)' == 'modern'">
+    <Compile Include="..\..\src\expected-after\Contoso.Pricing\*.cs" />
+    <PackageReference Include="Microsoft.Data.SqlClient" Version="7.1.2" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(Impl)' == 'agent'">
+    <ProjectReference Include="$(AgentDir)\Contoso.Pricing.csproj" />
+  </ItemGroup>
+
+</Project>

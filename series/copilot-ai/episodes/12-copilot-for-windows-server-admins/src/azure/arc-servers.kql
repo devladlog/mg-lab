@@ -1,0 +1,14 @@
+// Azure Resource Graph: Azure Arc-enabled servers and their agent state.
+// Property names checked against Microsoft Learn (Resource Graph sample queries, Azure Arc).
+// Azure Copilot can write a query like this from a prompt; Learn advises reviewing generated queries.
+resources
+| where type =~ 'microsoft.hybridcompute/machines'
+| project name,
+          status = tostring(properties.status),
+          osType = tostring(properties.osType),
+          osName = tostring(properties.osName),
+          osVersion = tostring(properties.osVersion),
+          osSku = tostring(properties.osSku),
+          agentVersion = tostring(properties.agentVersion),
+          lastStatusChange = todatetime(properties.lastStatusChange)
+| order by name asc

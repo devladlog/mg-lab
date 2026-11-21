@@ -1,0 +1,255 @@
+# DEVLADLOG Copilot & AI - episode 07 (draft: screen scenes need the recording described in demo.md)
+episode: 7
+slug: copilot-in-power-bi-and-fabric
+series_label: "COPILOT & AI"
+series_name: "DEVLADLOG Copilot & AI"
+file_prefix: "copilot-ai"
+title: "Copilot in Power BI and Fabric"
+subtitle: "What it needs, what it costs, and how to make it answer correctly"
+voice: am_michael
+thumbnail_text: "COPILOT\nPOWER BI\nF2 OR NOTHING"
+youtube:
+  title: "Copilot in Power BI and Fabric: F2 Capacity, Prep Data for AI, Real Costs | DEVLADLOG Copilot & AI #7"
+  tags: [Copilot in Power BI, Copilot in Fabric, Fabric capacity, F2, Prep data for AI, AI instructions, verified answers, approved for Copilot, semantic model, TMDL, Power BI Desktop, Fabric Copilot capacity]
+next_episode: "Copilot in Dynamics 365 Sales and Customer Service"
+sources:
+  - "https://learn.microsoft.com/power-bi/create-reports/copilot-introduction"
+  - "https://learn.microsoft.com/power-bi/create-reports/copilot-prepare-data-ai"
+  - "https://learn.microsoft.com/power-bi/create-reports/copilot-prepare-data-ai-instructions"
+  - "https://learn.microsoft.com/power-bi/create-reports/copilot-evaluate-data"
+  - "https://learn.microsoft.com/fabric/fundamentals/copilot-fabric-consumption"
+  - "https://learn.microsoft.com/fabric/fundamentals/copilot-enable-fabric"
+  - "https://learn.microsoft.com/fabric/iq/connectors/copilot-power-bi-fabric"
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Copilot in Power BI: F2 or nothing"
+    sub: "The licence nobody mentions, and the model work that matters"
+    short: hook
+    narration: >
+      Copilot in Power BI does not need a per user licence. It needs a paid capacity, and our free Fabric trial cannot
+      run it. In this episode we use the smallest paid capacity, see what Copilot does with a model nobody prepared,
+      fix the model with a few lines of code, and check the answers against numbers we calculated ourselves. Welcome
+      to Dev Lad Log, Copilot and A I.
+
+  - id: what
+    type: bullets
+    heading: "What Copilot does here"
+    bullets:
+      - "Report pane: summaries and data questions (generally available)"
+      - "Authoring: report pages, D A X queries, measure descriptions"
+      - "Semantic model web modeling (preview)"
+      - "Fabric: notebooks, warehouse, Dataflows Gen2, data agents"
+    narration: >
+      First, what it does. In a report, the Copilot pane summarizes and answers data questions, and that part is
+      generally available. Authors get report pages, D A X queries and measure descriptions. In Fabric it reaches
+      notebooks, the warehouse and Dataflows Gen2, mostly in preview. Check the release status page before you promise
+      anything.
+
+  - id: needs
+    type: bullets
+    heading: "What it needs"
+    bullets:
+      - "Paid Fabric capacity F2 or higher, or Premium P1 or higher"
+      - "Trial and free SKUs: not supported"
+      - "Pro or Premium Per User alone: not enough"
+      - "Tenant setting on, region supported, up to 24 hours after a purchase"
+    narration: >
+      What it needs is a capacity. A paid Fabric F2 or higher, or Premium P1 or higher. Trial capacities are not
+      supported, and a Pro or Premium Per User licence alone is not enough. After you buy or scale a capacity, Learn
+      says Copilot can take up to twenty four hours to notice.
+
+  - id: cost-code
+    type: code
+    heading: "What it costs: tokens, not seats"
+    lang: python
+    code: |
+      RATE_INPUT = 100.0   # CU seconds per 1,000 input tokens
+      RATE_CACHED = 10.0   # CU seconds per 1,000 cached input tokens
+      RATE_OUTPUT = 400.0  # CU seconds per 1,000 output tokens
+
+      def cu_seconds_per_prompt(input_tokens, output_tokens, cached_share=0.0):
+          fresh = input_tokens * (1 - cached_share)
+          cached = input_tokens * cached_share
+          return (fresh * RATE_INPUT + cached * RATE_CACHED
+                  + output_tokens * RATE_OUTPUT) / 1000.0
+    narration: >
+      The cost is tokens, not seats. Learn publishes the rates in capacity unit seconds per thousand tokens: a hundred
+      for input, ten for cached input, four hundred for output. Copilot runs as a background job on the same capacity
+      as everything else. Our test reproduces the Learn example: two thousand tokens in, five hundred out, four
+      hundred capacity unit seconds.
+
+  - id: trial-screen
+    type: screen
+    heading: "The trial capacity says no"
+    image: screens/trial-no-copilot.jpg
+    bar: "app.fabric.microsoft.com · workspace on the Fabric trial"
+    short: trial
+    demo: "Browser as labadmin on the Fabric portal: a workspace assigned to the Fabric trial capacity, a report open, and the Copilot button missing or the message that says none of the workspaces has the necessary capacity. Show Workspace settings > License info with the trial capacity. Capture whatever the product really shows. Mask the tenant name."
+    narration: >
+      Here is our Fabric trial workspace. Sixty days, plenty of capacity, and no Copilot, because Learn says trial
+      capacities are not supported. To record the rest of this episode we created a paid F2 in West Europe the day
+      before, and we pause it after every take.
+
+  - id: retiring
+    type: bullets
+    heading: "Names are moving"
+    bullets:
+      - "Copilot inside reports: not affected"
+      - "Standalone Copilot and app Copilot: retiring"
+      - "Microsoft Copilot in Power BI and Fabric: preview, off by default"
+      - "That one does not need an F SKU"
+    narration: >
+      Names are moving. Learn says standalone Copilot in Power BI and app scoped Copilot are retiring, while Copilot
+      inside reports is not affected. Its successor, Microsoft Copilot in Power BI and Fabric, is a preview, off by
+      default, and needs no F S K U to ask questions about Power BI data. Plan on the report pane for now.
+
+  - id: lint-code
+    type: code
+    heading: "Lint the model before Copilot sees it"
+    lang: text
+    code: |
+      $ python -m copilot_pbi lint ContosoSales.SemanticModel
+      model: 5 tables, 34 columns, 6 measures
+      WARNING C001  measure [Margin %]: no description
+      WARNING C001  measure [Margin]: no description
+      WARNING C001  measure [Orders]: no description
+      WARNING C001  measure [Sales Amount]: no description
+      WARNING C001  measure [Total Cost]: no description
+      WARNING C001  measure [Units]: no description
+      WARNING C009  column Country: the same name exists in Customer,
+                    Store and not every copy has a description
+      -- 0 errors, 7 warnings, 0 info
+    narration: >
+      Now the part you control. Learn says a prepared model makes Copilot consistent, so we wrote a linter for the
+      Contoso Bikes model from Power BI episode one. It reads the T M D L files. None of the six measures has a
+      description, and Country exists twice, for the customer and for the store. Ask for sales by country and Copilot
+      has to guess.
+
+  - id: before-screen
+    type: screen
+    heading: "Unprepared model, real answers"
+    image: screens/copilot-before.jpg
+    bar: "Power BI Desktop · Copilot pane · Contoso Bikes"
+    demo: "Power BI Desktop on the lab laptop, ContosoSales.pbip opened from the copy with the DataFolder parameter set, Copilot workspace set to the F2 workspace, skill picker on Answer questions about the data. Ask: 'Show sales by country for 2025' and 'How many orders were shipped in June 2025?'. Capture both answers and open How Copilot arrived at this. Expected from the validated numbers: country is ambiguous (customer vs store); shipped is 149 while ordered is 145. Keep whatever Copilot really answers, right or wrong."
+    narration: >
+      Unprepared, we ask two questions: sales by country, and how many orders shipped in June. We calculated the right
+      answers from the data. Customer country and store country give different totals, and one hundred forty nine
+      orders shipped in June against one hundred forty five ordered. Whatever Copilot answers stays on screen, right
+      or wrong.
+
+  - id: instructions-code
+    type: code
+    heading: "AI instructions: pin the meaning"
+    lang: text
+    code: |
+      Metrics
+      - "Sales" or "revenue" without another qualifier means [Sales Amount].
+      - "Shipped orders" means [Orders Shipped].
+
+      Dates
+      - Use 'Date'[Date], which is the order date, unless the user asks
+        about shipping.
+
+      Ambiguity
+      - "Country" is ambiguous. 'Customer'[Country] is where the customer
+        lives and 'Store'[Country] is where the sale was made. If the user
+        does not say which one, ask.
+    narration: >
+      AI instructions are plain text on the model, limited to ten thousand characters. Ours pin the default metric and
+      the date basis, and tell Copilot to ask which country is meant. Instructions are interpreted, never guaranteed,
+      so the linter checks every bracketed name against the model, because a renamed measure silently breaks an
+      instruction.
+
+  - id: prep-screen
+    type: screen
+    heading: "Prep data for AI"
+    image: screens/prep-data-ai.jpg
+    bar: "Power BI Desktop · Prep data for AI · Add AI instructions"
+    demo: "Power BI Desktop, Home ribbon > Prep data for AI, tab Add AI instructions with the text of src/data/ai-instructions-contoso-bikes.md pasted (Q&A must be on for the model: use Turn on Q&A if the tabs are disabled). Then show the Simplify data schema tab and one verified answer set on a bar chart with its trigger phrases. Apply. Show the model descriptions in the Properties pane for [Sales Amount]."
+    narration: >
+      In Desktop, Prep data for AI holds a simplified data schema, verified answers with trigger phrases, and the
+      instructions. Q and A must be on for the model, you paste the text because you cannot upload it, and everything
+      is saved on the semantic model, not the report.
+
+  - id: describe-code
+    type: code
+    heading: "Descriptions as code"
+    lang: tmdl
+    code: |
+      /// Number of distinct orders counted by ship date instead of order
+      /// date, through the inactive Ship Date relationship. Use when the
+      /// question says shipped or delivered.
+      measure 'Orders Shipped' =
+          CALCULATE([Orders],
+              USERELATIONSHIP(Sales[Ship Date], 'Date'[Date]))
+          formatString: #,0
+    narration: >
+      Descriptions are triple slash lines in T M D L, so they live in Git. Copilot reads only the first two hundred
+      characters, so the meaning goes first. The describe command copies the model and adds ours, plus one new measure
+      for shipped orders, because instructions cannot repair a missing calculation.
+
+  - id: after-screen
+    type: screen
+    heading: "Same questions, prepared model"
+    image: screens/copilot-after.jpg
+    bar: "Power BI Desktop · Copilot pane · prepared model"
+    short: after
+    demo: "Same Desktop session after Apply and after closing and reopening the Copilot pane (Learn: required for changes to take effect). Ask the same two questions again, plus 'Which category made the most margin in 2025?'. Capture the answers next to the validated results: Bikes 312,551.80 for margin; 149 shipped in June. If an answer is still wrong, keep it: Learn says outputs are nondeterministic."
+    narration: >
+      Same questions after Apply, with the pane closed and reopened, which Learn says is required. Does Copilot now
+      ask which country we mean? Does shipped use the new measure? We compare every number with the golden answers,
+      for example three hundred twelve thousand five hundred fifty two for bikes margin. Right or wrong, the
+      comparison is the test.
+
+  - id: fabric-screen
+    type: screen
+    heading: "Fabric: Copilot in a notebook"
+    image: screens/fabric-notebook.jpg
+    bar: "app.fabric.microsoft.com · notebook · Copilot chat pane"
+    demo: "Fabric portal, workspace on the paid F2: a lakehouse with the five star-schema CSV files loaded as tables, a notebook attached to it, Copilot chat pane open with the starter prompt 'Profile my table to check columns, missing values, and duplicates'. Capture Copilot asking permission to add a code cell and the result. Then pause the capacity."
+    narration: >
+      Fabric uses the same capacity. A notebook attached to a lakehouse with the Contoso tables, and Copilot already
+      knows the schema. It asks permission before it adds and runs a cell. That experience is still marked preview, so
+      treat the code as a draft and read it.
+
+  - id: gotcha
+    type: bullets
+    heading: "Honest gotchas"
+    bullets:
+      - "Outputs are nondeterministic: test, do not assume"
+      - "Hidden fields are not seen by Copilot in data questions"
+      - "Ship dates in January 2026 fall outside our date table"
+      - "Learn contradicts itself once on trial support"
+    narration: >
+      The gotchas. Outputs are nondeterministic. Hidden fields are excluded, so an instruction naming a hidden column
+      does nothing, and the linter says so. Nine orders shipped in January twenty twenty six, outside our date table.
+      And one Learn article lists trial capacities as supported while several others say they are not. We followed the
+      others.
+
+  - id: golden-code
+    type: code
+    heading: "Golden questions, validated"
+    lang: text
+    code: |
+      $ python -m copilot_pbi golden
+      G1  What were total sales in 2025?
+          validated result: 967,472.88
+      G2  Which product category made the most margin in 2025?
+          validated result: Bikes 312,551.80
+      G4  How many orders were shipped in June 2025?
+          validated result: 149 shipped (the 145 is the order-date answer)
+    narration: >
+      The last piece is a test set. Learn asks for an expected measure, date basis and validated result per question.
+      The golden command computes them from the C S V files with decimal arithmetic, independent of Power BI. Whenever
+      the model or the instructions change, ask the same questions again.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The linter, the cost estimator, the capacity script and the tests are on GitHub, and every Microsoft Learn page
+      is in the description. Next episode, Copilot in Dynamics 365 Sales and Customer Service. This was Dev Lad Log,
+      Copilot and A I, by Momento Galático.

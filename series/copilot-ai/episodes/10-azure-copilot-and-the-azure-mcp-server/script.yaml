@@ -1,0 +1,246 @@
+# DEVLADLOG Copilot & AI - episode 10 (draft: screen scenes need the recording described in demo.md)
+episode: 10
+slug: azure-copilot-and-the-azure-mcp-server
+series_label: "COPILOT & AI"
+series_name: "DEVLADLOG Copilot & AI"
+file_prefix: "copilot-ai"
+title: "Azure Copilot and the Azure MCP Server"
+subtitle: "Two ways to talk to Azure, and one flag that limits both"
+voice: am_michael
+thumbnail_text: "AZURE COPILOT\nAZURE MCP\nSERVER"
+youtube:
+  title: "Azure Copilot and the Azure MCP Server: Real Demo and Read-Only Mode | DEVLADLOG Copilot & AI #10"
+  tags: [Azure Copilot, Microsoft Copilot in Azure, Azure MCP Server, Model Context Protocol, MCP, read-only, Azure RBAC, Bicep, Azure portal, Python]
+next_episode: "Copilot for SQL: SSMS and Azure SQL"
+sources:
+  - "https://learn.microsoft.com/azure/copilot/overview"
+  - "https://learn.microsoft.com/azure/copilot/capabilities"
+  - "https://learn.microsoft.com/azure/copilot/agents"
+  - "https://learn.microsoft.com/azure/copilot/manage-access"
+  - "https://learn.microsoft.com/azure/developer/azure-mcp-server/overview"
+  - "https://learn.microsoft.com/azure/developer/azure-mcp-server/tools/"
+  - "https://learn.microsoft.com/azure/developer/azure-mcp-server/get-started/tools/visual-studio-code"
+  - "https://github.com/microsoft/mcp/blob/main/servers/Azure.Mcp.Server/README.md"
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Azure Copilot and the Azure MCP Server"
+    sub: "Two ways to talk to Azure, and how to keep both on a leash"
+    short: hook
+    narration: >
+      There are two very different ways to ask an A I to do things in Azure. One lives in the portal and is called
+      Azure Copilot. The other is a server that your own tools connect to, the Azure M C P Server. In this episode
+      we use both against a small resource group, count exactly what the server exposes, and prove that one start
+      flag removes every write. Welcome to Dev Lad Log, Copilot and A I.
+
+  - id: two
+    type: bullets
+    heading: "Two different things"
+    bullets:
+      - "Azure Copilot: in the portal and the mobile app, runs as you"
+      - "Azure MCP Server: open source tool server for your own AI client"
+      - "Both use your Azure RBAC permissions"
+      - "Azure Copilot was called Microsoft Copilot in Azure"
+    narration: >
+      Azure Copilot is the chat in the Azure portal and the mobile app. Learn says it was previously called
+      Microsoft Copilot in Azure, and you will still see that name on older pages. The Azure M C P Server is
+      different. It is a program that speaks the Model Context Protocol, so any client that understands M C P, like
+      GitHub Copilot in VS Code, can list and manage Azure resources. Both act with your permissions.
+
+  - id: access
+    type: bullets
+    heading: "Access and cost"
+    bullets:
+      - "Azure Copilot: on by default for all users in the tenant"
+      - "Global Administrator can restrict it to chosen users or groups"
+      - "Included at no extra cost, except the Observability agent"
+      - "MCP server: free, but VS Code needs a GitHub Copilot subscription"
+    narration: >
+      Access and cost. By default every user in the tenant can use Azure Copilot, and a Global Administrator can
+      limit it to chosen users or groups with the Copilot for Azure User role. Learn says the capabilities available
+      today are included at no extra cost, except the Observability agent, which has usage based charges. The M C P
+      server itself is free, and in VS Code it needs a GitHub Copilot subscription.
+
+  - id: ask
+    type: screen
+    heading: "Ask Azure Copilot"
+    image: screens/azure-copilot.jpg
+    bar: "Azure portal · Azure Copilot · rg-mglab-copilot-10"
+    short: live
+    demo: "Browser on the lab tenant, Azure portal as labadmin, resource group rg-mglab-copilot-10 open. Select the Copilot icon in the header. Prompts, one after another: 'List the resources in resource group rg-mglab-copilot-10 with their SKU' then 'Show me my cost recommendations from Azure Advisor'. Record exactly what comes back, including any 'I can't do that' reply. Mask the subscription id and tenant name."
+    narration: >
+      Here is Azure Copilot in the portal, on a small resource group with a storage account and a key vault. We ask
+      it to list the resources and then for cost recommendations from Advisor. It answers from the real
+      environment, with the permissions of the person who signed in.
+
+  - id: guardrails
+    type: screen
+    heading: "Confirmation, locks and Reader"
+    image: screens/guardrails.jpg
+    bar: "Azure portal · Azure Copilot · guardrails"
+    demo: "Two takes. (1) As labadmin (Owner) ask Azure Copilot to delete the storage account in rg-mglab-copilot-10 (the CanNotDelete lock is on it). Show the confirmation it asks for before acting and then whatever happens when the lock blocks it. (2) Sign in as sam.demo (Reader on the resource group) and ask the same. Record the real wording of each refusal. Do not retake to get a nicer answer."
+    narration: >
+      Now the guardrails. Learn says Azure Copilot only does what you can do, asks for confirmation before changes,
+      and respects Azure policy, resource locks and role based access control. So we ask it to delete the storage
+      account, which has a lock on it, first as an owner and then as a reader. We show whatever it really says.
+
+  - id: limits
+    type: bullets
+    heading: "Know its limits"
+    bullets:
+      - "A conversation cannot continue beyond 24 hours"
+      - "Actions on more than 10 resources: do them outside Copilot"
+      - "Some lists show only the top five items"
+      - "Agents: Troubleshooting, Deployment, Catalyst, Observability GA"
+      - "Optimization and Resiliency agents are preview"
+    narration: >
+      Its limits, from Learn. A conversation cannot go on past twenty four hours. Actions on more than ten
+      resources must be done outside Azure Copilot. Some lists show only the top five. And the agents inside it
+      are four generally available, Troubleshooting, Deployment, Catalyst and Observability, and two in preview,
+      Optimization and Resiliency.
+
+  - id: bicep
+    type: code
+    heading: "The demo resources, as code"
+    lang: bicep
+    code: |
+      resource storageLock 'Microsoft.Authorization/locks@2020-05-01' = {
+        name: 'lock-do-not-delete'
+        scope: storage
+        properties: {
+          level: 'CanNotDelete'
+        }
+      }
+
+      resource vault 'Microsoft.KeyVault/vaults@2023-07-01' = {
+        name: 'kv-mglab10-${take(uniqueString(resourceGroup().id), 8)}'
+        properties: {
+          enableRbacAuthorization: true
+          enableSoftDelete: true
+        }
+      }
+    narration: >
+      The resources are a small Bicep file: a storage account with a can not delete lock, a key vault that uses role
+      based access, and a secret that is not a real secret. It builds and lints clean, and the lab deletes the
+      whole resource group afterwards.
+
+  - id: modes
+    type: code
+    heading: "How many tools does the server expose?"
+    lang: text
+    code: |
+      Azure MCP Server 4.0.0-beta.9      tools published
+      --mode all                               451
+      --mode all --read-only                   257
+      --mode namespace (default)                74
+      --mode namespace --read-only              71
+      --mode consolidated                      177
+      --mode single                              1
+
+      # --mode all: 448 commands + 3 proxied Microsoft Learn tools
+    narration: >
+      Now the server. We started the real server, version four point zero beta nine, in each mode and counted what
+      it publishes over the protocol. All mode publishes four hundred fifty one tools, namespace mode seventy four,
+      and read only mode removes the writes. Those are measurements, not documentation, and they will change with the
+      version.
+
+  - id: report
+    type: code
+    heading: "Predict it from the catalog"
+    lang: text
+    code: |
+      $ python -m azmcp_audit report policies/contoso-ops-reader.json
+      namespace        tools readonly writes destructive secret exposed
+      monitor             28       21      7           2      0      21
+      advisor              9        8      1           1      0       8
+      group                2        2      0           0      0       2
+      ...
+      Exposed with `azmcp server start --mode all ... --read-only`: 36 tool(s)
+      Findings: 0
+    narration: >
+      The server can describe its own tools, with the annotations Learn documents: read only, destructive, secret
+      and open world. Our audit tool reads that catalog and a small policy file with the namespaces you allow, and
+      predicts what a start line exposes. Switch the policy to a developer profile and it flags sixteen tools,
+      including the ones that read key vault secrets.
+
+  - id: probe
+    type: screen
+    heading: "Prove it against the real server"
+    image: screens/probe.jpg
+    bar: "Terminal · azmcp_audit probe · Azure MCP Server 4.0.0-beta.9"
+    short: probe
+    demo: "Terminal (dark, 18 pt) on the recording laptop, signed in with az login. In src/: python -m azmcp_audit report policies/contoso-dev-writer.json (16 findings), then python -m azmcp_audit probe policies/contoso-ops-reader.json (expect: Published 36 tool(s); the catalog predicts 36; Match: yes; Namespace mode ... same set), then the same command with --call group_list to list the real resource groups of the lab subscription. Mask the subscription id. Record whatever appears."
+    narration: >
+      Then the proof. The probe starts the real server with the read only policy, talks the protocol over standard
+      input and output, and compares what it publishes with the prediction. Thirty six tools, same set, in both
+      modes. Then it calls group list, and the real resource groups of the subscription come back.
+
+  - id: mcpjson
+    type: code
+    heading: "The VS Code configuration"
+    lang: json
+    code: |
+      {
+        "servers": {
+          "Contoso Azure (read-only)": {
+            "command": "npx",
+            "args": ["-y", "@azure/mcp@4.0.0-beta.9",
+              "server", "start", "--mode", "namespace",
+              "--namespace", "group", "--namespace", "monitor",
+              "...",
+              "--read-only"]
+          }
+        }
+      }
+    narration: >
+      The same policy generates the dot vscode slash m c p dot json. The shape is the one Learn shows, with two
+      changes of ours: a pinned version instead of latest, because this package is a beta, and the read only flag.
+
+  - id: vscode
+    type: screen
+    heading: "Inside VS Code"
+    image: screens/vscode.jpg
+    bar: "VS Code · GitHub Copilot agent mode · Azure MCP Server"
+    demo: "NEEDS the owner's GitHub Copilot plan (see demo.md). VS Code on the recording laptop, folder with .vscode/mcp.json from `python -m azmcp_audit config policies/contoso-ops-reader.json`; start the server from the mcp.json CodeLens. Copilot Chat in agent mode: 'List my resource groups' (real answer), then 'Create a storage account called x in rg-mglab-copilot-10' (expect: no tool for it). Then switch the file to the output of config for policies/contoso-dev-writer.json and ask 'Get the value of the secret demo-secret in the key vault of rg-mglab-copilot-10': record the confirmation prompt (elicitation) Learn describes before the secret is read. Mask the key vault name if it shows the subscription."
+    narration: >
+      In VS Code, GitHub Copilot in agent mode can list the resource groups, but a request to create a storage
+      account finds no tool, because the server never published one. With the developer policy, reading a key vault
+      secret makes the server ask for confirmation first. That prompt is a feature Learn calls elicitation.
+
+  - id: gotchas
+    type: bullets
+    heading: "Gotchas"
+    bullets:
+      - "The package is a beta: pin the version"
+      - "Learn lists four modes, --help lists three: consolidated works"
+      - "Even create tools can carry the destructive hint"
+      - "--tool and --namespace cannot be combined"
+      - "Three Learn docs tools are added unless you disable proxy tools"
+    narration: >
+      Gotchas we hit. The package is a beta, so pin the version. Learn lists four modes, but the help text of this
+      build lists three. Consolidated works, we counted it. The destructive hint is conservative: key vault create
+      tools carry it. The tool option cannot be combined with namespaces. And three Microsoft Learn documentation
+      tools are added unless you pass disable proxy tools.
+
+  - id: recap
+    type: bullets
+    heading: "Five rules"
+    bullets:
+      - "Azure Copilot and the MCP server act as you: fix RBAC first"
+      - "Start the server with --read-only and a namespace list"
+      - "Audit the catalog, then probe the real server"
+      - "Pin the beta version"
+      - "Never disable confirmation prompts outside a trusted pipeline"
+    narration: >
+      Five rules. Both act as you, so fix role assignments first. Start the server read only, with a short list of
+      namespaces. Audit the catalog and then probe the real server. Pin the beta version. And never turn off the
+      confirmation prompts outside a trusted pipeline. Next time: Copilot for S Q L.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The audit tool, the Bicep file and the tests are on GitHub, and the Microsoft Learn pages are in the
+      description. This was Dev Lad Log, Copilot and A I, by Momento Galático.

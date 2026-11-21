@@ -1,0 +1,230 @@
+# DEVLADLOG Copilot & AI - episode 13 (draft: screen scenes need the recording described in demo.md)
+episode: 13
+slug: github-copilot-in-vs-code-agent-mode-instructions
+series_label: "COPILOT & AI"
+series_name: "DEVLADLOG Copilot & AI"
+file_prefix: "copilot-ai"
+title: "GitHub Copilot in VS Code: Agent Mode, Instructions and Prompt Files"
+subtitle: "What changed, what to write, what is going away"
+voice: am_michael
+thumbnail_text: "COPILOT\nIN VS CODE\nINSTRUCTIONS"
+youtube:
+  title: "Copilot in VS Code: Agent, Instructions, Skills, Prompt Files | DEVLADLOG Copilot & AI #13"
+  tags: [GitHub Copilot, VS Code, Copilot agent, custom instructions, copilot-instructions.md, prompt files, agent skills, custom agents, applyTo, Copilot harness, AGENTS.md]
+next_episode: "GitHub Copilot with MCP Servers (Learn, Azure, GitHub)"
+sources:
+  - "https://code.visualstudio.com/docs/agents/run/agent-harnesses"
+  - "https://code.visualstudio.com/docs/agent-customization/custom-instructions"
+  - "https://code.visualstudio.com/docs/agents/reference/custom-instructions-reference"
+  - "https://code.visualstudio.com/docs/agent-customization/prompt-files"
+  - "https://code.visualstudio.com/docs/agent-customization/agent-skills"
+  - "https://code.visualstudio.com/docs/agents/run/move-to-copilot"
+  - "https://code.visualstudio.com/docs/agents/reference/custom-agent-file-reference"
+  - "https://code.visualstudio.com/docs/setup/copilot"
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Copilot in VS Code, rules and all"
+    sub: "Agent, instructions, skills, and the prompt files that are going away"
+    short: hook
+    narration: >
+      Contoso's vendor team has a small Python tool and a Copilot that keeps forgetting their rules. Dates in the
+      wrong format, tests with the wrong names, no test run at the end. In this episode we write the rules once, let
+      the agent do a real task, check the result with a test it has never seen, and find out why prompt files, one of
+      the three things in the title, have an expiry date. Welcome to Dev Lad Log, Copilot and A I.
+
+  - id: changed
+    type: bullets
+    heading: "What agent mode is called now"
+    bullets:
+      - "A harness runs the agent: Copilot, Claude, Codex, or Local"
+      - "Built-in agents in the Copilot harness: Ask, Agent, Plan"
+      - "Local harness: deprecated, removal by February 2027"
+      - "Instructions and skills follow the harness you pick"
+      - "Learn pages still say agent mode"
+    narration: >
+      First, the vocabulary moved. The VS Code documentation now talks about harnesses. A harness is what runs the
+      agent: Copilot, Claude, Codex, or the old Local one. In the Copilot harness the built in agents are Ask, Agent
+      and Plan. What most people call agent mode is the Agent. The Local harness is deprecated and goes away by
+      February twenty twenty seven. Many Microsoft Learn pages still say agent mode, so you will see both.
+
+  - id: plan
+    type: bullets
+    heading: "What we build"
+    bullets:
+      - "Contoso vendor tools: a small Python renewal report"
+      - "Project and targeted instructions"
+      - "A skill and a custom agent"
+      - "customcheck: lint, explain, convert"
+      - "An acceptance test the agent has not seen"
+    narration: >
+      The sample is a tiny renewal report for the four vendors from episode two. Around it we put project
+      instructions, a targeted instructions file, a skill, a custom reviewer agent, and a checker we wrote, called
+      customcheck. And a hidden acceptance test, so we do not have to trust what the agent says it did.
+
+  - id: project-instructions
+    type: code
+    heading: ".github/copilot-instructions.md"
+    lang: markdown
+    code: |
+      # Contoso vendor tools
+
+      * Put business logic in `src/vendor_tools/renewals.py`;
+        keep `cli.py` to argument parsing and printing.
+      * Dates are `datetime.date` objects and ISO 8601
+        (`YYYY-MM-DD`) in files and output.
+      * Money is whole euros (`int`). No floats for amounts.
+      * Add or update tests for every behaviour change.
+        Run `python -m pytest` and report the result.
+      * Do not add third-party dependencies.
+    narration: >
+      Project instructions are a Markdown file at dot github slash copilot dash instructions dot m d, or an
+      AGENTS dot m d. No header needed. Notice what is in it: where code goes, the date format, the money type, the
+      test command. Specific, checkable rules. Microsoft says it plainly: instructions guide the model, they do not
+      guarantee compliance.
+
+  - id: targeted
+    type: code
+    heading: "Targeted rules with applyTo"
+    lang: markdown
+    code: |
+      ---
+      name: 'Python tests'
+      description: 'Use when creating or updating Python tests.'
+      applyTo: 'tests/**/*.py'
+      ---
+      * Name tests `test_<behavior>_<condition>`.
+      * Use `data/vendors.csv`; do not invent vendors.
+      * Pass `today` explicitly. Never call `date.today()`.
+
+      $ python -m customcheck explain contoso-vendor-tools tests/test_renewals.py
+        .github/copilot-instructions.md (project-wide)
+        .github/instructions/python-tests.instructions.md
+          (applyTo: tests/**/*.py)
+    narration: >
+      Rules for one part of the code go in a dot instructions dot m d file with apply to. The pattern is relative to
+      the workspace root, not to the instructions folder, and tests slash star star slash star dot p y matches nested
+      tests too. Our checker can explain which files apply to a path. That is offline, and it follows the table in
+      the documentation.
+
+  - id: harness-screen
+    type: screen
+    heading: "Pick the harness and the agent"
+    image: screens/harness.jpg
+    bar: "VS Code · Chat view · Session Target: Copilot · Agent"
+    demo: "VS Code on the lab laptop with the folder contoso-vendor-tools open. Chat view, new chat: the Session Target control set to Copilot and the agent picker open showing Ask, Agent, Plan (and the custom agent Renewal reviewer). Then Chat: Open Customizations > Instructions showing copilot-instructions.md, python-tests and cli listed. Mask the GitHub account name."
+    narration: >
+      In VS Code we open the folder, start a new chat and set the session target to Copilot. The agent picker offers
+      Ask, Agent, Plan, and our Renewal reviewer. The customizations editor lists the instruction files. Listed
+      means discovered. It does not mean followed.
+
+  - id: agent-screen
+    type: screen
+    heading: "Give the agent a real task"
+    image: screens/agent-run.jpg
+    bar: "VS Code · Copilot · Agent · new chat"
+    short: live
+    demo: "New chat, Agent selected, Copilot harness. Prompt exactly: 'Show the notice deadline (renewal date minus notice_days) for each vendor in the renewals report, and flag vendors whose deadline has already passed.' Record the real run: the files it opens, the edits, the pytest run in the terminal, the permission prompts you accept, and the final answer with the References section open so the instruction files are visible. Do not retake to make it look better; if it ignores a rule, keep that take."
+    narration: >
+      Now the task. Show each vendor's notice deadline, and flag the ones already past. We never mention the rules. The
+      agent reads the code, edits the logic file and the printing file, adds tests, runs pytest, and the references
+      list the instruction files it used. That is evidence the files were included. Whether it followed them, we check
+      next.
+
+  - id: verify-screen
+    type: screen
+    heading: "Do not trust, check"
+    image: screens/acceptance.jpg
+    bar: "Terminal · acceptance test · git diff"
+    demo: "Terminal in the workspace: 'python -m pytest' then 'python -m pytest acceptance -q' (3 tests the agent never saw), then 'git diff --stat' and the diff of the new test names to check test_<behavior>_<condition>, and a search for date.today() in tests. Record the real results, pass or fail."
+    narration: >
+      The acceptance test was written before the agent ran, and it fails on the untouched repository. If it passes
+      now, the feature works. Then we read the diff against our rules. Test names, today passed in, no date dot today
+      in tests. That is review, and no instruction file replaces it.
+
+  - id: prompt-gotcha
+    type: screen
+    heading: "Gotcha: prompt files are Local only"
+    image: screens/prompt-local.jpg
+    bar: "VS Code · Prompt files · Local harness vs Copilot harness"
+    short: gotcha
+    demo: "Same folder with .github/prompts/renewal-report.prompt.md and .github/skills/renewal-report/SKILL.md. Type / in a Copilot-harness chat and record which of the two appear (record the real result). If the Local harness is still offered in Session Target on the recording day, repeat in a Local chat. Then Chat: Open Customizations > Migrations and the Convert Prompt to Skills section. If Local is gone, say so and record only the Copilot chat and the Migrations tab."
+    narration: >
+      And the gotcha, in the title itself. Prompt files only run in Local harness sessions. The Copilot harness does
+      not load them, and the Local harness is removed by February twenty twenty seven. Microsoft's advice is to
+      convert recurring prompts to skills. The customizations editor has a migration for that, and there is no
+      error on the old file. It simply does nothing.
+
+  - id: convert
+    type: code
+    heading: "Prompt file to skill, with the losses listed"
+    lang: text
+    code: |
+      $ python -m customcheck convert-prompt \
+          .github/prompts/renewal-report.prompt.md
+      Wrote .github/skills/renewal-report-prompt/SKILL.md
+        check: 'agent: agent' is not preserved by a skill
+        check: 'tools: ['execute']' is not preserved by a skill
+        check: the body uses ${input:...} variables: run the
+               skill once and check it still asks for them
+      # header gets: disable-model-invocation: true
+      # link ../copilot-instructions.md -> ../../copilot-instructions.md
+    narration: >
+      Our converter does what the documentation describes. It writes a skill folder, keeps explicit invocation with
+      disable model invocation, fixes the relative links, and lists what a skill does not keep: the agent, the model
+      and the tool list. Check those by hand, because a skill does not replace a tool allow list.
+
+  - id: lint
+    type: bullets
+    heading: "What customcheck catches"
+    bullets:
+      - "applyTo as a YAML list, or matching no file"
+      - "Skill names with colons or uppercase: silent load failure"
+      - "Skill name not equal to its folder"
+      - "Old .chatmode.md files: rename to .agent.md"
+      - "Prompt files: an honest note that they are Local only"
+    narration: >
+      The checker is not magic, just the documented rules in code. An apply to written as a list. A pattern that
+      matches nothing. A skill name with a colon, which Learn says makes the skill silently fail to load. Old chat
+      mode files. Tests cover each rule, and it runs in a pipeline like any linter.
+
+  - id: agent-file
+    type: code
+    heading: "A custom agent that cannot edit"
+    lang: markdown
+    code: |
+      ---
+      name: Renewal reviewer
+      description: Review vendor renewal changes without editing files
+      tools: ['read', 'search']
+      ---
+      Review the supplied change for correctness, date handling
+      and missing tests. Report findings with file references and
+      a severity. Do not edit files.
+    narration: >
+      A custom agent is a Markdown file in dot github slash agents. This one only has read and search tools, so a
+      review cannot quietly become an edit. Pick tools in the file, and approvals stay separate: tool availability
+      and permission are different controls.
+
+  - id: recap
+    type: bullets
+    heading: "Five rules"
+    bullets:
+      - "Specific, testable instructions; start with one repeated mistake"
+      - "applyTo is relative to the workspace root"
+      - "Listed and referenced is not the same as followed"
+      - "New reusable workflows: skills, not prompt files"
+      - "Check with a test the agent has not seen"
+    narration: >
+      Five rules. Write specific instructions, and start with the one mistake you keep correcting. Remember apply to
+      is relative to the root. Listed and referenced does not mean followed. Make new reusable workflows skills. And
+      check the result with a test the agent has not seen. Next episode: the same agent with M C P servers.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The sample project, the checker and the tests are on GitHub, and the VS Code documentation pages are in the
+      description. This was Dev Lad Log, Copilot and A I, by Momento Galático.

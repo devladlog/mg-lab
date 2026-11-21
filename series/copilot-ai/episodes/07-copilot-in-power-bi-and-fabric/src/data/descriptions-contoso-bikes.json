@@ -1,0 +1,27 @@
+{
+  "_comment": "Descriptions for the Contoso Bikes model of Power BI episode 1. Copilot reads only the first 200 characters of each, so the meaning comes first.",
+  "tables": {},
+  "measures": {
+    "Sales[Sales Amount]": "Sales revenue before cost: quantity times unit price, summed over order lines. The default meaning of 'sales' and 'revenue'. Filters by order date.",
+    "Sales[Total Cost]": "Cost of the goods sold: quantity times unit cost, summed over order lines.",
+    "Sales[Margin]": "Gross margin amount: [Sales Amount] minus [Total Cost]. Use for 'margin' and 'profit'.",
+    "Sales[Margin %]": "Gross margin as a share of sales: [Margin] divided by [Sales Amount]. Never average line-level percentages.",
+    "Sales[Units]": "Number of units sold: the sum of the line quantity.",
+    "Sales[Orders]": "Number of distinct orders (order numbers), not order lines. Counted by order date. For orders by shipping date use [Orders Shipped]."
+  },
+  "columns": {
+    "Customer[Country]": "Country where the customer lives. For where the sale was made use Store[Country].",
+    "Store[Country]": "Country of the selling store. For where the customer lives use Customer[Country]."
+  },
+  "addMeasures": {
+    "Sales": [
+      {
+        "name": "Orders Shipped",
+        "expression": "CALCULATE([Orders], USERELATIONSHIP(Sales[Ship Date], 'Date'[Date]))",
+        "description": "Number of distinct orders counted by ship date instead of order date, through the inactive Ship Date relationship. Use when the question says shipped or delivered.",
+        "formatString": "#,0",
+        "displayFolder": "Sales"
+      }
+    ]
+  }
+}

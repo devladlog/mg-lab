@@ -1,0 +1,220 @@
+# DEVLADLOG Copilot & AI - episode 12 (draft: screen scenes need the recording described in demo.md)
+episode: 12
+slug: copilot-for-windows-server-admins
+series_label: "COPILOT & AI"
+series_name: "DEVLADLOG Copilot & AI"
+file_prefix: "copilot-ai"
+title: "Copilot for Windows Server Admins"
+subtitle: "Azure Copilot with Azure Arc, GitHub Copilot for PowerShell, and a dry run before every change"
+voice: am_michael
+thumbnail_text: "COPILOT\nFOR WINDOWS\nSERVER"
+youtube:
+  title: "Copilot for Windows Server Admins: Azure Arc and PowerShell | DEVLADLOG Copilot & AI #12"
+  tags: [Copilot for Windows Server, Azure Copilot, Azure Arc, Windows Server 2025, GitHub Copilot, PowerShell, WhatIf, SupportsShouldProcess, Azure Resource Graph, AI Shell, sysadmin]
+next_episode: "GitHub Copilot in VS Code: Agent Mode and Instructions"
+sources:
+  - "https://learn.microsoft.com/azure/copilot/overview"
+  - "https://learn.microsoft.com/azure/copilot/capabilities"
+  - "https://learn.microsoft.com/azure/copilot/get-information-resource-graph"
+  - "https://learn.microsoft.com/azure/azure-arc/servers/overview"
+  - "https://learn.microsoft.com/azure/azure-arc/servers/prerequisites"
+  - "https://learn.microsoft.com/azure/azure-arc/servers/manage-vm-extensions"
+  - "https://learn.microsoft.com/azure/governance/resource-graph/samples/starter"
+  - "https://learn.microsoft.com/powershell/utility-modules/aishell/overview"
+  - "https://learn.microsoft.com/powershell/scripting/learn/deep-dives/everything-about-shouldprocess"
+  - "https://learn.microsoft.com/powershell/module/microsoft.powershell.core/about/about_preference_variables"
+  - "https://code.visualstudio.com/docs/copilot/customization/custom-instructions"
+  - "https://docs.github.com/en/copilot/get-started/plans"
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Copilot for your servers. Who checks the script?"
+    sub: "Azure Copilot, Azure Arc, PowerShell, and a dry run"
+    short: hook
+    narration: >
+      Ask Copilot for a PowerShell script to fix a server, and it will give you one in seconds. Would you run it on
+      production? Today we use Azure Copilot with Azure Arc, GitHub Copilot for PowerShell, and a small review gate
+      that reads every script before it touches a machine. Welcome to Dev Lad Log, Copilot and A I.
+
+  - id: landscape
+    type: bullets
+    heading: "Where Copilot meets a Windows Server admin"
+    bullets:
+      - "Azure Copilot: questions about Azure VMs and Arc-enabled servers"
+      - "GitHub Copilot: PowerShell written in VS Code"
+      - "Windows Admin Center: no Copilot found on Learn"
+      - "AI Shell: archived since January 2026"
+    narration: >
+      Two Copilots really help a server admin today. Azure Copilot answers questions about Azure V Ms and Azure Arc
+      enabled servers. GitHub Copilot writes Power Shell in VS Code. Two things you might expect are not there.
+      I found no Copilot feature documented for Windows Admin Center on Microsoft Learn. And A I Shell, the command
+      line assistant, is archived and no longer maintained since January twenty twenty six.
+
+  - id: arc
+    type: bullets
+    heading: "Arc is the bridge"
+    bullets:
+      - "Windows Server 2025 is supported by the Arc agent"
+      - "The Arc control plane is free"
+      - "Management benefits need Software Assurance or pay-as-you-go"
+      - "Our lab: connect only, enable no paid benefit"
+      - "Not recommended for ephemeral servers"
+    narration: >
+      Azure Copilot can only see what Azure can see, so the bridge is Azure Arc. The agent supports Windows Server
+      twenty twenty five, and the Arc control plane is free. The Windows Server management benefits need Software
+      Assurance or pay as you go, so in our lab we connect one throwaway server and enable no paid feature. Microsoft
+      does not recommend Arc on ephemeral servers.
+
+  - id: arc-onboard
+    type: screen
+    heading: "One lab server, connected to Azure Arc"
+    image: screens/arc-onboard.jpg
+    bar: "Azure portal · Azure Arc · Servers · CON-ARC01"
+    demo: "Azure portal as labadmin, resource group rg-mglab-copilot-ai-12. Show CON-ARC01 (Windows Server 2025, throwaway VM) in Azure Arc > Servers with status Connected. Then on the VM, Start menu, Azure Arc Setup wizard, only for the take where the agent is installed. Mask subscription ID and tenant."
+    narration: >
+      Here is Contoso's throwaway server, C O N A R C zero one, connected to Azure Arc. Status connected, nothing else
+      enabled. It is a lab machine we delete afterwards.
+
+  - id: azure-copilot
+    type: screen
+    heading: "Azure Copilot asks about the Arc server"
+    image: screens/azure-copilot.jpg
+    bar: "Azure portal · Copilot · Azure Arc server"
+    demo: "Azure portal, Copilot pane. Prompts, one at a time: 'List my Azure Arc-enabled servers and their agent status' and 'Help me troubleshoot my Arc server extension' (Learn's own sample). Capture the real answers, also if they are vague or wrong, and any request for a resource ID."
+    narration: >
+      Now we ask Azure Copilot. First, list my Arc enabled servers and their agent status. Then Learn's own sample
+      prompt, help me troubleshoot my Arc server extension. Whatever it answers is what you see, wrong or not.
+      Learn lists limits: lists show the top five items, a conversation lasts twenty four hours, and actions on more
+      than ten resources happen outside Copilot.
+
+  - id: kql
+    type: code
+    heading: "It can write the Resource Graph query"
+    lang: sql
+    code: |
+      resources
+      | where type =~ 'microsoft.hybridcompute/machines'
+      | project name,
+                status = tostring(properties.status),
+                osName = tostring(properties.osName),
+                agentVersion = tostring(properties.agentVersion),
+                lastStatusChange = todatetime(properties.lastStatusChange)
+      | order by name asc
+    narration: >
+      Azure Copilot can turn a plain request into an Azure Resource Graph query, and Learn says to review the generated
+      query. This one is ours, written from the documented property names: status, O S name, agent version, last status
+      change. Check it before you trust it. It reads, it does not change.
+
+  - id: vscode
+    type: screen
+    heading: "GitHub Copilot writes the health script"
+    image: screens/vscode-script.jpg
+    bar: "VS Code · Copilot Chat · Get-ServerHealth.ps1"
+    demo: "VS Code with the lab repo, copilot-instructions.md copied to .github/. Agent or Chat, owner's GitHub account. Prompt: 'Write a read-only PowerShell 7 health check for one Windows Server: disks under 15 percent free, automatic services not running, pending reboot, uptime, last hotfix.' Save Copilot's real answer as copilot-draft.ps1 beside src/scripts/Get-ServerHealth.ps1 and show both."
+    narration: >
+      Over to VS Code. With our instructions file in place, we ask GitHub Copilot for a read only health check:
+      disks, services, pending restart, uptime, last hotfix. We keep its real answer and put it next to our own
+      reference script. Instructions steer Copilot. They do not guarantee anything, says the V S Code documentation.
+
+  - id: instructions
+    type: code
+    heading: "Instructions that steer, not guarantee"
+    lang: markdown
+    code: |
+      # .github/copilot-instructions.md
+      - Every script that changes state declares
+        [CmdletBinding(SupportsShouldProcess)]
+      - Read-only tasks use Get-* commands only
+      - Never use Invoke-Expression, -EncodedCommand,
+        -AsPlainText or a password in the script
+      - Never target all computers: take -ComputerName
+      - Never leave an empty catch block
+    narration: >
+      This repository file tells Copilot our house rules. Should process in every change, read only tasks use get
+      commands, no invoke expression, no passwords in scripts, never all computers. Useful, but only a request.
+
+  - id: gate
+    type: code
+    heading: "A gate that reads the script first"
+    lang: text
+    code: |
+      PS> ./Invoke-AdminGate.ps1 risky.ps1 -Mode Change
+        BLOCK AG-D002  line 4  Format-Volume can destroy data ...
+        BLOCK AG-D002  line 5  Remove-Item can destroy data ...
+        BLOCK AG-D001  line 6  Invoke-Expression runs text as code
+        BLOCK AG-S001  line 7  $adminPassword is assigned a literal secret
+        BLOCK AG-D002  line 8  Set-NetFirewallProfile can destroy ...
+        WARN  AG-R001  line 3  Get-ADComputer fans out to Restart-Computer
+        WARN  AG-C001  line 9  Set-Service has no SupportsShouldProcess
+        WARN  AG-T001  line 10 Empty catch block hides failures
+      -> Blocked, exit code 2
+    short: gate
+    narration: >
+      So we wrote a review gate in Power Shell. It parses the script with the Power Shell parser, never runs it, and
+      walks the syntax tree. It blocks destructive commands, invoke expression, literal passwords, and unknown
+      parameters. It warns about fan out to many servers, missing should process, and empty catch blocks. In read only
+      mode, any change is a block. It is a second pair of eyes, not a boundary. Azure permissions are the boundary.
+
+  - id: gate-tests
+    type: bullets
+    heading: "How we know the gate works"
+    bullets:
+      - "67 Pester tests, run without a Windows Server"
+      - "Health script checked with fixture data and mocks"
+      - "Unknown cmdlets and parameters caught with Get-Command"
+      - "Never fakes Copilot output: samples are hand-written"
+    narration: >
+      Sixty seven Pester tests cover it, without a Windows Server. The health script is tested with fixture data and
+      mocks. Invented cmdlets and wrong parameters are caught by asking Get Command. And the risky samples are
+      written by hand, they are not Copilot output.
+
+  - id: whatif
+    type: screen
+    heading: "Dry run first: -WhatIf"
+    image: screens/whatif.jpg
+    bar: "PowerShell 7 · CON-ARC01 · -WhatIf"
+    demo: "On CON-ARC01 only. Take Copilot's change script for a harmless target (for example: stop and start the Print Spooler service on this one server). Run the gate in Change mode, then run it with -WhatIf and show the What if lines. Then show a draft that lacks SupportsShouldProcess: -WhatIf fails, and the gate warned AG-C001 before. Never run a change on a shared lab VM."
+    narration: >
+      The dry run. On the throwaway server only, we take a change script and run it with what if. When the script
+      supports should process, we see what would happen. When it does not, the parameter simply fails, and our gate
+      already warned us. Learn warns that preference values do not always pass between script modules, so test it, never assume. Try one server first, then widen.
+
+  - id: gotchas
+    type: bullets
+    heading: "Gotchas, straight from the docs"
+    bullets:
+      - "Azure Copilot writes Azure PowerShell, not in-guest Windows commands"
+      - "Arc Run Command runs as Local System, controlled by Azure RBAC"
+      - "Copilot instructions do not guarantee compliance"
+      - "AI Shell is archived: do not build on it"
+      - "Windows Server benefits through Arc cost money"
+    short: gotcha
+    narration: >
+      The gotchas. Azure Copilot generates Azure Power Shell, not the cmdlets that run inside the guest. The Arc run
+      command extension runs as Local System by default, and Azure role based access controls who can use it. You can
+      block extensions on the machine. Instructions do not guarantee compliance. A I Shell is archived. And the
+      Windows Server benefits through Arc need Software Assurance or pay as you go.
+
+  - id: recap
+    type: bullets
+    heading: "Five rules"
+    bullets:
+      - "Read-only first; add changes one at a time"
+      - "Review every script before it runs"
+      - "Always -WhatIf on one server first"
+      - "Let Azure RBAC, not Copilot, set the limits"
+      - "Check licence and version on the day"
+    narration: >
+      Five rules. Read only first, add changes one at a time. Review every script before it runs. Always what if on
+      one server first. Let Azure role based access, not Copilot, set the limits. And check the licence and the
+      version on the day you record.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The gate, the health script and the instructions file are on GitHub. The link is in the description. Next time,
+      GitHub Copilot in VS Code, agent mode and instructions. Subscribe so you don't miss it. This was Dev Lad Log,
+      Copilot and A I, by Momento Galático.

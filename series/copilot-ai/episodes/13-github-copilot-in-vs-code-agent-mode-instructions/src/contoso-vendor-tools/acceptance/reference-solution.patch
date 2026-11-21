@@ -1,0 +1,50 @@
+diff -ru a/src/vendor_tools/cli.py b/src/vendor_tools/cli.py
+--- a/src/vendor_tools/cli.py
++++ b/src/vendor_tools/cli.py
+@@ -5,16 +5,20 @@
+ from datetime import date
+ from pathlib import Path
+ 
+-from .renewals import load_vendors, total_cost, upcoming_renewals
++from .renewals import load_vendors, notice_deadline, total_cost, upcoming_renewals
+ 
+ DEFAULT_DATA = Path(__file__).resolve().parents[2] / "data" / "vendors.csv"
+ 
+ 
+ def render(vendors, today: date, within_days: int) -> str:
+     rows = upcoming_renewals(vendors, today, within_days)
+-    lines = [f"{'Vendor':<24}{'Renews':<12}{'EUR/year':>10}"]
++    lines = [f"{'Vendor':<24}{'Renews':<12}{'Notice by':<12}{'EUR/year':>10}"]
+     for v in rows:
+-        lines.append(f"{v.name:<24}{v.renewal_date.isoformat():<12}{v.annual_cost_eur:>10,}")
++        deadline = notice_deadline(v)
++        flag = "  NOTICE PASSED" if deadline < today else ""
++        lines.append(
++            f"{v.name:<24}{v.renewal_date.isoformat():<12}{deadline.isoformat():<12}{v.annual_cost_eur:>10,}{flag}"
++        )
+     lines.append(f"Total: {total_cost(rows):,} EUR")
+     return "\n".join(lines)
+ 
+diff -ru a/src/vendor_tools/renewals.py b/src/vendor_tools/renewals.py
+--- a/src/vendor_tools/renewals.py
++++ b/src/vendor_tools/renewals.py
+@@ -3,7 +3,7 @@
+ 
+ import csv
+ from dataclasses import dataclass
+-from datetime import date
++from datetime import date, timedelta
+ from pathlib import Path
+ 
+ 
+@@ -37,5 +37,10 @@
+     return sorted(selected, key=lambda v: v.renewal_date)
+ 
+ 
++def notice_deadline(vendor: Vendor) -> date:
++    """Last day to give notice: the renewal date minus the notice period."""
++    return vendor.renewal_date - timedelta(days=vendor.notice_days)
++
++
+ def total_cost(vendors: list[Vendor]) -> int:
+     return sum(v.annual_cost_eur for v in vendors)

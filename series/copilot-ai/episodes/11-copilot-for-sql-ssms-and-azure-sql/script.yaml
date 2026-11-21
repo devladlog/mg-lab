@@ -1,0 +1,224 @@
+# DEVLADLOG Copilot & AI - episode 11 (draft: screen scenes need the recording described in demo.md)
+episode: 11
+slug: copilot-for-sql-ssms-and-azure-sql
+series_label: "COPILOT & AI"
+series_name: "DEVLADLOG Copilot & AI"
+file_prefix: "copilot-ai"
+title: "Copilot for SQL: SSMS and Azure SQL"
+subtitle: "GitHub Copilot in SSMS, Azure Copilot, and the permissions that really protect your data"
+voice: am_michael
+thumbnail_text: "COPILOT\nFOR SQL\nSSMS + AZURE"
+youtube:
+  title: "Copilot for SQL: GitHub Copilot in SSMS 22 and Azure Copilot | DEVLADLOG Copilot & AI #11"
+  tags: [GitHub Copilot, SSMS 22, SQL Server Management Studio, Azure Copilot, Azure SQL Database, T-SQL, Copilot agent mode, CONSTITUTION.md, agentExecuteAsUser, least privilege, SQL Server 2022]
+next_episode: "Copilot for Windows Server Admins"
+sources:
+  - "https://learn.microsoft.com/ssms/github-copilot/overview"
+  - "https://learn.microsoft.com/ssms/github-copilot/agent-mode"
+  - "https://learn.microsoft.com/ssms/github-copilot/execution-context"
+  - "https://learn.microsoft.com/ssms/github-copilot/chat"
+  - "https://learn.microsoft.com/ssms/github-copilot/free-plan"
+  - "https://learn.microsoft.com/azure/azure-sql/copilot/copilot-azure-sql-overview"
+  - "https://learn.microsoft.com/azure/azure-sql/database/free-offer"
+  - "https://learn.microsoft.com/azure/copilot/overview"
+  - "https://learn.microsoft.com/fabric/database/sql/copilot-sql-database"
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Copilot writes your T-SQL. Who checks it?"
+    sub: "SSMS, Azure SQL, and the permissions that really protect your data"
+    short: hook
+    narration: >
+      Copilot can write T-SQL inside S S M S and inside the Azure portal. But who is it running as, what can it
+      change, and who reads the code before you press Execute? We try GitHub Copilot and Azure Copilot on a real
+      database, lock Copilot down with S Q L Server permissions, and add a small review gate. Welcome to Dev Lad Log,
+      Copilot and A I.
+
+  - id: landscape
+    type: bullets
+    heading: "Three Copilots, three products"
+    bullets:
+      - "GitHub Copilot in SSMS 22: chat, completions, agent mode"
+      - "Azure Copilot in the portal: Azure SQL Database skills"
+      - "Copilot in a Fabric SQL database: paid F2 or P1 capacity"
+      - "Different licences, different admins, different names"
+    narration: >
+      There are three Copilots here. GitHub Copilot lives inside S S M S twenty two, with chat, completions and, since
+      twenty two point seven, agent mode. Azure Copilot lives in the Azure portal and knows Azure S Q L Database. And
+      Copilot in a Fabric S Q L database needs a paid F two or P one capacity, trial capacity is not supported, so it
+      stays out of our demo.
+
+  - id: licence
+    type: bullets
+    heading: "What it costs"
+    bullets:
+      - "SSMS: a GitHub account; Copilot Free has a monthly chat limit"
+      - "GitHub plans: Pro $10, Business $19, Enterprise $39 a month"
+      - "Azure Copilot: no extra cost for today's capabilities"
+      - "Our demo: free-tier Azure SQL, SQL Server 2022 Developer"
+    narration: >
+      What does it cost? For S S M S you need a GitHub account. Copilot Free works, with a monthly chat limit. Paid
+      plans are ten dollars for Pro, nineteen for Business and thirty nine for Enterprise, per GitHub's pricing page.
+      Azure Copilot is included at no extra cost today, and Microsoft says future capabilities might be priced.
+
+  - id: modes
+    type: bullets
+    heading: "Ask mode or Agent mode"
+    bullets:
+      - "Install: Visual Studio Installer, AI Assistance workload"
+      - "Ask: one answer, read-only queries only"
+      - "Agent (22.7+): many steps, asks before each query"
+      - "Agent ignores the editor: name the server and database"
+    narration: >
+      Install it with the AI Assistance workload in the Visual Studio Installer. Ask mode gives one answer and only
+      runs read-only queries. Agent mode works through many steps and asks before it runs each query. And one detail
+      from Learn that surprises people: agent mode does not inherit the connection of your active editor. Name the
+      server and the database in the prompt.
+
+  - id: ssms-ask
+    type: screen
+    heading: "Ask mode: plain English to T-SQL"
+    image: screens/ssms-ask.jpg
+    bar: "SSMS 22 · Copilot Chat (Ask) · ContosoCopilot on CON-SQL01"
+    demo: "SSMS 22 on the lab laptop, query window connected to ContosoCopilot on CON-SQL01 as copilot_demo_analyst, Copilot Chat in Ask mode. Prompt: 'Top 5 customers by revenue in September 2026, revenue is quantity times unit price, cancelled orders excluded'. Show Copilot's T-SQL, press Apply, run it, and show the result next to the reference query q01. Record whatever Copilot really answers, also when it is wrong."
+    narration: >
+      In S S M S we open a query window on our Contoso database and ask in plain English for the top five customers by
+      revenue in September, cancelled orders excluded. Copilot answers with T-SQL. We do not trust it, we compare it
+      with our own reference query. Same five rows, or we say so on camera.
+
+  - id: ssms-agent
+    type: screen
+    heading: "Agent mode: it asks before each query"
+    image: screens/ssms-agent.jpg
+    bar: "SSMS 22.7+ · Copilot Chat (Agent) · approval prompt"
+    demo: "Copilot Chat in Agent mode, tools icon showing sql-tools. Prompt naming server and database: 'In the ContosoCopilot database on the CON-SQL01 server, which customers have never placed an order?'. Capture the moment Copilot pauses for approval with the Allow dropdown open (Allow once, Allow for this session, Allow always), then the final answer. Do not pick Allow always."
+    narration: >
+      Now agent mode. We name the server and the database, and ask which customers never ordered. Copilot reads the
+      schema, drafts a query, and pauses for approval. The Allow menu offers once, this session, or always. Always is
+      saved across sessions, so think before you click it. Our answer should be Eva Newcustomer, the only customer with
+      no orders.
+
+  - id: boundary
+    type: code
+    heading: "The real control: who Copilot runs as"
+    lang: sql
+    code: |
+      -- 02-copilot-user.sql
+      CREATE USER GHCP_DB_User WITHOUT LOGIN;
+      GRANT SELECT ON SCHEMA::Sales     TO GHCP_DB_User;
+      GRANT SELECT ON SCHEMA::Reporting TO GHCP_DB_User;
+      GRANT IMPERSONATE ON USER::GHCP_DB_User TO copilot_demo_analyst;
+
+      -- CONSTITUTION.md, stored as a database extended property
+      ---
+      agentExecuteAsUser: GHCP_DB_User
+      ---
+      Always use explicit column lists. Do not use SELECT *.
+      Use schema-qualified object names (Sales.Orders).
+      Do not generate TRUNCATE TABLE statements.
+    narration: >
+      Here is the real control. By default Copilot runs as you. A database constitution can name a user, here G H C P
+      D B User, with select permission only, and S S M S runs every Copilot query as that user with execute as. Your
+      people need impersonate permission on it, and without it Copilot does not work for them, by design. The approval
+      prompts are not a security boundary. S Q L Server permissions are.
+
+  - id: denied
+    type: screen
+    heading: "Copilot's user cannot write"
+    image: screens/denied.jpg
+    bar: "SSMS 22 · connected as copilot_demo_analyst · EXECUTE AS GHCP_DB_User"
+    short: boundary
+    demo: "Query window connected as copilot_demo_analyst (a normal read-write developer login). Run 04-verify-copilot-user.sql: result grids show running_as = GHCP_DB_User, visible_orders = 30, the permission list (SELECT only), then the UPDATE attempt failing with error 229 (permission denied), and finally rows_changed_as_analyst = 1 inside a rolled-back transaction. Optional take: ask Agent mode to cancel order 1 after the sql-tools server is switched to READ_WRITE and record what Copilot reports."
+    narration: >
+      Proof. Connected as a normal developer who can write to the database, we switch to the Copilot user and try to
+      cancel an order. Error two two nine, permission denied. The same statement as the developer would work, so it was
+      rolled back. Copilot has no powers of its own. Grant select, nothing else, and add rights one by one.
+
+  - id: gate
+    type: code
+    heading: "A review gate before you press Execute"
+    lang: text
+    code: |
+      $ python -m tsql_gate check risky.sql --mode readwrite
+         BLOCK TG-W002  line 5   UPDATE without WHERE touches every row
+         WARN  TG-Q001  line 8   SELECT * : list the columns
+         WARN  TG-Q002  line 8   table 'Orders' has no schema
+         BLOCK TG-W003  line 11  DROP without IF EXISTS
+         BLOCK TG-W003  line 12  TRUNCATE TABLE is not allowed ...
+         BLOCK TG-S001  line 15  sp_configure is on the dangerous-feature list
+         BLOCK TG-S001  line 17  xp_cmdshell is on the dangerous-feature list
+         WARN  TG-D001  line 22  EXEC of a variable or expression: ...
+         WARN  TG-S002  line 25  GRANT changes permissions
+         ... 3 more warnings
+         -> BLOCKED: 5 block, 7 warning
+    narration: >
+      Copilot's T-SQL also travels: into tickets, pipelines, a colleague's window. So here is a review gate in Python.
+      It blanks out comments and strings, scans for write statements, then uses a T-SQL parser for update without where,
+      select star and missing schemas. If it cannot parse a batch, it blocks. It is a second pair of eyes, not a
+      boundary.
+
+  - id: gate-tests
+    type: bullets
+    heading: "What the gate checks, and how we know"
+    bullets:
+      - "Read-only mode: any write, DDL or permission change blocks"
+      - "UPDATE or DELETE without WHERE: always blocked"
+      - "xp_cmdshell, sp_configure, OPENROWSET: always blocked"
+      - "Dynamic SQL: literals analysed, variables flagged"
+      - "61 pytest tests; seed data and queries run on DuckDB"
+    narration: >
+      In read only mode any write blocks. Update or delete without where is always blocked, and so are xp cmdshell and
+      sp configure. Dynamic S Q L is analysed when it is a literal, and flagged when it is a variable. Sixty one tests
+      cover it, with the demo data and reference queries run on DuckDB, since the build machine has no S Q L Server.
+
+  - id: azure
+    type: screen
+    heading: "Azure Copilot on Azure SQL Database"
+    image: screens/azure-copilot.jpg
+    bar: "Azure portal · Azure SQL Database (free offer) · Copilot"
+    demo: "Azure portal as labadmin, resource group rg-mglab-copilot-ai-11, Azure SQL Database 'sqldb-copilot-demo' (free offer, AdventureWorksLT sample). On the database page open the Copilot pane and ask Learn's sample prompts: 'What's the size of this database?' and 'What are the most expensive queries in my workload?'. Capture the real answers. Mask subscription ID, server name and tenant."
+    narration: >
+      Over to the Azure portal. On a free tier Azure S Q L database with the sample data, we open Azure Copilot from the
+      database page and ask two of Learn's own sample prompts: how big is this database, and which queries are the most
+      expensive. Learn says it answers from catalog views, dynamic management views and Query Store. And ask from the
+      right page: a question about another database gives worse answers.
+
+  - id: gotchas
+    type: bullets
+    heading: "Gotchas, straight from the docs"
+    bullets:
+      - "Approval prompts and the read-only classifier are not security"
+      - "Allow always is saved across sessions"
+      - "Cancel does not roll back queries that already ran"
+      - "Some Learn pages still say Preview; check the release notes"
+      - "Azure SQL page still says Microsoft Copilot in Azure"
+    short: gotcha
+    narration: >
+      The gotchas, all from Microsoft Learn. Approval prompts and the read only classifier are not security. Allow
+      always is saved across sessions. Cancel does not roll back queries that already ran. Some Learn pages still say
+      preview, so check the release notes for the version you run. And the Azure S Q L page still uses the older name,
+      Microsoft Copilot in Azure.
+
+  - id: recap
+    type: bullets
+    heading: "Five rules"
+    bullets:
+      - "Name the server and database in agent mode"
+      - "Run Copilot as a least-privilege database user"
+      - "Compare its answer with a reference you trust"
+      - "Review write statements before they leave your machine"
+      - "Check the licence and the version on the day"
+    narration: >
+      Five rules. Name the server and the database in agent mode. Run Copilot as a least privilege database user. Compare
+      every answer with a reference you trust. Review write statements before they leave your machine. And check the
+      licence and the version on the day you record, because all of this moves fast.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The gate, the demo database and the permission scripts are on GitHub. The link is in the description. Next time, Copilot
+      for Windows Server admins. Subscribe so you don't miss it. This was Dev Lad Log, Copilot and A I, by Momento
+      Galático.

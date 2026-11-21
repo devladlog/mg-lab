@@ -1,0 +1,227 @@
+# DEVLADLOG Copilot & AI - episode 16 (draft: screen scenes need the recording described in demo.md)
+episode: 16
+slug: github-copilot-for-net-modernization
+series_label: "COPILOT & AI"
+series_name: "DEVLADLOG Copilot & AI"
+file_prefix: "copilot-ai"
+title: "GitHub Copilot for .NET Modernization"
+subtitle: "Assess, plan, upgrade: .NET Framework to .NET 10, with tests as the safety net"
+voice: am_michael
+thumbnail_text: "COPILOT\nUPGRADES YOUR\n.NET FRAMEWORK APP"
+youtube:
+  title: "Copilot Upgrades .NET Framework to .NET 10: Assess, Plan, Test (Real) | DEVLADLOG Copilot & AI #16"
+  tags: [GitHub Copilot, GitHub Copilot upgrade, app modernization, .NET Framework, .NET 10, Visual Studio 2026, Upgrade Assistant, System.Text.Json, Microsoft.Data.SqlClient, legacy code]
+next_episode: "Extending Microsoft 365 Copilot: Declarative Agents and API Plugins"
+sources:
+  - "https://learn.microsoft.com/dotnet/core/porting/github-copilot-upgrade/dotnet-overview"
+  - "https://learn.microsoft.com/dotnet/core/porting/github-copilot-upgrade/dotnet-how-to-upgrade-with-github-copilot"
+  - "https://learn.microsoft.com/dotnet/core/porting/github-copilot-upgrade/dotnet-scenarios-and-skills"
+  - "https://learn.microsoft.com/dotnet/core/porting/github-copilot-upgrade/dotnet-how-to-custom-upgrade-instructions"
+  - "https://learn.microsoft.com/dotnet/core/porting/github-copilot-upgrade/concepts"
+  - "https://learn.microsoft.com/dotnet/core/porting/github-copilot-app-modernization/install"
+  - "https://learn.microsoft.com/dotnet/core/porting/"
+  - "https://learn.microsoft.com/sql/connect/ado-net/migrate-system-data-sql-client-to-microsoft-data-sql-client"
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Let Copilot upgrade a .NET Framework app"
+    sub: "Assessment, plan, tasks, and the tests that keep it honest"
+    short: hook
+    narration: >
+      Contoso Bikes still runs its dealer quote service on dot net Framework four point seven two. Everyone agrees it
+      should move. Nobody wants to be the one who touches it. Today GitHub Copilot does the upgrade, in three stages
+      we can read and correct, and we prove with tests that nothing changed that should not have. Welcome to DEVLADLOG
+      Copilot and A I.
+
+  - id: what
+    type: bullets
+    heading: "GitHub Copilot upgrade: what it is"
+    bullets:
+      - "Was: GitHub Copilot app modernization for .NET"
+      - "Visual Studio: right-click, Modernize, or @Modernize"
+      - "VS Code and Copilot CLI: @upgrade"
+      - "Targets .NET 8 or later, or .NET Framework 4.8.1"
+      - "The .NET Upgrade Assistant is deprecated in its favour"
+    narration: >
+      First the names. Microsoft Learn now calls it GitHub Copilot upgrade. You may know it as GitHub Copilot app
+      modernization for dot net. In Visual Studio you right click the solution and choose Modernize, in VS Code and
+      the Copilot command line you type at upgrade. It upgrades to dot net eight or later, or to Framework four point
+      eight point one. The dot net Upgrade Assistant is officially deprecated in favour of it.
+
+  - id: scan
+    type: code
+    heading: "Before the agent: a pre-scan of the solution"
+    lang: bash
+    code: |
+      $ dotnet run --project ModernizationScan -- scan legacy-contoso
+      3 project(s). Scan score 28 (high effort; our own heuristic, not a Microsoft measure).
+
+      | # | Project | Format | Target | Packages | Depends on |
+      | 1 | Contoso.Pricing | legacy + packages.config | net472 | 1 | - |
+      | 2 | Contoso.Orders.Web | legacy + packages.config + web | net472 | 5 | Contoso.Pricing |
+      | 3 | Contoso.Pricing.Tests | legacy + packages.config | net472 | 3 | Contoso.Pricing |
+    narration: >
+      Before we open Visual Studio, a pre scan. Three projects, all legacy format with packages dot config, one of them
+      an ASP dot net MVC web app. The scan maps what it finds to the scenarios and skills Learn lists: Newtonsoft,
+      the old SQL client, the static HTTP context. It is our own helper. The agent does its own, deeper assessment.
+
+  - id: stages
+    type: bullets
+    heading: "Three stages, all saved in your repo"
+    bullets:
+      - "Assessment: assessment.md, then upgrade-options.md"
+      - "Planning: plan.md and scenario-instructions.md"
+      - "Execution: tasks.md, build and test per task"
+      - "Everything lives in .github/upgrades/{scenarioId}"
+      - "Guided mode pauses at each stage; automatic does not"
+    narration: >
+      The agent works in three stages and writes each one to your repository, under dot github, upgrades, and the
+      scenario name. Assessment produces assessment dot m d and the options you confirm, like bottom up or all at once.
+      Planning produces the plan. Execution produces a task list and builds and tests after each task. Guided mode
+      pauses between stages. Start there.
+
+  - id: start-screen
+    type: screen
+    heading: "Right-click the solution: Modernize"
+    image: screens/modernize-start.jpg
+    bar: "Visual Studio · Solution Explorer · Modernize · Copilot Chat"
+    demo: "Lab Windows desktop, Visual Studio with the .NET desktop workload and the GitHub Copilot app modernization component, solution src/legacy-contoso/Contoso.sln open in a throwaway Git repo. Right-click the solution, Modernize; Copilot Chat opens with the agent. Type 'Upgrade everything to .NET 10', choose a strong reasoning model, answer the pre-initialization questions (target, Git strategy, Guided mode). Show whatever the real agent asks."
+    narration: >
+      Here it is in Visual Studio. Right click the solution, Modernize, and the chat opens with the agent. We ask it to
+      upgrade everything to dot net ten. It asks for the target, the Git strategy and whether we want guided mode.
+      The project must be in Git, because the agent commits as it goes.
+
+  - id: assessment-screen
+    type: screen
+    heading: "assessment.md: what will break"
+    image: screens/assessment.jpg
+    bar: "Visual Studio · .github/upgrades/dotnet-version-upgrade/assessment.md"
+    short: assessment
+    demo: "Visual Studio editor showing the real assessment.md the agent produced for Contoso.sln: the executive summary, project compatibility and package compatibility tables, and the Newtonsoft.Json and System.Data.SqlClient entries. Do not edit before capturing. If the agent flags the Newtonsoft.Json 12.0.3 vulnerability, scroll to it."
+    narration: >
+      The assessment is a file you can read and edit. Projects, packages, breaking APIs, and the technologies it found.
+      Newtonsoft dot Json shows up, and so does the old SQL client. This is the moment to add context before the plan
+      exists. If you remove a project from the plan, others that depend on it can fail, so edit with care.
+
+  - id: tasks-screen
+    type: screen
+    heading: "tasks.md: build and test after every task"
+    image: screens/tasks-progress.jpg
+    bar: "Visual Studio · tasks.md · Git Changes"
+    demo: "Visual Studio: tasks.md with the progress line and task headings ([ ] to [✓]) while the agent executes, Git Changes window showing the agent's commits per the chosen Git strategy. Then terminal: `dotnet run --project ModernizationScan -- check-upgrade <repo>` (from src/) printing the stage and task counts."
+    narration: >
+      Execution is a task list. Each task is started, executed, then validated by building and running tests, and the
+      agent commits according to the Git strategy you chose. You can close the chat and come back tomorrow, because the
+      state is in the repository. Our small checker reads that folder and tells you which tasks are still open.
+
+  - id: lock
+    type: code
+    heading: "The safety net: one test set, three implementations"
+    lang: bash
+    code: |
+      $ dotnet test -p:Impl=legacy     # Newtonsoft.Json, as today
+      Passed!  - Failed: 0, Passed: 13
+      $ dotnet test -p:Impl=modern     # System.Text.Json, after the upgrade
+      Passed!  - Failed: 0, Passed: 14
+      $ dotnet test -p:Impl=naive      # find-and-replace JsonConvert
+      Failed!  - Failed: 5, Passed: 8
+    narration: >
+      Now the part that matters. Characterization tests describe what the code does today, and they pass on the legacy
+      sources. Then the same tests run against our reference upgrade, and against a naive find and replace of
+      JsonConvert with JsonSerializer. The reference passes. The naive version compiles, and fails five tests.
+
+  - id: stj
+    type: code
+    heading: "Why the naive replace is wrong"
+    lang: csharp
+    code: |
+      // JsonSerializerDefaults.Web = camelCase names, case-insensitive reading, numbers may be read from strings.
+      private static readonly JsonSerializerOptions Options = new(JsonSerializerDefaults.Web)
+      {
+          DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+          Converters = { new JsonStringEnumConverter() }
+      };
+
+      public static Quote? FromJson(string json)
+      {
+          // Newtonsoft returned null for empty input; System.Text.Json throws. Keep the old contract.
+          if (string.IsNullOrWhiteSpace(json)) return null;
+          return JsonSerializer.Deserialize<Quote>(json, Options);
+      }
+    narration: >
+      Why. The messages already in the queue use camel case names, text enums, and numbers inside strings. Default
+      System dot Text dot Json is case sensitive and will not read a number from a string. Newtonsoft also returned null
+      for empty input, and the new serializer throws. Whoever does the upgrade, human or agent, needs tests that know
+      this.
+
+  - id: gotcha-screen
+    type: screen
+    heading: "Gotcha: the connection that no longer connects"
+    image: screens/sql-encrypt.jpg
+    bar: "PowerShell · dotnet run · Contoso.Pricing.Probe · CON-SQL01"
+    short: gotcha
+    demo: "Terminal on the lab laptop, upgraded app or the expected-after Contoso.Pricing.Probe: with PRICING_CONN pointing at CON-SQL01 (10.50.0.30) and no TrustServerCertificate, run `dotnet run -- BIKE-100`; show the real exception (expected: certificate chain not trusted). Then connect with the lab-only trusting string and show the price. If the real error differs, show the real error."
+    narration: >
+      The honest gotcha. After the upgrade, the app uses Microsoft dot Data dot SqlClient, which encrypts by default
+      since version four. Our lab SQL Server has only its self signed certificate, so the connection fails with a
+      certificate chain error. For a lab you can trust the certificate. In production, install a certificate the client
+      trusts. Microsoft's guidance is clear: do not use it as a general fix.
+
+  - id: instructions
+    type: code
+    heading: "Teach the agent your rule: a custom upgrade instruction"
+    lang: markdown
+    code: |
+      # Replace Newtonsoft.Json with System.Text.Json
+
+      ## Detect
+      - If a project references `Newtonsoft.Json` (in `packages.config` or as a `PackageReference`) and calls `JsonConvert`, then migrate that project with the steps below.
+
+      ## Steps
+      1. If `JsonConvert.SerializeObject` or `DeserializeObject` is called with `JsonSerializerSettings`, then create one `static readonly JsonSerializerOptions` built with `JsonSerializerDefaults.Web`. Do not use the parameterless options: they are case-sensitive, do not read numbers from strings and write PascalCase names.
+      5. If `DeserializeObject` can receive an empty or whitespace string, then return `null` before calling `JsonSerializer.Deserialize`. Newtonsoft returns null for empty input; System.Text.Json throws.
+    narration: >
+      Learn documents custom upgrade instructions: a markdown file with one transformation, explicit if then steps,
+      and a diff captured from a real edit. Name it with the verb, like replace underscore newtonsoft, and ask for it
+      during assessment. Ours encodes exactly the lessons from the tests. A linter checks it against Learn's tips.
+
+  - id: cost
+    type: bullets
+    heading: "What you need, and the limits"
+    bullets:
+      - "Windows, Visual Studio 2026 or 2022 17.14.17+"
+      - "A GitHub Copilot subscription, paid or free"
+      - "Visual Basic: not fully supported by the agent"
+      - "Project must be in Git; review every commit"
+      - "Can also run in the cloud as a custom agent (episode 15)"
+    narration: >
+      What you need. Windows, Visual Studio twenty twenty six, or twenty twenty two seventeen fourteen seventeen or
+      later, and a GitHub Copilot subscription. Learn says paid or free. The agent does not fully support Visual
+      Basic, so use the standard agent or the Upgrade Assistant there. It can also run in the cloud as a custom agent,
+      which ties back to last episode. And you still review every commit.
+
+  - id: tests
+    type: code
+    heading: "Everything above is tested code"
+    lang: bash
+    code: |
+      $ dotnet test tests/ModernizationScan.Tests
+      Passed!  - Failed: 0, Passed: 40
+      $ dotnet test tests/Pricing.Characterization -p:Impl=modern
+      Passed!  - Failed: 0, Passed: 14
+      $ python -m pytest -q
+      4 passed
+    narration: >
+      The kit is real code. Forty tests for the scanner and the upgrade folder checker, and the characterization tests
+      you just saw. The legacy sources compile against Framework reference assemblies, but only a Windows build
+      proves the full solution, and that is what we record.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The legacy solution, the reference upgrade, the scanner and the tests are on GitHub, with the Microsoft Learn
+      links in the description. Next episode, extending Microsoft three six five Copilot with declarative agents. Subscribe
+      so you don't miss it. This was DEVLADLOG Copilot and A I, by Momento Galático.

@@ -1,0 +1,229 @@
+# DEVLADLOG Copilot & AI - episode 08 (draft: screen scenes need the recording described in demo.md)
+episode: 8
+slug: copilot-in-dynamics-365-sales-and-customer-service
+series_label: "COPILOT & AI"
+series_name: "DEVLADLOG Copilot & AI"
+file_prefix: "copilot-ai"
+title: "Copilot in Dynamics 365 Sales and Customer Service"
+subtitle: "Summaries are only as good as the records behind them"
+voice: am_michael
+thumbnail_text: "COPILOT\nDYNAMICS 365\nTHIN DATA, THIN ANSWERS"
+youtube:
+  title: "Copilot in Dynamics 365 Sales and Service: What It Reads and Skips | DEVLADLOG Copilot & AI #8"
+  tags: [Copilot in Dynamics 365 Sales, Copilot in Customer Service, opportunity summary, case summary, knowledge articles, Copilot Service workspace, Copilot Service admin center, Dataverse Web API, Sales agent, Microsoft 365 Copilot, Dynamics 365 licensing, Python]
+next_episode: "Copilot in SharePoint and SharePoint Agents"
+sources:
+  - "https://learn.microsoft.com/dynamics365/sales/understand-copilot-summaries"
+  - "https://learn.microsoft.com/dynamics365/sales/copilot-summarize-records"
+  - "https://learn.microsoft.com/dynamics365/sales/enable-setup-copilot"
+  - "https://learn.microsoft.com/microsoft-sales-copilot/set-up-sales-chat"
+  - "https://learn.microsoft.com/dynamics365/customer-service/use/copilot-use-summary"
+  - "https://learn.microsoft.com/dynamics365/customer-service/administer/copilot-map-custom-fields"
+  - "https://learn.microsoft.com/dynamics365/customer-service/administer/configure-copilot-features"
+  - "https://learn.microsoft.com/dynamics365/contact-center/administer/copilot-enable-help-pane"
+  - "https://learn.microsoft.com/dynamics365/contact-center/use/copilot-language-support"
+  - "https://learn.microsoft.com/dynamics365/customer-service/administer/faq-copilot-features"
+  - "https://learn.microsoft.com/power-apps/developer/data-platform/webapi/query/page-results"
+  - "https://www.microsoft.com/dynamics-365/products/sales/pricing"
+  - "https://www.microsoft.com/dynamics-365/products/customer-service/pricing"
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Copilot in Dynamics 365: thin data, thin answers"
+    sub: "Sales and Customer Service, checked with code"
+    short: hook
+    narration: >
+      Copilot in Dynamics 365 writes summaries of your records. If the records are thin, the summary is thin, or it
+      does not appear at all. In this episode we check, in code, what Contoso's opportunities, cases and knowledge
+      articles give Copilot, and then we watch Sales and Customer Service Copilot work on the same data. Welcome to
+      Dev Lad Log, Copilot and A I.
+
+  - id: what
+    type: bullets
+    heading: "What we are looking at"
+    bullets:
+      - "Sales: opportunity and account summaries"
+      - "Customer Service: case summaries"
+      - "Customer Service: answers from knowledge articles"
+      - "Input: your Dataverse records"
+    narration: >
+      First, scope. In Sales, Copilot summarizes opportunities and accounts. In Customer Service it summarizes cases
+      and answers representative questions from knowledge articles. All of it is generated from the data in Dataverse,
+      and that is the part you can inspect.
+
+  - id: licence
+    type: bullets
+    heading: "Licences, from the pricing pages"
+    bullets:
+      - "Sales Professional 65 dollars: no Copilot"
+      - "Sales Enterprise 105, Premium 150: Copilot"
+      - "Customer Service Professional 50: no Copilot"
+      - "Customer Service Enterprise 105, Premium 195: Copilot"
+    narration: >
+      Licences first. Microsoft's pricing pages, read on twenty first November, list Sales Professional at sixty five
+      dollars per user per month with no Copilot, then Enterprise at one hundred five and Premium at one hundred
+      fifty with Copilot. Customer Service goes fifty, one hundred five and one hundred ninety five, and again the
+      Professional plan has no Copilot. All paid yearly. The Sales agent in Microsoft 365 Copilot works on Dynamics
+      Sales data with Enterprise or Premium alone, but Graph data needs a Microsoft 365 Copilot licence.
+
+  - id: setup-screen
+    type: screen
+    heading: "Switching it on"
+    image: screens/copilot-settings.jpg
+    bar: "Sales Hub · App Settings · Copilot  |  Copilot Service admin center"
+    demo: "Two browser windows on the lab trial environment. Window 1: Sales Hub, App Settings, General Settings, Copilot, showing Copilot on and the Turn audit on option or the audit already on. Window 2: Copilot Service admin center, Support experience, Productivity, Copilot settings, showing opt in done and the data movement status. Mask the organisation URL and tenant name."
+    narration: >
+      Setup lives in two places. In Sales Hub, App Settings, Copilot, we turn audit on, because Copilot reads audit
+      history for recent changes and for opportunity stage updates. In Customer Service we enable the A I features in
+      the Power Platform admin center and opt in from the Copilot Service admin center. Learn says data movement for
+      Copilot is on by default in Europe, and we check that our environment agrees.
+
+  - id: run-code
+    type: code
+    heading: "Check the records before Copilot reads them"
+    lang: text
+    code: |
+      $ python -m d365_copilot_ready check --sample src/data/sample
+      6 opportunities, 4 accounts, 6 cases, 7 knowledge articles
+      (2 usable for UI language 1033)
+      ERROR C001 case 'CAS-1002': only 6 words ... below 38 words
+      ERROR O004 opportunity 'Proseware courier trial':
+                 parentaccountid is empty ...
+      ERROR K001 knowledgearticle 'KA-0002 ...': state is not Published
+      ERROR K002 knowledgearticle 'KA-0003 ...': not the latest version
+      ERROR K003 knowledgearticle 'KA-0004 ...': language 2070 differs
+      ...
+      -- 7 errors, 11 warnings, 9 info
+    narration: >
+      Now the check. Our tool reads opportunities, accounts, cases and knowledge articles from the Dataverse Web A P I,
+      follows the paging links, and applies rules taken from Learn. On our fictional Contoso Bikes sample it finds
+      seven errors. A Proseware opportunity has no parent account, so no account history. One case has six words. Five
+      of seven articles are invisible to Copilot.
+
+  - id: opp-screen
+    type: screen
+    heading: "Opportunity summary: full record and thin record"
+    image: screens/opportunity-summary.jpg
+    bar: "Sales Hub · Opportunity · Copilot summary"
+    demo: "Sales Hub on the lab trial environment. Open the opportunity 'Tailspin fleet: 40 e-bikes' (account, contact, estimated value and close date, two products, one quote) and expand the Copilot summary banner. Then open 'Proseware courier trial' (no account, no products) and expand its summary. Record both exactly as shown, and keep the Learn attribute list (estimatedvalue, estimatedclosedate, parentcontactid, parentaccountid) on a second window for comparison."
+    narration: >
+      Here are two real opportunities in the Sales trial. One has an account, a contact, products and a quote. The
+      other has no account and no products. We expand the Copilot summary on each. Whatever Copilot writes stays on
+      screen, and we compare it with the attributes Learn lists: estimated value, close date, contact and account.
+
+  - id: case-code
+    type: code
+    heading: "Case summary: the thirty eight word rule"
+    lang: python
+    short: case
+    code: |
+      CASE_SUMMARY_MIN_WORDS = 38
+
+      def case_words(case, notes, emails) -> int:
+          mails = (html_text(e)[0] for e in emails)
+          return count_words(case.get("title"), case.get("description"),
+                             *notes, *mails)
+
+      # in check_case:
+      words = case_words(case, notes, emails)
+      if words < CASE_SUMMARY_MIN_WORDS:
+          ...  # error C001
+    narration: >
+      Customer Service has a hard rule. Learn says a case summary is not generated if the source fields hold fewer
+      than thirty eight words in English. Our check counts generously, title, description, notes, and the text of
+      linked emails with the markup stripped. A case that fails our check should fail in Copilot too.
+
+  - id: case-screen
+    type: screen
+    heading: "Case summary: long case and six word case"
+    image: screens/case-summary.jpg
+    bar: "Copilot Service workspace · Case · Copilot summary"
+    demo: "Copilot Service workspace on the lab Customer Service trial. Open case CAS-1001 (full description) and expand the Copilot case summary card. Then open CAS-1002 (six words: 'Battery does not charge.') and show what the summary card does. Record the real behaviour, including any message or an empty card."
+    narration: >
+      In Copilot Service workspace we open a case with a full description and a case that says Battery does not
+      charge. The first should get a summary card. For the second, Learn says none is generated, and we show exactly
+      what the screen does.
+
+  - id: kb-code
+    type: code
+    heading: "Knowledge: what Copilot can actually use"
+    lang: python
+    code: |
+      KB_STATE_PUBLISHED = 3
+
+      def is_usable(art, ui_localeid, locale_of) -> bool:
+          outside, _inside, _images = html_text(art.get("content"))
+          return (art.get("statecode") == KB_STATE_PUBLISHED
+                  and bool(art.get("islatestversion"))
+                  and locale_of.get(art.get("_languagelocaleid_value"))
+                      == ui_localeid
+                  and bool(outside))
+    narration: >
+      For answers, Copilot reads the content column of knowledge articles, and only articles that are published, at the
+      latest version, and tagged with the language of the user interface. That is this function. A draft, an old
+      version, a Portuguese article for an English user: all invisible.
+
+  - id: kb-screen
+    type: screen
+    heading: "Ask a question: published article, draft article"
+    image: screens/ask-a-question.jpg
+    bar: "Copilot Service workspace · Copilot · Ask a question"
+    demo: "Copilot Service workspace, Copilot help pane, Ask a question tab, with the organisation knowledge base as source. First ask 'How do I reset error E21 on the Contoso Volt display?' (published article KA-0001) and open Check sources. Then ask 'What does the hub warranty cover?' (only a draft article KA-0002 exists). Record the answers and citations exactly as shown."
+    narration: >
+      In the Ask a question pane we ask how to reset error E twenty one, which a published article answers. Then we ask
+      about the hub warranty, which exists only as a draft. We read the answers and the citations as they appear.
+
+  - id: paging-code
+    type: code
+    heading: "Reading Dataverse: follow the next link"
+    lang: python
+    code: |
+      while url:
+          if url in seen:
+              raise DataverseError("paging loop: same next link twice")
+          seen.add(url)
+          page = self._get(url)
+          yield from page.get("value", [])
+          url = page.get("@odata.nextLink")
+    narration: >
+      Reading this much data needs paging. Without a page size, one request can return up to five thousand rows. We
+      send a page size, follow the next link exactly as returned, never use skip, and stop when there is no next link.
+      Learn is explicit about each of those, and our tests run the loop against a local server.
+
+  - id: gotcha
+    type: bullets
+    heading: "Gotchas, all from Learn"
+    short: gotcha
+    bullets:
+      - "Tables and images in articles: not read"
+      - "Content column only: title and keywords do not count"
+      - "UI language not matched by any article: no response"
+      - "Same question, different answer: expected"
+    narration: >
+      The gotchas, all from Learn. Copilot cannot read tables or images in knowledge articles, so a table of torque
+      values is invisible. It reads the content column only, not title or keywords. If the interface is Spanish and
+      the articles are English only, no response is generated. And the same question can give different answers, so
+      test with a checklist, not a single try.
+
+  - id: fixes
+    type: bullets
+    heading: "What to fix first"
+    bullets:
+      - "Parent account and contact on every opportunity"
+      - "Products and quotes linked to opportunities"
+      - "Cases with a real description, notes and emails"
+      - "Articles published, latest, in the user language, as text"
+    narration: >
+      So what do you fix first? Every opportunity needs a parent account and a contact. Link products and quotes.
+      Teach people to write real case descriptions, and keep notes and emails on the case. And publish articles at
+      their latest version, in the language your representatives use, as text and not as tables.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The checker, the sample data and the tests are on GitHub, and every Microsoft Learn page is in the description.
+      Next episode, Copilot in SharePoint and SharePoint agents. This was Dev Lad Log, Copilot and A I, by Momento
+      Galático.

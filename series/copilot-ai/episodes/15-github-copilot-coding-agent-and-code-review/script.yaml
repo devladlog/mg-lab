@@ -1,0 +1,233 @@
+# DEVLADLOG Copilot & AI - episode 15 (draft: screen scenes need the recording described in demo.md)
+episode: 15
+slug: github-copilot-coding-agent-and-code-review
+series_label: "COPILOT & AI"
+series_name: "DEVLADLOG Copilot & AI"
+file_prefix: "copilot-ai"
+title: "Copilot Coding Agent and Code Review"
+subtitle: "Assign an issue, review the pull request, keep a human in charge"
+voice: am_michael
+thumbnail_text: "COPILOT\nCODING AGENT\nAND CODE REVIEW"
+youtube:
+  title: "GitHub Copilot Coding Agent and Code Review: Issue to PR (Real Repo) | DEVLADLOG Copilot & AI #15"
+  tags: [GitHub Copilot, Copilot cloud agent, Copilot coding agent, Copilot code review, copilot-setup-steps, copilot-instructions, GitHub Actions, pull request review, AI code review, DevOps]
+next_episode: "GitHub Copilot for .NET Modernization"
+sources:
+  - "https://docs.github.com/en/copilot/concepts/agents/cloud-agent/about-cloud-agent"
+  - "https://docs.github.com/en/copilot/how-tos/use-copilot-agents/cloud-agent/use-cloud-agent-on-github"
+  - "https://docs.github.com/en/copilot/how-tos/use-copilot-agents/cloud-agent/use-cloud-agent-via-the-api"
+  - "https://docs.github.com/en/copilot/how-tos/copilot-on-github/customize-copilot/customize-cloud-agent/customize-the-agent-environment"
+  - "https://docs.github.com/en/copilot/concepts/agents/cloud-agent/risks-and-mitigations"
+  - "https://docs.github.com/en/copilot/how-tos/use-copilot-agents/request-a-code-review/use-code-review"
+  - "https://docs.github.com/en/copilot/tutorials/customize-code-review"
+  - "https://docs.github.com/en/copilot/get-started/plans"
+  - "https://learn.microsoft.com/training/modules/github-copilot-code-agent/"
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Give Copilot an issue. Get a pull request."
+    sub: "The cloud agent and code review, with a human in charge"
+    short: hook
+    narration: >
+      A dealer pricing bug sits in the backlog at Contoso Bikes. Nobody has time. So we assign the issue to GitHub
+      Copilot, and a while later there is a draft pull request waiting. Today we do that for real: what the agent
+      needs before it starts, what it is not allowed to do, and what Copilot code review adds on top. Welcome to
+      DEVLADLOG Copilot and A I.
+
+  - id: two-jobs
+    type: bullets
+    heading: "Two features, two different jobs"
+    bullets:
+      - "Cloud agent (formerly coding agent): does the work"
+      - "Code review: reads the work, as a reviewer"
+      - "Agent runs in an ephemeral environment on GitHub Actions"
+      - "One repository, one branch, one pull request per task"
+      - "Paid Copilot plans; business plans need the policy enabled"
+    narration: >
+      Two features, two jobs. The cloud agent, which GitHub used to call the coding agent, does the work. It runs in
+      an ephemeral environment powered by GitHub Actions, in one repository, on one branch, with one pull request per
+      task. Code review is different. It reads a pull request as a reviewer. Both need a paid Copilot plan, and on
+      Business and Enterprise an admin has to enable the policy first.
+
+  - id: issue
+    type: code
+    heading: "A ready issue: example, criteria, files"
+    lang: markdown
+    code: |
+      ## Problem
+      `DiscountCalculator.LoyaltyPrice` uses `Math.Round(value, 2)`, which rounds halves to the nearest even cent.
+      For a dealer with 3 years, a list price of 12.25 gives 11.02. Finance's price list says 11.03.
+
+      ## Acceptance criteria
+      - [ ] `LoyaltyPrice(12.25m, 3)` returns `11.03m`; `LoyaltyPrice(12.45m, 3)` returns `11.21m` (11.205 rounds up).
+      - [ ] A negative `listPrice` or negative `years` throws `ArgumentOutOfRangeException` (parameter name in the exception).
+      - [ ] `dotnet test Contoso.Bikes.sln` is green.
+
+      ## Where to look
+      - `src/Contoso.Bikes.Pricing/DiscountCalculator.cs`
+    narration: >
+      The agent receives the issue title, the description and the comments, plus your repository instructions. It does
+      not react to comments added after you assign. So the issue is the prompt. A concrete example, a checklist of
+      acceptance criteria, and the files to look at. Our preflight linter checks exactly that, and this one passes.
+
+  - id: setup
+    type: code
+    heading: "copilot-setup-steps.yml: install before it starts"
+    lang: yaml
+    code: |
+      jobs:
+        # The job MUST be called copilot-setup-steps or Copilot will not pick it up.
+        copilot-setup-steps:
+          runs-on: ubuntu-latest
+          timeout-minutes: 20
+          permissions:
+            contents: read
+          steps:
+            - name: Check out the repository
+              uses: actions/checkout@v4
+            - name: Install the .NET 8 SDK
+              uses: actions/setup-dotnet@v4
+              with:
+                dotnet-version: 8.0.x
+            - name: Restore packages so the agent can build and test offline
+              run: dotnet restore Contoso.Bikes.sln
+    narration: >
+      Next, the environment. A workflow called copilot setup steps installs the tools before the agent starts. The job
+      must have exactly that name, or it is ignored. Only steps, permissions, runs on, services, snapshot and timeout
+      minutes are honoured, and the timeout cannot go above fifty nine. The file must be on the default branch.
+
+  - id: assign-screen
+    type: screen
+    heading: "Assign the issue to Copilot"
+    image: screens/assign-issue.jpg
+    bar: "GitHub · throwaway repo · Issues · Assignees"
+    demo: "Browser on github.com as the owner's account, throwaway repo `contoso-bikes-pricing` (private): the issue 'Loyalty price rounds halves to even; finance expects away from zero' open; right sidebar Assignees > Copilot selected, the optional prompt field visible. Mask nothing but the account's email."
+    narration: >
+      In the issue, open assignees and pick Copilot. There is an optional prompt for extra guidance, and menus for the
+      branch, the custom agent and the model. Assign it, and now we wait. The issue itself stays untouched.
+
+  - id: session-screen
+    type: screen
+    heading: "The draft pull request and its session"
+    image: screens/agent-pr.jpg
+    bar: "GitHub · pull request · copilot/ branch · session log"
+    demo: "Browser: the draft pull request the agent opened (branch starting with copilot/), its commits authored by Copilot with the requester as co-author and marked Verified, the link to the session log, and the merge box showing 'Approve and run workflows'."
+    narration: >
+      A draft pull request appears on a branch that starts with copilot slash. Commits are authored by Copilot with
+      you as co-author, signed, and linked to the session log, so you can see how it worked. The checks have not run.
+      GitHub waits for a person with write access to click approve and run workflows.
+
+  - id: guardrails
+    type: bullets
+    heading: "What the agent cannot do"
+    bullets:
+      - "Push only to its own copilot/ branch"
+      - "Cannot mark ready, approve or merge"
+      - "The person who asked cannot approve it"
+      - "Workflows wait for 'Approve and run workflows'"
+      - "CodeQL, secret scanning and dependency checks on its code"
+    narration: >
+      These are the guardrails GitHub documents. It pushes only to its own branch. It cannot mark the pull request
+      ready, approve or merge it. The person who requested the work cannot approve it either. Its code goes through
+      CodeQL, secret scanning and a dependency check. Branch protections and required checks still apply.
+
+  - id: gate-screen
+    type: screen
+    heading: "Is it ready for a human to merge?"
+    image: screens/gate-terminal.jpg
+    bar: "Terminal · python -m agent_ready gate"
+    demo: "Terminal on the lab laptop (dark, 18 pt): `python -m agent_ready gate --repo <owner>/contoso-bikes-pricing --pull <n> --requested-by <owner login>` run twice: first while the pull request is a draft with no approval (WAIT lines, 'not ready'), then after a second account approved and the workflows ran (all OK, 'ready for a human to merge')."
+    narration: >
+      Our small gate script reads the pull request with the GitHub CLI and says what is still missing. Draft, no
+      approval from anyone but the requester, workflows not run. After a colleague approves and the checks pass, it
+      says ready for a human to merge. It reads. It never merges.
+
+  - id: review-instructions
+    type: code
+    heading: "Teach code review your rules"
+    lang: markdown
+    code: |
+      ---
+      applyTo: "src/**/*.cs"
+      ---
+      # Money code review rules
+
+      - Flag any `double` or `float` used for a price, discount or total. Use `decimal`.
+      - Flag `Math.Round` without `MidpointRounding.AwayFromZero`.
+      - Flag public methods that accept a price or a count and do not validate negative values.
+      - Flag `catch` blocks that swallow an exception without logging or rethrowing.
+    narration: >
+      Now code review. Path specific instructions live in dot github, instructions, with an apply to pattern.
+      Copilot reads them from the head branch, so you can test a rule inside the same pull request. Keep rules short and
+      concrete. Instructions that change formatting, block merges or follow links are not supported.
+
+  - id: review-screen
+    type: screen
+    heading: "Copilot reviews a flawed pull request"
+    image: screens/code-review.jpg
+    bar: "GitHub · pull request · Reviewers · Copilot"
+    short: review
+    demo: "Browser: the seeded pull request 'Add bulk discount total' (src/demo-repo/review-demo patch) with Copilot requested under Reviewers; the Copilot review as a Comment with line comments. Whatever Copilot really answers is what is shown: expected themes are double used for money, Math.Round without midpoint rule, no validation, swallowed exception. Do not stage or edit the output."
+    narration: >
+      Here is a pull request with four planted problems: double for money, rounding without the midpoint rule, no
+      validation, and an exception swallowed. We request a review from Copilot. It usually answers in under thirty
+      seconds. This is what it really said. Where it matches our rules, great. Where it missed something, we say so.
+
+  - id: gotcha
+    type: bullets
+    heading: "Gotcha: the review is advisory"
+    short: gotcha
+    bullets:
+      - "Copilot's review is a Comment, not an approval"
+      - "It does not count toward required approvals"
+      - "Re-reviews can repeat comments you already resolved"
+      - "Text hidden in an HTML comment never reaches the agent"
+      - "Approvals by Copilot: public preview, off by default"
+    narration: >
+      The honest gotcha. Copilot's review is a comment review, so it never counts toward required approvals. A
+      re-review may repeat comments you already resolved. And on the issue side, text hidden in an HTML comment is
+      filtered before the agent sees it, so a clever hidden instruction simply does nothing. Treat both features as
+      a fast first reader, not as the approver.
+
+  - id: cost
+    type: bullets
+    heading: "What it costs"
+    bullets:
+      - "Paid plans only: Pro $10, Pro+ $39, Business $19, Enterprise $39"
+      - "Cloud agent uses Actions minutes and AI credits"
+      - "Code review uses Actions minutes on private repos"
+      - "Session hard limit: 59 minutes"
+      - "Prices as read on 21 Nov 2026: check on the day"
+    narration: >
+      On cost. These are paid plan features. GitHub's plans page listed Pro at ten dollars, Pro plus at thirty nine,
+      Business at nineteen and Enterprise at thirty nine per month, when we read it. The cloud agent uses Actions
+      minutes and AI credits, and code review uses Actions minutes on private repositories. Each session stops at fifty
+      nine minutes. Billing is changing, so check the pages on the day you buy.
+
+  - id: tests
+    type: code
+    heading: "Everything above is tested code"
+    lang: bash
+    code: |
+      $ python -m pytest -q
+      ................................................................  [100%]
+      59 passed
+
+      $ python -m agent_ready issue demo-repo/issues/02-vague-make-pricing-better.md
+      WARNING hidden-text: 1 HTML comment(s): GitHub filters hidden text ...
+      ERROR   problem: needs a `## Problem` section ...
+      ERROR   criteria: needs `## Acceptance criteria` ...
+    narration: >
+      The preflight kit is real code with fifty nine tests. It checks the setup file, lints your instructions, rejects
+      a vague issue like make pricing better, builds the assign request, and runs the gate. It is a helper around the
+      GitHub features, not a replacement for them.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The kit and the demo repository are on GitHub, and the official documentation links are in the description. Next
+      episode, Copilot for dot net modernization: the upgrade agent, assessment, plan and tasks. Subscribe so you don't
+      miss it. This was DEVLADLOG Copilot and A I, by Momento Galático.

@@ -1,0 +1,229 @@
+# DEVLADLOG Copilot & AI - episode 14 (draft: screen scenes need the recording described in demo.md)
+episode: 14
+slug: github-copilot-with-mcp-servers-learn-azure-github
+series_label: "COPILOT & AI"
+series_name: "DEVLADLOG Copilot & AI"
+file_prefix: "copilot-ai"
+title: "GitHub Copilot with MCP Servers (Learn, Azure, GitHub)"
+subtitle: "Three real servers, one of our own, and the config gotchas"
+voice: am_michael
+thumbnail_text: "COPILOT\nMCP SERVERS\nLEARN AZURE GITHUB"
+youtube:
+  title: "GitHub Copilot with MCP Servers: Learn, Azure, GitHub and Your Own | DEVLADLOG Copilot & AI #14"
+  tags: [GitHub Copilot, MCP, Model Context Protocol, VS Code, Microsoft Learn MCP Server, Azure MCP Server, GitHub MCP Server, mcp.json, Python, agent tools]
+next_episode: "GitHub Copilot Coding Agent and Code Review"
+sources:
+  - "https://learn.microsoft.com/training/support/mcp"
+  - "https://learn.microsoft.com/azure/developer/azure-mcp-server/overview"
+  - "https://learn.microsoft.com/azure/developer/azure-mcp-server/get-started/tools/visual-studio-code"
+  - "https://learn.microsoft.com/azure/developer/azure-mcp-server/tools/"
+  - "https://code.visualstudio.com/docs/agent-customization/mcp-servers"
+  - "https://code.visualstudio.com/docs/agents/reference/mcp-configuration"
+  - "https://code.visualstudio.com/docs/agents/run/manage-mcp-servers"
+  - "https://docs.github.com/en/copilot/how-tos/provide-context/use-mcp/set-up-the-github-mcp-server"
+  - "https://github.com/github/github-mcp-server"
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Give Copilot tools, not guesses"
+    sub: "Microsoft Learn, Azure and GitHub, plus one we wrote"
+    short: hook
+    narration: >
+      Ask a model for a notice deadline and it will happily invent one. Ask it with a tool that reads the real
+      vendor list and it can quote the answer. In this episode we connect GitHub Copilot in VS Code to three official
+      M C P servers, Microsoft Learn, Azure and GitHub, add one of our own in Python, and learn why the same config
+      file can be wrong in two places. Welcome to Dev Lad Log, Copilot and A I.
+
+  - id: what
+    type: bullets
+    heading: "Three servers, three trust models"
+    bullets:
+      - "Learn: remote, no sign-in, free, three read-only tools"
+      - "Azure: local npx process, your own Azure credentials"
+      - "GitHub: remote, OAuth sign-in or a token"
+      - "Ours: a local Python process over stdio"
+      - "Local servers run code on your machine"
+    narration: >
+      Four servers, four trust models. The Microsoft Learn server is remote, needs no sign in, costs nothing, and
+      exposes search, fetch and code sample search. The Azure server is a local process that uses your own Azure
+      credentials and role assignments. GitHub's is remote, with O Auth or a token. And ours is a local Python
+      process. Microsoft's own docs warn that local servers can run code on your machine.
+
+  - id: formats
+    type: code
+    heading: "Two formats, one trap"
+    lang: json
+    code: |
+      // .vscode/mcp.json  (editor format, Local harness)
+      { "servers": { "microsoftLearn": {
+          "type": "http",
+          "url": "https://learn.microsoft.com/api/mcp" } } }
+
+      // .mcp.json  (native Copilot harness, workspace root)
+      { "mcpServers": { "microsoftLearn": {
+          "type": "http",
+          "url": "https://learn.microsoft.com/api/mcp",
+          "tools": ["*"] } } }
+    narration: >
+      Here is the trap. The Learn and Azure quick starts still show dot vscode slash mcp dot json, with a top level
+      servers key. The current VS Code documentation says new Copilot configuration goes in a dot m c p dot json at the
+      workspace root, with a top level m c p servers key. The old file belongs to the deprecated Local harness, and
+      only eligible entries are forwarded.
+
+  - id: config
+    type: code
+    heading: "Our .mcp.json, generated and checked"
+    lang: json
+    code: |
+      "azure": {
+        "type": "stdio", "command": "npx",
+        "args": ["-y", "@azure/mcp@4.0.0-beta.9",
+                 "server", "start", "--read-only"],
+        "tools": ["*"] },
+      "github": {
+        "type": "http",
+        "url": "https://api.githubcopilot.com/mcp/readonly",
+        "tools": ["*"] },
+      "contosoVendors": {
+        "type": "stdio", "command": "python",
+        "args": ["-m", "vendor_mcp"], "tools": ["*"] }
+    narration: >
+      Our file. Azure runs with the read only flag, and the version is pinned, because at: latest the package was a
+      four point zero beta on the day we checked. GitHub uses the slash read only address. Our own server starts with
+      python dash m. All generated from the old format by a converter, then checked.
+
+  - id: secrets
+    type: code
+    heading: "Secrets: never in the file"
+    lang: text
+    code: |
+      $ python -m mcpconf convert examples/github-pat.vscode-mcp.json
+        "Authorization": "Bearer ${GITHUB_MCP_PAT}"
+      note: ${input:github_mcp_pat} -> ${GITHUB_MCP_PAT}: set it in the
+            environment of the host that runs the harness
+      note: top-level `inputs` dropped: prompting is an editor feature
+
+      $ python -m mcpconf convert examples/bad.vscode-mcp.json
+      error: refusing to convert: [github] looks like a literal
+      GitHub token; never commit credentials
+    narration: >
+      The native format has no input prompts, so a password input becomes an environment variable reference. Our
+      converter does that, says what it dropped, and refuses to copy a literal token at all. Rotate it first. Microsoft
+      says plainly not to commit tokens, and a config file is not a secret store.
+
+  - id: servers-screen
+    type: screen
+    heading: "Four servers, discovered"
+    image: screens/mcp-servers.jpg
+    bar: "VS Code · Copilot · Chat: Open Customizations · MCP Servers"
+    demo: "VS Code on the lab laptop with the folder 'src' of this episode copied to C:\\demo\\mcp-demo and trusted. Chat view, Session Target Copilot. Chat: Open Customizations > MCP Servers: the four servers from .mcp.json (microsoftLearn, azure, github, contosoVendors) with their state and tool counts; authenticate github (browser sign-in, off camera if needed); azure starts after az login was done. Mask the GitHub account and Azure subscription."
+    narration: >
+      In VS Code the customizations editor lists the four servers from the workspace file, each with its tool count.
+      Trust is a separate decision from sign in, and from approving each tool call. Three different controls, and
+      resolving one does not resolve the others.
+
+  - id: learn-screen
+    type: screen
+    heading: "Learn answers, with a tool call"
+    image: screens/learn-call.jpg
+    bar: "VS Code · Copilot · Agent · Microsoft Learn MCP"
+    short: live
+    demo: "New chat, Agent, Copilot harness. Prompt: 'Use the Microsoft Learn MCP tools to find the official documentation for the Kusto Query Language where operator. Summarize its syntax and link to the documentation. Do not change files.' Expand the tool call: the tool name microsoft_docs_search (or fetch), the query, and the result. Approve the tool when asked. Record whatever it answers; a plausible answer without a tool call does not count, say so if that happens."
+    narration: >
+      Now a real question: the Kusto where operator, through the Learn server. We expand the tool call, because a
+      plausible answer without a tool call proves nothing. The agent searched the official documentation, and the
+      link in the answer is the one the tool returned.
+
+  - id: vendors-screen
+    type: screen
+    heading: "Our server, our facts"
+    image: screens/vendors-call.jpg
+    bar: "VS Code · Copilot · Agent · contosoVendors"
+    demo: "Same chat or a new one. Prompt: 'Which Contoso vendors have a notice deadline that has already passed, and what is the total yearly cost of the vendors renewing in the next 400 days? Use today's date.' Expand the tool calls (list_renewals, total_cost) with their arguments and JSON results. Then run in the terminal: python -m pytest tests/test_vendor_mcp_stdio.py -q to show the same tools are tested. Record the real answer and compare it with the tool output."
+    narration: >
+      And our own server. The agent calls list renewals and total cost, with arguments we can read, and the answer
+      must match the J S O N it got back. The tests start this same server as a process and talk M C P to it over
+      standard input, exactly like VS Code does.
+
+  - id: azure-github-screen
+    type: screen
+    heading: "Azure and GitHub, read only"
+    image: screens/azure-github.jpg
+    bar: "VS Code · Copilot · Agent · Azure MCP + GitHub MCP"
+    demo: "After az login on the lab laptop (subscription: the lab pay-as-you-go one, resource group rg-mglab-copilot-ai-14 created empty beforehand). Prompt 1: 'List my Azure resource groups.' Show the tool approval prompt with its options and the result. Prompt 2: 'List the open issues in the repository <throwaway repo> and summarise them.' (throwaway repo with two seeded issues). Mask subscription id, tenant id, GitHub account."
+    narration: >
+      Azure lists the resource groups the signed in account can read, and the sign in is the Azure CLI you already
+      have. GitHub lists issues from a throwaway repository. Both are read only by configuration, and tool calls still go through the
+      approval settings.
+
+  - id: readonly-gotcha
+    type: screen
+    heading: "Gotcha: read only is a setting you chose"
+    image: screens/readonly.jpg
+    bar: "VS Code · Copilot · Agent · GitHub /readonly"
+    short: gotcha
+    demo: "Same repository, github server on the /readonly URL. Prompt: 'Create an issue titled mcp write test in the throwaway repository.' Record the real behaviour: which tools exist in the server's tool list (no issue write tool expected) and what the agent says. Then show the one line in .mcp.json that makes it read only and the same server on the default URL in the tool list, to show the write tools appear. Do not create anything on GitHub."
+    narration: >
+      The gotcha. Read only is not a property of the agent. It is a line in the configuration. The remote GitHub server
+      has a slash read only address and a header, the Azure server has a read only flag, and the default for both is
+      write capable. Trust the file you reviewed, not the model's promise. Approvals are the last line, not the first.
+
+  - id: server-code
+    type: code
+    heading: "Our server in twelve lines"
+    lang: python
+    code: |
+      READ_ONLY = ToolAnnotations(readOnlyHint=True,
+                                  destructiveHint=False)
+      mcp = MCPServer("contoso-vendors", version="1.0.0")
+
+      @mcp.tool(annotations=READ_ONLY)
+      def get_vendor(name: str, today: str | None = None) -> VendorInfo:
+          """One vendor by (part of) its name."""
+          try:
+              return data.find_vendor(data.load(), name,
+                                      data.parse_today(today))
+          except data.VendorError as exc:
+              raise ToolError(str(exc)) from exc
+    narration: >
+      The server itself is the official Python S D K. A tool is a typed function with a docstring that becomes its
+      description, and annotations that say it only reads. One detail we hit in testing: an ordinary exception reaches
+      the model as a generic error. Raise the S D K's tool error, and the model gets your message and can fix its call.
+
+  - id: safety
+    type: bullets
+    heading: "Before you trust a server"
+    bullets:
+      - "Review the command or URL and who publishes it"
+      - "Workspace trust lets workspace servers start"
+      - "Limit tools with the tools list and read only options"
+      - "Azure: your RBAC roles decide what works"
+      - "GitHub in an organization: the MCP policy must be on"
+    narration: >
+      Before you trust any server, read what it starts. In a trusted workspace, servers from the workspace file can
+      start without a separate prompt, so review a repository's M C P file before you trust the folder. Limit tools
+      with the tools list. For Azure, your own role assignments decide what can work. For GitHub, if your organization
+      has Copilot Business or Enterprise, the M C P servers policy has to be enabled, or nothing connects.
+
+  - id: recap
+    type: bullets
+    heading: "Five rules"
+    bullets:
+      - "New config goes in .mcp.json; old mcp.json is Local"
+      - "No secrets in files: environment variables or OAuth"
+      - "Pin versions; choose read only on purpose"
+      - "Trust, sign in and approval are three controls"
+      - "A tool call you can see beats a plausible answer"
+    narration: >
+      Five rules. New configuration goes in dot m c p dot json. Keep secrets out of files. Pin versions and choose
+      read only on purpose. Trust, sign in and approval are three controls. And a tool call you can see beats a
+      plausible answer. Next episode: the coding agent and code review on GitHub.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The server, the config checker and the tests are on GitHub, and the Microsoft Learn, V S Code and GitHub
+      documentation pages are in the description. This was Dev Lad Log, Copilot and A I, by Momento Galático.

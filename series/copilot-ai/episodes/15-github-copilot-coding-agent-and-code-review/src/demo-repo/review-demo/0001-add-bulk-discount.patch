@@ -1,0 +1,51 @@
+From 679d4a957335ccef78967eacbbf07614707740fb Mon Sep 17 00:00:00 2001
+From: Alex Demo <alex.demo@example.com>
+Date: Sat, 21 Nov 2026 07:27:59 +0000
+Subject: [PATCH] Add bulk discount total for orders of ten or more bikes
+
+---
+ src/Contoso.Bikes.Pricing/DiscountCalculator.cs    | 14 ++++++++++++++
+ .../DiscountCalculatorTests.cs                     |  6 ++++++
+ 2 files changed, 20 insertions(+)
+
+diff --git a/src/Contoso.Bikes.Pricing/DiscountCalculator.cs b/src/Contoso.Bikes.Pricing/DiscountCalculator.cs
+index eb8e7c1..334fff3 100644
+--- a/src/Contoso.Bikes.Pricing/DiscountCalculator.cs
++++ b/src/Contoso.Bikes.Pricing/DiscountCalculator.cs
+@@ -17,4 +17,18 @@ public static class DiscountCalculator
+         var discounted = listPrice * (1m - LoyaltyRate(years));
+         return Math.Round(discounted, 2);
+     }
++
++    /// <summary>Total for a bulk order: 8% off from 10 bikes.</summary>
++    public static double BulkTotal(double unitPrice, int quantity)
++    {
++        try
++        {
++            var rate = quantity >= 10 ? 0.08 : 0.0;
++            return Math.Round(unitPrice * quantity * (1 - rate), 2);
++        }
++        catch
++        {
++            return 0;
++        }
++    }
+ }
+diff --git a/tests/Contoso.Bikes.Pricing.Tests/DiscountCalculatorTests.cs b/tests/Contoso.Bikes.Pricing.Tests/DiscountCalculatorTests.cs
+index 4e866eb..b52a19f 100644
+--- a/tests/Contoso.Bikes.Pricing.Tests/DiscountCalculatorTests.cs
++++ b/tests/Contoso.Bikes.Pricing.Tests/DiscountCalculatorTests.cs
+@@ -32,4 +32,10 @@ public class DiscountCalculatorTests
+     {
+         Assert.Equal(1169.10m, DiscountCalculator.LoyaltyPrice(1299.00m, 3));
+     }
++
++    [Fact]
++    public void BulkTotal_gives_eight_percent_off_from_ten_bikes()
++    {
++        Assert.Equal(1195.08, DiscountCalculator.BulkTotal(129.90, 10));
++    }
+ }
+-- 
+2.43.0
+
