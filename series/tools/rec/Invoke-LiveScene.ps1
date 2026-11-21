@@ -20,11 +20,18 @@ public struct CONSOLE_FONT_INFOEX { public uint cbSize; public uint nFont; publi
   [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)] public string FaceName; }
 [DllImport("kernel32.dll", SetLastError = true)] public static extern IntPtr GetStdHandle(int n);
 [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)] public static extern bool SetCurrentConsoleFontEx(IntPtr h, bool max, ref CONSOLE_FONT_INFOEX f);
+[DllImport("kernel32.dll", SetLastError = true)] public static extern bool GetConsoleMode(IntPtr h, out uint m);
+[DllImport("kernel32.dll", SetLastError = true)] public static extern bool SetConsoleMode(IntPtr h, uint m);
 '@
     $f = New-Object MgRec.Font+CONSOLE_FONT_INFOEX
     $f.cbSize = [Runtime.InteropServices.Marshal]::SizeOf($f); $f.FaceName = 'Cascadia Mono'; $f.Y = $(if ($scene.fontSize) { [int16]$scene.fontSize } else { 22 }); $f.FontWeight = 400; $f.FontFamily = 54
     [void][MgRec.Font]::SetCurrentConsoleFontEx([MgRec.Font]::GetStdHandle(-11), $false, [ref]$f)
+    # colours from npm, vitest, dotnet etc. arrive as ANSI escapes: let the console render them instead of printing them
+    $h = [MgRec.Font]::GetStdHandle(-11); $m = 0
+    if ([MgRec.Font]::GetConsoleMode($h, [ref]$m)) { [void][MgRec.Font]::SetConsoleMode($h, $m -bor 0x0001 -bor 0x0004) }
 } catch {}
+# UTF-8 both ways, so tool symbols (check marks, crosses, box drawing) don't turn into mojibake
+try { [Console]::OutputEncoding = [Text.UTF8Encoding]::new($false); [Console]::InputEncoding = [Text.UTF8Encoding]::new($false); $OutputEncoding = [Text.UTF8Encoding]::new($false) } catch {}
 if ($scene.markerDir) {
     New-Item -ItemType File -Force -Path (Join-Path $scene.markerDir 'started') | Out-Null
     try { Start-Transcript -Path (Join-Path $scene.markerDir 'scene.log') -Force | Out-Null } catch {}

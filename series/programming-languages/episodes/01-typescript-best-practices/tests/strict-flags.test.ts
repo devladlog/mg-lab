@@ -6,7 +6,9 @@ import { describe, expect, it } from "vitest";
 // tsconfig.json or the ESLint config, these tests go red.
 const root = fileURLToPath(new URL("..", import.meta.url));
 const run = (script: string): string => {
-  const r = spawnSync("npm", ["run", "-s", script], { cwd: root, encoding: "utf8" });
+  // npm is npm.cmd on Windows, and Node only starts .cmd files through a shell
+  const win = process.platform === "win32";
+  const r = spawnSync(win ? "npm.cmd" : "npm", ["run", "-s", script], { cwd: root, encoding: "utf8", shell: win });
   expect(r.status, `${script} should fail`).not.toBe(0);
   return r.stdout + r.stderr;
 };
