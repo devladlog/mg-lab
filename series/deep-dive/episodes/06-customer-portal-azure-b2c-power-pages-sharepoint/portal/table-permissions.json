@@ -1,0 +1,62 @@
+{
+  "_comment": "Authorization design of the portal, as data. The recorder creates exactly this in Power Pages design studio (Security > Table permissions / web roles); tests/design.test.mjs checks the invariants. Relationship names are the Dataverse defaults; confirm them in design studio.",
+  "webRoles": [
+    {"name": "Customer contacts", "description": "Contacts Contoso registered for a customer account. Assigned by Contoso staff, never by sign-up."}
+  ],
+  "builtInRoles": ["Anonymous Users", "Authenticated Users", "Administrators"],
+  "permissions": [
+    {
+      "name": "My contact record",
+      "table": "contact",
+      "access": "Self",
+      "privileges": ["Read", "AppendTo"],
+      "roles": ["Customer contacts"],
+      "why": "AppendTo lets a new request point its Raised by lookup at the signed-in contact."
+    },
+    {
+      "name": "Requests I raised",
+      "table": "mgl_supportrequest",
+      "access": "Contact",
+      "relationship": "mgl_contact_mgl_supportrequest",
+      "privileges": ["Read", "Create", "Write", "Append", "AppendTo"],
+      "roles": ["Customer contacts"],
+      "why": "Create with Contact access: the new record must be related to the signed-in contact. Write + AppendTo are what the documents subgrid needs to upload.",
+      "children": [
+        {
+          "name": "Documents of my requests",
+          "table": "sharepointdocumentlocation",
+          "relationship": "mgl_supportrequest_SharePointDocumentLocations",
+          "privileges": ["Read", "Create", "Write", "Append"]
+        }
+      ]
+    },
+    {
+      "name": "Colleagues at my company",
+      "table": "contact",
+      "access": "Account",
+      "relationship": "contact_customer_accounts",
+      "privileges": ["Read"],
+      "roles": ["Customer contacts"],
+      "why": "Contacts whose parent account is my account. Reading them is the first hop to their requests.",
+      "children": [
+        {
+          "name": "Requests raised by colleagues",
+          "table": "mgl_supportrequest",
+          "relationship": "mgl_contact_mgl_supportrequest",
+          "privileges": ["Read", "AppendTo"],
+          "children": [
+            {
+              "name": "Documents of colleagues' requests",
+              "table": "sharepointdocumentlocation",
+              "relationship": "mgl_supportrequest_SharePointDocumentLocations",
+              "privileges": ["Read"]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "pagePermissions": [
+    {"page": "/support/", "roles": ["Customer contacts"], "why": "Hiding a page from navigation doesn't secure it (Learn, security best practices)."}
+  ]
+}

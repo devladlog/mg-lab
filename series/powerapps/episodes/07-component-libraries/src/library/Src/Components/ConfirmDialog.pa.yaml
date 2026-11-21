@@ -1,0 +1,105 @@
+# Equipment Desk Kit (component library) - ConfirmDialog
+# A full-screen confirmation: a dimmed scrim, a panel, a title, a message and two buttons. It owns no data and changes
+# nothing: it raises OnConfirm or OnCancel and the app does the work (Patch, Back, Notify). That's the only way it can
+# work from a library: library components can never access app scope, and data sources can't be saved with components
+# (Learn: canvas component overview, Scope and Known limitations).
+# The app shows it with the instance's Visible property, e.g. Visible: =!IsBlank(returnLoan).
+ComponentDefinitions:
+  ConfirmDialog:
+    DefinitionType: CanvasComponent
+    Description: Modal confirmation with Confirm and Cancel. Handle OnConfirm and OnCancel in the app.
+    AllowCustomization: false
+    CustomProperties:
+      Title:
+        PropertyKind: Input
+        DataType: Text
+        Description: Question in bold, e.g. "Mark as returned?".
+        Default: ="Are you sure?"
+      Message:
+        PropertyKind: Input
+        DataType: Text
+        Description: One or two sentences about what happens next.
+        Default: =""
+      ConfirmText:
+        PropertyKind: Input
+        DataType: Text
+        Description: Text of the confirm button.
+        Default: ="Confirm"
+      Destructive:
+        PropertyKind: Input
+        DataType: Boolean
+        Description: Paint the confirm button red for actions that are hard to undo.
+        Default: =false
+      OnConfirm:
+        PropertyKind: Event
+        ReturnType: None
+        Description: Raised when the user confirms.
+      OnCancel:
+        PropertyKind: Event
+        ReturnType: None
+        Description: Raised when the user cancels (Cancel button or a tap on the scrim).
+    Properties:
+      Width: =640
+      Height: =1136
+    Children:
+      - recScrim:
+          Control: Rectangle
+          Properties:
+            Fill: =RGBA(0, 0, 0, 0.45)
+            OnSelect: =ConfirmDialog.OnCancel()
+            X: =0
+            Y: =0
+            Width: =Parent.Width
+            Height: =Parent.Height
+      - recPanel:
+          Control: Rectangle
+          Properties:
+            Fill: =RGBA(255, 255, 255, 1)
+            X: =32
+            Y: =(Parent.Height - Self.Height) / 2
+            Width: =Parent.Width - 64
+            Height: =400
+      - lblDialogTitle:
+          Control: Label
+          Properties:
+            Text: =ConfirmDialog.Title
+            Role: =TextRole.Heading2
+            Size: =22
+            FontWeight: =FontWeight.Semibold
+            X: =recPanel.X + 32
+            Y: =recPanel.Y + 32
+            Width: =recPanel.Width - 64
+            Height: =64
+      - lblDialogMessage:
+          Control: Label
+          Properties:
+            Text: =ConfirmDialog.Message
+            Size: =18
+            VerticalAlign: =VerticalAlign.Top
+            X: =recPanel.X + 32
+            Y: =recPanel.Y + 104
+            Width: =recPanel.Width - 64
+            Height: =160
+      - btnDialogCancel:
+          Control: Classic/Button
+          Properties:
+            Text: ="Cancel"
+            OnSelect: =ConfirmDialog.OnCancel()
+            Fill: =RGBA(255, 255, 255, 1)
+            Color: =RGBA(50, 49, 48, 1)
+            BorderColor: =RGBA(138, 136, 134, 1)
+            X: =recPanel.X + 32
+            Y: =recPanel.Y + recPanel.Height - 120
+            Width: =(recPanel.Width - 96) / 2
+            Height: =88
+      - btnDialogConfirm:
+          Control: Classic/Button
+          Properties:
+            Text: =ConfirmDialog.ConfirmText
+            OnSelect: =ConfirmDialog.OnConfirm()
+            Fill: =If(ConfirmDialog.Destructive, RGBA(168, 0, 0, 1), RGBA(0, 90, 158, 1))
+            Color: =RGBA(255, 255, 255, 1)
+            X: =recPanel.X + 64 + (recPanel.Width - 96) / 2
+            Y: =recPanel.Y + recPanel.Height - 120
+            Width: =(recPanel.Width - 96) / 2
+            Height: =88

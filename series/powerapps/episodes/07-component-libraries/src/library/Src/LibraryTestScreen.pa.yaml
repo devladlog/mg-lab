@@ -1,0 +1,72 @@
+# Equipment Desk Kit - test screen. Learn: "The screens in a component library are available for testing only."
+# One instance of each component, wired to a local variable so the library author can press Play and see the events.
+# Events can't reach any app (there is none), so the handlers only record what happened.
+Screens:
+  LibraryTestScreen:
+    Properties:
+      Fill: =RGBA(245, 246, 250, 1)
+    Children:
+      - hdrTest:
+          Control: CanvasComponent
+          ComponentName: DeskHeader
+          Properties:
+            Title: ="Library test"
+            ShowBack: =true
+            OnBack: =Set(lastEvent, "OnBack")
+            X: =0
+            Y: =0
+            Width: =Parent.Width
+      - rulesTest:
+          Control: CanvasComponent
+          ComponentName: DeskRules
+          Properties:
+            Visible: =false
+      - lblLastEvent:
+          Control: Label
+          Properties:
+            Text: =Coalesce(lastEvent, "No event yet")
+            X: =32
+            Y: =136
+            Width: =Parent.Width - 64
+            Height: =56
+      - lblOverdueSwatch:
+          Control: Label
+          Properties:
+            Text: ="Overdue"
+            Color: =rulesTest.StateColor("Overdue")
+            X: =32
+            Y: =208
+            Width: =280
+            Height: =56
+      - lblTagCheck:
+          Control: Label
+          Properties:
+            Text: =If(rulesTest.TagIsValid(" ct-0042 "), "Tag check works", "Tag check is broken")
+            X: =32
+            Y: =280
+            Width: =Parent.Width - 64
+            Height: =56
+      - btnOpenDialog:
+          Control: Classic/Button
+          Properties:
+            Text: ="Open dialog"
+            OnSelect: =Set(showDialog, true)
+            X: =32
+            Y: =360
+            Width: =280
+            Height: =88
+      - dlgTest:
+          Control: CanvasComponent
+          ComponentName: ConfirmDialog
+          Properties:
+            Title: ="Delete everything?"
+            Message: ="Nothing is deleted. This only tests the events."
+            ConfirmText: ="Delete"
+            Destructive: =true
+            OnConfirm: =Set(lastEvent, "OnConfirm"); Set(showDialog, false)
+            OnCancel: =Set(lastEvent, "OnCancel"); Set(showDialog, false)
+            Visible: =showDialog
+            X: =0
+            Y: =0
+            Width: =Parent.Width
+            Height: =Parent.Height

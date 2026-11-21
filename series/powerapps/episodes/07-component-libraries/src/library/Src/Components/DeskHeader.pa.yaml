@@ -1,0 +1,65 @@
+# Equipment Desk Kit (component library) - DeskHeader
+# The title bar every Equipment Desk screen had as a hand-made label. Data in (Title, ShowBack, Accent), one event out
+# (OnBack). The component doesn't navigate itself: a library component can never access app scope (Learn), so the app
+# decides what "back" means by handling OnBack.
+# Coordinates are phone-layout units (the app is a phone app: 640 wide), so the back icon is 88 x 88.
+ComponentDefinitions:
+  DeskHeader:
+    DefinitionType: CanvasComponent
+    Description: Title bar with an optional back button. Handle OnBack in the app.
+    AllowCustomization: false
+    CustomProperties:
+      Title:
+        PropertyKind: Input
+        DataType: Text
+        Description: Text shown in the bar.
+        Default: ="Equipment Desk"
+      ShowBack:
+        PropertyKind: Input
+        DataType: Boolean
+        Description: Show the back arrow (raise OnBack when tapped).
+        Default: =false
+      Accent:
+        PropertyKind: Input
+        DataType: Color
+        Description: Bar colour. Defaults to the Equipment Desk blue.
+        Default: =RGBA(0, 90, 158, 1)
+      OnBack:
+        PropertyKind: Event
+        ReturnType: None
+        Description: Raised when the back arrow is tapped. The app decides what back means (usually Back()).
+    Properties:
+      Width: =640
+      Height: =112
+      Fill: =DeskHeader.Accent
+    Children:
+      - icoBack:
+          Control: Classic/Icon
+          Properties:
+            Icon: =Icon.ChevronLeft
+            Visible: =DeskHeader.ShowBack
+            OnSelect: =DeskHeader.OnBack()
+            # Learn (accessible apps): an icon used as a button gets TabIndex 0 and an AccessibleLabel.
+            AccessibleLabel: ="Back"
+            TabIndex: =0
+            Color: =RGBA(255, 255, 255, 1)
+            X: =12
+            Y: =12
+            Width: =88
+            Height: =88
+            PaddingTop: =24
+            PaddingBottom: =24
+            PaddingLeft: =24
+            PaddingRight: =24
+      - lblHeaderTitle:
+          Control: Label
+          Properties:
+            Text: =DeskHeader.Title
+            Role: =TextRole.Heading1
+            Color: =RGBA(255, 255, 255, 1)
+            Size: =24
+            FontWeight: =FontWeight.Semibold
+            X: =If(DeskHeader.ShowBack, 112, 32)
+            Y: =12
+            Width: =Parent.Width - Self.X - 32
+            Height: =88

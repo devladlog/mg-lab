@@ -1,0 +1,257 @@
+# DEVLADLOG Power Apps — episode 07. Draft: code scenes are real excerpts from src/ and tests/, screen scenes need the lab recording.
+episode: 7
+slug: component-libraries
+series_label: "POWER APPS"
+series_name: "DEVLADLOG Power Apps"
+file_prefix: "powerapps"
+title: "Component libraries: build it once, update it everywhere"
+subtitle: "Custom properties, events, output functions, and the update prompt"
+voice: am_michael
+thumbnail_text: "BUILD ONCE\nUPDATE\nEVERYWHERE"
+youtube:
+  title: "Power Apps Component Libraries: Events, Output Functions and Updates | DEVLADLOG Power Apps #7"
+  tags: [Power Apps, component library, canvas components, custom properties, enhanced component properties, event properties, output functions, Power Fx, canvas apps, ALM, Dataverse solutions, Power Platform]
+sources:
+  - https://www.devladlog.com/articles/powerapps/2026-02-28-component-libraries-complete-guide-2026/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Fix the header once, not on every screen"
+    sub: "A component library with data in, events out, and no data of its own"
+    short: hook
+    narration: >
+      Every screen in our Equipment Desk app has its own title bar, and every confirm prompt was built by hand. Change the
+      colour, and you change it everywhere, by hand. Today we move those pieces into a component library, use them in the
+      app, and then publish an update and watch the app pick it up. Welcome to DEVLADLOG Power Apps.
+
+  - id: plan
+    type: bullets
+    heading: "The Equipment Desk Kit"
+    bullets:
+      - "DeskHeader: title, back arrow, an OnBack event"
+      - "ConfirmDialog: OnConfirm and OnCancel, no data"
+      - "DeskRules: shared logic as output functions"
+      - "The Loans screen uses all three"
+      - "109 tests run the components on the Power Fx engine"
+    narration: >
+      The library has three components. A header with a back arrow. A confirmation dialog. And a component with no
+      controls at all, only functions, for the rules we want every app to share. Then the open loans screen from episode
+      six gets a Returned button that goes through the dialog.
+
+  - id: header
+    type: code
+    heading: "Data in, an event out"
+    lang: yaml
+    code: |
+      DeskHeader:
+        DefinitionType: CanvasComponent
+        AllowCustomization: false
+        CustomProperties:
+          Title:
+            PropertyKind: Input
+            DataType: Text
+            Default: ="Equipment Desk"
+          OnBack:
+            PropertyKind: Event
+            ReturnType: None
+        Children:
+          - icoBack:
+              Properties:
+                Visible: =DeskHeader.ShowBack
+                OnSelect: =DeskHeader.OnBack()
+    narration: >
+      Here's the header as source, trimmed. Input properties like title and show back, each with a default. And an event
+      property, on back. The back arrow doesn't navigate. It raises the event, and the app decides what back means. Inside the
+      component you read inputs as the component name dot property.
+
+  - id: why-events
+    type: code
+    heading: "Why the dialog can't save anything"
+    lang: text
+    code: |
+      dlgReturn (ConfirmDialog instance on LoansScreen)
+        Visible:   !IsBlank(returnLoan)
+        OnConfirm:
+          IfError(
+              Patch(Loans, returnLoan, { 'Returned on': Today() }),
+              Notify("Couldn't mark it as returned: " & FirstError.Message, NotificationType.Error),
+              Patch(Equipment, returnLoan.Equipment, { Status: 'Status (Equipment)'.Available }),
+              Notify("Loan closed, but the device status wasn't updated: " & FirstError.Message, NotificationType.Warning),
+              Notify(returnLoan.Equipment.'Asset tag' & " is back and available", NotificationType.Success)
+          );
+          Set(returnLoan, Blank())
+        OnCancel:  Set(returnLoan, Blank())
+    narration: >
+      The dialog owns no data, on purpose. Learn says components in a library can never access app scope, and data
+      sources can't be saved with components. So the dialog raises on confirm, and the app does the two writes, one if
+      error pair each, exactly like episode two taught us.
+
+  - id: library-screen
+    type: screen
+    heading: "The library in Studio"
+    image: screens/library-studio.jpg
+    bar: "Power Apps · Component libraries · Equipment Desk Kit"
+    demo: >
+      make.powerapps.com, DEV environment, Solutions > Equipment Desk > the component library "Equipment Desk Kit" open in Studio.
+      Tree view on the Components tab: ConfirmDialog, DeskHeader, DeskRules. DeskHeader selected, right pane Properties with the
+      custom properties Title, ShowBack, Accent (Data, Input) and OnBack (Event). Then the LibraryTestScreen in Play mode: tap the
+      back arrow, the label shows "OnBack"; tap Open dialog, then Cancel, the label shows "OnCancel". Finish with Save with version
+      notes ("1.0 first version") and Publish. Mask environment name and user.
+    narration: >
+      In Studio, a component library opens on the components tab. Here are the header's custom properties, with on back
+      as an event. The screen in a library is only for testing: tap back, tap cancel, and the label shows which event fired.
+      Save with version notes, and publish. Only published versions reach the apps.
+
+  - id: gallery
+    type: code
+    heading: "The badge we couldn't build"
+    lang: yaml
+    short: gallery
+    code: |
+      # Learn, known limitations: "You can't insert a component into a gallery or a form"
+      DeskRules:
+        CustomProperties:
+          StateColor:
+            PropertyKind: OutputFunction
+            ReturnType: Color
+            Parameters:
+              - state: { DataType: Text }
+        Properties:
+          StateColor: =Switch(state, "Overdue", RGBA(168, 0, 0, 1), "Due soon", RGBA(138, 90, 0, 1),
+                              "Returned", RGBA(16, 124, 16, 1), RGBA(50, 49, 48, 1))
+
+      # in the gallery row:  Color: =deskRules.StateColor(LoanState(ThisItem.'Due date', ThisItem.'Returned on'))
+    narration: >
+      My first idea was a status badge component in every gallery row. Learn's limitations say no: you can't put a
+      component inside a gallery or a form. So the rule ships as an output function instead. The library defines state
+      colour, and the gallery's own label calls desk rules dot state colour. The colours now live in one place for every app.
+
+  - id: purity
+    type: code
+    heading: "Functions get arguments, nothing else"
+    lang: csharp
+    code: |
+      // Learn: function properties "cannot access variables or component values and properties"
+      var empty = new RecalcEngine(config);          // no app, no component, no controls
+      var udf = Harness.Udf("f", def.CustomProperties[property], def.Properties[property]);
+      var result = empty.AddUserDefinedFunction(udf, CultureInfo.InvariantCulture, empty.EngineSymbols);
+      Assert.True(result.IsSuccess);
+
+      Passed  A_function_property_binds_with_nothing_but_its_parameters(DeskRules, StateColor)
+      Passed  A_function_property_binds_with_nothing_but_its_parameters(DeskRules, TagIsValid)
+      Passed  The_purity_check_does_fail_when_a_function_reads_component_state
+    narration: >
+      Function properties can't read variables or other properties, so everything comes in as an argument. The test
+      compiles each function in an empty Power Fx engine. If it binds there, it only uses its parameters. And a second
+      test proves the check fails when a function peeks at component state.
+
+  - id: ismatch
+    type: code
+    heading: "Gotcha: IsMatch isn't the same everywhere"
+    lang: text
+    short: ismatch
+    code: |
+      TagIsValid: =IsMatch(Upper(Trim(tag)), "CT-\d{4}")       # first version
+
+      Failed  TagIsValid_accepts_a_whole_asset_tag_only(tag: "CT-00421")   Expected: False  Actual: True
+      Failed  TagIsValid_accepts_a_whole_asset_tag_only(tag: "XCT-0042")   Expected: False  Actual: True
+
+      # Learn: MatchOptions.Complete is the default for IsMatch "on Power Apps",
+      #        Contains is the default outside Power Apps.
+      TagIsValid: =IsMatch(Upper(Trim(tag)), "^CT-\d{4}$")     # same answer in every host
+    narration: >
+      Here's the one that bit me. The asset tag check passed CT zero zero four two one, with five digits. In Power Apps,
+      is match must match the whole text by default. Outside Power Apps, Learn says the default is contains, and our test
+      engine is outside. Anchor the pattern with a caret and a dollar sign, and the rule means the same everywhere.
+
+  - id: import-screen
+    type: screen
+    heading: "Get more components"
+    image: screens/import-components.jpg
+    bar: "Power Apps Studio · Equipment Desk (phone) · Insert"
+    demo: >
+      Equipment Desk (phone) in Studio (DEV). Insert pane > Get more components: the panel lists "Equipment Desk Kit" with its three
+      components; Select all > Import. Insert pane now shows a "Library components" category with ConfirmDialog, DeskHeader, DeskRules.
+      Settings > Updates > New: "Enhanced component properties" On. On LoansScreen: hdrLoans selected with Title "Open loans", ShowBack
+      true, OnBack = Back(); the gallery label's Color formula deskRules.StateColor(...). Mask environment and user names.
+    narration: >
+      In the app, insert, get more components, and import the whole library. The components appear under library
+      components. Enhanced component properties must be on in the app settings for the output functions. The header
+      instance sets its title and handles on back with back. The hidden desk rules instance is there only so the gallery
+      can call its functions.
+
+  - id: app-screen
+    type: screen
+    heading: "Returned, confirmed, gone from the list"
+    image: screens/app-return.jpg
+    bar: "Equipment Desk (phone) · Open loans"
+    demo: >
+      The published app playing in the browser on the lab Windows host (phone layout): Open loans with the blue DeskHeader and the back
+      arrow. Tap Returned on CT-0043 (alex.demo@contoso.com): the dimmed ConfirmDialog with "Mark as returned?" and the message naming
+      CT-0043 Laptop 14. Tap Cancel: nothing changes. Tap Returned again, then Mark returned: green banner "CT-0043 is back and
+      available", the row disappears, the summary turns green "Nothing overdue". Then the model-driven Equipment Desk app shows CT-0043
+      with Status Available. Test data only; mask tenant and users.
+    narration: >
+      Running. Tap returned, and the dialog asks first, naming the device and the borrower. Cancel changes nothing. Confirm,
+      and the loan closes, the device is available again, and the row leaves the list. The banner comes from the app's own
+      handler, and the model driven app from episode one agrees: the laptop is available.
+
+  - id: update-screen
+    type: screen
+    heading: "Publish an update, review it in the app"
+    image: screens/library-update.jpg
+    bar: "Power Apps Studio · Update available"
+    demo: >
+      Back in the library: change DeskHeader's Accent default to a darker blue, Save with version notes "1.1 darker header", Publish.
+      Wait (Learn: up to 5 minutes). Open Equipment Desk (phone) for editing: the "Updates available" notification, Review shows
+      DeskHeader with the version note, Update. The header colour changes on every screen. Also show Insert > Library components >
+      Check for updates. Save and publish the app. Mask environment and user names.
+    narration: >
+      Now the reason libraries exist. Change the header colour in the library, save with a version note, publish. Open the
+      app for editing, and Studio says updates are available. Review shows our note. Update, and every header changes. The
+      app still has to be published again.
+
+  - id: alm
+    type: bullets
+    heading: "Before you ship a library"
+    bullets:
+      - "Edit a library component in the app and you get a copy: no more updates"
+      - "Solution: ship the library with the app, or install it first"
+      - "Otherwise: Import failed due to missing dependencies"
+      - "Up to 20 components per library; up to 5 minutes after publish"
+      - "No code components, no flows inside library components"
+    narration: >
+      A few rules from Learn before you ship. Editing a library component inside an app creates a local copy that never
+      gets updates, so we turned customization off. A solution with the app needs the library too, or the import fails with
+      missing dependencies. Keep a library to about twenty components, allow five minutes after publishing, and leave code
+      components and flows out.
+
+  - id: tests
+    type: code
+    heading: "109 tests, and they bite"
+    lang: text
+    code: |
+      $ dotnet test EquipmentDesk.Components.Tests
+        Passed  Tapping_back_raises_OnBack_and_the_app_decides_what_back_means
+        Passed  Confirm_closes_the_loan_frees_the_device_and_closes_the_dialog
+        Passed  Cancel_or_a_tap_outside_changes_nothing(control: "recScrim")
+        Passed  No_component_instance_sits_inside_a_gallery_or_a_form
+        Passed  Every_instance_sets_only_what_its_definition_declares
+      Passed!  - Failed: 0, Passed: 109, Total: 109
+
+      # mutation: Confirm raises OnCancel, one colour changed
+      Failed!  - Failed: 6, Passed: 103
+    narration: >
+      The tests load the library and the app source, host the components on the open source Power Fx engine, raise the
+      events and run the app's handlers. Lints turn Learn's rules into failures, like no component inside a gallery. Swap
+      the confirm event or change one colour, and six tests fail. Studio and the update prompt are the lab's job.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The library source, the app screen and all the tests are on GitHub, and the complete guide is on devladlog dot com.
+      Links are in the description. Next time: mobile app design, with the same app on a real phone. Subscribe so you
+      don't miss it.

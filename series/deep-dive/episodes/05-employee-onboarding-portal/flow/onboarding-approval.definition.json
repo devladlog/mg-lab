@@ -1,0 +1,134 @@
+{
+  "_comment": "Reference definition of the 'Onboarding request approval' cloud flow (standard connectors only: SharePoint, Approvals, Office 365 Outlook). Written by hand from the designer steps in demo.md and checked by tests/Contract.Tests.ps1; NOT yet imported. After the lab build, replace it with the exported definition and re-run the tests.",
+  "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "$connections": { "defaultValue": {}, "type": "Object" },
+    "$authentication": { "defaultValue": {}, "type": "SecureObject" },
+    "HR site URL (mgl_HrSiteUrl)": {
+      "defaultValue": "https://contoso.sharepoint.com/sites/hr-lab",
+      "type": "String",
+      "metadata": { "schemaName": "mgl_HrSiteUrl" }
+    },
+    "Onboarding Requests list (mgl_OnboardingRequestsList)": {
+      "defaultValue": "00000000-0000-0000-0000-000000000000",
+      "type": "String",
+      "metadata": { "schemaName": "mgl_OnboardingRequestsList" }
+    }
+  },
+  "triggers": {
+    "When_an_item_is_created": {
+      "type": "OpenApiConnection",
+      "recurrence": { "interval": 1, "frequency": "Minute" },
+      "splitOn": "@triggerOutputs()?['body/value']",
+      "conditions": [
+        { "expression": "@equals(triggerOutputs()?['body/OnbStatus/Value'], 'Submitted')" }
+      ],
+      "inputs": {
+        "host": {
+          "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+          "connectionName": "shared_sharepointonline",
+          "operationId": "GetOnNewItems"
+        },
+        "parameters": {
+          "dataset": "@parameters('HR site URL (mgl_HrSiteUrl)')",
+          "table": "@parameters('Onboarding Requests list (mgl_OnboardingRequestsList)')"
+        },
+        "authentication": "@parameters('$authentication')"
+      }
+    }
+  },
+  "actions": {
+    "Start_and_wait_for_an_approval": {
+      "type": "OpenApiConnectionWebhook",
+      "runAfter": {},
+      "inputs": {
+        "host": {
+          "apiId": "/providers/Microsoft.PowerApps/apis/shared_approvals",
+          "connectionName": "shared_approvals",
+          "operationId": "StartAndWaitForAnApproval"
+        },
+        "parameters": {
+          "approvalType": "Basic",
+          "WebhookApprovalCreationInput/title": "New hire: @{triggerOutputs()?['body/OnbGivenName']} @{triggerOutputs()?['body/OnbSurname']} (@{triggerOutputs()?['body/OnbDepartment/Value']})",
+          "WebhookApprovalCreationInput/assignedTo": "@{triggerOutputs()?['body/OnbManagerEmail']}",
+          "WebhookApprovalCreationInput/details": "Job title: @{triggerOutputs()?['body/OnbJobTitle']}\nStart date: @{formatDateTime(triggerOutputs()?['body/OnbStartDate'], 'yyyy-MM-dd')}\nSubmitted by: @{triggerOutputs()?['body/Author/DisplayName']}\n\nApproving creates a disabled Microsoft Entra account; it is enabled on the start date.",
+          "WebhookApprovalCreationInput/itemLink": "@triggerOutputs()?['body/{Link}']",
+          "WebhookApprovalCreationInput/itemLinkDescription": "Open the onboarding request",
+          "WebhookApprovalCreationInput/enableNotifications": true,
+          "WebhookApprovalCreationInput/enableReassignment": false
+        },
+        "authentication": "@parameters('$authentication')"
+      }
+    },
+    "Condition_approved": {
+      "type": "If",
+      "runAfter": { "Start_and_wait_for_an_approval": ["Succeeded"] },
+      "expression": {
+        "and": [ { "equals": ["@outputs('Start_and_wait_for_an_approval')?['body/outcome']", "Approve"] } ]
+      },
+      "actions": {
+        "Set_status_Approved": {
+          "type": "OpenApiConnection",
+          "runAfter": {},
+          "inputs": {
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+              "connectionName": "shared_sharepointonline",
+              "operationId": "PatchItem"
+            },
+            "parameters": {
+              "dataset": "@parameters('HR site URL (mgl_HrSiteUrl)')",
+              "table": "@parameters('Onboarding Requests list (mgl_OnboardingRequestsList)')",
+              "id": "@triggerOutputs()?['body/ID']",
+              "item/OnbStatus/Value": "Approved",
+              "item/OnbMessage": "Approved by @{first(outputs('Start_and_wait_for_an_approval')?['body/responses'])?['responder/email']}: @{first(outputs('Start_and_wait_for_an_approval')?['body/responses'])?['comments']}"
+            },
+            "authentication": "@parameters('$authentication')"
+          }
+        }
+      },
+      "else": {
+        "actions": {
+          "Set_status_Rejected": {
+            "type": "OpenApiConnection",
+            "runAfter": {},
+            "inputs": {
+              "host": {
+                "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                "connectionName": "shared_sharepointonline",
+                "operationId": "PatchItem"
+              },
+              "parameters": {
+                "dataset": "@parameters('HR site URL (mgl_HrSiteUrl)')",
+                "table": "@parameters('Onboarding Requests list (mgl_OnboardingRequestsList)')",
+                "id": "@triggerOutputs()?['body/ID']",
+                "item/OnbStatus/Value": "Rejected",
+                "item/OnbMessage": "Rejected by @{first(outputs('Start_and_wait_for_an_approval')?['body/responses'])?['responder/email']}: @{first(outputs('Start_and_wait_for_an_approval')?['body/responses'])?['comments']}"
+              },
+              "authentication": "@parameters('$authentication')"
+            }
+          },
+          "Tell_HR_it_was_rejected": {
+            "type": "OpenApiConnection",
+            "runAfter": { "Set_status_Rejected": ["Succeeded"] },
+            "inputs": {
+              "host": {
+                "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365",
+                "connectionName": "shared_office365",
+                "operationId": "SendEmailV2"
+              },
+              "parameters": {
+                "emailMessage/To": "@triggerOutputs()?['body/Author/Email']",
+                "emailMessage/Subject": "Onboarding request rejected: @{triggerOutputs()?['body/Title']}",
+                "emailMessage/Body": "<p>The hiring manager rejected the request.</p><p>@{first(outputs('Start_and_wait_for_an_approval')?['body/responses'])?['comments']}</p>"
+              },
+              "authentication": "@parameters('$authentication')"
+            }
+          }
+        }
+      }
+    }
+  },
+  "outputs": {}
+}

@@ -1,0 +1,54 @@
+# Equipment Desk (phone) - episode 8: made for the phone it runs on.
+# App settings that pa.yaml doesn't hold (set them in Studio, Settings > Display): Scale to fit OFF, Lock aspect ratio OFF,
+# Lock orientation OFF (Learn: build responsive apps). Settings > General: Can be used offline ON (Dataverse offline-first).
+#
+# SizeBreakpoints: Learn's default for a PHONE app is [1200, 1800, 2400] ("the values for phone apps are doubled because such
+# apps use coordinates that are effectively double"). We write it out so nobody has to remember that, and so the tests use it.
+# Episode 7's App.Formulas, plus:
+#   TapTarget  88 phone-layout units = 44 effective pixels, the "touch-optimized" target size in Microsoft's touch guidance
+#   FindLoan   behavior UDF shared by the barcode scanner and the "type a tag" box (Learn: offer an alternative to the camera)
+App:
+  Properties:
+    StartScreen: =BrowseScreen
+    SizeBreakpoints: =[1200, 1800, 2400]
+    MinScreenWidth: =640
+    MinScreenHeight: =640
+    Formulas: |-
+      =DefaultLoanDays = 14;
+      MaxLoanDays = 90;
+      TapTarget = 88;
+      OfficeCountry = "PT";
+      OfficeSubdivision = "";
+      DaysOff = ContosoHolidays.GetDaysOff(OfficeCountry, Year(Today()) - 1, { toYear: Year(Today()) + 1, subdivision: OfficeSubdivision });
+      Holidays = ForAll(DaysOff.days, ThisRecord.date);
+      OverdueCount = CountIf(Loans, IsBlank('Returned on') && 'Due date' < Today());
+      IsWorkingDay(d: Date): Boolean = Weekday(d, StartOfWeek.Monday) <= 5 && !(d in Holidays);
+      WorkingDaysBetween(start: Date, finish: Date): Number =
+          If(finish <= start, 0,
+              CountIf(ForAll(Sequence(DateDiff(start, finish)), DateAdd(start, Value)), IsWorkingDay(Value)));
+      WorkingDays(n: Number): Text = n & If(n = 1, " working day", " working days");
+      LoanState(due: Date, returned: Date): Text =
+          Switch(true,
+              !IsBlank(returned), "Returned",
+              due < Today(), "Overdue",
+              WorkingDaysBetween(Today(), due) <= 2, "Due soon",
+              "On loan");
+      FirstName(email: Text): Text = Proper(First(Split(First(Split(email, "@")).Value, ".")).Value);
+      ReminderText(asset: Text, email: Text, due: Date): Text =
+          $"Hi {FirstName(email)}, the {asset} you borrowed was due back on {Text(due, "dddd d mmmm", "en-GB")}, {WorkingDays(WorkingDaysBetween(due, Today()))} ago. Please bring it to the Equipment Desk. Thank you!";
+      CopyReminder(asset: Text, email: Text, due: Date): Void = {
+          IfError(
+              Copy(ReminderText(asset, email, due)),
+              Notify("Couldn't copy the reminder: " & FirstError.Message, NotificationType.Error),
+              Notify("Reminder for " & email & " copied", NotificationType.Success)
+          )
+      };
+      FindLoan(tag: Text): Void = {
+          With(
+              { loan: LookUp(Loans, IsBlank('Returned on') && Equipment.'Asset tag' = tag) },
+              If(
+                  IsBlank(loan), Notify(tag & " has no open loan", NotificationType.Information),
+                  Set(selectedLoan, loan)
+              )
+          )
+      };

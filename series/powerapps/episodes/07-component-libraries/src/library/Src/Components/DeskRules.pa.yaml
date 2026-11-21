@@ -1,0 +1,42 @@
+# Equipment Desk Kit (component library) - DeskRules
+# A component with no visible controls, only output FUNCTION properties (Learn: Canvas component properties, enhanced
+# component properties). It is how a library shares logic: a UDF in App.Formulas lives in one app, an output function in
+# a library is shared by every app that imports it and gets the library's update prompts.
+# Why not a StatusBadge component in each gallery row? Learn: "You can't insert a component into a gallery or a form".
+# So the colour rule ships as a function, and the gallery's own labels call deskRules.StateColor(...).
+# Learn: function properties can't access variables or component values and properties; everything comes in as an
+# argument (a test checks each formula binds with nothing but its parameters).
+ComponentDefinitions:
+  DeskRules:
+    DefinitionType: CanvasComponent
+    Description: Shared Equipment Desk rules as functions. Add one hidden instance per screen that needs them.
+    AllowCustomization: false
+    CustomProperties:
+      StateColor:
+        PropertyKind: OutputFunction
+        Description: Colour for a loan state ("Overdue", "Due soon", "Returned", anything else = on loan).
+        ReturnType: Color
+        Parameters:
+          - state:
+              Description: Loan state text as returned by LoanState.
+              DataType: Text
+      TagIsValid:
+        PropertyKind: OutputFunction
+        Description: True for a Contoso asset tag such as CT-0042 (CT, a hyphen, four digits), ignoring case and spaces.
+        ReturnType: Boolean
+        Parameters:
+          - tag:
+              Description: Typed or scanned text.
+              DataType: Text
+    Properties:
+      Width: =0
+      Height: =0
+      StateColor: |-
+        =Switch(state,
+            "Overdue", RGBA(168, 0, 0, 1),
+            "Due soon", RGBA(138, 90, 0, 1),
+            "Returned", RGBA(16, 124, 16, 1),
+            RGBA(50, 49, 48, 1))
+      # ^ and $ on purpose. Learn: IsMatch defaults to MatchOptions.Complete "on Power Apps" but to Contains outside
+      # Power Apps, so the anchors make the rule mean the same in every Power Fx host (and in our tests).
+      TagIsValid: =IsMatch(Upper(Trim(tag)), "^CT-\d{4}$")

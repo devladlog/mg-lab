@@ -1,0 +1,285 @@
+# DEVLADLOG Power Apps — episode 08. Draft: code scenes are real excerpts from src/ and tests/, screen scenes need the lab recording.
+episode: 8
+slug: mobile-app-design
+series_label: "POWER APPS"
+series_name: "DEVLADLOG Power Apps"
+file_prefix: "powerapps"
+title: "Mobile app design: rotate it, tap it, take it offline"
+subtitle: "Screen size and orientation, touch targets, offline-first Dataverse, and a barcode scanner"
+voice: am_michael
+thumbnail_text: "ROTATE\nTAP\nOFFLINE"
+youtube:
+  title: "Power Apps Mobile Design: Responsive Layout, Offline and Barcode Scanning | DEVLADLOG Power Apps #8"
+  tags: [Power Apps, mobile app design, Power Apps mobile, responsive canvas apps, SizeBreakpoints, screen orientation, touch targets, offline canvas apps, Connection.Sync, barcode reader, Dataverse offline, Power Platform]
+sources:
+  - https://www.devladlog.com/articles/powerapps/2026-03-04-mobile-app-design-complete-guide-2026/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Turn the phone sideways. Does your app notice?"
+    sub: "Same app, real phone: rotation, big targets, no signal, a camera"
+    short: hook
+    narration: >
+      Our Equipment Desk app was built on the phone layout, and it showed. Turn the phone sideways and you scroll. The
+      buttons in each row were forty units high. And in the storeroom there's no signal. Today we fix all three on a real
+      phone, and add a barcode scanner for the asset tags. Welcome to DEVLADLOG Power Apps.
+
+  - id: plan
+    type: bullets
+    heading: "Four mobile fixes"
+    bullets:
+      - "Screen size and orientation: one screen, one or two panes"
+      - "Touch: every target at least 88 phone units"
+      - "Offline-first Dataverse, honest about what needs a signal"
+      - "Scan an asset tag, or type it"
+      - "112 tests run the formulas at different screen sizes"
+    narration: >
+      Four changes to the open loans screen from episode seven. It adapts to the screen it gets. Everything you tap is big
+      enough for a thumb. It keeps working offline, and says clearly what doesn't. And a scan button finds a loan from the
+      label on the device.
+
+  - id: rotate
+    type: code
+    heading: "Landscape shouldn't mean scrolling"
+    lang: text
+    short: rotate
+    code: |
+      LoansScreen
+        Width:  Max(App.Width, If(App.Width < App.Height, App.DesignWidth, App.DesignHeight))
+        Height: Max(App.Height, If(App.Width < App.Height, App.DesignHeight, App.DesignWidth))
+
+      Learn's example: designed at 640 x 1136, phone turned sideways reports App 1136 x 640
+        default  Height = Max(App.Height, App.DesignHeight)  -> 1136   (scroll on a 640 tall screen)
+        ours                                                 -> 640
+
+      Passed  Learns_landscape_example_needs_the_orientation_formulas
+    narration: >
+      First, scale to fit is off. In Learn's orientation example the screen height is the larger of the app height and the
+      design height. On a phone turned sideways that's eleven thirty six on a six hundred and forty unit screen, so you
+      scroll. Learn's fix swaps design width and height with the orientation. The test uses Learn's own numbers.
+
+  - id: panes
+    type: code
+    heading: "One screen, one pane or two"
+    lang: yaml
+    code: |
+      App:
+        SizeBreakpoints: =[1200, 1800, 2400]      # Learn: phone apps, doubled coordinates
+
+      conList:
+        Visible: =LoansScreen.Size >= ScreenSize.Medium || IsBlank(selectedLoan)
+        FillPortions: =2
+      conDetail:
+        Visible: =LoansScreen.Size >= ScreenSize.Medium || !IsBlank(selectedLoan)
+        FillPortions: =3
+      galLoans:
+        OnSelect: =Set(selectedLoan, ThisItem)
+    narration: >
+      The screen's size compares its width to the app's size breakpoints. For a phone app Learn's defaults are twelve
+      hundred, eighteen hundred and twenty four hundred, because phone apps use doubled coordinates. We write them out.
+      Small means the list or the loan. Medium and up, the list and the loan side by side, in two auto layout containers.
+
+  - id: rotate-screen
+    type: screen
+    heading: "On the phone: list, loan, rotate"
+    image: screens/phone-rotate.jpg
+    bar: "Power Apps mobile (Android) · Equipment Desk (phone)"
+    demo: >
+      Real phone, Power Apps mobile app signed in as the lab user, screen recorded with the phone's own recorder (not an emulator).
+      Equipment Desk (phone) > Open loans upright: the list only. Tap the CT-0043 row: the loan fills the screen, the header says
+      "CT-0043", Send reminder and Mark returned are big buttons. Tap the header back arrow: back to the list. Open CT-0107, then
+      rotate the phone to landscape: list on the left, CT-0107 on the right, no vertical scrolling. Mask account name.
+    narration: >
+      On a real phone. Upright, the list. Tap a row, the whole row is the target, and the loan takes the screen. Back
+      returns to the list. Open another loan and turn the phone. Now it's the list and the loan, side by side, and nothing
+      scrolls.
+
+  - id: back
+    type: code
+    heading: "Back means different things"
+    lang: yaml
+    code: |
+      hdrLoans:                       # DeskHeader from the episode 7 library
+        Title: =If(LoansScreen.Size = ScreenSize.Small && !IsBlank(selectedLoan),
+                   selectedLoan.Equipment.'Asset tag', "Open loans")
+        OnBack: =If(LoansScreen.Size = ScreenSize.Small && !IsBlank(selectedLoan),
+                    Set(selectedLoan, Blank()), Back())
+
+      Passed  On_an_upright_phone_back_first_returns_to_the_list
+      Passed  Turning_the_phone_sideways_shows_list_and_loan_side_by_side
+    narration: >
+      This is where episode seven pays off. The header raises on back, and the app decides. Upright with a loan open,
+      back closes the loan. Otherwise it leaves the screen. Same component, same library, behaviour that fits the size.
+
+  - id: touch
+    type: code
+    heading: "Big enough for a thumb, by test"
+    lang: csharp
+    code: |
+      // TapTarget = 88: 44 effective px ("touch-optimized" in Microsoft's touch guidance),
+      // doubled because phone-layout apps use doubled coordinates (Learn)
+      from c in s.Controls.Values
+      where IsInteractive(c) && c.Type != "CanvasComponent"
+      let prop = c.Type == "Gallery" ? "TemplateSize" : "Height"
+      let value = h.Number(CanvasSource.Strip(c.Properties[prop]))
+      where value < min
+      select $"{c.Name}.{prop} = {value}";
+
+      Passed  Every_tappable_control_on_the_screen_is_at_least_TapTarget_high
+      Passed  Episode_7s_row_buttons_would_fail_the_rule   -> btnReturn.Height = 40, tglOverdueOnly.Height = 40
+    narration: >
+      Touch targets. Microsoft's touch guidance calls forty four by forty four effective pixels touch optimized. Phone
+      apps use doubled coordinates, so our rule is eighty eight. A test evaluates the height of everything you can tap.
+      Episode seven's row buttons were forty, and they'd fail. So the buttons left the rows.
+
+  - id: offline
+    type: code
+    heading: "Offline-first, with the globe icon"
+    lang: yaml
+    code: |
+      icoSync:
+        Icon: =Switch(Connection.Sync,
+                  ConnectionSync.Connected, Icon.Globe,
+                  ConnectionSync.ConnectedPendingUpsync, Icon.GlobeChangesPending,
+                  ConnectionSync.NotConnected, Icon.GlobeNotConnected,
+                  ConnectionSync.NotConnectedPendingUpsync, Icon.GlobeChangesPending,
+                  ...)
+        Visible: =Host.OfflineEnabled
+        OnSelect: =ShowHostInfo(HostInfo.OfflineSync)
+      lblOffline:
+        Visible: =!Connection.Connected
+    narration: >
+      For a Dataverse app, Learn says use the built in offline first feature, not save data and load data. Turn it on,
+      pick an offline profile, and your normal formulas work on local data. We add Learn's sync icon, which opens the
+      device status page, and a banner when there's no connection.
+
+  - id: flows-offline
+    type: code
+    heading: "Gotcha: the flow needs a signal"
+    lang: yaml
+    short: offline-flows
+    code: |
+      # Learn, mobile offline limitations: "Power Automate flows aren't supported in offline mode."
+      btnRemind:
+        Text: |-
+          =Switch(true,
+              !Connection.Connected, "Send reminder (needs a connection)",
+              sendingLoan = selectedLoan.contoso_loanid, "Sending...",
+              "Send reminder")
+        DisplayMode: =If(Connection.Connected && IsBlank(sendingLoan), DisplayMode.Edit, DisplayMode.Disabled)
+
+      Passed  Every_flow_call_sits_behind_a_Connection_check
+    narration: >
+      Here's the catch. Episode six's send reminder button runs a cloud flow, and Learn says flows aren't supported in
+      offline mode. So offline, the button is disabled and says why. Mark returned is just a patch, so it works offline
+      and syncs later. A lint fails if any flow call isn't behind a connection check.
+
+  - id: offline-screen
+    type: screen
+    heading: "Airplane mode in the storeroom"
+    image: screens/phone-offline.jpg
+    bar: "Power Apps mobile (Android) · airplane mode"
+    demo: >
+      Real phone, Power Apps mobile, app enabled for offline (initial sync finished). Turn on airplane mode: yellow banner "Offline.
+      Changes stay on this phone...", globe icon not connected. Open CT-0043: Send reminder greyed out "Send reminder (needs a
+      connection)". Tap Mark returned > dialog > Mark returned: banner "CT-0043 is back and available", globe shows changes pending.
+      Tap the globe: device status page. Turn airplane mode off: icon goes back to connected. Then on the lab Windows host the
+      model-driven Equipment Desk app shows CT-0043 Available. Mask account names.
+    narration: >
+      Airplane mode on. The banner appears and the globe changes. Send reminder is greyed out and tells you why. Mark
+      returned still works, and the globe shows changes waiting. Back online, it syncs, and the model driven app agrees.
+
+  - id: scan
+    type: code
+    heading: "Scan the label, or type it"
+    lang: yaml
+    code: |
+      bcrScan:
+        Control: BarcodeReader
+        OnScan: |-
+          =With({ tag: Upper(Trim(First(bcrScan.Barcodes).Value)) },
+              If(deskRules.TagIsValid(tag), FindLoan(tag),
+                 Notify("That code isn't an asset tag: " & First(bcrScan.Barcodes).Value, NotificationType.Warning)))
+
+      FindLoan(tag: Text): Void = {
+          With({ loan: LookUp(Loans, IsBlank('Returned on') && Equipment.'Asset tag' = tag) },
+              If(IsBlank(loan), Notify(tag & " has no open loan", NotificationType.Information),
+                 Set(selectedLoan, loan)))
+      };
+    narration: >
+      The barcode reader opens the phone's native scanner and returns a table of barcodes. We take the first, check it
+      with the library's tag rule from episode seven, and look up the open loan. Learn's accessibility advice is to offer
+      another way in, so a text box calls the same function.
+
+  - id: scan-screen
+    type: screen
+    heading: "Scan CT-0043"
+    image: screens/phone-scan.jpg
+    bar: "Power Apps mobile (Android) · Barcode reader"
+    demo: >
+      Real phone, Power Apps mobile (the barcode reader isn't supported in desktop browsers, Learn). Open loans list: tap "Scan tag",
+      the native scanner opens; scan a printed Code 128 label with the text CT-0043: the loan opens. Scan a product barcode (EAN):
+      warning "That code isn't an asset tag: ...". Scan CT-0042 (returned): "CT-0042 has no open loan". Type "ct-0107" in the
+      text box: CT-0107 opens. Mask account names.
+    narration: >
+      Tap scan tag, point at the label, and the loan opens. A product barcode is refused. A device with no open loan says
+      so. And typing the tag works just the same.
+
+  - id: setup
+    type: bullets
+    heading: "Offline setup, per Learn"
+    bullets:
+      - "Tables: Can be taken offline. App: in a solution, Can be used offline"
+      - "Offline profile: filter rows, don't download everything"
+      - "Basic User can't open an offline app: add read on Canvas App, Mobile offline profile, Sync Error"
+      - "Browser = no offline, even on a phone; delta sync every 5 minutes"
+      - "No Relate or Unrelate offline; sort your galleries"
+    narration: >
+      The setup, from Learn. Mark the tables can be taken offline, keep the app in a solution and switch on can be used
+      offline. Use a profile with filters. Users with only the basic user role can't open an offline app, so add read
+      access to three tables. A browser never runs offline, even on a phone. And sort your galleries, or offline rows can
+      come back in a different order.
+
+  - id: wide-screen
+    type: screen
+    heading: "Same app, bigger screens"
+    image: screens/browser-wide.jpg
+    bar: "Microsoft Edge on the lab laptop · device emulation"
+    demo: >
+      Lab Windows host, Microsoft Edge, the published app opened from make.powerapps.com (Play). DevTools device toolbar (browser
+      device emulation, say so on screen): an iPad-sized viewport upright and sideways, then a full desktop window. Medium and
+      larger show list and detail side by side with "Select a loan to see it here." until a row is tapped. No globe icon here
+      (Host.OfflineEnabled is false in the browser). Mask tenant and account.
+    narration: >
+      And in a browser, with device emulation on the laptop. A tablet sized window and a desktop window both get the two
+      pane layout. No globe here: the browser can't run offline, and the icon knows it.
+
+  - id: tests
+    type: code
+    heading: "112 tests at every size"
+    lang: text
+    code: |
+      $ dotnet test EquipmentDesk.Mobile.Tests
+        Passed  Screen_size_follows_the_screen_width_and_the_breakpoints(width: 1688, height: 780, size: 2)
+        Passed  Upright_phone_shows_the_list_then_the_loan_instead_of_the_list
+        Passed  Mark_returned_works_offline_and_closes_the_detail_pane
+        Passed  A_code_that_isnt_an_asset_tag_is_refused_by_the_library_rule(scanned: "4006381333931")
+        Passed  The_gallery_has_a_sort_order
+      Passed!  - Failed: 0, Passed: 112, Total: 112
+
+      # mutation: default Height formula, no Connection check, a 40-high toggle
+      Failed!  - Failed: 4, Passed: 108
+    narration: >
+      The tests set the app width and height, the connection signal and the scanned barcodes, then run the real formulas.
+      Put back the default height formula, drop the connection check, or shrink one toggle, and four tests fail. The
+      phone itself, the sync and the camera are the lab's job.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The screen source and all the tests are on GitHub, and the complete guide is on devladlog dot com. Links are in the
+      description. Next time: A L M and DevOps for Power Platform, moving this app from dev to production properly.
+      Subscribe so you don't miss it.

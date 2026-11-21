@@ -1,0 +1,169 @@
+# Equipment Desk (phone) - episode 7: the Open loans screen from episode 6, now built with the Equipment Desk Kit
+# component library (src/library). Changes:
+#   hdrLoans    DeskHeader instead of the lblLoansTitle label; OnBack = Back()
+#   deskRules   hidden DeskRules instance; the gallery labels call deskRules.StateColor(...) (it used to be a UDF)
+#   btnReturn   new "Returned" button per row; it only remembers the loan (returnLoan)
+#   dlgReturn   ConfirmDialog over everything; OnConfirm does the two Patch calls, OnCancel forgets the loan
+# Library components can't sit inside a gallery (Learn), so the dialog is on the screen and the row button just sets
+# a variable. Library instances: Control CanvasComponent + ComponentLibraryUniqueName + ComponentName (pa.yaml v3).
+Screens:
+  LoansScreen:
+    Properties:
+      Fill: =RGBA(245, 246, 250, 1)
+    Children:
+      - hdrLoans:
+          Control: CanvasComponent
+          ComponentLibraryUniqueName: contoso_equipmentdeskkit
+          ComponentName: DeskHeader
+          Properties:
+            Title: ="Open loans"
+            ShowBack: =true
+            OnBack: =Back()
+            X: =0
+            Y: =0
+            Width: =Parent.Width
+      - deskRules:
+          Control: CanvasComponent
+          ComponentLibraryUniqueName: contoso_equipmentdeskkit
+          ComponentName: DeskRules
+          Properties:
+            Visible: =false
+      - lblSummary:
+          Control: Label
+          Properties:
+            Text: |-
+              =If(
+                  OverdueCount = 0, "Nothing overdue",
+                  OverdueCount = 1, "1 loan is overdue",
+                  OverdueCount & " loans are overdue"
+              )
+            Color: =deskRules.StateColor(If(OverdueCount = 0, "Returned", "Overdue"))
+            X: =24
+            Y: =120
+            Width: =Parent.Width - 48
+            Height: =32
+      - tglOverdueOnly:
+          Control: Classic/Toggle
+          Properties:
+            Default: =false
+            X: =24
+            Y: =160
+            Width: =96
+            Height: =40
+      - lblOverdueOnly:
+          Control: Label
+          Properties:
+            Text: ="Overdue only"
+            X: =128
+            Y: =160
+            Width: =200
+            Height: =40
+      - galLoans:
+          Control: Gallery
+          Properties:
+            Items: |-
+              =Sort(
+                  Filter(
+                      Loans,
+                      IsBlank('Returned on') && (!tglOverdueOnly.Value || 'Due date' < Today())
+                  ),
+                  'Due date'
+              )
+            TemplateSize: =112
+            X: =0
+            Y: =208
+            Width: =Parent.Width
+            Height: =Parent.Height - 208
+          Children:
+            - lblLoanTitle:
+                Control: Label
+                Properties:
+                  Text: =ThisItem.Equipment.'Asset tag' & " · " & ThisItem.Equipment.Name
+                  X: =24
+                  Y: =8
+                  Width: =Parent.TemplateWidth - 160
+                  Height: =32
+                  FontWeight: =FontWeight.Semibold
+            - lblLoanDetail:
+                Control: Label
+                Properties:
+                  Text: |-
+                    =With(
+                        { state: LoanState(ThisItem.'Due date', ThisItem.'Returned on') },
+                        ThisItem.'Borrower email' & " · " &
+                        Switch(state,
+                            "Overdue", WorkingDays(WorkingDaysBetween(ThisItem.'Due date', Today())) & " late",
+                            "Due soon", "due " & Text(ThisItem.'Due date', "ddd d mmm", "en-GB") & " (soon)",
+                            "due " & Text(ThisItem.'Due date', "ddd d mmm", "en-GB"))
+                    )
+                  # Episode 7: the colour rule comes from the library (was StateColor(...) in App.Formulas).
+                  Color: =deskRules.StateColor(LoanState(ThisItem.'Due date', ThisItem.'Returned on'))
+                  X: =24
+                  Y: =40
+                  Width: =Parent.TemplateWidth - 160
+                  Height: =28
+            - lblLoanNotes:
+                Control: Label
+                Properties:
+                  Text: =Coalesce(ThisItem.Notes, "No notes")
+                  X: =24
+                  Y: =70
+                  Width: =Parent.TemplateWidth - 160
+                  Height: =28
+            - btnRemind:
+                Control: Classic/Button
+                Properties:
+                  # Unchanged from episode 6 (tested there): runs the SendLoanReminder flow with the loan id.
+                  Text: =If(sendingLoan = ThisItem.contoso_loanid, "Sending...", "Send reminder")
+                  DisplayMode: =If(IsBlank(sendingLoan), DisplayMode.Edit, DisplayMode.Disabled)
+                  Visible: =LoanState(ThisItem.'Due date', ThisItem.'Returned on') = "Overdue"
+                  OnSelect: |-
+                    =Set(sendingLoan, ThisItem.contoso_loanid);
+                    IfError(
+                        With(
+                            { result: SendLoanReminder.Run(Text(ThisItem.contoso_loanid)) },
+                            Notify(result.message, If(result.sent, NotificationType.Success, NotificationType.Warning))
+                        ),
+                        Notify("The reminder flow didn't run: " & FirstError.Message, NotificationType.Error)
+                    );
+                    Set(sendingLoan, Blank())
+                  X: =Parent.TemplateWidth - 128
+                  Y: =8
+                  Width: =112
+                  Height: =40
+            - btnReturn:
+                Control: Classic/Button
+                Properties:
+                  # Episode 7: no Patch here. The row only remembers which loan; the dialog asks first.
+                  Text: ="Returned"
+                  OnSelect: =Set(returnLoan, ThisItem)
+                  X: =Parent.TemplateWidth - 128
+                  Y: =60
+                  Width: =112
+                  Height: =40
+      - dlgReturn:
+          Control: CanvasComponent
+          ComponentLibraryUniqueName: contoso_equipmentdeskkit
+          ComponentName: ConfirmDialog
+          Properties:
+            Visible: =!IsBlank(returnLoan)
+            Title: ="Mark as returned?"
+            Message: |-
+              =returnLoan.Equipment.'Asset tag' & " " & returnLoan.Equipment.Name & " from " & returnLoan.'Borrower email' &
+              " is marked as returned today and the device becomes available again."
+            ConfirmText: ="Mark returned"
+            # Two writes, one IfError pair each, success last (episode 2's lesson: ';' doesn't stop on an error).
+            OnConfirm: |-
+              =IfError(
+                  Patch(Loans, returnLoan, { 'Returned on': Today() }),
+                  Notify("Couldn't mark it as returned: " & FirstError.Message, NotificationType.Error),
+                  Patch(Equipment, returnLoan.Equipment, { Status: 'Status (Equipment)'.Available }),
+                  Notify("Loan closed, but the device status wasn't updated: " & FirstError.Message, NotificationType.Warning),
+                  Notify(returnLoan.Equipment.'Asset tag' & " is back and available", NotificationType.Success)
+              );
+              Set(returnLoan, Blank())
+            OnCancel: =Set(returnLoan, Blank())
+            X: =0
+            Y: =0
+            Width: =Parent.Width
+            Height: =Parent.Height

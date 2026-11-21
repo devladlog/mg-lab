@@ -1,0 +1,23 @@
+{
+  "_comment": "Dataverse table behind the customer portal, created in the DEV environment (publisher prefix mgl). Choice values below are the ones to give the options when creating the columns (custom option values start at the publisher's option value prefix; check yours and update this file if they differ). There is deliberately NO account lookup: company-wide visibility comes from the contact's parent account through a parent/child table permission, so a customer can't attach a request to another company.",
+  "logicalName": "mgl_supportrequest",
+  "entitySetName": "mgl_supportrequests",
+  "displayName": "Support request",
+  "primaryNameColumn": "mgl_title",
+  "documentManagement": true,
+  "columns": [
+    {"logicalName": "mgl_supportrequestid", "type": "Uniqueidentifier", "display": "Support request"},
+    {"logicalName": "mgl_title",       "type": "Text", "maxLength": 200, "display": "Title", "required": true},
+    {"logicalName": "mgl_description", "type": "Multiline", "maxLength": 2000, "display": "Description"},
+    {"logicalName": "mgl_reference",   "type": "Autonumber", "format": "SR-{SEQNUM:5}", "display": "Reference"},
+    {"logicalName": "mgl_category",    "type": "Choice", "display": "Category", "required": true,
+     "options": [{"value": 100000000, "label": "Billing"}, {"value": 100000001, "label": "Delivery"},
+                 {"value": 100000002, "label": "Product"}, {"value": 100000003, "label": "Other"}]},
+    {"logicalName": "mgl_status",      "type": "Choice", "display": "Status", "default": 100000000,
+     "options": [{"value": 100000000, "label": "New"}, {"value": 100000001, "label": "In progress"},
+                 {"value": 100000002, "label": "Waiting for customer"}, {"value": 100000003, "label": "Resolved"}]},
+    {"logicalName": "mgl_contact",     "type": "Lookup", "target": "contact", "display": "Raised by", "required": true,
+     "navigationProperty": "mgl_Contact", "relationship": "mgl_contact_mgl_supportrequest"},
+    {"logicalName": "createdon",       "type": "DateTime", "display": "Created on"}
+  ]
+}

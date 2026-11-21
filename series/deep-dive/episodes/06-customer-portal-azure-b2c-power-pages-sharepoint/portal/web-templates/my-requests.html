@@ -1,0 +1,32 @@
+{% comment %}
+  Web template "Support requests" (Power Pages Management > Web Templates), used by the page /support/ whose page
+  permission allows only the "Customer contacts" web role. user.id is the signed-in contact's ID.
+{% endcomment %}
+{% if user %}
+<section id="contoso-requests" data-contact-id="{{ user.id }}">
+  <h2>Support requests for {{ user.parentcustomerid.name | escape }}</h2>
+  <form id="new-request" novalidate>
+    <label>Title <input name="title" maxlength="200" required></label>
+    <label>Category
+      <select name="category" required>
+        <option value="">Choose…</option>
+        <option value="100000000">Billing</option>
+        <option value="100000001">Delivery</option>
+        <option value="100000002">Product</option>
+        <option value="100000003">Other</option>
+      </select>
+    </label>
+    <label>Description <textarea name="description" maxlength="2000" rows="4"></textarea></label>
+    <button type="submit">Send request</button>
+  </form>
+  <p id="request-message" role="status" aria-live="polite"></p>
+  <table class="table">
+    <thead><tr><th>Reference</th><th>Title</th><th>Category</th><th>Status</th><th>Raised by</th></tr></thead>
+    <tbody id="request-rows"><tr><td colspan="5">Loading…</td></tr></tbody>
+  </table>
+</section>
+<script src="/support-requests.js"></script>
+<script>ContosoSupport.mount(document, window);</script>
+{% else %}
+<p>Please <a href="/SignIn?returnUrl={{ request.path_and_query | escape }}">sign in</a> to see your support requests.</p>
+{% endif %}

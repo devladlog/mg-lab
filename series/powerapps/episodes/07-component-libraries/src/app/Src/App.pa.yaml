@@ -1,0 +1,35 @@
+# Equipment Desk (phone) - episode 7. App.Formulas from episode 5, with ONE change: StateColor moved out of the app
+# into the Equipment Desk Kit component library (DeskRules.StateColor), so the colours are the same in every app that
+# imports the library. Everything else is unchanged (DaysOff still comes from the Contoso Holidays connector).
+App:
+  Properties:
+    StartScreen: =BrowseScreen
+    Formulas: |-
+      =DefaultLoanDays = 14;
+      MaxLoanDays = 90;
+      OfficeCountry = "PT";
+      OfficeSubdivision = "";
+      DaysOff = ContosoHolidays.GetDaysOff(OfficeCountry, Year(Today()) - 1, { toYear: Year(Today()) + 1, subdivision: OfficeSubdivision });
+      Holidays = ForAll(DaysOff.days, ThisRecord.date);
+      OverdueCount = CountIf(Loans, IsBlank('Returned on') && 'Due date' < Today());
+      IsWorkingDay(d: Date): Boolean = Weekday(d, StartOfWeek.Monday) <= 5 && !(d in Holidays);
+      WorkingDaysBetween(start: Date, finish: Date): Number =
+          If(finish <= start, 0,
+              CountIf(ForAll(Sequence(DateDiff(start, finish)), DateAdd(start, Value)), IsWorkingDay(Value)));
+      WorkingDays(n: Number): Text = n & If(n = 1, " working day", " working days");
+      LoanState(due: Date, returned: Date): Text =
+          Switch(true,
+              !IsBlank(returned), "Returned",
+              due < Today(), "Overdue",
+              WorkingDaysBetween(Today(), due) <= 2, "Due soon",
+              "On loan");
+      FirstName(email: Text): Text = Proper(First(Split(First(Split(email, "@")).Value, ".")).Value);
+      ReminderText(asset: Text, email: Text, due: Date): Text =
+          $"Hi {FirstName(email)}, the {asset} you borrowed was due back on {Text(due, "dddd d mmmm", "en-GB")}, {WorkingDays(WorkingDaysBetween(due, Today()))} ago. Please bring it to the Equipment Desk. Thank you!";
+      CopyReminder(asset: Text, email: Text, due: Date): Void = {
+          IfError(
+              Copy(ReminderText(asset, email, due)),
+              Notify("Couldn't copy the reminder: " & FirstError.Message, NotificationType.Error),
+              Notify("Reminder for " & email & " copied", NotificationType.Success)
+          )
+      };

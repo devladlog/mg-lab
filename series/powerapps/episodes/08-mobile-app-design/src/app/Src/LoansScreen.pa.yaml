@@ -1,0 +1,322 @@
+# Equipment Desk (phone) - episode 8: episode 7's Open loans screen, redesigned for phones that rotate and go offline.
+#   Size        Screen Width/Height use Learn's orientation formulas, so a phone held sideways gets a short, wide screen
+#               instead of a tall one you have to scroll; Size then follows App.SizeBreakpoints.
+#   One screen, two panes   Small: the list OR the loan (tap a row to open, header back to return).
+#               Medium and up (phone sideways, tablet, desktop): list AND loan side by side.
+#   Touch       every tappable control is at least TapTarget (88) high; row buttons moved out of the gallery rows.
+#   Offline     banner and sync icon (Connection.Sync, Learn snippet); Send reminder is disabled offline because Power
+#               Automate flows aren't supported in offline mode (Learn); Mark returned works offline and syncs later.
+#   Scanner     Barcode reader opens the native scanner (Power Apps mobile only, Learn); a text box is the alternative.
+# The header, the dialog and deskRules are the Equipment Desk Kit library from episode 7 (unchanged).
+Screens:
+  LoansScreen:
+    Properties:
+      Fill: =RGBA(245, 246, 250, 1)
+      # Learn (create responsive layouts, Device orientation): swap DesignWidth/DesignHeight with the orientation.
+      Width: =Max(App.Width, If(App.Width < App.Height, App.DesignWidth, App.DesignHeight))
+      Height: =Max(App.Height, If(App.Width < App.Height, App.DesignHeight, App.DesignWidth))
+    Children:
+      - hdrLoans:
+          Control: CanvasComponent
+          ComponentLibraryUniqueName: contoso_equipmentdeskkit
+          ComponentName: DeskHeader
+          Properties:
+            Title: =If(LoansScreen.Size = ScreenSize.Small && !IsBlank(selectedLoan), selectedLoan.Equipment.'Asset tag', "Open loans")
+            ShowBack: =true
+            # On a phone held upright the loan replaces the list, so "back" first goes back to the list.
+            OnBack: =If(LoansScreen.Size = ScreenSize.Small && !IsBlank(selectedLoan), Set(selectedLoan, Blank()), Back())
+            X: =0
+            Y: =0
+            Width: =Parent.Width - TapTarget
+      - icoSync:
+          Control: Classic/Icon
+          Properties:
+            # Learn (set up mobile offline for canvas apps): the Offline template's globe icon.
+            Icon: |-
+              =Switch(Connection.Sync,
+                  ConnectionSync.Connected, Icon.Globe,
+                  ConnectionSync.ConnectedWithWarning, Icon.GlobeWarning,
+                  ConnectionSync.ConnectedPendingUpsync, Icon.GlobeChangesPending,
+                  ConnectionSync.ConnectedError, Icon.GlobeError,
+                  ConnectionSync.ConnectedRefresh, Icon.GlobeRefresh,
+                  ConnectionSync.NotConnected, Icon.GlobeNotConnected,
+                  ConnectionSync.NotConnectedWithWarning, Icon.GlobeWarning,
+                  ConnectionSync.NotConnectedPendingUpsync, Icon.GlobeChangesPending,
+                  ConnectionSync.NotConnectedSyncError, Icon.GlobeError)
+            Visible: =Host.OfflineEnabled
+            OnSelect: =ShowHostInfo(HostInfo.OfflineSync)
+            AccessibleLabel: ="Sync status"
+            TabIndex: =0
+            Fill: =RGBA(0, 90, 158, 1)
+            Color: =RGBA(255, 255, 255, 1)
+            X: =Parent.Width - TapTarget
+            Y: =12
+            Width: =TapTarget
+            Height: =TapTarget
+      - lblOffline:
+          Control: Label
+          Properties:
+            Visible: =!Connection.Connected
+            Text: ="Offline. Changes stay on this phone and sync when you're back online."
+            Live: =Live.Polite
+            Fill: =RGBA(255, 244, 206, 1)
+            Color: =RGBA(50, 49, 48, 1)
+            X: =0
+            Y: =112
+            Width: =Parent.Width
+            Height: =If(Self.Visible, 64, 0)
+      - conBody:
+          Control: GroupContainer
+          Variant: AutoLayout
+          Properties:
+            LayoutDirection: =LayoutDirection.Horizontal
+            LayoutGap: =16
+            X: =0
+            Y: =lblOffline.Y + lblOffline.Height
+            Width: =Parent.Width
+            Height: =Parent.Height - Self.Y
+          Children:
+            - conList:
+                Control: GroupContainer
+                Variant: AutoLayout
+                Properties:
+                  Visible: =LoansScreen.Size >= ScreenSize.Medium || IsBlank(selectedLoan)
+                  LayoutDirection: =LayoutDirection.Vertical
+                  LayoutGap: =8
+                  FillPortions: =2
+                  LayoutMinWidth: =560
+                Children:
+                  - lblSummary:
+                      Control: Label
+                      Properties:
+                        Text: |-
+                          =If(
+                              OverdueCount = 0, "Nothing overdue",
+                              OverdueCount = 1, "1 loan is overdue",
+                              OverdueCount & " loans are overdue"
+                          )
+                        Color: =deskRules.StateColor(If(OverdueCount = 0, "Returned", "Overdue"))
+                        Height: =56
+                  - conFind:
+                      Control: GroupContainer
+                      Variant: AutoLayout
+                      Properties:
+                        LayoutDirection: =LayoutDirection.Horizontal
+                        LayoutGap: =8
+                        Height: =TapTarget
+                      Children:
+                        - bcrScan:
+                            Control: BarcodeReader
+                            Properties:
+                              Text: ="Scan tag"
+                              # Code 128 asset tag labels; Learn: Barcodes is a table of Value and Type.
+                              OnScan: |-
+                                =With(
+                                    { tag: Upper(Trim(First(bcrScan.Barcodes).Value)) },
+                                    If(
+                                        deskRules.TagIsValid(tag), FindLoan(tag),
+                                        Notify("That code isn't an asset tag: " & First(bcrScan.Barcodes).Value, NotificationType.Warning)
+                                    )
+                                )
+                              Width: =200
+                              Height: =TapTarget
+                        - txtFindTag:
+                            Control: Classic/TextInput
+                            Properties:
+                              # Learn (barcode reader accessibility): offer another way to enter the code.
+                              Default: =""
+                              HintText: ="or type a tag, e.g. CT-0043"
+                              AccessibleLabel: ="Asset tag"
+                              OnChange: |-
+                                =With(
+                                    { tag: Upper(Trim(txtFindTag.Text)) },
+                                    If(
+                                        deskRules.TagIsValid(tag), FindLoan(tag),
+                                        Notify("Type a tag like CT-0043", NotificationType.Warning)
+                                    )
+                                )
+                              FillPortions: =1
+                              Height: =TapTarget
+                  - conFilter:
+                      Control: GroupContainer
+                      Variant: AutoLayout
+                      Properties:
+                        LayoutDirection: =LayoutDirection.Horizontal
+                        LayoutGap: =8
+                        Height: =TapTarget
+                      Children:
+                        - tglOverdueOnly:
+                            Control: Classic/Toggle
+                            Properties:
+                              Default: =false
+                              AccessibleLabel: ="Overdue only"
+                              Width: =120
+                              Height: =TapTarget
+                        - lblOverdueOnly:
+                            Control: Label
+                            Properties:
+                              Text: ="Overdue only"
+                              FillPortions: =1
+                              Height: =TapTarget
+                  - galLoans:
+                      Control: Gallery
+                      Properties:
+                        # Sorted on purpose: Learn (offline limitations) says rows can come in a different order offline
+                        # unless the gallery has a sort order.
+                        Items: |-
+                          =Sort(
+                              Filter(
+                                  Loans,
+                                  IsBlank('Returned on') && (!tglOverdueOnly.Value || 'Due date' < Today())
+                              ),
+                              'Due date'
+                          )
+                        # The whole row is the target now: no small buttons inside rows.
+                        OnSelect: =Set(selectedLoan, ThisItem)
+                        TemplateSize: =128
+                        FillPortions: =1
+                      Children:
+                        - lblLoanTitle:
+                            Control: Label
+                            Properties:
+                              Text: =ThisItem.Equipment.'Asset tag' & " · " & ThisItem.Equipment.Name
+                              FontWeight: =FontWeight.Semibold
+                              Size: =20
+                              X: =24
+                              Y: =16
+                              Width: =Parent.TemplateWidth - 104
+                              Height: =44
+                        - lblLoanDetail:
+                            Control: Label
+                            Properties:
+                              Text: |-
+                                =ThisItem.'Borrower email' & " · " &
+                                Switch(LoanState(ThisItem.'Due date', ThisItem.'Returned on'),
+                                    "Overdue", WorkingDays(WorkingDaysBetween(ThisItem.'Due date', Today())) & " late",
+                                    "due " & Text(ThisItem.'Due date', "ddd d mmm", "en-GB"))
+                              Color: =deskRules.StateColor(LoanState(ThisItem.'Due date', ThisItem.'Returned on'))
+                              X: =24
+                              Y: =64
+                              Width: =Parent.TemplateWidth - 104
+                              Height: =44
+                        - icoOpen:
+                            Control: Classic/Icon
+                            Properties:
+                              # Decorative: the row itself is the target, so no AccessibleLabel (Learn: empty hides it
+                              # from screen readers).
+                              Icon: =Icon.ChevronRight
+                              X: =Parent.TemplateWidth - 72
+                              Y: =40
+                              Width: =48
+                              Height: =48
+            - conDetail:
+                Control: GroupContainer
+                Variant: AutoLayout
+                Properties:
+                  Visible: =LoansScreen.Size >= ScreenSize.Medium || !IsBlank(selectedLoan)
+                  LayoutDirection: =LayoutDirection.Vertical
+                  LayoutGap: =16
+                  FillPortions: =3
+                  PaddingLeft: =24
+                  PaddingRight: =24
+                Children:
+                  - lblNoSelection:
+                      Control: Label
+                      Properties:
+                        Visible: =IsBlank(selectedLoan)
+                        Text: ="Select a loan to see it here."
+                        Height: =64
+                  - lblDetailTitle:
+                      Control: Label
+                      Properties:
+                        Visible: =!IsBlank(selectedLoan)
+                        Text: =selectedLoan.Equipment.'Asset tag' & " · " & selectedLoan.Equipment.Name
+                        Role: =TextRole.Heading2
+                        Size: =24
+                        FontWeight: =FontWeight.Semibold
+                        Height: =64
+                  - lblDetailBorrower:
+                      Control: Label
+                      Properties:
+                        Visible: =!IsBlank(selectedLoan)
+                        Text: ="Borrowed by " & selectedLoan.'Borrower email'
+                        Height: =56
+                  - lblDetailDue:
+                      Control: Label
+                      Properties:
+                        Visible: =!IsBlank(selectedLoan)
+                        Text: |-
+                          =With(
+                              { state: LoanState(selectedLoan.'Due date', selectedLoan.'Returned on') },
+                              state & " · due " & Text(selectedLoan.'Due date', "dddd d mmmm", "en-GB")
+                          )
+                        Color: =deskRules.StateColor(LoanState(selectedLoan.'Due date', selectedLoan.'Returned on'))
+                        Height: =56
+                  - lblDetailNotes:
+                      Control: Label
+                      Properties:
+                        Visible: =!IsBlank(selectedLoan)
+                        Text: =Coalesce(selectedLoan.Notes, "No notes")
+                        Height: =56
+                  - btnRemind:
+                      Control: Classic/Button
+                      Properties:
+                        Visible: =!IsBlank(selectedLoan) && LoanState(selectedLoan.'Due date', selectedLoan.'Returned on') = "Overdue"
+                        # Learn (mobile offline limitations): Power Automate flows aren't supported in offline mode.
+                        Text: |-
+                          =Switch(true,
+                              !Connection.Connected, "Send reminder (needs a connection)",
+                              sendingLoan = selectedLoan.contoso_loanid, "Sending...",
+                              "Send reminder")
+                        DisplayMode: =If(Connection.Connected && IsBlank(sendingLoan), DisplayMode.Edit, DisplayMode.Disabled)
+                        OnSelect: |-
+                          =Set(sendingLoan, selectedLoan.contoso_loanid);
+                          IfError(
+                              With(
+                                  { result: SendLoanReminder.Run(Text(selectedLoan.contoso_loanid)) },
+                                  Notify(result.message, If(result.sent, NotificationType.Success, NotificationType.Warning))
+                              ),
+                              Notify("The reminder flow didn't run: " & FirstError.Message, NotificationType.Error)
+                          );
+                          Set(sendingLoan, Blank())
+                        Height: =TapTarget
+                  - btnReturn:
+                      Control: Classic/Button
+                      Properties:
+                        Visible: =!IsBlank(selectedLoan)
+                        Text: ="Mark returned"
+                        OnSelect: =Set(returnLoan, selectedLoan)
+                        Height: =TapTarget
+      - deskRules:
+          Control: CanvasComponent
+          ComponentLibraryUniqueName: contoso_equipmentdeskkit
+          ComponentName: DeskRules
+          Properties:
+            Visible: =false
+      - dlgReturn:
+          Control: CanvasComponent
+          ComponentLibraryUniqueName: contoso_equipmentdeskkit
+          ComponentName: ConfirmDialog
+          Properties:
+            Visible: =!IsBlank(returnLoan)
+            Title: ="Mark as returned?"
+            Message: |-
+              =returnLoan.Equipment.'Asset tag' & " " & returnLoan.Equipment.Name & " from " & returnLoan.'Borrower email' &
+              " is marked as returned today and the device becomes available again."
+            ConfirmText: ="Mark returned"
+            # Episode 7's handler; a returned loan leaves the list, so the detail pane closes too.
+            OnConfirm: |-
+              =IfError(
+                  Patch(Loans, returnLoan, { 'Returned on': Today() }),
+                  Notify("Couldn't mark it as returned: " & FirstError.Message, NotificationType.Error),
+                  Patch(Equipment, returnLoan.Equipment, { Status: 'Status (Equipment)'.Available }),
+                  Notify("Loan closed, but the device status wasn't updated: " & FirstError.Message, NotificationType.Warning),
+                  Notify(returnLoan.Equipment.'Asset tag' & " is back and available", NotificationType.Success);
+                  Set(selectedLoan, Blank())
+              );
+              Set(returnLoan, Blank())
+            OnCancel: =Set(returnLoan, Blank())
+            X: =0
+            Y: =0
+            Width: =Parent.Width
+            Height: =Parent.Height

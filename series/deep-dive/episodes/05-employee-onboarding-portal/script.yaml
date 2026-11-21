@@ -1,0 +1,245 @@
+# DEVLADLOG Deep Dive — episode 05. Code and test scenes are real (from this folder); screen scenes need the lab
+# recording described in demo.md. Narration ~870 words.
+episode: 5
+slug: employee-onboarding-portal
+series_label: "DEEP DIVE"
+series_name: "DEVLADLOG Deep Dive"
+file_prefix: "deep-dive"
+title: "Employee onboarding portal"
+subtitle: "Power Apps + SharePoint + Entra inbound provisioning + Lifecycle Workflows"
+voice: am_michael
+thumbnail_text: "DAY ONE\nREADY\nNO PASSWORDS"
+youtube:
+  title: "Employee Onboarding: Power Apps, SharePoint, Entra Lifecycle Workflows | DEVLADLOG Deep Dive #5"
+  tags: [employee onboarding, Power Apps, SharePoint, Microsoft Entra, API-driven inbound provisioning, SCIM, Lifecycle Workflows, Temporary Access Pass, Azure Functions, PowerShell, Flex Consumption, managed identity, Microsoft Graph, solution architecture]
+sources:
+  - https://www.devladlog.com/articles/deep-dive/2025-04-07-building-employee-onboarding-portal-azure-powerapps-sharepoint/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Day one, and no account"
+    sub: "or an account that works a week too early"
+    short: hook
+    narration: >
+      A new hire starts on Monday. Too often the account isn't ready, or it was created a week early with a password
+      somebody sent by email. Today we build an onboarding portal where HR fills in one form, and on day one the
+      account is enabled, licensed, and unlocked with a temporary access pass. This is the DEVLADLOG Deep Dive.
+
+  - id: architecture
+    type: diagram
+    heading: "HR asks, Entra provisions"
+    nodes: ["App", "List", "Function", "Entra", "Workflows"]
+    labels: ["Power Apps", "SharePoint", "PowerShell 7.6", "inbound API", "Lifecycle"]
+    narration: >
+      HR uses a canvas app that writes to a SharePoint list. A standard flow asks the hiring manager to approve. A
+      PowerShell function sends approved requests to Microsoft Entra's API driven inbound provisioning. Lifecycle
+      Workflows do the rest: a temporary access pass for the manager before the start date, and on day one the account
+      is enabled, licensed and added to its groups. Everything people touch runs on standard connectors, so HR and
+      managers need nothing beyond Microsoft three six five.
+
+  - id: why-not
+    type: bullets
+    heading: "Why not just create the user?"
+    bullets:
+      - "Creating users directly needs broad Graph rights"
+      - "Inbound provisioning: one permission, one endpoint"
+      - "It matches, creates or updates: we only send data"
+      - "Joiner tasks are built in: TAP, enable, licence, groups"
+    narration: >
+      The guide on the blog creates the user directly with Microsoft Graph, and that takes broad permissions like user
+      read write all. Here the function never creates anyone. It sends a scim record to the provisioning endpoint,
+      which matches, creates or updates the account. The joiner tasks are built into Lifecycle Workflows.
+
+  - id: scim
+    type: code
+    heading: "One SCIM operation per new hire"
+    lang: powershell
+    code: |
+      data = [ordered]@{
+          externalId  = $EmployeeId          # matched to employeeId: same request, same account
+          userName    = $UserPrincipalName
+          name        = [ordered]@{ givenName = $given; familyName = $sur }
+          title       = ([string]$Fields.OnbJobTitle).Trim()
+          active      = $false   # disabled until 'Onboard new hire employee' enables it
+          $script:ScimEnterpriseSchema = [ordered]@{
+              department = [string]$Fields.OnbDepartment
+              manager    = [ordered]@{ value = $ManagerEmployeeId }   # the manager's employeeId
+          }
+          $script:ScimCustomSchema = [ordered]@{ HireDate = $HireDateUtc; UsageLocation = $usage }
+      }
+    narration: >
+      This is what we send. The list item becomes employee ID N H, five digits, and that is the external ID. The
+      provisioning service matches it to employee ID, so sending the same request twice updates one account. The
+      account starts disabled. Hire date and usage location travel in a custom schema we map in the provisioning app.
+
+  - id: upn
+    type: code
+    heading: "João Gonçalves can't log in as João"
+    short: upn
+    lang: powershell
+    code: |
+      $lower = $Text.Trim().ToLowerInvariant()
+      foreach ($k in $map.Keys) { $lower = $lower.Replace($k, $map[$k]) }   # ß -> ss, ø -> o, ł -> l
+      foreach ($ch in $lower.Normalize([System.Text.NormalizationForm]::FormD).ToCharArray()) {
+          if ([System.Globalization.CharUnicodeInfo]::GetUnicodeCategory($ch) -eq [System.Globalization.UnicodeCategory]::NonSpacingMark) { continue }
+          if ($ch -match '[a-z0-9-]') { [void]$sb.Append($ch) }
+      }
+
+      ConvertTo-OnbUpnAlias -GivenName 'João Maria' -Surname 'Conceição Gonçalves'   # joao.goncalves
+      Resolve-OnbUpn -Candidates (Get-OnbUpnCandidates -Alias 'joao.goncalves' -Domain 'contoso.com')
+      # taken by someone else -> joao.goncalves2@contoso.com
+    narration: >
+      In Portugal, half the names have accents, and a user principal name can't contain any. So we decompose the name,
+      drop the accent marks, and keep first given name dot last surname. The provisioning service doesn't resolve
+      duplicate names, Learn says that's the client's job, so we check and take the next free one.
+
+  - id: sync
+    type: code
+    heading: "Send, then wait for the account"
+    lang: powershell
+    code: |
+      $send = Send-OnbScimBulk -Config $Config -BulkRequest (New-OnbScimBulkRequest -Operations @($chunk | ForEach-Object Operation))
+      if (-not $send.Accepted -and $send.StatusCode -notin 400, 403) {
+          throw "bulkUpload failed, requests stay Approved for the next run: $($send.Error)"
+      }
+      $outcome = Set-OnbRequestFields -Config $Config -ItemId $r.Item.Id -ETag $r.Item.ETag -Fields $fields
+
+      # inside Set-OnbRequestFields: PATCH .../fields with If-Match
+      if ($r.StatusCode -eq 412) { return 'Conflict' }   # HR edited it meanwhile: next pass sends it again
+
+      $user = Find-OnbUserByEmployeeId -EmployeeId $employeeId
+      if ($user) {
+          $created = Add-OnbTasks -Config $Config -RequestId $item.Id -Plan $plan
+    narration: >
+      Every five minutes a timer runs one pass. Approved requests go out in one bulk request, up to fifty per call. A
+      two oh two means staged, not done, so the item moves to sent. We write back with the item's e-tag: if HR edited
+      it meanwhile, SharePoint says four twelve and we try again next pass. Next pass, if the account exists, we add
+      the day one checklist.
+
+  - id: token
+    type: code
+    heading: "No modules, no secrets"
+    lang: powershell
+    code: |
+      # Flex Consumption doesn't support PowerShell managed dependencies: no Graph SDK, plain REST.
+      $uri = '{0}?resource={1}&api-version=2019-08-01' -f $env:IDENTITY_ENDPOINT, [uri]::EscapeDataString('https://graph.microsoft.com')
+      if ($ClientId) { $uri += '&client_id=' + [uri]::EscapeDataString($ClientId) }   # user-assigned identity
+      $r = Invoke-RestMethod -Method Get -Uri $uri -Headers @{ 'X-IDENTITY-HEADER' = $env:IDENTITY_HEADER }
+
+      Get-OnbRequiredGraphRoles
+      # SynchronizationData-User.Upload, User.Read.All, Lists.SelectedOperations.Selected
+      # + 'write' on the two onboarding lists only
+    narration: >
+      The function runs on Flex Consumption with PowerShell seven point six. Flex doesn't support managed dependencies,
+      so there is no Graph module: the token comes straight from the managed identity endpoint. The identity gets three
+      Graph roles, and write access to two SharePoint lists, not the whole site, and not the directory.
+
+  - id: tests
+    type: code
+    heading: "82 tests, a fake Graph, no tenant"
+    lang: text
+    code: |
+      $ pwsh -c 'Invoke-Pester ./tests'
+        [+] sends one SCIM operation, then records the account and creates the tasks once
+        [+] takes the next free name when another person already has it
+        [+] fails when the manager has no employee ID (no bulk call at all)
+        [+] does not overwrite an HR edit made while the run was working (412) ...
+        [+] waits for the account within the time-out, then fails with a pointer to the provisioning logs
+        [+] runs PowerShell 7.6 on Flex Consumption with a user-assigned identity
+      Tests Passed: 82, Failed: 0
+    narration: >
+      Eighty two Pester tests. An in-memory Graph plays the provisioning service the way Learn describes it: match on
+      external ID, create or update, fail on a taken name. Contract tests keep the app, the flow, the lists and the
+      Bicep in line with the function, so a renamed column breaks a test, not the demo.
+
+  - id: app-screen
+    type: screen
+    heading: "HR fills in one form"
+    image: screens/app-new-request.jpg
+    bar: "Power Apps · Onboarding Portal"
+    demo: >
+      Canvas app 'Onboarding Portal' signed in as Taylor Demo (HR). New request: Casey Demo, Sales, Sales representative,
+      hiring manager Sam Demo picked from the people search, start date today. After Submit, the My requests screen
+      shows Casey Demo with status Submitted.
+    narration: >
+      Now the lab. Taylor from HR opens the onboarding portal: Casey Demo, sales representative, starting today, and
+      the manager comes from the people picker, Sam. Submit. Sam gets a normal approval in Teams and approves, and
+      that's every click a human makes.
+
+  - id: provisioning-screen
+    type: screen
+    heading: "Entra creates the account"
+    image: screens/provisioning-logs.jpg
+    bar: "Microsoft Entra admin center · Provisioning logs"
+    demo: >
+      Enterprise apps > the API-driven provisioning app > Provisioning logs: one 'Create' row for source ID NH0000x,
+      status Success. Detail pane shows the modified properties: userPrincipalName casey.demo@..., accountEnabled
+      False, employeeId, department Sales, employeeHireDate, manager.
+    narration: >
+      Within minutes the provisioning log shows a create for Casey's employee ID: disabled, with department, hire date
+      and Sam as manager. The function never touched the directory itself.
+
+  - id: list-screen
+    type: screen
+    heading: "Status and checklist, back in SharePoint"
+    image: screens/list-account-created.jpg
+    bar: "SharePoint · HR lab · Onboarding Requests"
+    demo: >
+      Onboarding Requests list: Casey Demo row with Status 'Account created', Employee ID NH0000x, Sign-in name
+      casey.demo@..., Provisioning note '... 7 onboarding tasks added'. Inset or second capture: Onboarding Tasks list
+      filtered to the request, seven tasks with owners and due dates.
+    narration: >
+      Back in SharePoint the request says account created, with the sign-in name and the employee ID. The checklist
+      has seven tasks with due dates in working days: laptop, buddy, contract, and a sales access request. Run the
+      function again and nothing changes: no second account, no duplicate tasks.
+
+  - id: tap-screen
+    type: screen
+    heading: "The manager gets the pass"
+    image: screens/lcw-tap-email.jpg
+    bar: "Outlook · Sam Demo"
+    demo: >
+      Lifecycle workflows > 'Contoso pre-hire' > Workflow history: one run for Casey Demo, task 'Generate TAP and send
+      email' Completed. Then Sam Demo's Outlook: the TAP email for Casey Demo. MASK the pass value completely.
+    narration: >
+      The pre-hire workflow generates a temporary access pass and mails it to Sam. We ran it on demand; in production it
+      runs on its schedule, every three hours by default. On day one Casey signs in with the pass and registers a passkey.
+
+  - id: gotcha
+    type: bullets
+    heading: "Four things that bit us"
+    short: gotcha
+    bullets:
+      - "Managers are matched by employeeId: set it on every manager"
+      - "Hire date has a time, in UTC: we use 09:00 Lisbon time"
+      - "New workflows with 'Equal to' don't catch up missed days"
+      - "PowerShell 7.4 left support in November 2026: use 7.6"
+    narration: >
+      Four traps. The provisioning service resolves the manager by employee ID, so a manager without one means no
+      manager and no pass email: we fail the request with that message. Hire date is a timestamp in U T C, and the pass
+      starts at that moment. New workflows with equal to don't catch up a missed day, so use within. And PowerShell
+      seven point four left support in November.
+
+  - id: recap
+    type: bullets
+    heading: "What to take away"
+    bullets:
+      - "Send HR data to inbound provisioning, don't create users"
+      - "externalId to employeeId makes every send idempotent"
+      - "Lifecycle Workflows own day one: TAP, enable, licence"
+      - "Three Graph roles and two lists, nothing more"
+      - "Test the flow against a fake that behaves like Learn says"
+    narration: >
+      To recap. Send HR data to inbound provisioning instead of creating users. External ID to employee ID makes every
+      send safe to repeat. Lifecycle Workflows own day one. Three Graph roles and two lists, nothing more. And test
+      against a fake that behaves the way the documentation says.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The function, the tests, the p n p and Graph scripts, the flow, the Power Fx and the Bicep are on GitHub, and the
+      full guide is on devladlog dot com. Next time: a customer portal for people outside the company. This was the
+      DEVLADLOG Deep Dive, by Momento Galático.

@@ -1,0 +1,258 @@
+# DEVLADLOG Deep Dive — episode 06. Code and test scenes are real (from this folder); screen scenes need the lab
+# recording described in demo.md. The blog title says Azure AD B2C; this episode explains why it uses Microsoft Entra
+# External ID instead (B2C is no longer sold to new customers). Narration ~860 words.
+episode: 6
+slug: customer-portal-azure-b2c-power-pages-sharepoint
+series_label: "DEEP DIVE"
+series_name: "DEVLADLOG Deep Dive"
+file_prefix: "deep-dive"
+title: "Customer portal"
+subtitle: "Entra External ID (successor to Azure AD B2C) + Power Pages + SharePoint"
+voice: am_michael
+thumbnail_text: "CUSTOMERS IN\nTHEIR DATA ONLY\nB2C → EXTERNAL ID"
+youtube:
+  title: "Customer Portal with Power Pages, Entra External ID and SharePoint | DEVLADLOG Deep Dive #6"
+  tags: [Power Pages, Microsoft Entra External ID, Azure AD B2C, external tenant, CIAM, table permissions, web roles, Power Pages Web API, SharePoint document management, Dataverse, FetchXML, Microsoft Graph, solution architecture]
+sources:
+  - https://www.devladlog.com/articles/deep-dive/2025-11-03-customer-portal-secure-external-access-azure-b2c-power-pages-sharepoint/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Signing in is easy"
+    sub: "seeing only your own company's data is the hard part"
+    short: hook
+    narration: >
+      Anyone on the internet can create an account on your customer portal. That's the point. The hard part is what
+      happens next: a customer must see their company's requests and documents, and nothing from anyone else's. Today we
+      build that with Power Pages, SharePoint, and Microsoft Entra External ID. This is the DEVLADLOG Deep Dive.
+
+  - id: b2c
+    type: bullets
+    heading: "The guide says B2C. We don't."
+    short: b2c
+    bullets:
+      - "Azure AD B2C: no longer sold to new customers since 1 May 2025"
+      - "Existing B2C tenants: supported until at least May 2030"
+      - "B2C P2 discontinued on 15 March 2026"
+      - "New projects: Entra External ID, external tenant"
+    narration: >
+      First, an honest correction. The blog guide's title says Azure A D B 2 C. Since the first of May twenty twenty
+      five, B 2 C is no longer available to purchase for new customers. Existing tenants keep working, and Microsoft
+      supports them until at least May twenty thirty. A new portal starts on Microsoft Entra External ID, in an
+      external tenant, and Power Pages has a built-in provider for it.
+
+  - id: architecture
+    type: diagram
+    heading: "Who does what"
+    nodes: ["Customer", "External ID", "Power Pages", "Dataverse", "SharePoint"]
+    labels: ["email + password", "external tenant", "web roles", "table permissions", "documents"]
+    narration: >
+      The customer signs up with email and password in an external tenant, separate from Contoso's workforce
+      directory. Power Pages turns that sign-in into a contact. Dataverse holds the support requests, table permissions
+      decide which rows each contact sees, and SharePoint stores the documents for each request.
+
+  - id: identity-code
+    type: code
+    heading: "The external tenant, scripted"
+    lang: powershell
+    code: |
+      $app = Set-ExtPortalApp -DisplayName $AppName -ReplyUrl $ReplyUrl      # web redirect = site reply URL
+      $sp = Set-ExtServicePrincipal -AppId $app.App.appId                     # a user flow needs a service principal
+      Grant-ExtSignInConsent -App $app.App -ServicePrincipal $sp.ServicePrincipal   # openid + profile, admin consent
+      $flow = Set-ExtUserFlow -DisplayName $FlowName                          # EmailPassword-OAUTH, sign-up allowed
+      Add-ExtAppToUserFlow -FlowId $flow.Flow.id -AppId $app.App.appId        # one user flow per app
+
+      # Power Pages > Security > Identity providers > Microsoft Entra External ID
+      # Client ID         00000000-0000-0000-0000-00000000a001
+      # Authority         https://contosocustomers.ciamlogin.com/<tenant-id>/v2.0
+      # Metadata address  .../v2.0/.well-known/openid-configuration
+    narration: >
+      The external tenant setup is one idempotent PowerShell script on Microsoft Graph. An app registration with the
+      site's reply URL, its service principal, consent for open I D and profile, and a sign-up and sign-in user flow.
+      An app can belong to only one user flow, so the script refuses to steal one. It ends by printing the three values
+      the Power Pages wizard asks for.
+
+  - id: authz
+    type: bullets
+    heading: "Authentication isn't authorization"
+    bullets:
+      - "Anyone can sign up: they get 'Authenticated Users' and nothing else"
+      - "Contoso registers the contact and gives the 'Customer contacts' role"
+      - "Sign-in maps to that contact by e-mail"
+      - "No table permission on a built-in role, no Global access"
+    narration: >
+      Here's the design rule. Signing up proves who you are, not what you may see. A stranger who signs up gets the
+      authenticated users role, and that role has no table permissions at all. Contoso staff register each customer
+      contact with their company and give them the customer contacts role. At first sign-in, Power Pages maps the
+      account to that contact by email.
+
+  - id: permissions
+    type: code
+    heading: "My company's requests, without an account lookup"
+    short: permissions
+    lang: json
+    code: |
+      { "name": "Requests I raised", "table": "mgl_supportrequest", "access": "Contact",
+        "privileges": ["Read", "Create", "Write", "Append", "AppendTo"],
+        "children": [{ "name": "Documents of my requests", "table": "sharepointdocumentlocation" }] },
+      { "name": "Colleagues at my company", "table": "contact", "access": "Account",
+        "relationship": "contact_customer_accounts", "privileges": ["Read"],
+        "children": [{ "name": "Requests raised by colleagues", "table": "mgl_supportrequest",
+                       "privileges": ["Read", "AppendTo"],
+                       "children": [{ "name": "Documents of colleagues' requests",
+                                      "table": "sharepointdocumentlocation", "privileges": ["Read"] }] }] }
+    narration: >
+      Two permission trees. Requests I raised uses contact access, and it's the only one that can create. Company
+      visibility goes through contacts: read the contacts of my account, and through them, their requests. The request
+      has no account column at all, so nobody can attach a request to someone else's company.
+
+  - id: create-code
+    type: code
+    heading: "The page binds to me, the server checks"
+    lang: javascript
+    code: |
+      function buildCreateBody(input, contactId) {
+        if (!GUID.test(String(contactId || ''))) throw new PortalApiError(0, 'The page did not provide your contact ID; sign in again.');
+        var body = { mgl_title: String(input.title).trim(), mgl_category: Number(input.category) };
+        var description = (input.description ? String(input.description) : '').trim();
+        if (description) body.mgl_description = description;
+        // The server refuses a contact that isn't the signed-in user: the only Create permission has Contact access.
+        body['mgl_Contact@odata.bind'] = '/contacts(' + contactId + ')';
+        return body;
+      }
+      // every call: headers['__RequestVerificationToken'] = token from shell.getTokenDeferred()
+    narration: >
+      The page script creates requests through the Power Pages web A P I. It binds the request to the signed-in contact
+      and sends the anti forgery token on every call. The browser decides nothing about security: if someone edits the
+      script and binds a colleague's contact, the server checks the contact access permission again.
+
+  - id: list-code
+    type: code
+    heading: "No filter: the permissions are the filter"
+    lang: javascript
+    code: |
+      return '<fetch top="' + n + '"><entity name="mgl_supportrequest">' +
+        attrs.map(function (a) { return '<attribute name="' + a + '" />'; }).join('') +
+        '<order attribute="createdon" descending="true" /></entity></fetch>';
+
+      // FetchXML results omit null columns, so every property is optional
+      category: record['mgl_category' + FORMATTED] || (cat != null ? (CATEGORY[cat] || String(cat)) : ''),
+
+      { "name": "Webapi/mgl_supportrequest/fields",
+        "value": "mgl_supportrequestid,mgl_reference,mgl_title,mgl_description,mgl_category,mgl_status,mgl_contact,createdon" }
+    narration: >
+      The list query has no filter. The server only returns rows the permissions allow. We use FetchXML because Learn
+      lists a known issue with multi level permissions on plain O data reads. FetchXML leaves out null columns, so the
+      mapping copes. And the web A P I exposes eight named columns, because the star wildcard is deprecated.
+
+  - id: tests
+    type: code
+    heading: "41 tests, no tenant"
+    lang: text
+    code: |
+      $ npm test
+        ✔ the only Create on support requests has Contact access
+        ✔ company visibility goes through the contact's account, and is read-only
+        ✔ every permission that reads support requests has its own Document Location child
+        ✔ the script uses exactly the exposed columns, and they all exist in the table
+        ✔ escapes everything that came from Dataverse
+      # pass 31
+      $ pwsh -c 'Invoke-Pester ./tests'
+        [+] is idempotent: a second run writes nothing
+        [+] refuses to steal an app that another user flow already owns
+      Tests Passed: 10, Failed: 0
+    narration: >
+      Forty one tests. The security rules from Learn's Power Pages guidance are checked as data: no global access, no
+      permission on a built-in role, one create path, a document location child under every parent. The script's
+      columns must match the web A P I setting, and an in-memory tenant proves the identity script is idempotent.
+
+  - id: signup-screen
+    type: screen
+    heading: "Riley signs up"
+    image: screens/external-id-signup.jpg
+    bar: "Contoso support portal · Microsoft Entra External ID"
+    demo: >
+      Private browser window, portal home, Sign in > Microsoft Entra External ID. The external tenant's sign-up page:
+      Riley Demo enters her e-mail, the one-time verification code, a password and her name. Back on the portal,
+      signed in as Riley Demo, the Support menu item is visible.
+    narration: >
+      Now the lab. Riley, a customer at Northwind Traders, opens the portal and signs up on the external tenant's page:
+      email, verification code, password. She lands back in the portal, mapped to the contact Contoso registered for her.
+
+  - id: requests-screen
+    type: screen
+    heading: "Her company's requests, and a new one"
+    image: screens/support-requests.jpg
+    bar: "Power Pages · /support/ · signed in as Riley (Northwind Traders)"
+    demo: >
+      /support/ as Riley: the table lists SR-0000x requests from Riley and from her colleague Alex (Northwind), none
+      from Adventure Works. Riley submits 'Pallet arrived damaged', category Delivery; the message 'Request sent' appears
+      and the new row is at the top, marked as hers.
+    narration: >
+      On the support page Riley sees her own requests and her colleague Alex's, and none from any other customer. She
+      reports a damaged pallet. The new request appears at the top, with a reference number from Dataverse.
+
+  - id: documents-screen
+    type: screen
+    heading: "Documents land in SharePoint"
+    image: screens/request-documents.jpg
+    bar: "Power Pages · request page · SharePoint documents"
+    demo: >
+      The request's page (basic form, mode 'Updates an existing record') with the documents subgrid: Riley uploads
+      pallet-photos.pdf. Second capture: the SharePoint document library for the Support request table on the lab site,
+      folder named after the request, containing the PDF.
+    narration: >
+      She opens the request and uploads photos. The file goes to SharePoint, into a folder for this request, through
+      Dataverse's document management. Contoso's team works in SharePoint; Riley never needs a Microsoft three six five
+      account.
+
+  - id: isolation-screen
+    type: screen
+    heading: "Everyone else sees nothing"
+    image: screens/isolation.jpg
+    bar: "Power Pages · signed in as Taylor (Adventure Works) / Jordan (not registered)"
+    demo: >
+      Three captures: Taylor (Adventure Works contact) on /support/ sees only Adventure Works requests. Jordan, who
+      signed up but has no registered contact, gets the access denied page on /support/. Riley's browser console:
+      a create with a colleague's contact ID in mgl_Contact@odata.bind returns an error (record the exact status).
+    narration: >
+      Taylor, from another customer, sees only her company's requests. Jordan signed up but Contoso never registered
+      him, so the support page is closed. And a forged create, bound to someone else's contact from the console, is
+      refused by the server.
+
+  - id: gotcha
+    type: bullets
+    heading: "What bit us"
+    bullets:
+      - "Webapi fields '*' is deprecated: requests fail until you list columns"
+      - "One Document Location child per parent permission"
+      - "Uploads need an existing record: form mode 'update'"
+      - "FetchXML drops null columns; OData GET trips on deep permissions"
+    narration: >
+      Four traps. The wildcard in the web A P I fields setting is deprecated, and requests fail until you list the
+      columns. Documents need a document location child permission under every parent permission, not just one.
+      Uploads only work on a form that updates an existing record. And FetchXML leaves null columns out of the result.
+
+  - id: recap
+    type: bullets
+    heading: "What to take away"
+    bullets:
+      - "New customer portals: Entra External ID, not B2C"
+      - "Sign-up is authentication; web roles are authorization"
+      - "Relationship-based permissions, never Global"
+      - "No account lookup to spoof: go through the contact"
+      - "Script the tenant, test the rules as data"
+    narration: >
+      To recap. A new customer portal uses Entra External ID, not B 2 C. Sign-up is authentication; web roles
+      given by your staff are authorization. Use relationship based permissions, never global. Leave nothing for the
+      customer to spoof. And script the tenant and test the rules as data.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The identity script, the page script, the permission design and the tests are on GitHub, and the full guide is on
+      devladlog dot com. Next time: enterprise A P I management with A P I M and Service Bus. This was the DEVLADLOG
+      Deep Dive, by Momento Galático.

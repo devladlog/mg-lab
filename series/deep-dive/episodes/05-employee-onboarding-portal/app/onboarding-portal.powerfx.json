@@ -1,0 +1,23 @@
+{
+  "_comment": "Power Fx for the 'Onboarding Portal' canvas app (tablet layout). Data sources: the 'Onboarding Requests' SharePoint list and Office 365 Users, both standard connectors, so a Microsoft 365 licence is enough. Canvas apps show SharePoint columns by display name; tests/Contract.Tests.ps1 checks every column name and status used here against contract/onboarding-lists.json. The recorder builds the screens in Power Apps Studio from this file (demo.md step 5).",
+  "dataSources": ["Onboarding Requests", "Office365Users"],
+  "screens": {
+    "NewRequestScreen": {
+      "ddDepartment.Items": "Choices([@'Onboarding Requests'].Department)",
+      "cmbManager.Items": "Office365Users.SearchUserV2({searchTerm: Self.SearchText, top: 10, isSearchTermRequired: false}).value",
+      "cmbManager.DisplayFields": "[\"DisplayName\", \"Mail\"]",
+      "dpStart.DefaultDate": "Today() + 14",
+      "btnSubmit.DisplayMode": "If(IsBlank(txtGivenName.Text) || IsBlank(txtSurname.Text) || IsBlank(txtJobTitle.Text) || IsBlank(cmbManager.Selected) || IsBlank(ddDepartment.Selected) || dpStart.SelectedDate < Today(), DisplayMode.Disabled, DisplayMode.Edit)",
+      "btnSubmit.OnSelect": "Patch(\n    'Onboarding Requests',\n    Defaults('Onboarding Requests'),\n    {\n        Title: Trim(txtGivenName.Text) & \" \" & Trim(txtSurname.Text),\n        'Given name': Trim(txtGivenName.Text),\n        Surname: Trim(txtSurname.Text),\n        Department: {Value: ddDepartment.Selected.Value},\n        'Job title': Trim(txtJobTitle.Text),\n        'Hiring manager': cmbManager.Selected.Mail,\n        'Start date': dpStart.SelectedDate,\n        'Usage location': \"PT\",\n        Status: {Value: \"Submitted\"}\n    }\n);\nNotify(\"Sent to \" & cmbManager.Selected.DisplayName & \" for approval.\", NotificationType.Success);\nReset(txtGivenName); Reset(txtSurname); Reset(txtJobTitle);\nNavigate(MyRequestsScreen, ScreenTransition.None)"
+    },
+    "MyRequestsScreen": {
+      "galRequests.Items": "Sort(Filter('Onboarding Requests', 'Created By'.Email = User().Email), Created, SortOrder.Descending)",
+      "lblTitle.Text": "ThisItem.Title & \" · \" & ThisItem.Department.Value & \" · starts \" & Text(ThisItem.'Start date', \"yyyy-mm-dd\")",
+      "lblStatus.Text": "ThisItem.Status.Value & If(IsBlank(ThisItem.'Sign-in name'), \"\", \" · \" & ThisItem.'Sign-in name')",
+      "lblStatus.Color": "Switch(ThisItem.Status.Value, \"Account created\", Color.Green, \"Failed\", Color.Red, \"Rejected\", Color.Red, Color.DarkGray)",
+      "lblNote.Text": "ThisItem.'Provisioning note'",
+      "tmrRefresh.OnTimerEnd": "Refresh('Onboarding Requests')",
+      "tmrRefresh.Duration": "30000"
+    }
+  }
+}
