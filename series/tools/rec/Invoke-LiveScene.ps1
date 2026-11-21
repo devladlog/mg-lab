@@ -76,6 +76,14 @@ if ($target -ne 'host') {
 } elseif ($scene.workdir) {
     Set-Location -LiteralPath $scene.workdir
 }
+if ($target -eq 'host') {
+    # child PowerShell processes started on camera skip the owner's profile (no personal banner or prompt in the video);
+    # the typed command stays exactly as written in record.json
+    $global:MgPwshExe = (Get-Command pwsh -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1).Source
+    if ($global:MgPwshExe) { function global:pwsh { & $global:MgPwshExe -NoProfile @args } }
+    $global:MgPsExe = (Get-Command powershell -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1).Source
+    if ($global:MgPsExe) { function global:powershell { & $global:MgPsExe -NoProfile @args } }
+}
 
 Start-Sleep -Milliseconds 800
 foreach ($cmd in $scene.commands) {
