@@ -298,6 +298,18 @@ def video_segment(slide_png, clip, box, wav, speech, out, rate=1.0, crop=None):
     return dur
 
 
+LOUDNORM = "loudnorm=I=-14:TP=-1.5:LRA=11"  # YouTube/Shorts reference loudness
+
+
+def normalize_audio(path):
+    """Bring a finished file to -14 LUFS (video stream copied untouched)."""
+    path = Path(path)
+    tmp = path.with_name(path.stem + "_ln.mp4")
+    run(["ffmpeg", "-y", "-i", str(path), "-map", "0:v", "-map", "0:a", "-c:v", "copy", "-af", LOUDNORM,
+         "-c:a", "aac", "-b:a", "192k", "-ar", "48000", "-movflags", "+faststart", str(tmp)])
+    shutil.move(tmp, path)
+
+
 def concat(parts, out, music=None, music_db=-24):
     lst = out.parent / (out.stem + "_list.txt")
     lst.write_text("".join(f"file '{p.resolve()}'\n" for p in parts))
@@ -312,6 +324,7 @@ def concat(parts, out, music=None, music_db=-24):
     else:
         shutil.move(tmp, out)
     lst.unlink()
+    normalize_audio(out)
 
 
 def make_thumbnail(script, out):
@@ -449,6 +462,7 @@ def make_short(scene, script, wav, dur, slide_png, out, workdir, clip=None):
     run(["ffmpeg", "-y", *inputs, "-filter_complex", f"{vf};{af}", "-map", "[v]", "-map", "[a]",
          "-t", f"{total:.2f}", "-c:v", "libx264", "-preset", "veryfast", "-crf", "21", "-c:a", "aac", "-b:a", "160k",
          "-movflags", "+faststart", str(out)])
+    normalize_audio(out)
 
 
 def main():
