@@ -10,6 +10,7 @@
     "Invoke-Command -VMName CON-DC01 -Credential $cred { if (-not (Get-ADUser -Filter \"SamAccountName -eq 'alex.demo'\")) { New-ADUser -Name 'Alex Demo' -SamAccountName alex.demo -UserPrincipalName alex.demo@lab.contoso.com -Enabled $false } }",
     "$r = Invoke-Command -VMName CON-SRV02 -Credential $cred { $x = Install-WindowsFeature FS-FileServer, FS-SMB1; Set-NetFirewallProfile -Profile Public -Enabled False; Set-ItemProperty 'HKLM:\\SYSTEM\\CurrentControlSet\\Control\\Terminal Server' -Name fDenyTSConnections -Value 0; if (-not (Get-LocalGroupMember -SID 'S-1-5-32-544' | Where-Object Name -eq 'CONTOSO\\alex.demo')) { Add-LocalGroupMember -SID 'S-1-5-32-544' -Member 'CONTOSO\\alex.demo' }; \"$($x.RestartNeeded)\" }",
     "if (\"$r\" -eq 'Yes') { Restart-VM -Name CON-SRV02 -Force -Wait -For Heartbeat; Start-Sleep -Seconds 45 }",
+    "\"CON-SRV02 restart needed: $r\"; Invoke-Command -VMName CON-SRV02 -Credential $cred { Get-WindowsFeature FS-FileServer, FS-SMB1 | Select-Object Name, InstallState; Get-NetFirewallProfile | Select-Object Name, Enabled; 'fDenyTSConnections=' + (Get-ItemProperty 'HKLM:\\SYSTEM\\CurrentControlSet\\Control\\Terminal Server').fDenyTSConnections } | Format-Table -AutoSize | Out-Host",
     "Remove-PSSession $cli"
   ],
   "screens": [

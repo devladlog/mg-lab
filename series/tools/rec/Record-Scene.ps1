@@ -28,11 +28,13 @@ if (-not $SkipPrepare -and $s.prepare) {
 
 $ffmpeg = Get-FfmpegPath
 $pwsh = (Get-Command pwsh).Source
-$markers = Join-Path ([IO.Path]::GetTempPath()) ("mgrec-" + [guid]::NewGuid().ToString('N'))
+$id = [guid]::NewGuid().ToString('N').Substring(0, 8)
+$windowTitle = "MG-REC $Screen $id"
+$markers = Join-Path ([IO.Path]::GetTempPath()) ("mgrec-" + $id)
 New-Item -ItemType Directory -Path $markers | Out-Null
 $sceneJson = Join-Path $markers 'scene.json'
 [ordered]@{
-    title = $Screen; target = $s.target; workdir = $s.workdir; prompt = $s.prompt; configurationName = $s.configurationName
+    title = $Screen; windowTitle = $windowTitle; fontSize = $s.fontSize; target = $s.target; workdir = $s.workdir; prompt = $s.prompt; configurationName = $s.configurationName
     commands = @($s.commands); typingDelayMs = $s.typingDelayMs; markerDir = $markers
 } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $sceneJson -Encoding utf8
 
@@ -44,7 +46,7 @@ $jpg = Join-Path $screens "$Screen.jpg"
 # 1. the window to record (classic console host, so the font and size are ours)
 $live = Join-Path $PSScriptRoot 'Invoke-LiveScene.ps1'
 $p = Start-Process conhost.exe -ArgumentList "`"$pwsh`" -NoProfile -NoLogo -File `"$live`" -SceneFile `"$sceneJson`"" -PassThru
-try { $win = Wait-WindowByTitle -Title 'MG-REC' -TimeoutSeconds 30 }
+try { $win = Wait-WindowByTitle -Title $windowTitle -TimeoutSeconds 30 }
 catch {
     # keep what the scene window left behind, so the reason can be read: recordings\failed-<screen>\
     $keep = Join-Path $Root "recordings\failed-$Screen"
@@ -66,6 +68,8 @@ while (-not (Test-Path (Join-Path $markers 'done')) -and (Get-Date) -lt $limit -
 Start-Sleep -Milliseconds 1200
 Stop-WindowCapture $rec
 New-Item -ItemType File -Force -Path (Join-Path $markers 'stop') | Out-Null
+# wait until the scene window has really closed before the next scene (or kill it), then clean up
+if (-not $p.WaitForExit(20000)) { try { $p.Kill($true) } catch {} }
 
 & $ffmpeg -loglevel error -y -sseof -0.5 -i $mp4 -frames:v 1 -update 1 $jpg
 Write-Host "Saved $mp4 and poster $jpg" -ForegroundColor Green

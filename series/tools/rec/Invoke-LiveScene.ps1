@@ -11,7 +11,20 @@ param([Parameter(Mandatory)] [string] $SceneFile)
 
 $ErrorActionPreference = 'Continue'
 $scene = Get-Content -LiteralPath $SceneFile -Raw | ConvertFrom-Json
-$Host.UI.RawUI.WindowTitle = 'MG-REC'
+$Host.UI.RawUI.WindowTitle = $(if ($scene.windowTitle) { $scene.windowTitle } else { 'MG-REC' })
+# large, readable font inside this console (the window is recorded at 1600x900)
+try {
+    Add-Type -Namespace MgRec -Name Font -MemberDefinition @'
+[StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+public struct CONSOLE_FONT_INFOEX { public uint cbSize; public uint nFont; public short X; public short Y; public int FontFamily; public int FontWeight;
+  [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)] public string FaceName; }
+[DllImport("kernel32.dll", SetLastError = true)] public static extern IntPtr GetStdHandle(int n);
+[DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)] public static extern bool SetCurrentConsoleFontEx(IntPtr h, bool max, ref CONSOLE_FONT_INFOEX f);
+'@
+    $f = New-Object MgRec.Font+CONSOLE_FONT_INFOEX
+    $f.cbSize = [Runtime.InteropServices.Marshal]::SizeOf($f); $f.FaceName = 'Cascadia Mono'; $f.Y = $(if ($scene.fontSize) { [int16]$scene.fontSize } else { 22 }); $f.FontWeight = 400; $f.FontFamily = 54
+    [void][MgRec.Font]::SetCurrentConsoleFontEx([MgRec.Font]::GetStdHandle(-11), $false, [ref]$f)
+} catch {}
 if ($scene.markerDir) {
     New-Item -ItemType File -Force -Path (Join-Path $scene.markerDir 'started') | Out-Null
     try { Start-Transcript -Path (Join-Path $scene.markerDir 'scene.log') -Force | Out-Null } catch {}
