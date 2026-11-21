@@ -27,8 +27,8 @@ All demos are recorded for real. Use these shared resources before asking for ne
 
 ## Dev services
 - Azure DevOps: existing organization `devladlog` (connected to the lab directory). Demos create their own private
-  project and delete it afterwards. Microsoft-hosted pipelines need the org's billing linked to the lab Azure
-  subscription (free grant: 1 job, 1,800 min/month); until then use a self-hosted agent on a lab VM.
+  project and delete it afterwards. Billing is linked to the lab Azure subscription, so the free Microsoft-hosted grant
+  is active (1 parallel job, up to 60 min per run, 1,800 min/month). No paid parallel jobs.
 - GitHub: the same account/organization used for github.com/devladlog/mg-lab. Throwaway demo repos are created and
   deleted inside the episode.
 
