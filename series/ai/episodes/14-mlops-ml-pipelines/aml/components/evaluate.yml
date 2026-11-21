@@ -1,0 +1,25 @@
+$schema: https://azuremlschemas.azureedge.net/latest/commandComponent.schema.json
+type: command
+name: slabreach_evaluate
+display_name: Gate the model
+version: 1
+description: Scores the model on newer tickets and applies the promotion rules. Exits non-zero when the gate says no, which fails the pipeline.
+inputs:
+  model:
+    type: mlflow_model
+  test:
+    type: uri_folder
+  baseline_auc:
+    type: number
+    default: 0
+    description: AUC of the model now in production; 0 when there is none.
+outputs:
+  decision:
+    type: uri_folder
+code: ../../src
+environment:
+  image: mcr.microsoft.com/azureml/openmpi4.1.0-ubuntu22.04:latest
+  conda_file: ../environment/conda.yml
+command: >-
+  python -m slabreach evaluate --model ${{inputs.model}} --test ${{inputs.test}} --out ${{outputs.decision}}
+  --baseline-auc ${{inputs.baseline_auc}}

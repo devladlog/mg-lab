@@ -1,0 +1,27 @@
+$schema: https://azuremlschemas.azureedge.net/latest/commandComponent.schema.json
+type: command
+name: slabreach_train
+display_name: Train the SLA breach model
+version: 1
+description: Fits a gradient boosting classifier and saves it as an MLflow model (probability of breach).
+inputs:
+  train:
+    type: uri_folder
+  seed:
+    type: integer
+    default: 7
+  max_iter:
+    type: integer
+    default: 120
+    min: 10
+    max: 1000
+outputs:
+  model_out:
+    type: mlflow_model
+code: ../../src
+environment:
+  image: mcr.microsoft.com/azureml/openmpi4.1.0-ubuntu22.04:latest
+  conda_file: ../environment/conda.yml
+command: >-
+  python -m slabreach train --train ${{inputs.train}} --model-out ${{outputs.model_out}}
+  --seed ${{inputs.seed}} --max-iter ${{inputs.max_iter}}

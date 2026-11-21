@@ -1,0 +1,45 @@
+$schema: https://azuremlschemas.azureedge.net/latest/pipelineJob.schema.json
+type: pipeline
+display_name: slabreach-train-and-gate
+experiment_name: slabreach
+description: validate and split, train, gate. A failed gate fails the job, so nothing is registered or deployed.
+
+inputs:
+  raw_data:
+    type: uri_folder
+    path: ../build/raw          # python -m slabreach generate --out build/raw
+  baseline_auc: 0       # literal inputs are plain values; scripts/train-and-register.sh overrides it with --set
+  seed: 7
+
+outputs:
+  model:
+    type: mlflow_model
+  decision:
+    type: uri_folder
+
+settings:
+  default_compute: azureml:cpu-cluster
+
+jobs:
+  prepare:
+    type: command
+    component: ./components/prepare.yml
+    inputs:
+      raw: ${{parent.inputs.raw_data}}
+  train:
+    type: command
+    component: ./components/train.yml
+    inputs:
+      train: ${{parent.jobs.prepare.outputs.train}}
+      seed: ${{parent.inputs.seed}}
+    outputs:
+      model_out: ${{parent.outputs.model}}
+  evaluate:
+    type: command
+    component: ./components/evaluate.yml
+    inputs:
+      model: ${{parent.jobs.train.outputs.model_out}}
+      test: ${{parent.jobs.prepare.outputs.test}}
+      baseline_auc: ${{parent.inputs.baseline_auc}}
+    outputs:
+      decision: ${{parent.outputs.decision}}

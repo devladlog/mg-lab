@@ -1,0 +1,217 @@
+# DEVLADLOG AI, episode 13. Code scenes are real excerpts from src/.
+# Screen scenes: capture per demo.md. Narration describes what must be on screen without quoting live numbers;
+# after recording, adjust the sentences marked TODO to what the service really returned (including a failed gate).
+episode: 13
+slug: computer-vision-image-analysis
+series_label: "AI"
+series_name: "DEVLADLOG AI"
+file_prefix: "ai"
+title: "Computer vision on Azure: read the asset tag, blur the people"
+subtitle: "Azure Vision Image Analysis 4.0: caption, text, people, smart crop, and a way out"
+voice: am_michael
+thumbnail_text: "READ THE\nTAG\nBLUR THE\nPEOPLE"
+youtube:
+  title: "Computer Vision on Azure: Image Analysis 4.0 OCR, People Detection, Smart Crop | DEVLADLOG AI #13"
+  tags: [computer vision, Azure Vision, Image Analysis 4.0, OCR, people detection, smart crop, image captioning, Microsoft Foundry, Python, Bicep, privacy]
+sources:
+  - https://www.devladlog.com/articles/ai/2025-03-04-computer-vision-complete-guide-2025/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Read the asset tag. Blur the people."
+    sub: "Azure Vision Image Analysis 4.0, and what it cannot do"
+    short: hook
+    narration: >
+      People attach photos to service desk tickets. A laptop with a sticker, a broken monitor, a meeting room screen, and
+      sometimes a colleague standing right there. Today the Contoso Porto service desk reads the asset tag from the photo,
+      and makes sure the people in it are never stored. Welcome to DEVLADLOG AI.
+
+  - id: scenario
+    type: bullets
+    heading: "One photo, one call, four jobs"
+    bullets:
+      - "Read the asset tag: CON and five digits"
+      - "Pixelate every person before anything is stored"
+      - "Make a thumbnail from the pixelated copy"
+      - "A person decides when we are not sure"
+    narration: >
+      Episode ten sent screenshots to a vision language model. This one uses the dedicated Azure Vision service, which
+      returns a caption, tags, objects, text, people and smart crops in a single synchronous call. We use the text to find
+      the asset tag, the people to blur, and the crop for a thumbnail.
+
+  - id: limits-code
+    type: code
+    heading: "The limits are constants"
+    lang: python
+    code: |
+      V4_FORMATS = {"JPEG", "PNG", "GIF", "BMP", "WEBP", "ICO", "TIFF", "MPO"}
+      MAX_BYTES = 20 * 1024 * 1024            # "less than 20 megabytes"
+      MIN_SIDE = 50                           # "greater than 50 x 50 pixels"
+      MAX_SIDE = 16000                        # "less than 16,000 x 16,000 pixels"
+      # Learn, Vision FAQ: "client library SDKs can handle files up to 6 MB"
+      SDK_SAFE_BYTES = 6 * 1024 * 1024
+      # Learn, Vision FAQ: the free tier allows 20 transactions per minute (S1: up to 20 per second).
+      F0_CALLS_PER_MINUTE = 20
+    narration: >
+      Learn documents the input rules. Version four accepts eight formats, under twenty megabytes, and each side between
+      fifty and sixteen thousand pixels. The F A Q adds that the client libraries handle files up to six megabytes, and that
+      the free tier allows twenty calls a minute, one image per call. So we check before we call, shrink what we send, and
+      pace the batch.
+
+  - id: call-code
+    type: code
+    heading: "One call, six features, Entra ID"
+    lang: python
+    code: |
+      FEATURES = [VisualFeatures.CAPTION, VisualFeatures.TAGS, VisualFeatures.OBJECTS,
+                  VisualFeatures.READ, VisualFeatures.PEOPLE, VisualFeatures.SMART_CROPS]
+
+      def analyze(self, image: bytes) -> Analysis:
+          r = self.client.analyze(image_data=image, visual_features=FEATURES,
+                                  smart_crops_aspect_ratios=self.ratios,
+                                  gender_neutral_caption=True, language="en")
+          a = Analysis(r.metadata.width, r.metadata.height, r.model_version)
+          if r.read is not None:
+              a.lines = [Line(ln.text, [Word(w.text, w.confidence) for w in ln.words])
+                         for b in r.read.blocks for ln in b.lines]
+          if r.people is not None:
+              a.people = [Person(_box(p.bounding_box), p.confidence) for p in r.people.list]
+    narration: >
+      The call itself is short. Six visual features, gender neutral captions, two crop ratios, and a default Azure credential,
+      so no keys. The result is converted straight away into our own small types. That is deliberate, and we come back to it
+      at the end.
+
+  - id: analyze-screen
+    type: screen
+    heading: "A laptop label, analysed live"
+    image: screens/analyze-label.jpg
+    bar: "Terminal · python -m photoscan analyze"
+    demo: "Terminal: PYTHONPATH=src python -m photoscan analyze build/photos/label-clean.png --endpoint $VISION. Show the printed block: caption with confidence, tags, objects, text lines, people, asset tag with confidence, decision line, and the 'original is never written' line."
+    narration: >
+      Here is a photo of a laptop label, live. The service returns a caption, tags, the text lines, and the confidence of
+      every word. Our code finds the asset tag in those lines, and the last line is the decision for this ticket.
+    # TODO after recording: read the caption, the tag confidence and the decision exactly as printed.
+
+  - id: tag-code
+    type: code
+    heading: "The service reads text. The rules are ours."
+    lang: python
+    code: |
+      TAG = re.compile(r"\bCON[-\s]?([0-9OoIlSB]{5})\b")
+      CONFUSED = str.maketrans({"O": "0", "o": "0", "I": "1", "l": "1", "S": "5", "B": "8"})
+      MIN_WORD_CONFIDENCE = 0.80
+
+      def usable(t: TagRead) -> bool:
+          return t.confidence >= MIN_WORD_CONFIDENCE and not t.corrected
+    narration: >
+      The service returns text and a confidence per word. It does not know what a Contoso asset tag is. A pattern of ours
+      finds it, a confidence floor of zero point eight rejects shaky reads, and one more rule: if the digits contain a
+      letter that looks like a digit, like an O for a zero, we correct it but never trust it. That ticket goes to a person
+      to confirm.
+
+  - id: decide-code
+    type: code
+    heading: "Next step: rules with reasons"
+    lang: python
+    code: |
+      if a.people and a.lines:
+          reasons.append("text is visible in a photo with people: names on badges or screens are not blurred")
+      distinct = {t.tag for t in tags}
+      if len(distinct) > 1:
+          return "manual-review", reasons + [f"{len(distinct)} different asset tags in one photo"]
+      if not tags:
+          return "manual-review", reasons + ["no asset tag read"]
+      t = tags[0]
+      if t.corrected:
+          return "confirm-tag", reasons + [f"printed {t.raw!r} read as {t.tag}: look-alike letters replaced"]
+    narration: >
+      What happens to the photo is a short list of rules, each with its reason. Two different tags in one picture, or no tag
+      at all, goes to a person. A corrected tag goes to a person to confirm. A clean tag is attached to the asset record,
+      and if there was text in a photo with people, it is attached and flagged for review. Every threshold here is ours, so
+      change them on your own photos, not on ours. A call that fails never stops the batch: that photo simply goes to a
+      person.
+
+  - id: blur-code
+    type: code
+    heading: "Pixelate, then thumbnail the pixelated copy"
+    lang: python
+    code: |
+      PERSON_THRESHOLD = 0.20      # deliberately low: Learn's own example returns a clearly visible person at 0.27
+
+      def redact_people(png: bytes, people: list[Person], threshold: float = PERSON_THRESHOLD) -> Redacted:
+          im = Image.open(io.BytesIO(png)).convert("RGB")
+          done, ignored = [], 0
+          for p in people:
+              if p.confidence < threshold:
+                  ignored += 1
+                  continue
+              g = grow(p.box, *im.size)
+              pixelate_region(im, g)
+              done.append(g)
+    short: blur
+    narration: >
+      People detection returns a box and a confidence, and nothing about who the person is. We pixelate every box, with a
+      small margin. The threshold is low on purpose: Learn's own example shows a clearly visible person returned at zero
+      point two seven. Pixelating a chair costs nothing. Storing a face costs a lot. And the thumbnail is cut from the
+      pixelated copy, never from the original.
+
+  - id: room-screen
+    type: screen
+    heading: "A person in a meeting room"
+    image: screens/room.jpg
+    bar: "Terminal + image viewer · python -m photoscan analyze"
+    demo: "Terminal: PYTHONPATH=src python -m photoscan fetch-sample (once, off camera) then python -m photoscan analyze build/photos/learn-presentation.png --endpoint $VISION. Then open build/out/learn-presentation.redacted.png next to the original: the person pixelated, the names on the room display still readable. Show the decision line with the warning about text in a photo with people."
+    narration: >
+      Now a person. This is the sample photo from the Learn quickstart. The service finds the person, we pixelate the box,
+      and the stored image has no face. But look at the room display. The names of the meetings and the organisers are still
+      readable, because blurring people does not remove text. Our rule notices text in a photo with people and asks for a
+      review.
+    # TODO after recording: say how many people were found, their confidences, and whether the whole person was inside the box.
+
+  - id: resource-screen
+    type: screen
+    heading: "Free tier, no keys"
+    image: screens/resource.jpg
+    bar: "Azure portal · Vision resource"
+    demo: "Azure portal > the Vision resource in rg-mglab-ai-13: Overview (pricing tier Free F0, region West Europe, endpoint masked), then Keys and Endpoint / Identity showing local authentication disabled, then Access control (IAM) with the Cognitive Services User assignment for the lab account. Mask subscription, tenant, user and the name suffix."
+    narration: >
+      The Bicep file created one Vision resource. Free tier, West Europe, which Learn lists for captions, a custom sub domain,
+      and local authentication disabled. The developer holds the Cognitive Services User role.
+    # TODO after recording: say whether the F0 deployment was accepted and whether the role was enough.
+
+  - id: evaluate-screen
+    type: screen
+    heading: "The gate"
+    image: screens/evaluate.jpg
+    bar: "Terminal · python -m photoscan evaluate"
+    demo: "Terminal: PYTHONPATH=src python -m photoscan evaluate --endpoint $VISION ; echo exit=$?. The table of seven cases with decision, expected decision, tag read and people blurred; any '!' problem lines; the summary line; RESULT; the exit code."
+    narration: >
+      The gate runs seven photos, six drawn by us and the Learn sample. A wrong tag attached to an asset fails it. A person
+      who is not really pixelated fails it. A failed call fails it. And at least sixty percent of the tags we know are there
+      must be read. The expectations are ours, written in a file, and the table shows where the service and our rules
+      disagreed with them.
+    # TODO after recording: say which cases failed, which tags were read, whether the look-alike case was caught, and the exit code.
+
+  - id: gotcha
+    type: bullets
+    heading: "The honest gotcha: this service is on its way out"
+    bullets:
+      - "Learn: Image Analysis is deprecated, retired 25 September 2028"
+      - "Blurring people does not remove names in text"
+      - "Seven photos prove plumbing, not accuracy"
+      - "Our adapter keeps the swap to one file"
+    short: gotcha
+    narration: >
+      The honest part. Learn now says Image Analysis is deprecated and will be retired on the twenty fifth of September
+      twenty twenty eight, with Document Intelligence, Face, and Content Understanding named as alternatives. That is why the
+      rest of the code only sees our own types, so a new backend is one file. Second, blurring people leaves the text. Third,
+      seven photos prove the plumbing, not the accuracy. Test on your own photos.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The pipeline, the privacy rules and the gate are on GitHub, and the complete computer vision guide is on devladlog dot
+      com. Links are in the description. This was DEVLADLOG AI, by Momento Galático.

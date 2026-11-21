@@ -1,0 +1,228 @@
+# DEVLADLOG AI — episode 17. Code scenes are real excerpts from src/ and infra/ (checked by a script, see README).
+# Screen scenes: capture per demo.md. Narration describes what must be on screen without quoting live numbers;
+# after recording, adjust the sentences marked TODO to what the platform really returned (including the 403 and any failed probe).
+episode: 17
+slug: azure-ai-services-platform
+series_label: "AI"
+series_name: "DEVLADLOG AI"
+file_prefix: "ai"
+title: "Azure AI services as a platform: one resource, one identity, one place to look"
+subtitle: "A Foundry resource, keyless, with a probe, an audit, usage metrics and a retirement check"
+voice: am_michael
+thumbnail_text: "ONE\nRESOURCE\nONE IDENTITY"
+youtube:
+  title: "Azure AI Services Platform: One Foundry Resource, Keyless, Audited, With a Retirement Check | DEVLADLOG AI #17"
+  tags: [Azure AI services, Foundry Tools, Microsoft Foundry, Entra ID, keyless authentication, Cognitive Services User, Azure Monitor, Log Analytics, retirement, Python, Bicep]
+sources:
+  - https://www.devladlog.com/articles/ai/2025-01-01-azure-ai-services-complete-guide-2025/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Sixteen episodes, sixteen resources?"
+    sub: "The platform under the Azure AI services"
+    short: hook
+    narration: >
+      So far in this series every episode created its own Azure resource. A language resource here, a vision resource
+      there, each with its own endpoint and its own access. That works for a demo. It is not how you run it. Today the
+      Contoso Porto service desk gets one Foundry resource, one identity, and a way to see who calls what. Welcome to
+      DEVLADLOG AI.
+
+  - id: scenario
+    type: bullets
+    heading: "What the platform layer has to answer"
+    bullets:
+      - "Which service for which job, and on which host"
+      - "Who may call it, without keys"
+      - "Can we see the calls, the errors, the latency"
+      - "Which parts of our code have a retirement date"
+    narration: >
+      Four questions. Which service for which job, and on which host. Who may call it, without a key lying around.
+      Can we see the calls and the errors afterwards. And the one nobody asks until it hurts: which of our own code uses
+      a service with a retirement date.
+
+  - id: one-resource
+    type: bullets
+    heading: "One resource, three hostnames"
+    bullets:
+      - "Kind AIServices is the Foundry resource"
+      - "Tools: name.cognitiveservices.azure.com"
+      - "Models: services.ai.azure.com and openai.azure.com"
+      - "Speech and search keep their own hosts"
+    narration: >
+      Learn describes the Foundry resource as the one you create with the kind A I Services. It answers on three host
+      names under the same custom sub domain. The tools, meaning Language, Translator, Content Safety and Document
+      Intelligence, live on cognitive services dot azure dot com. The models and agents use the other two. Speech has
+      its own hosts, and search is a separate resource, so the catalog in the repo says so for each job.
+
+  - id: bicep-code
+    type: code
+    heading: "The resource: keyless from the first line"
+    lang: bicep
+    code: |
+      resource foundry 'Microsoft.CognitiveServices/accounts@2025-06-01' = {
+        name: name
+        location: location
+        kind: 'AIServices'
+        sku: { name: 'S0' }
+        tags: tags
+        identity: { type: 'SystemAssigned' }
+        properties: {
+          customSubDomainName: name
+          disableLocalAuth: true
+          publicNetworkAccess: 'Enabled'
+        }
+      }
+    narration: >
+      This is the whole resource. Kind A I Services, standard tier, a custom sub domain, and local authentication
+      disabled. Learn says Microsoft Entra I D only works with the custom sub domain, and that an organisation using Entra
+      should switch keys off. The same template also sends the audit and request logs to Log Analytics, and gives the
+      developer one role. Public access stays open for the demo, and our audit will say so.
+
+  - id: resource-screen
+    type: screen
+    heading: "The resource in the portal"
+    image: screens/resource.jpg
+    bar: "Azure portal · Foundry resource"
+    demo: "Azure portal > the Foundry resource in rg-mglab-ai-17: Overview (kind AI Services, region West Europe, endpoint with the custom subdomain masked), the Keys and Endpoint view showing local authentication disabled, Diagnostic settings showing the setting that sends Audit, RequestResponse and AllMetrics to the Log Analytics workspace. Mask subscription, tenant, user and the resource-name suffix."
+    narration: >
+      In the portal it is one resource. Local authentication is disabled, so there is no key to leak, and the diagnostic
+      setting sends the audit and request logs and the metrics to a Log Analytics workspace. Everything we run next uses
+      this one resource, and the identity of whoever runs it.
+    # TODO after recording: confirm what the Overview shows as the resource type and which log categories are ticked.
+
+  - id: forbidden-screen
+    type: screen
+    heading: "Owner is not enough: four times 403"
+    image: screens/forbidden.jpg
+    bar: "Terminal · python -m aiplatform probe"
+    short: owner
+    demo: "Terminal, before the role assignment: PYTHONPATH=src python -m aiplatform probe --endpoint $AI17 ; echo exit=$?. The table with four rows (Language, Translator, Content Safety, Document Intelligence), HTTP 403 and verdict forbidden on each, the hint lines about the missing data-plane role, the line '0 of 4 services answered', exit=1. The signed-in account is the subscription Owner."
+    narration: >
+      Now the surprise. The person running this is the subscription owner, the most powerful role there is, and all four
+      calls come back forbidden. Learn is explicit: Owner and Contributor carry management permissions only, not the
+      development permissions. Without a data role, a keyless call is refused, however senior the caller is.
+    # TODO after recording: say whether all four returned 403 exactly, and what the error code in the detail column was.
+
+  - id: pipeline-code
+    type: code
+    heading: "One token, one pipeline, no key"
+    lang: python
+    code: |
+      def _pipe(self, scope: str) -> Pipeline:
+          if scope not in self._pipes:
+              policies = [UserAgentPolicy(user_agent=self.user_agent), BearerTokenCredentialPolicy(self.credential, scope)]
+              if self.retries:
+                  policies.append(RetryPolicy(retry_total=self.retries, retry_backoff_factor=0.5))
+              self._pipes[scope] = Pipeline(transport=self.transport, policies=policies)
+          return self._pipes[scope]
+    narration: >
+      Every call in the repo goes through this small pipeline from the Azure core library. A bearer token policy gets the
+      Entra token, with the cognitive services scope for the services and the management scope for the resource itself.
+      There is no key header anywhere. Retries are off by default, on purpose, so a rate limit shows up as a rate limit
+      instead of being hidden.
+
+  - id: probe-screen
+    type: screen
+    heading: "Same identity, four services"
+    image: screens/probe.jpg
+    bar: "Terminal · python -m aiplatform probe"
+    demo: "Terminal, after the Cognitive Services User role is assigned and about five minutes have passed: the same command. Four rows with HTTP 200 and verdict ok: the detected language and confidence, the Portuguese translation, the four content-safety severities, and the custom model count with its limit; milliseconds per call; the line '4 of 4 services answered with the same identity.'"
+    narration: >
+      Role assigned, five minutes of patience, same command. Language detection, translation, content safety and document
+      intelligence all answer, from the same host, with the same token. Each row has the status, the time and the
+      answer, so a failure tells you which service and why, not just that something broke.
+    # TODO after recording: read the detected language, the translation and the severities exactly as printed, and the slowest call.
+
+  - id: audit-code
+    type: code
+    heading: "The audit rules say where they come from"
+    lang: python
+    code: |
+      DATA_PLANE_ROLES = {"Cognitive Services User", "Foundry User", "Foundry Owner", "Cognitive Services Language Reader"}
+      REQUIRED_LOGS = ("Audit", "RequestResponse")
+      REQUIRED_TAGS = ("owner", "costcenter")        # our policy, not Learn's
+    narration: >
+      The audit reads the resource from Azure Resource Manager. Is it the multi service kind, are keys off, is the network
+      open, do the logs reach Log Analytics, does anybody hold a data role. Each rule says whether it comes from Learn or
+      from our own policy, like these required tags, because passing off a house rule as a Microsoft rule starts arguments.
+
+  - id: operate-screen
+    type: screen
+    heading: "Audit, then usage"
+    image: screens/operate.jpg
+    bar: "Terminal · python -m aiplatform audit / usage"
+    demo: "Terminal: python -m aiplatform audit ; echo exit=$? then python -m aiplatform usage --minutes 30. The audit lines (PASS for kind, subdomain, local authentication, diagnostics, roles; WARN for the open public network) and the counts; then the usage table with one row per ApiName: calls, errors, 4xx, 5xx, average milliseconds, and the billable units lines. The earlier 403 attempts should show as client errors."
+    narration: >
+      The audit passes everything except the open network, which it flags as a warning, and the exit code stays zero because
+      nothing failed. Then usage, straight from Azure Monitor metrics: calls, errors and latency per A P I. The four
+      forbidden calls from a few minutes ago are in there as client errors, which is exactly what you want from an audit trail.
+    # TODO after recording: say whether the 403 attempts appeared as client errors, and how long the metrics took to show up.
+
+  - id: lifecycle-code
+    type: code
+    heading: "Retirement is a date, so it is data"
+    lang: python
+    code: |
+      def status(e: Entry, today: date, urgent_days: int = 180, plan_days: int = 730) -> tuple[str, int]:
+          left = (e.retires - today).days
+          if left <= 0:
+              return "RETIRED", left
+          if left <= urgent_days:
+              return "URGENT", left
+          if left <= plan_days:
+              return "PLAN", left
+          return "TRACK", left
+    narration: >
+      Now the question nobody asks. A register of retiring services, each date copied from a Learn page, and a scanner
+      that finds their client calls in your code. The status is plain arithmetic: retired, urgent within one hundred
+      eighty days, plan within two years, otherwise track. Those thresholds are ours, not Microsoft's.
+
+  - id: lifecycle-screen
+    type: screen
+    heading: "Our own series, scanned"
+    image: screens/lifecycle.jpg
+    bar: "Terminal · python -m aiplatform lifecycle"
+    short: retire
+    demo: "Terminal: PYTHONPATH=src python -m aiplatform lifecycle ../ --no-lines ; echo exit=$? (then once without --no-lines for the file and line list). The output lists Azure Vision Image Analysis (from episode 13) and the Language sentiment and key phrase features (from episode 12), each with its retirement date, days left, replacement and Learn source."
+    narration: >
+      We pointed it at the earlier episodes of this very series. Episode thirteen uses Image Analysis, which Learn says
+      retires on September twenty-fifth, twenty twenty-eight. Episode twelve uses sentiment analysis and key phrase
+      extraction, which retire from Azure Language on March thirty-first, twenty twenty-nine. Nothing is broken today, and
+      the scanner exits zero for that. But now the work to move is a plan with a date, not a surprise.
+    # TODO after recording: read the days left exactly as printed on the day, and the files the scanner names.
+
+  - id: gotcha
+    type: bullets
+    heading: "The honest gotcha: a green platform is not a good model"
+    bullets:
+      - "The probe proves reachability, not accuracy"
+      - "The scanner finds use, not importance"
+      - "Learn's own plan-by date is already in the past"
+      - "Dates change: reread the Learn page"
+    narration: >
+      The honest part. The probe proves that a service answers with your identity, not that it answers well, and the audit
+      checks configuration, not behaviour. The scanner finds code that uses a retiring service, it cannot tell you how
+      important that code is. And Learn asks for a transition plan for Image Analysis by September twenty twenty-six, a
+      date already behind us as we record. Read the page again before you trust any date in this repo, including ours.
+
+  - id: recap
+    type: bullets
+    heading: "The platform checklist"
+    bullets:
+      - "One AIServices resource, custom subdomain, keys off"
+      - "A data-plane role, not just Owner"
+      - "Audit and request logs to Log Analytics"
+      - "A retirement scan in the pipeline"
+    narration: >
+      The checklist. One A I Services resource with keys off. A data plane role for each caller, because Owner is not
+      one. Audit logs in Log Analytics. And a retirement scan in your builds, so a date on a Learn page becomes a ticket
+      long before it becomes an outage.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The Bicep template, the probe, the audit, the usage query and the retirement scanner are on GitHub, and the complete
+      Azure A I services guide is on devladlog dot com. Links are in the description. This was DEVLADLOG AI, by Momento Galático.

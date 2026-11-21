@@ -1,0 +1,15 @@
+# The environment every pipeline step runs in (Learn: a base image plus a conda file). The pins are the versions the tests ran with
+# locally; the MLflow model this environment produces records them in its own conda.yaml, so the endpoint builds the same stack.
+name: slabreach-env
+channels:
+  - conda-forge
+dependencies:
+  - python=3.12
+  - pip
+  - pip:
+      - mlflow-skinny==3.18.0
+      - cloudpickle==3.1.2
+      - scikit-learn==1.9.1
+      - pandas==3.0.5
+      - numpy==2.5.3
+      - azureml-mlflow

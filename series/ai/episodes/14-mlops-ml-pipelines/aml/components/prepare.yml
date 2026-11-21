@@ -1,0 +1,26 @@
+$schema: https://azuremlschemas.azureedge.net/latest/commandComponent.schema.json
+type: command
+name: slabreach_prepare
+display_name: Validate and split tickets
+version: 1
+description: Refuses a bad extract (schema, values, label rate), then splits by time so the test set is newer than the training set.
+inputs:
+  raw:
+    type: uri_folder
+  test_fraction:
+    type: number
+    default: 0.2
+    min: 0.05
+    max: 0.5
+outputs:
+  train:
+    type: uri_folder
+  test:
+    type: uri_folder
+code: ../../src
+environment:
+  image: mcr.microsoft.com/azureml/openmpi4.1.0-ubuntu22.04:latest
+  conda_file: ../environment/conda.yml
+command: >-
+  python -m slabreach prepare --raw ${{inputs.raw}} --train-out ${{outputs.train}} --test-out ${{outputs.test}}
+  --test-fraction ${{inputs.test_fraction}}

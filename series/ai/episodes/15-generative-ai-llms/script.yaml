@@ -1,0 +1,238 @@
+# DEVLADLOG AI — episode 15. Code scenes are real excerpts from src/ (the tokens scene shows real output of the offline command).
+# Screen scenes: capture per demo.md. Narration of screen scenes describes what is on screen without quoting live numbers;
+# after recording, adjust the sentences marked TODO to what the service really returned.
+episode: 15
+slug: generative-ai-llms
+series_label: "AI"
+series_name: "DEVLADLOG AI"
+file_prefix: "ai"
+title: "Generative AI and LLMs: what the model does with your prompt"
+subtitle: "Tokens, probabilities, sampling, streaming and the context budget"
+voice: am_michael
+thumbnail_text: "LLMS ARE\nNEXT-TOKEN\nPREDICTORS"
+youtube:
+  title: "Generative AI & LLMs on Azure OpenAI: Tokens, Logprobs, Temperature, Streaming | DEVLADLOG AI #15"
+  tags: [generative AI, LLM, Azure OpenAI, tokens, tiktoken, logprobs, temperature, seed, streaming, context window, gpt-4.1-mini, Python, Microsoft Foundry]
+sources:
+  - https://www.devladlog.com/articles/ai/2025-07-10-generative-ai-complete-guide-2025/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Same prompt. Different answer."
+    sub: "What a language model really does, measured on Azure"
+    short: hook
+    narration: >
+      Ask the Contoso HR bot the same question twice and the wording changes. Is that a bug, a setting, or just how
+      language models work? This episode opens the box on a real Azure OpenAI deployment: tokens, probabilities,
+      sampling, streaming and the budget everything has to fit in. Welcome to DEVLADLOG AI.
+
+  - id: plan
+    type: bullets
+    heading: "Five questions, five small tools"
+    bullets:
+      - "Tokens: what does text cost, in two languages?"
+      - "Probabilities: how sure is the model?"
+      - "Sampling: what do temperature and seed change?"
+      - "Streaming: what is the user waiting for?"
+      - "Budget: what fits in the window?"
+    narration: >
+      Generative AI sounds like magic, so we measure it. Five questions about the HR bot, five small tools in one
+      Python package. Tokens, probabilities, sampling, streaming and the context budget. The first one needs no
+      Azure at all.
+
+  - id: tokens
+    type: code
+    heading: "Tokens: Portuguese costs more"
+    lang: text
+    code: |
+      $ python -m llmprobe tokens
+      sentence      cl100k_base en/pt   pt/en      o200k_base en/pt   pt/en
+      leave               16/27          1.69           16/20          1.25
+      request             24/31          1.29           24/25          1.04
+      carry               15/19          1.27           15/16          1.07
+      lost                21/30          1.43           21/27          1.29
+      sick                16/21          1.31           16/18          1.12
+      parental            21/29          1.38           21/25          1.19
+      total              113/157         1.39          113/131         1.16
+    narration: >
+      A model never sees letters, it sees tokens. Here are six sentences from the leave policy, in English and in
+      Portuguese, counted with two encodings. On the older one, Portuguese needs about forty percent more tokens. On
+      the newer one that gap shrinks, but it does not vanish. Tokens are what you pay for and what fills the window.
+
+  - id: deployment
+    type: screen
+    heading: "One small deployment, no keys"
+    image: screens/deployment.jpg
+    bar: "Microsoft Foundry · Models + endpoints"
+    demo: "Foundry portal (or Azure portal > the Azure OpenAI resource > Deployments, resource group rg-mglab-ai-15): the 'chat' deployment, model gpt-4.1-mini 2025-04-14, deployment type Standard, region Sweden Central. Then the resource Authentication view showing local (key) authentication disabled. Resource-name suffix masked."
+    narration: >
+      Everything from here runs against this: one resource in Sweden Central, a small Standard deployment of
+      g p t four point one mini, and local keys switched off, so the code signs in with Entra ID. We use a model
+      without reasoning on purpose, because Learn lists temperature and log probabilities as unsupported on
+      reasoning models.
+
+  - id: probe-code
+    type: code
+    heading: "Next-token probabilities"
+    lang: python
+    code: |
+      first = choice.logprobs.content[0]
+      merged: dict[str, float] = {}
+      for c in first.top_logprobs:
+          key = _norm(c.token)
+          if key:
+              merged[key] = merged.get(key, 0.0) + math.exp(c.logprob)
+      cands = tuple(Candidate(k, p) for k, p in sorted(merged.items(), key=lambda kv: -kv[1]))
+      mass = sum(c.prob for c in cands)
+      ent = -sum((c.prob / mass) * math.log2(c.prob / mass) for c in cands if c.prob > 0)
+    narration: >
+      A chat model picks one token at a time from a probability distribution. Ask for log probabilities and the
+      service returns the top candidates, up to twenty, for each position. We turn them into probabilities, merge
+      variants like a letter with and without a space, and compute how spread out the choice was.
+
+  - id: probe-screen
+    type: screen
+    heading: "How sure is the model?"
+    image: screens/probe.jpg
+    bar: "Terminal · python -m llmprobe probe"
+    short: probe
+    demo: "Terminal: PYTHONPATH=src python -m llmprobe probe --endpoint $AOAI. Output: the table (case, context yes/no, answer, p(top), p(2nd), bits, correct, answer/escalate at 0.9) for four multiple-choice questions, each asked without and with the leave handbook, then the candidate lines. The 'capital' control question and the policy questions must all be visible."
+    narration: >
+      Four multiple choice questions, each asked twice, once with no context and once with the leave handbook. The
+      table shows the probability of the winning letter, the runner up, and a threshold that decides whether to
+      answer or escalate. Look at how the numbers move when the handbook is there. And remember, a token probability
+      is not the probability that the answer is true.
+    # TODO after recording: say which questions were uncertain without the handbook and what changed with it.
+
+  - id: sample-code
+    type: code
+    heading: "Temperature and seed, measured"
+    lang: python
+    code: |
+      for _ in range(runs):
+          kw = {"temperature": setting.temperature, "max_completion_tokens": max_tokens}
+          if setting.seed is not None:
+              kw["seed"] = setting.seed
+          r = client.chat.completions.create(model=deployment, messages=messages, **kw)
+          outputs.append((r.choices[0].message.content or "").strip())
+          finish.append(r.choices[0].finish_reason)
+          prints.add(getattr(r, "system_fingerprint", None))
+    narration: >
+      Temperature reshapes the distribution before a token is drawn. Seed asks for a best effort repeat. Learn is
+      clear that determinism is not guaranteed and that you should watch the system fingerprint. So we run the same
+      prompt eight times per setting and count distinct answers, similarity, and whether the facts survived.
+
+  - id: sample-screen
+    type: screen
+    heading: "Wording moves. Do the facts?"
+    image: screens/sample.jpg
+    bar: "Terminal · python -m llmprobe sample"
+    short: sample
+    demo: "Terminal: PYTHONPATH=src python -m llmprobe sample --endpoint $AOAI --runs 8 ; echo exit=$?. Output: four rows (t=0 no seed, t=0 seed=42, t=1 no seed, t=1 seed=42) with runs, distinct answers, similarity, facts ok, fingerprints, then the exit code. If a FAIL line appears, keep it on screen."
+    narration: >
+      Four settings, eight runs each, same question about carry over. The facts to keep are the five day limit and
+      the thirty first of March. The table shows how many different answers each setting produced, and whether any
+      answer lost a fact. The command exits with one if a fact goes missing, so it can sit in a pipeline.
+    # TODO after recording: state the real distinct counts, including whether temperature zero was fully repeatable.
+
+  - id: stream-code
+    type: code
+    heading: "Streaming without crashing on chunk one"
+    lang: python
+    code: |
+      for ch in stream:
+          now = clock() - t0
+          chunks += 1
+          if first_chunk is None:
+              first_chunk = now
+          if getattr(ch, "usage", None) is not None:
+              usage = ch.usage
+          if not ch.choices:               # filter annotations (first) or the usage chunk (last)
+              continue
+          c = ch.choices[0]
+          if c.delta is not None and c.delta.content:
+    narration: >
+      Streaming is about what the user waits for. The first chunk can carry only content filter annotations, and
+      with include usage the last chunk carries only the token counts, both with an empty choices list. Code that
+      reads choice zero blindly breaks. We time the first chunk with text, and take billed tokens from the usage chunk.
+
+  - id: stream-screen
+    type: screen
+    heading: "Time to first text"
+    image: screens/stream.jpg
+    bar: "Terminal · python -m llmprobe stream"
+    demo: "Terminal: PYTHONPATH=src python -m llmprobe stream --endpoint $AOAI --runs 3. Output: median time to first content, streaming total, blocking total, content chunks per run, completion tokens per run, and the 'first run: N chunks in total, M with text' line."
+    narration: >
+      Same question, streamed and not streamed, three runs each. The total time is similar. What changes is when the
+      first words appear. Also compare the number of chunks with the billed completion tokens: by default the service
+      buffers text for the content filter, so a chunk is not a token.
+    # TODO after recording: read the real median first-text time and total time.
+
+  - id: budget-code
+    type: code
+    heading: "The window is a budget"
+    lang: python
+    code: |
+      kept, used = [], 0
+      for i, c in enumerate(chunks):
+          n = count(c, encoding)
+          if used + n > budget:
+              return kept, chunks[i:]
+          kept.append(c)
+          used += n
+      return kept, []
+    narration: >
+      The context window is shared by the system message, retrieved text, history, the question and the answer you
+      allow. For this model Learn lists a one million token window, three hundred thousand on Standard deployments,
+      and thirty two thousand tokens of output at most. Our packer keeps chunks in rank order and stops at the first
+      one that does not fit, so it never silently reorders relevance.
+
+  - id: budget-screen
+    type: screen
+    heading: "Estimate versus billed"
+    image: screens/budget.jpg
+    bar: "Terminal · python -m llmprobe budget"
+    demo: "Terminal: PYTHONPATH=src python -m llmprobe budget --endpoint $AOAI --context-budget 120, then again with --context-budget 400. Output: the plan line, chunks kept and dropped (the Carry-over section is dropped at 120 and kept at 400), the estimated prompt tokens, the billed prompt tokens with the difference, finish_reason, and the answer each time."
+    narration: >
+      First run, a tiny context budget. The carry over section is dropped, so look at what the model answers when the
+      evidence is missing. Second run, enough room, and the answer comes back grounded. The tool also compares our
+      estimate with the prompt tokens the service billed, because an estimate is not an invoice.
+    # TODO after recording: quote the difference between estimate and billed tokens, and what the model said without the section.
+
+  - id: gotchas
+    type: bullets
+    heading: "Gotchas we hit or Learn documents"
+    bullets:
+      - "Seed is best effort, not a guarantee"
+      - "Token probability is not truth"
+      - "Reasoning models: no temperature, no logprobs"
+      - "Chunks are not tokens"
+      - "Max output is a cap, not a reservation"
+    narration: >
+      The honest gotchas. Seed is best effort, and Learn says determinism is not guaranteed, so never build a test
+      that depends on identical text. A confident token can still be wrong, so calibrate any threshold on labelled
+      questions. Reasoning models reject temperature and log probabilities. And the maximum output is a cap, not a
+      reservation, so budget for it yourself.
+
+  - id: recap
+    type: bullets
+    heading: "What to take home"
+    bullets:
+      - "Count tokens in your own languages"
+      - "Check facts, not exact wording"
+      - "Escalate on low confidence"
+      - "Stream for perceived speed"
+      - "Plan the window before you retrieve"
+    narration: >
+      Count tokens in the languages your users write. Test that the facts survive, not that the wording repeats.
+      Route low confidence to retrieval or a person. Stream for perceived speed. And plan the window before you
+      retrieve. Next, machine learning fundamentals, the part of AI that does not need a language model at all.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The code is on GitHub and the five guides for this topic are on devladlog dot com. See you in the next
+      episode of DEVLADLOG AI.

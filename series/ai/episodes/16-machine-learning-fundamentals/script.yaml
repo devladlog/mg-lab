@@ -1,0 +1,212 @@
+# DEVLADLOG AI — episode 16. Code scenes are real excerpts from src/. Everything runs locally (scikit-learn, synthetic data).
+# Screen scenes: capture per demo.md. Narration of screen scenes describes what is on screen without quoting live numbers;
+# after recording, adjust the sentences marked TODO to what the terminal really printed.
+episode: 16
+slug: machine-learning-fundamentals
+series_label: "AI"
+series_name: "DEVLADLOG AI"
+file_prefix: "ai"
+title: "Machine learning fundamentals: can you believe your model's number?"
+subtitle: "Leakage, imbalance, splits, overfitting and a threshold from costs"
+voice: am_michael
+thumbnail_text: "ML FUNDAMENTALS\nDON'T TRUST\nTHE NUMBER"
+youtube:
+  title: "Machine Learning Fundamentals: Leakage, Group Splits, Overfitting, Thresholds | DEVLADLOG AI #16"
+  tags: [machine learning, scikit-learn, data leakage, imbalanced data, cross-validation, overfitting, average precision, model card, Python, Azure Machine Learning]
+sources:
+  - https://www.devladlog.com/articles/ai/2025-01-02-machine-learning-fundamentals-complete-guide-2025/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Your model is 87% accurate"
+    sub: "So is a model that never flags anything"
+    short: hook
+    narration: >
+      A model that never flags a single ticket can be about eighty seven percent accurate. So when someone shows you
+      a machine learning score, what exactly are they showing you? This episode trains a real model on the Contoso
+      service desk, and checks, one pitfall at a time, whether its number can be believed. Welcome to DEVLADLOG AI.
+
+  - id: plan
+    type: bullets
+    heading: "Will this ticket breach its SLA?"
+    bullets:
+      - "Tabular data, synthetic and fixed-seed"
+      - "Rare positives, a leaky column, repeat requesters"
+      - "Same models, five ways to evaluate"
+      - "A threshold from costs, one honest test"
+      - "No language model needed"
+    narration: >
+      Not everything needs a language model. The Porto service desk wants to know, when a ticket arrives, whether it
+      will breach its S L A. That is a classic table problem. The data is synthetic with a fixed seed, and I planted
+      the traps on purpose: rare positives, a column from the future, and employees who file many tickets.
+
+  - id: data-code
+    type: code
+    heading: "The traps are in the recipe"
+    lang: python
+    code: |
+      req_effect = rng.normal(0, 1, requesters)                 # personal propensity, constant per employee
+      logit = (-4.6
+               + np.select([priority == "P1", priority == "P2"], [1.6, 0.8], 0.0)
+               + np.select([category == "network", category == "access"], [1.2, -0.6], 0.0)
+               + 0.12 * backlog
+               + 1.2 * ((hour < 8) | (hour >= 18))
+               + 0.9 * (weekday >= 5)
+               - 0.8 * is_vip
+               + 0.0012 * text_length
+               + 1.0 * req_effect[req])
+      breach = (rng.random(n) < 1 / (1 + np.exp(-logit))).astype(int)
+      first_resp = np.clip(np.where(breach == 1, rng.normal(190, 70, n), rng.normal(40, 25, n)), 1, None).round()
+    narration: >
+      The outcome depends on priority, category, queue backlog, after hours and weekends, and on a personal tendency
+      that belongs to each employee and never changes. And the first response time is generated from the outcome
+      itself, because in real life it is only known after somebody picks the ticket up. A dispatcher does not have that
+      number when the ticket arrives, so a model that uses it is cheating.
+
+  - id: audit-screen
+    type: screen
+    heading: "Audit before you model"
+    image: screens/audit.jpg
+    bar: "Terminal · python -m mlbasics audit"
+    demo: "Terminal: PYTHONPATH=src python -m mlbasics audit ; echo exit=$?. Output: rows, positives and prevalence, the always-predict-no accuracy, requesters, missing values, the single-column AUC table with first_response_minutes marked SUSPECT, then exit=1. Then the same command with --drop first_response_minutes and exit=0."
+    narration: >
+      The audit prints the class balance, the missing values, and scores every column on its own. One column ranks
+      the outcome almost perfectly, and it is the one that is not known at arrival, so it is flagged and the command
+      exits with one. Learn describes target leakage as the model cheating with data it will not have at prediction time.
+    # TODO after recording: read the prevalence and the single-column AUC of the leaky column as printed.
+
+  - id: baseline-screen
+    type: screen
+    heading: "Accuracy is the wrong yardstick"
+    image: screens/baseline.jpg
+    bar: "Terminal · python -m mlbasics baseline"
+    demo: "Terminal: PYTHONPATH=src python -m mlbasics baseline. Output: two rows (always the prior, logistic regression) with accuracy, AUC, average precision, Brier, and the prevalence line."
+    narration: >
+      Here is a model with no skill next to a real logistic regression. Look at the accuracy column, then at AUC and
+      average precision. Learn says imbalanced data gives a falsely perceived accuracy, and recommends looking at the
+      confusion matrix, ROC AUC and average precision instead.
+    # TODO after recording: state how little the accuracy moved and how much the ranking metrics did.
+
+  - id: pipeline-code
+    type: code
+    heading: "One pipeline, nothing learned from test data"
+    lang: python
+    code: |
+      def preprocessor(categorical: list[str], numeric: list[str], scale: bool = True) -> ColumnTransformer:
+          num_steps = [("impute", SimpleImputer(strategy="median"))] + ([("scale", StandardScaler())] if scale else [])
+          parts = []
+          if numeric:
+              parts.append(("num", Pipeline(num_steps), numeric))
+          if categorical:
+              parts.append(("cat", OneHotEncoder(handle_unknown="ignore"), categorical))
+          return ColumnTransformer(parts)
+    narration: >
+      Imputation, scaling and one hot encoding live inside the model pipeline, so their statistics are learned from
+      the training rows only. Fit a scaler on the whole table first and you have leaked, whatever split you use
+      afterwards. Missing text lengths get the training median, and unknown categories are ignored, so a new
+      department does not crash the scorer.
+
+  - id: split-code
+    type: code
+    heading: "Hold out people, not rows"
+    lang: python
+    code: |
+      def group_split(df: pd.DataFrame, test_size: float = 0.25, seed: int = 0) -> tuple[pd.DataFrame, pd.DataFrame]:
+          gss = GroupShuffleSplit(n_splits=1, test_size=test_size, random_state=seed)
+          i, j = next(gss.split(df, groups=df[GROUP]))
+          return df.iloc[i], df.iloc[j]
+    narration: >
+      A random split puts the same employee on both sides, so the model can recognise people instead of learning
+      the pattern. A group split sends whole requesters to one side. The test set is employees the model has never
+      seen, which is who walks in tomorrow.
+
+  - id: compare-screen
+    type: screen
+    heading: "Same models, five evaluations"
+    image: screens/compare.jpg
+    bar: "Terminal · python -m mlbasics compare"
+    short: compare
+    demo: "Terminal: PYTHONPATH=src python -m mlbasics compare. Output: five rows (random + leaky column, random + requester id, group split with and without id, time split) with test rows, shared people, prevalence, and average precision and AUC for logistic regression and a random forest. About ten to twenty seconds of compute; cut the wait."
+    narration: >
+      Same two algorithms, same data, only the evaluation changes. With the leaky column, the score looks brilliant.
+      Remove it, but keep the employee identifier and random rows, and the score is still flattering. Hold out whole
+      people, or later days, and you see what the model can do on a new ticket.
+    # TODO after recording: read average precision for the leaky row, the shared-people row and the group row.
+
+  - id: depth-screen
+    type: screen
+    heading: "Overfitting, in one table"
+    image: screens/depth.jpg
+    bar: "Terminal · python -m mlbasics depth"
+    demo: "Terminal: PYTHONPATH=src python -m mlbasics depth. Output: max_depth 1, 2, 3, 5, 8, 12, none with train AP, validation AP, gap, and the best-validation line."
+    narration: >
+      A decision tree gets deeper and its training score keeps climbing, all the way to a perfect score. The score
+      on unseen employees peaks early and then falls. The gap between the two columns is overfitting, and Learn makes
+      the same point: what matters is how much lower the unseen score is.
+    # TODO after recording: name the depth with the best validation score.
+
+  - id: threshold-code
+    type: code
+    heading: "The threshold is a business decision"
+    lang: python
+    code: |
+      def choose_threshold(y, p, cost_fn: float, cost_fp: float) -> float:
+          grid = np.unique(np.round(np.asarray(p), 4))
+          best = min(grid, key=lambda t: (cost(y, p, t, cost_fn, cost_fp), -t))
+          return float(best)
+    narration: >
+      Point five is a habit, not a rule. Here a missed breach costs ten times a false alarm, and those numbers belong
+      to the service desk manager, not to the data scientist. We pick the threshold with the lowest total cost. We
+      choose it on out of fold predictions from the training rows, never on the test set.
+
+  - id: train-screen
+    type: screen
+    heading: "One test, one verdict"
+    image: screens/train.jpg
+    bar: "Terminal · python -m mlbasics train"
+    short: train
+    demo: "Terminal: PYTHONPATH=src python -m mlbasics train ; echo exit=$?. Output: grouped cross-validation ranking of five candidates, the chosen model, the threshold, the single test evaluation (AUC, average precision, Brier, recall and false alarms), the cost against flag nothing and flag everything, the RESULT line, the saved model and model_card.json paths, exit code. Then: python -m mlbasics score on a sample ticket JSON."
+    narration: >
+      Grouped cross validation picks the model on the training rows, five folds, with no employee on both sides of
+      any fold. The threshold comes from costs. Then the test employees are used exactly once, and the verdict
+      compares the cost against two policies that need no model at all: flag nothing, and flag everything. If the
+      model does not beat both, the command exits with one. The run saves a model and a model card, and the score
+      command refuses any field the dispatcher would not have.
+    # TODO after recording: read the chosen model, recall, false alarms and the cost comparison; keep a do-not-ship result if it happens.
+
+  - id: gotchas
+    type: bullets
+    heading: "Gotchas we hit or Learn documents"
+    bullets:
+      - "Abnormally good scores usually mean leakage"
+      - "Accuracy flatters imbalanced data"
+      - "Random splits leak identity"
+      - "Test set: touch it once"
+      - "One split is one draw: expect noise"
+    narration: >
+      The honest gotchas. An abnormally high score is usually a leak, not a triumph. Accuracy flatters rare positives.
+      Random splits leak identity. And a single split is a single draw: with only a few hundred test employees, a
+      different seed moves the numbers, so treat small differences between models as noise.
+
+  - id: recap
+    type: bullets
+    heading: "What to take home"
+    bullets:
+      - "Start from a no-skill baseline"
+      - "Ask: is this known at prediction time?"
+      - "Split like production: people, time"
+      - "Pick the threshold from costs"
+      - "Ship a model card, not just a model"
+    narration: >
+      Start from a baseline with no skill. Ask of every column whether it is known at prediction time. Split the way
+      production will meet the data. Choose the threshold from costs, and ship a model card with the model. Next,
+      the Azure A I services platform, where you do not train anything at all.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The code is on GitHub and the five guides for this topic are on devladlog dot com. See you in the next
+      episode of DEVLADLOG AI.

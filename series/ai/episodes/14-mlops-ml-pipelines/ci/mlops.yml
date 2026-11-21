@@ -1,0 +1,55 @@
+# Copy to .github/workflows/mlops.yml in the repository that holds this folder.
+# Learn (Use GitHub Actions with Azure Machine Learning): sign in with OpenID Connect (federated credential on an Entra app or a
+# user-assigned managed identity), no client secret stored in GitHub. The three IDs below are identifiers, not secrets, but Learn
+# recommends keeping them in GitHub secrets.
+name: slabreach-train-gate-register
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - "series/ai/episodes/14-mlops-ml-pipelines/**"
+permissions:
+  id-token: write      # needed to request the OIDC token
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: series/ai/episodes/14-mlops-ml-pipelines
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - run: MLFLOW_ALLOW_FILE_STORE=true python -m pytest tests -q
+  train:
+    needs: test
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    environment: lab            # protect with required reviewers in the repository settings
+    defaults:
+      run:
+        working-directory: series/ai/episodes/14-mlops-ml-pipelines
+    env:
+      RG: ${{ vars.AML_RESOURCE_GROUP }}
+      WS: ${{ vars.AML_WORKSPACE }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install pandas numpy
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - run: az extension add --name ml --yes
+      - run: PYTHONPATH=src python -m slabreach generate --out build/raw --seed ${{ github.run_number }}
+      - run: scripts/train-and-register.sh
+      - run: scripts/deploy-canary.sh "$(cat build/decision/model_version.txt)"
+        env:
+          ENDPOINT_NAME: ${{ vars.AML_ENDPOINT_NAME }}
