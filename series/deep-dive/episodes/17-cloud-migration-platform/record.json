@@ -1,0 +1,100 @@
+{
+  "note": "Deep-dive #17. Two resource groups plus anything Site Recovery adds: all must be gone at the end. Initial replication can take a long time: record replication and failover only afterwards. If the gate says NOT READY, show it and say why.",
+  "prepare": [
+    "python -m pip install -q -r requirements.txt; python -m pytest -q",
+    "# owner signs in (device code), not recorded",
+    "az login --use-device-code",
+    "foreach ($ns in 'Microsoft.Migrate','Microsoft.RecoveryServices','Microsoft.Compute','Microsoft.Network') { az provider register --namespace $ns }",
+    "az vm list-skus -l westeurope --size Standard_D2s_v5 -o table",
+    "New-Item -ItemType Directory -Force build | Out-Null",
+    "./scripts/Get-ServerInventory.ps1 -ComputerName CON-DC01,CON-SRV01,CON-SRV02,CON-SQL01,CON-SQL02,CON-CLI01 -Credential $cred -OutFile build/lab-inventory.json",
+    "python -c \"import json;a=json.load(open('build/lab-inventory.json'));b=json.load(open('data/contoso-cmdb.json'));print(json.dumps({'servers':a['servers']+b['servers'],'connections':a['connections']+b['connections']}))\" > build/all.json",
+    "Push-Location src; python -m migplan check ../build/all.json --landing-zone 10.60.0.0/16; python -m migplan plan ../build/all.json; python -m migplan csv ../build/all.json --out ../build/import.csv; Pop-Location",
+    "Set-Item Env:MGLAB_VM_ADMIN_PASSWORD (Read-Host -MaskInput 'VM admin password (owner types)')",
+    "az deployment sub create -l westeurope -n mglab17 -f infra/main.bicep -p infra/main.bicepparam --query properties.outputs -o json",
+    "# manual (portal): Azure Migrate > Create project in rg-mglab-deep-dive-17, geography Europe; Discover > Import using CSV > upload build/import.csv; wait for Completed (download the warning CSV if there are warnings)",
+    "# manual (portal): Assess > Azure VM > Imported servers, target West Europe; create one as-is and one performance-based assessment, note the comfort factor",
+    "# manual (portal): VM con-app01 > Disaster recovery > North Europe, vault rsv-mglab-dr, target network vnet-target; wait for initial replication to finish and note the time",
+    "# manual (portal): run a test failover (latest recovery point, vnet-target) before recording the failover screen, or record the NOT READY gate first"
+  ],
+  "screens": [
+    {
+      "name": "import",
+      "kind": "browser",
+      "url": "https://portal.azure.com/",
+      "account": "labadmin",
+      "steps": [
+        "Azure Migrate > the project in rg-mglab-deep-dive-17 > Servers, databases and web apps",
+        "Azure Migrate: Discovery and assessment > Discovered servers > Import based tab",
+        "Show the import status Completed and the imported servers: the real lab VMs from the collector plus the fictional Contoso rows"
+      ],
+      "mask": [
+        "subscription id",
+        "tenant name"
+      ]
+    },
+    {
+      "name": "assessment",
+      "kind": "browser",
+      "url": "https://portal.azure.com/",
+      "account": "labadmin",
+      "steps": [
+        "Open the Azure VM assessment created for the imported group (West Europe)",
+        "Summary: Azure VM readiness counts and the estimated monthly cost",
+        "Azure VM readiness tab: the recommended size per server",
+        "If time allows show both the performance-based and the as-is assessment and say which settings each used"
+      ],
+      "mask": [
+        "subscription id"
+      ]
+    },
+    {
+      "name": "replication",
+      "kind": "browser",
+      "url": "https://portal.azure.com/",
+      "account": "labadmin",
+      "steps": [
+        "Recovery Services vault rsv-mglab-dr (North Europe) > Replicated items > con-app01",
+        "Overview: replication health, status Protected, the RPO and the time it was last computed, Failover readiness",
+        "Record only after initial replication has finished"
+      ],
+      "mask": [
+        "subscription id",
+        "resource ids and storage account names"
+      ]
+    },
+    {
+      "name": "failover",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\deep-dive\\episodes\\17-cloud-migration-platform\\src",
+      "prompt": "PS ...\\17-migration\\src> ",
+      "prepare": [
+        "$env:PYTHONPATH = (Get-Location).Path"
+      ],
+      "commands": [
+        "$sub = az account show --query id -o tsv",
+        "az rest --method get --url \"https://management.azure.com/subscriptions/$sub/resourceGroups/rg-mglab-deep-dive-17-dr/providers/Microsoft.RecoveryServices/vaults/rsv-mglab-dr/replicationProtectedItems?api-version=2025-08-01\" > items.json",
+        "python -m migplan gate items.json",
+        "#pause 6"
+      ],
+      "also": [
+        "Left half of the split (browser, labadmin): portal > Replicated items > con-app01 > Test failover (latest recovery point, non-production target network), the job succeeding, the test VM in the North Europe group, then Cleanup test failover. The terminal shows PASS lines and READY, or the real FAIL lines (say why in the narration)."
+      ]
+    }
+  ],
+  "teardown": [
+    "# manual (portal): VM con-app01 > Disaster recovery > Disable replication (stops Site Recovery billing); remove the Site Recovery extension if the VM is reused",
+    "az group list --query \"[?starts_with(name,'rg-mglab-deep-dive-17')].name\" -o tsv",
+    "az group delete -n rg-mglab-deep-dive-17 --yes",
+    "az group delete -n rg-mglab-deep-dive-17-dr --yes   # if the vault refuses, remove replicated items and the Site Recovery configuration first, then retry",
+    "Remove-Item build -Recurse -Force -ErrorAction SilentlyContinue; Remove-Item src/items.json -ErrorAction SilentlyContinue",
+    "Remove-Item Env:MGLAB_VM_ADMIN_PASSWORD -ErrorAction SilentlyContinue",
+    "# manual: list the resource groups again and delete any group Site Recovery created for replica disks (check each group's resources first); confirm the Azure Migrate project is gone"
+  ],
+  "needs": [
+    "azure",
+    "lab-vms",
+    "paid:VM con-app01, Site Recovery protected instance, replica disks, test failover VM, cache storage (delete same day)"
+  ]
+}

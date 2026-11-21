@@ -1,0 +1,109 @@
+{
+  "note": "Deep-dive #13. The guest has no account: Edge InPrivate with the microphone allowed. meeting saves its output in %TEMP%\\hybrid-invite.json so lobby and connected can open the same guest link. Order: readiness (the day before), meeting, lobby, connected.",
+  "prepare": [
+    "Push-Location src/api; npm ci --no-audit --no-fund; npm test; Pop-Location",
+    "Push-Location src/join; npm ci --no-audit --no-fund; npm test; Pop-Location",
+    "Invoke-Pester ./tests",
+    "foreach ($m in 'Microsoft.Graph.Authentication','MicrosoftTeams') { if (-not (Get-Module -ListAvailable $m)) { Install-Module $m -Scope CurrentUser -Force } }",
+    "# owner signs in (device code), not recorded",
+    "az login --use-device-code",
+    "az functionapp list-flexconsumption-locations -o table",
+    "az group create -n rg-mglab-deep-dive-13 -l westeurope -o none",
+    "az deployment group create -g rg-mglab-deep-dive-13 -f infra/main.bicep -p infra/main.bicepparam --query properties.outputs -o json > $env:TEMP\\hybrid-outputs.json",
+    "$o = Get-Content $env:TEMP\\hybrid-outputs.json | ConvertFrom-Json; $env:MG_FN_URL13 = $o.functionAppUrl.value; $env:MG_FN13 = $o.functionAppName.value",
+    "./scripts/Build-Package.ps1 -OutFile ./hybrid-api.zip",
+    "az functionapp deployment source config-zip -g rg-mglab-deep-dive-13 -n $env:MG_FN13 --src ./hybrid-api.zip",
+    "(Invoke-WebRequest \"$($env:MG_FN_URL13)/api/join\").Content   # page asks for an invitation link",
+    "$env:MG_FN_KEY13 = az functionapp keys list -g rg-mglab-deep-dive-13 -n $env:MG_FN13 --query functionKeys.default -o tsv",
+    "Connect-MgGraph -Scopes OnlineMeetings.ReadWrite -NoWelcome   # owner signs in as labadmin, consents once",
+    "# manual: write down and, only if the readiness check fails, change the Teams settings (Set-CsTeamsMeetingConfiguration -DisableAnonymousJoin $false, Set-CsTeamsMeetingPolicy -Identity Global -AllowAnonymousUsersToJoinMeeting $true, -AutoAdmittedUsers EveryoneInCompany); policy changes can take up to 24 hours",
+    "# manual: look up the Azure Communication Services price on the pricing page and write it in the README"
+  ],
+  "screens": [
+    {
+      "name": "readiness",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\deep-dive\\episodes\\13-hybrid-work-platform",
+      "prompt": "PS ...\\13-hybrid> ",
+      "commands": [
+        "Connect-MicrosoftTeams | Out-Null",
+        "./scripts/Test-GuestJoinReadiness.ps1",
+        "#pause 5"
+      ],
+      "also": [
+        "Expected: three rows Passed (tenant anonymous join, organizer policy, lobby). The owner signs in to Teams as labadmin if asked. Then (browser, labadmin): Teams admin center > Meetings > Meeting policies > Global > Meeting join & lobby with the matching settings. Mask the tenant name."
+      ]
+    },
+    {
+      "name": "meeting",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\deep-dive\\episodes\\13-hybrid-work-platform",
+      "prompt": "PS ...\\13-hybrid> ",
+      "commands": [
+        "Connect-MgGraph -Scopes OnlineMeetings.ReadWrite -NoWelcome",
+        "$key = ConvertTo-SecureString $env:MG_FN_KEY13 -AsPlainText -Force",
+        "./scripts/Invoke-HybridInvite.ps1 -ApiBaseUrl $env:MG_FN_URL13 -FunctionKey $key -Subject 'Partner sync' -WhatIf",
+        "#pause 3",
+        "$inv = ./scripts/Invoke-HybridInvite.ps1 -ApiBaseUrl $env:MG_FN_URL13 -FunctionKey $key -Subject 'Partner sync'",
+        "$inv",
+        "$inv | ConvertTo-Json | Set-Content \"$env:TEMP\\hybrid-invite.json\"",
+        "#pause 5"
+      ],
+      "mask": [
+        "function host name in the guest link",
+        "tenant id and meeting id inside the Teams host link",
+        "all but the first four characters of the invite code"
+      ],
+      "also": [
+        "The function key is read from an environment variable into a SecureString and never printed. The saved JSON (guest link) is deleted in teardown."
+      ]
+    },
+    {
+      "name": "lobby",
+      "kind": "browser",
+      "url": "file:///%TEMP%/hybrid-invite.json (read the GuestLink; open it in an Edge InPrivate window)",
+      "account": "labadmin (Teams on the web, host); guest has no account (InPrivate)",
+      "steps": [
+        "Split the screen: left an Edge InPrivate window, right Teams on the web as labadmin",
+        "Right: join the meeting from HostJoin first (the guest cannot enter before a Teams user is present)",
+        "Left: open the GuestLink (from %TEMP%\\hybrid-invite.json), name field 'Riley Guest', click Join",
+        "Left shows 'Waiting in the lobby. The host will let you in.'; right shows the lobby notification naming Riley Guest. Do NOT admit yet"
+      ],
+      "mask": [
+        "tenant name and Teams meeting id in the address bar",
+        "function host name in the guest page address"
+      ]
+    },
+    {
+      "name": "connected",
+      "kind": "browser",
+      "url": "https://teams.microsoft.com/",
+      "account": "labadmin (host); guest has no account (InPrivate)",
+      "steps": [
+        "As labadmin click Admit for Riley Guest",
+        "Guest page changes to 'You are in the meeting.' with Mute enabled",
+        "Teams participants list shows the guest labelled external",
+        "The guest unmutes and says one sentence (audio captured), then clicks Leave: the guest disappears from the participant list"
+      ],
+      "mask": [
+        "tenant name and Teams meeting id in the address bar",
+        "function host name"
+      ]
+    }
+  ],
+  "teardown": [
+    "az group delete -n rg-mglab-deep-dive-13 --yes --no-wait",
+    "Remove-Item ./hybrid-api.zip, $env:TEMP\\hybrid-outputs.json, $env:TEMP\\hybrid-invite.json -ErrorAction SilentlyContinue",
+    "Remove-Item Env:MG_FN_KEY13, Env:MG_FN_URL13, Env:MG_FN13 -ErrorAction SilentlyContinue",
+    "Disconnect-MgGraph; Disconnect-MicrosoftTeams",
+    "# manual: revert any Teams setting changed for readiness to the value written in the README; delete the meeting from the Teams calendar; close the InPrivate window",
+    "az group exists -n rg-mglab-deep-dive-13   # false once the delete has finished"
+  ],
+  "needs": [
+    "tenant",
+    "azure",
+    "paid:Azure Communication Services usage (one guest, a few minutes)"
+  ]
+}

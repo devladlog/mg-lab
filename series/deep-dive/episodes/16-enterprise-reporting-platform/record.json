@@ -1,0 +1,110 @@
+{
+  "note": "Deep-dive #16. Builds on the episode 15 Synapse database (redeploy episode 15 first if it was torn down). Capacity size matters: free-licence viewers only on F64 or larger, all lab users have E5 (Power BI Pro). The callers in rls and governance are NOT workspace Admin, Member or Contributor. Say once that the data is synthetic.",
+  "prepare": [
+    "dotnet test test/ModelTests/ModelTests.csproj -m:1",
+    "Invoke-Pester ./tests",
+    "$env:MG_DOMAIN = Read-Host 'Lab domain for UpnDomain (owner types)'",
+    "# manual: Fabric portal: create workspaces 'Contoso Reporting [DEV]', '[TEST]', '[PROD]' on the Fabric trial capacity; alex.demo, sam.demo, jordan.demo, riley.demo as Viewer on [PROD] and [TEST] only",
+    "# manual: Power BI Desktop: save a blank report as .pbip (TMDL), replace its SemanticModel/definition folder with model/ContosoReporting.SemanticModel/definition, set parameters SynapseServer / SynapseDatabase (contoso_analytics) / UpnDomain, refresh, build the report, publish to [DEV]",
+    "# manual: Fabric portal > Deployment pipelines: create 'Contoso reporting' with three stages and assign [DEV], [TEST], [PROD]",
+    "# owner signs in (device code), not recorded",
+    "az login --use-device-code --allow-no-subscriptions",
+    "az ad group create --display-name sg-mglab-certifiers --mail-nickname sg-mglab-certifiers -o none; az ad group member add --group sg-mglab-certifiers --member-id (az ad user list --filter \"startswith(userPrincipalName,'taylor.demo@')\" --query '[0].id' -o tsv)",
+    "$pol = Get-Content governance/policy.json -Raw | ConvertFrom-Json; $pol.certifiers = @(\"taylor.demo@$($env:MG_DOMAIN)\"); $pol | ConvertTo-Json -Depth 10 | Set-Content governance/policy.json   # undone in teardown with git checkout",
+    "# manual: a Fabric admin (labadmin) enables Certification for sg-mglab-certifiers and the metadata scanning (scanner API) tenant settings",
+    "# update governance/fixtures/requests-by-department.csv from: SELECT DepartmentKey, COUNT(*) FROM gold.FactPurchaseRequest GROUP BY DepartmentKey",
+    "# tokens go into environment variables only, never printed or written to a file; viewer = a non-admin member (for example alex.demo), admin = labadmin",
+    "# az login as alex.demo (owner signs in), then:  $env:MG_PBI_VIEWER_TOKEN = az account get-access-token --resource https://analysis.windows.net/powerbi/api --query accessToken -o tsv",
+    "# az login as labadmin (owner signs in), then:   $env:MG_PBI_ADMIN_TOKEN = az account get-access-token --resource https://analysis.windows.net/powerbi/api --query accessToken -o tsv",
+    "$env:MG_WS_DEV = Read-Host 'DEV workspace id (owner types)'; $env:MG_WS_TEST = Read-Host 'TEST workspace id'; $env:MG_WS_PROD = Read-Host 'PROD workspace id'; $env:MG_DATASET = Read-Host 'PROD semantic model (dataset) id'"
+  ],
+  "screens": [
+    {
+      "name": "model-folder",
+      "kind": "app",
+      "app": "Visual Studio Code, then Power BI Desktop",
+      "account": "labadmin",
+      "steps": [
+        "VS Code: open the folder model/ContosoReporting.SemanticModel and definition/tables/FactPurchaseRequest.tmdl",
+        "Power BI Desktop: open the same folder as a project (developer mode, TMDL format)",
+        "TMDL view: show the same measure as in the file (parameters were set off camera)"
+      ],
+      "mask": [
+        "Synapse server name in the parameters and Power Query",
+        "workspace names"
+      ]
+    },
+    {
+      "name": "rls",
+      "kind": "browser",
+      "url": "https://app.powerbi.com/",
+      "account": "labadmin (admin steps), alex.demo (Test as role)",
+      "steps": [
+        "Open the PROD workspace > the semantic model > More options > Security > role Department Reader",
+        "Add alex.demo, sam.demo, jordan.demo and riley.demo as members",
+        "Test as role: Now viewing as alex.demo shows only Finance",
+        "Terminal capture right after (host): Import-Module ./scripts/ReportingGovernance.psm1 -Force ; Invoke-RlsCheck -DatasetId $env:MG_DATASET -MapCsv governance/fixtures/security-map.csv -CountsCsv governance/fixtures/requests-by-department.csv -AccessToken $env:MG_PBI_VIEWER_TOKEN prints Expected, Actual and Pass for the four users",
+        "Show once that a workspace Admin sees all rows, and that the callers are not workspace Admin, Member or Contributor"
+      ],
+      "mask": [
+        "workspace and tenant names",
+        "Synapse server name",
+        "user domain (keep display names)"
+      ]
+    },
+    {
+      "name": "pipeline",
+      "kind": "browser",
+      "url": "https://app.fabric.microsoft.com/",
+      "account": "labadmin",
+      "steps": [
+        "Deployment pipelines > Contoso reporting: three stages, a workspace assigned to each",
+        "Compare Development and Test: the changed semantic model is listed",
+        "Deploy to Test with a note",
+        "Test stage > Deployment rules: data source rule setting the SynapseServer parameter; deploy again so the rule applies",
+        "Open the deployment history entry",
+        "Add the role members in TEST again: they are not copied"
+      ],
+      "mask": [
+        "workspace and tenant names",
+        "Synapse server name in the rule value"
+      ]
+    },
+    {
+      "name": "governance",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\deep-dive\\episodes\\16-enterprise-reporting-platform",
+      "prompt": "PS ...\\16-reporting> ",
+      "commands": [
+        "Import-Module ./scripts/ReportingGovernance.psm1 -Force",
+        "$h = @{ Authorization = \"Bearer $env:MG_PBI_ADMIN_TOKEN\" }",
+        "$req = New-ScanRequest -WorkspaceId $env:MG_WS_DEV, $env:MG_WS_TEST, $env:MG_WS_PROD -DatasetSchema -DatasourceDetails",
+        "$scan = Invoke-RestMethod -Method Post -Uri $req.Uri -Headers $h -ContentType 'application/json' -Body ($req.Body | ConvertTo-Json)",
+        "do { Start-Sleep -Seconds 5; $st = Invoke-RestMethod -Uri \"https://api.powerbi.com/v1.0/myorg/admin/workspaces/scanStatus/$($scan.id)\" -Headers $h; $st.status } until ($st.status -eq 'Succeeded')",
+        "Invoke-RestMethod -Uri \"https://api.powerbi.com/v1.0/myorg/admin/workspaces/scanResult/$($scan.id)\" -Headers $h | ConvertTo-Json -Depth 20 | Set-Content scan.json",
+        "Get-GovernanceFindings -ScanResultPath scan.json -PolicyPath governance/policy.json | Format-Table Rule, Severity, Workspace, Item",
+        "#pause 6"
+      ],
+      "mask": [
+        "workspace names and ids in the findings",
+        "tenant name"
+      ],
+      "also": [
+        "Then (browser, labadmin and taylor.demo): Power BI service > the production semantic model > Settings > Endorsement and discovery: Promoted by labadmin, Certified by taylor.demo (member of sg-mglab-certifiers). Admin portal tenant settings for Certification only if the admin chooses; otherwise blur."
+      ]
+    }
+  ],
+  "teardown": [
+    "git checkout governance/policy.json",
+    "Remove-Item scan.json -ErrorAction SilentlyContinue; Remove-Item Env:MG_PBI_VIEWER_TOKEN, Env:MG_PBI_ADMIN_TOKEN, Env:MG_WS_DEV, Env:MG_WS_TEST, Env:MG_WS_PROD, Env:MG_DATASET, Env:MG_DOMAIN -ErrorAction SilentlyContinue",
+    "az ad group delete --group sg-mglab-certifiers",
+    "# manual: delete the three workspaces 'Contoso Reporting [DEV|TEST|PROD]' and the pipeline 'Contoso reporting'; revert the Certification and scanner tenant settings if changed; delete any saved .pbip project and Power BI Desktop data source credentials; tear down episode 15 per its own demo.md when finished"
+  ],
+  "needs": [
+    "tenant",
+    "azure",
+    "fabric-trial-capacity",
+    "episode-15-deployed"
+  ]
+}

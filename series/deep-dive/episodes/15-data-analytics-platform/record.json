@@ -1,0 +1,115 @@
+{
+  "note": "Deep-dive #15. Run order: phase 1 seed, adf-runs (run 1; between runs seed phase 2 and trigger, then trigger with nothing new), quality (phase 3 + one more run, prepared in the screen's prepare), score, powerbi. All data is synthetic: say it on screen once.",
+  "prepare": [
+    "python -m pip install -q -r requirements.txt; python -m pytest -q",
+    "Invoke-Pester ./tests",
+    "# owner signs in (device code), not recorded",
+    "az login --use-device-code",
+    "az provider register -n Microsoft.Synapse; az provider register -n Microsoft.DataFactory; az extension add -n datafactory --only-show-errors",
+    "az group create -n rg-mglab-deep-dive-15 -l westeurope -o none",
+    "$me = az ad signed-in-user show --query \"{upn:userPrincipalName,oid:id}\" -o json | ConvertFrom-Json; $ip = Invoke-RestMethod https://api.ipify.org",
+    "$o = az deployment group create -g rg-mglab-deep-dive-15 -f infra/main.bicep -p \"adminLogin=$($me.upn)\" \"adminObjectId=$($me.oid)\" \"clientIp=$ip\" --query properties.outputs -o json | ConvertFrom-Json",
+    "$env:MG_STORAGE15 = $o.storageAccountName.value; $env:MG_SQL15 = $o.sqlServerFqdn.value; $env:MG_ADF15 = $o.dataFactoryName.value; $env:MG_SYN15 = $o.synapseServerlessEndpoint.value",
+    "# manual: Synapse Studio > Manage > Access control: confirm labadmin is Synapse Administrator; role assignments can take a few minutes",
+    "Import-Module ./scripts/AnalyticsLab.psm1 -Force",
+    "$src = Get-AnalyticsSqlPlan -Target Source -FactoryName $env:MG_ADF15",
+    "Invoke-AnalyticsSql -Server $env:MG_SQL15 -Plan $src -WhatIf",
+    "Invoke-AnalyticsSql -Server $env:MG_SQL15 -Plan $src",
+    "$env:PYTHONPATH = 'src'; python -m analytics seed-sql --phase 1 --out \"$env:TEMP\\phase1.sql\"",
+    "sqlcmd -S $env:MG_SQL15 -d sourcedb -G -b -i \"$env:TEMP\\phase1.sql\"   # 1,089 rows; do NOT run the pipeline yet",
+    "$syn = Get-AnalyticsSqlPlan -Target Synapse -StorageAccount $env:MG_STORAGE15",
+    "Invoke-AnalyticsSql -Server $env:MG_SYN15 -Plan $syn   # views exist before any file does"
+  ],
+  "screens": [
+    {
+      "name": "adf-runs",
+      "kind": "browser",
+      "url": "https://adf.azure.com/",
+      "account": "labadmin",
+      "steps": [
+        "Data Factory Studio (factory name masked) > Author: show pipeline pl_incremental_purchase_requests once (four activities)",
+        "Trigger now (Debug is fine); Monitor > Pipeline runs: first run succeeded; open the Copy activity details: rows read 1,089",
+        "Off camera cut: python -m analytics seed-sql --phase 2 --out $env:TEMP\\phase2.sql ; sqlcmd -S $env:MG_SQL15 -d sourcedb -G -b -i $env:TEMP\\phase2.sql ; then trigger again: rows read 145",
+        "Trigger again with nothing new: rows read 0",
+        "Portal > the storage account > Containers > lake > bronze/purchase_requests/ingest_date=<day>/: the three requests-<run id>.parquet files"
+      ],
+      "mask": [
+        "Data Factory name",
+        "storage account name",
+        "subscription id",
+        "tenant name"
+      ]
+    },
+    {
+      "name": "quality",
+      "kind": "app",
+      "app": "SSMS 22",
+      "account": "labadmin",
+      "prepare": [
+        "$env:PYTHONPATH = 'src'; python -m analytics seed-sql --phase 3 --out \"$env:TEMP\\phase3.sql\"; sqlcmd -S $env:MG_SQL15 -d sourcedb -G -b -i \"$env:TEMP\\phase3.sql\"",
+        "$run = az datafactory pipeline create-run --factory-name $env:MG_ADF15 -g rg-mglab-deep-dive-15 --name pl_incremental_purchase_requests --query runId -o tsv",
+        "do { Start-Sleep -Seconds 15; $st = az datafactory pipeline-run show --factory-name $env:MG_ADF15 -g rg-mglab-deep-dive-15 --run-id $run --query status -o tsv } while ($st -in 'Queued','InProgress')   # rows read 4"
+      ],
+      "steps": [
+        "Connect to the Synapse serverless endpoint with Microsoft Entra MFA as labadmin, database contoso_analytics",
+        "Run: SELECT * FROM quality.CheckResult  (bronze row versions greater than distinct requests; four rejected rows: NonPositiveAmount, UnknownDepartment, ApprovedBeforeSubmitted, UnknownStatus)",
+        "Run: SELECT * FROM sys.dm_external_data_processed  (how little data the queries processed)"
+      ],
+      "mask": [
+        "serverless endpoint name in the connection dialog and tab titles"
+      ]
+    },
+    {
+      "name": "score",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\deep-dive\\episodes\\15-data-analytics-platform",
+      "prompt": "PS ...\\15-analytics> ",
+      "commands": [
+        "Import-Module ./scripts/AnalyticsLab.psm1 -Force",
+        "$env:PYTHONPATH = 'src'",
+        "# every number on this screen comes from SYNTHETIC purchase requests, not real people",
+        "$p = Get-LakePullCommand -StorageAccount $env:MG_STORAGE15 -Destination \"$env:TEMP\\lake\"",
+        "Invoke-Expression $p",
+        "python -m analytics train --lake \"$env:TEMP\\lake\" --model \"$env:TEMP\\model.json\"",
+        "python -m analytics export-sql --model \"$env:TEMP\\model.json\" --out sql\\synapse\\050-risk-score.sql",
+        "Invoke-AnalyticsSql -Server $env:MG_SYN15 -Plan (Get-AnalyticsSqlPlan -Target Synapse -StorageAccount $env:MG_STORAGE15 -IncludeRiskScore) | Format-Table",
+        "sqlcmd -S $env:MG_SYN15 -d contoso_analytics -G -Q \"SELECT TOP 10 RequestId, BreachProbability FROM gold.RequestRiskScore WHERE Status = 'Submitted' ORDER BY BreachProbability DESC\"",
+        "python -m analytics drift --lake \"$env:TEMP\\lake\" --model \"$env:TEMP\\model.json\"",
+        "#pause 6"
+      ],
+      "also": [
+        "The SELECT TOP 10 runs with sqlcmd in the same terminal instead of switching to SSMS. Expect auc_test and brier_test below brier_baseline_constant from train, PSI about 0.02 from drift. Storage account and endpoint stay in environment variables."
+      ]
+    },
+    {
+      "name": "powerbi",
+      "kind": "app",
+      "app": "Power BI Desktop",
+      "account": "labadmin",
+      "steps": [
+        "Get data > Azure Synapse Analytics SQL: server = the serverless -ondemand endpoint, database contoso_analytics, Import mode, sign in with the Microsoft account (labadmin)",
+        "Navigator: tick gold.FactPurchaseRequest, gold.DimDepartment and gold.RequestRiskScore, Load",
+        "Model view: relationship FactPurchaseRequest[DepartmentKey] to DimDepartment[DepartmentKey], many to one",
+        "Visual 1: clustered bar, Average of CycleDays by DepartmentName",
+        "Visual 2: table of RequestId, Amount, BreachProbability filtered to Status = Submitted, sorted descending by BreachProbability",
+        "Do not publish; do not show the server name"
+      ],
+      "mask": [
+        "server name in the Get data dialog, Data source settings and Power Query editor"
+      ]
+    }
+  ],
+  "teardown": [
+    "az group delete -n rg-mglab-deep-dive-15 --yes --no-wait",
+    "git checkout sql/synapse/050-risk-score.sql",
+    "Remove-Item \"$env:TEMP\\lake\", \"$env:TEMP\\model.json\", \"$env:TEMP\\phase1.sql\", \"$env:TEMP\\phase2.sql\", \"$env:TEMP\\phase3.sql\" -Recurse -Force -ErrorAction SilentlyContinue",
+    "Remove-Item Env:MG_STORAGE15, Env:MG_SQL15, Env:MG_ADF15, Env:MG_SYN15, Env:PYTHONPATH -ErrorAction SilentlyContinue",
+    "# manual: close Power BI Desktop WITHOUT saving a .pbix and clear its data source credentials; confirm the Synapse managed resource group is gone; write the Cost Management figure in the README"
+  ],
+  "needs": [
+    "tenant",
+    "azure",
+    "paid:Data Factory runs, Synapse serverless queries (cents)"
+  ]
+}

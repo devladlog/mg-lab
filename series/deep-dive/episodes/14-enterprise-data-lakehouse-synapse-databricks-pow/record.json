@@ -1,0 +1,84 @@
+{
+  "note": "Deep-dive #14. Databricks via the 14-day trial SKU (needs a pay-as-you-go subscription, which the lab has); cluster VMs are billed: single-node job cluster, auto-terminate in 10 minutes. Unity Catalog setup in Databricks is by hand.",
+  "prepare": [
+    "# owner signs in (device code), not recorded",
+    "az login --use-device-code",
+    "az group create -n rg-mglab-deep-dive-14 -l westeurope -o none",
+    "$o = az deployment group create -g rg-mglab-deep-dive-14 -f infra/main.bicep -p infra/main.bicepparam -p \"synapseAdminObjectId=$(az ad signed-in-user show --query id -o tsv)\" --query properties.outputs -o json | ConvertFrom-Json",
+    "$env:MG_STORAGE14 = $o.storageAccount.value; $env:MG_SYN14 = $o.synapseServerlessEndpoint.value",
+    "# manual: Databricks workspace: Unity Catalog metastore if the account has none, external location on abfss://lake@<storage>.dfs.core.windows.net/ with the access connector, catalog 'lakehouse'; upload the lakehouse package and src/databricks/medallion_job.py",
+    "$env:PYTHONPATH = 'src'; python -c \"from lakehouse.datagen import make_batch; make_batch(r'$env:TEMP\\landing\\b1', 1)\"   # one truncated line and one bad currency on purpose",
+    "az storage blob upload-batch --account-name $env:MG_STORAGE14 --auth-mode login -d lake -s \"$env:TEMP\\landing\\b1\" --destination-path landing/orders --overwrite"
+  ],
+  "screens": [
+    {
+      "name": "portal",
+      "kind": "browser",
+      "url": "https://portal.azure.com/",
+      "account": "labadmin",
+      "steps": [
+        "Azure portal > Resource groups > rg-mglab-deep-dive-14: the storage account (hierarchical namespace), the Databricks workspace, its access connector and the Synapse workspace",
+        "Open the storage account > Data management > Lifecycle management: the rule covers only the prefix lake/landing/"
+      ],
+      "mask": [
+        "subscription id",
+        "resource name suffixes that carry a group hash"
+      ]
+    },
+    {
+      "name": "databricks",
+      "kind": "browser",
+      "url": "https://<workspace-url>/",
+      "account": "labadmin",
+      "steps": [
+        "Open the Databricks workspace, notebook medallion_job, run it with batch_id = b1",
+        "Show the printed dict with ingested, rejected and applied counts",
+        "Catalog Explorer > lakehouse > gold > daily_sales (or the abfss path if no catalog)"
+      ],
+      "mask": [
+        "workspace URL",
+        "user e-mail"
+      ]
+    },
+    {
+      "name": "synapse",
+      "kind": "browser",
+      "url": "https://web.azuresynapse.net/",
+      "account": "labadmin",
+      "steps": [
+        "Synapse Studio > Develop > open src/synapse/serving.sql and run it against a user database",
+        "Run SELECT TOP 10 * FROM gold.daily_sales",
+        "Run SELECT COUNT(*) and compare with the row count shown in Databricks"
+      ],
+      "mask": [
+        "storage account name in the script and results",
+        "workspace name"
+      ]
+    },
+    {
+      "name": "powerbi",
+      "kind": "app",
+      "app": "Power BI Desktop",
+      "account": "labadmin",
+      "steps": [
+        "Enable the TMDL view; open the TMDL files from src/powerbi/Contoso.SemanticModel (paste in TMDL view or open as a PBIP project)",
+        "Connect the model to the Synapse serverless endpoint in Import mode, sign in with the organisational account, refresh",
+        "Build a card for Orders and a table of Revenue by region; set the currency slicer to one currency"
+      ],
+      "mask": [
+        "Synapse serverless server name in Data source settings and the Power Query editor"
+      ]
+    }
+  ],
+  "teardown": [
+    "az group delete -n rg-mglab-deep-dive-14 --yes --no-wait",
+    "Remove-Item $env:TEMP\\landing -Recurse -Force -ErrorAction SilentlyContinue; Remove-Item Env:MG_STORAGE14, Env:MG_SYN14, Env:PYTHONPATH -ErrorAction SilentlyContinue",
+    "# manual: confirm the Databricks managed resource group (rg-mglab14-dbw-managed-...) is gone and that nothing accrues in Cost Management; close Power BI Desktop without saving a .pbix and clear its data source credentials"
+  ],
+  "needs": [
+    "tenant",
+    "azure",
+    "paid:Databricks cluster VMs (trial DBUs are free)",
+    "licence:Databricks 14-day trial (pay-as-you-go subscription)"
+  ]
+}

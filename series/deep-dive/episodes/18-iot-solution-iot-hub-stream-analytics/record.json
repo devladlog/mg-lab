@@ -1,0 +1,92 @@
+{
+  "note": "Deep-dive #18. IoT Hub F1 is one free hub per subscription (8,000 messages per day): check there is no other free hub. The simulator refuses runs past 80 % of the daily limit. Stream Analytics bills while Running: stop the job right after. Order: iothub (normal run in the background), job, aggregates, alert.",
+  "prepare": [
+    "python -m pip install -q -r requirements.txt; npm ci --no-audit --no-fund; python -m pytest -q",
+    "$env:PYTHONPATH = 'src'; python -m iotlab budget --minutes 20",
+    "# owner signs in (device code), not recorded",
+    "az login --use-device-code",
+    "az extension add -n azure-iot --only-show-errors; az extension add -n stream-analytics --only-show-errors",
+    "foreach ($ns in 'Microsoft.Devices','Microsoft.StreamAnalytics','Microsoft.Storage') { az provider register --namespace $ns }",
+    "az iot hub list --query \"[?sku.name=='F1'].{n:name,g:resourceGroup}\" -o table   # must be empty: one free hub per subscription",
+    "az group create -n rg-mglab-deep-dive-18 -l westeurope -o none",
+    "$o = az deployment group create -g rg-mglab-deep-dive-18 -n main -f infra/main.bicep -p infra/main.bicepparam -p \"operatorObjectId=$(az ad signed-in-user show --query id -o tsv)\" --query properties.outputs -o json | ConvertFrom-Json",
+    "$env:MG_HUB18 = $o.hubName.value; $env:MG_JOB18 = $o.jobName.value; $env:MG_ST18 = $o.storageAccountName.value",
+    "# manual (portal): job input and both outputs: Test connection must succeed (role assignments can take minutes); note how long it took",
+    "python -m iotlab provision --hub $env:MG_HUB18   # connection strings go to devices.local.json (git-ignored), never printed",
+    "az stream-analytics job start -g rg-mglab-deep-dive-18 -n $env:MG_JOB18 --output-start-mode JobStartTime",
+    "do { Start-Sleep -Seconds 20; $st = az stream-analytics job show -g rg-mglab-deep-dive-18 -n $env:MG_JOB18 --query jobState -o tsv } until ($st -eq 'Running')"
+  ],
+  "screens": [
+    {
+      "name": "iothub",
+      "kind": "browser",
+      "url": "https://portal.azure.com/",
+      "account": "labadmin",
+      "steps": [
+        "IoT Hub overview: tier F1 and the daily message limit",
+        "Devices: coldroom-01, coldroom-02, coldroom-03",
+        "During the run (started by this screen's prepare) Monitoring > Metrics > Telemetry messages sent"
+      ],
+      "mask": [
+        "subscription id",
+        "hub name suffix if derived from the group id"
+      ]
+    },
+    {
+      "name": "job",
+      "kind": "browser",
+      "url": "https://portal.azure.com/",
+      "account": "labadmin",
+      "steps": [
+        "Stream Analytics job overview: status Running",
+        "Monitoring: Input Events and Output Events for the normal run",
+        "Watermark Delay split by Partition ID (if a partition is empty, say so in the narration; if both partitions get data and no delay shows, say that the empty-partition risk did not appear)"
+      ],
+      "mask": [
+        "subscription id",
+        "job name suffix"
+      ]
+    },
+    {
+      "name": "aggregates",
+      "kind": "browser",
+      "url": "https://portal.azure.com/",
+      "account": "labadmin",
+      "steps": [
+        "Storage account > Storage browser > Blob containers > aggregates > the date and hour folders",
+        "Open the blob and show a few JSON lines: deviceId, windowEnd, readings, avgTempC, minTempC, maxTempC for coldroom-01 to coldroom-03"
+      ],
+      "mask": [
+        "storage account name"
+      ]
+    },
+    {
+      "name": "alert",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\deep-dive\\episodes\\18-iot-solution-iot-hub-stream-analytics",
+      "prompt": "PS ...\\18-iot> ",
+      "prepare": [
+        "$env:MG_SENT_TODAY18 = Read-Host 'Messages already used today (portal: IoT Hub overview)'"
+      ],
+      "commands": [
+        "$env:PYTHONPATH = 'src'",
+        "python -m iotlab simulate --scenario door-open --minutes 10 --sent-today $env:MG_SENT_TODAY18",
+        "#pause 4"
+      ],
+      "also": [
+        "Right half of the split (browser, labadmin): storage account > the alerts container: the blob with COLD_ROOM_TOO_WARM lines for coldroom-02 only. Note the real time from the door-open reading (tick 13, about 65 s into the run) to the first alert line (it includes the window and the late-arrival wait) and say it in the narration."
+      ]
+    }
+  ],
+  "teardown": [
+    "az stream-analytics job stop -g rg-mglab-deep-dive-18 -n $env:MG_JOB18   # stops billing at once, also if the group delete is delayed",
+    "az group delete -n rg-mglab-deep-dive-18 --yes",
+    "Remove-Item devices.local.json -ErrorAction SilentlyContinue; Remove-Item build -Recurse -Force -ErrorAction SilentlyContinue",
+    "Remove-Item Env:MG_HUB18, Env:MG_JOB18, Env:MG_ST18, Env:MG_SENT_TODAY18, Env:PYTHONPATH -ErrorAction SilentlyContinue"
+  ],
+  "needs": [
+    "azure",
+    "paid:Stream Analytics 1 SU while running (stop and delete same day)"
+  ]
+}

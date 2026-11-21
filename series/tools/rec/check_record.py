@@ -7,7 +7,7 @@ from pathlib import Path
 
 import yaml
 
-SECRET = re.compile(r"(password\s*=|pwd=|\.Password\b|GetNetworkCredential|client_secret\s*=|AccountKey=|sig=|Get-Credential)", re.I)
+SECRET = re.compile(r"(password\s*=|pwd=|\.Password\b|GetNetworkCredential|client_secret\s*=|AccountKey=|sig=|Get-Credential\b(?!s))", re.I)
 REAL = re.compile(r"onmicrosoft\.com|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", re.I)
 KINDS = {"terminal", "browser", "app"}
 
