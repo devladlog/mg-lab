@@ -8,7 +8,7 @@
     "function Get-LabUserId($n) { (Invoke-MgGraphRequest -Uri \"/v1.0/users/$n@$env:MG_LAB_DOMAIN\").id }",
     "# group MG Lab - Intune Users (alex.demo, sam.demo)",
     "$grp = (Invoke-MgGraphRequest -Uri \"/v1.0/groups?`$filter=displayName eq 'MG Lab - Intune Users'\").value | Select-Object -First 1; if (-not $grp) { $grp = Invoke-MgGraphRequest -Method POST -Uri /v1.0/groups -Body @{ displayName = 'MG Lab - Intune Users'; mailNickname = 'mglab-intune-users'; mailEnabled = $false; securityEnabled = $true; 'members@odata.bind' = @(\"https://graph.microsoft.com/v1.0/users/$(Get-LabUserId 'alex.demo')\", \"https://graph.microsoft.com/v1.0/users/$(Get-LabUserId 'sam.demo')\") } }",
-    "$p = Get-Content ./src/intune.json -Raw | ConvertFrom-Json; $p.policy.assignTo.groupId = $grp.id; $p | ConvertTo-Json -Depth 8 | Set-Content ./src/intune.lab.json",
+    "$p = Get-Content ./src/intune.json -Raw | ConvertFrom-Json; $p.compliancePolicy.assignTo.groupId = $grp.id; $p | ConvertTo-Json -Depth 8 | Set-Content ./src/intune.lab.json",
     "# the Windows 11 VM: the lab builder creates CON-W11-01 and stops at Windows setup (needs E:\\MGLab\\iso\\Win11Ent-Eval.iso)",
     "if (-not (Get-VM -Name CON-W11-01 -ErrorAction SilentlyContinue)) { & 'D:\\momento_galatico_kit\\mg-lab-series\\lab\\hyperv\\Start-MGLab.ps1' }",
     "if ((Get-VM -Name CON-W11-01).State -ne 'Running') { Start-VM -Name CON-W11-01 }",

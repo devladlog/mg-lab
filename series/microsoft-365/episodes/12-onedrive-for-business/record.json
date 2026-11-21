@@ -1,0 +1,112 @@
+{
+  "note": "Live-session recording of the screen scenes (series/tools/rec). prepare/teardown run on the laptop, not recorded; commands are typed and run for real. Screens that mix a terminal and a portal carry the second half in also[] (when = before/after the main part). Scenes read MG_LAB_ADMIN_UPN / MG_LAB_DOMAIN (set by prepare, derived from the signed-in labadmin).",
+  "prepare": [
+    "if (-not (Get-Module -ListAvailable -Name Microsoft.Graph.Authentication)) { Install-Module Microsoft.Graph.Authentication -Scope CurrentUser -Force -AllowClobber }",
+    "Connect-MgGraph -Scopes SharePointTenantSettings.Read.All, Reports.Read.All, ReportSettings.ReadWrite.All, Organization.Read.All -NoWelcome  # owner signs in (browser)",
+    "function Set-LabVar($n, $v) { [Environment]::SetEnvironmentVariable($n, \"$v\", 'User'); Set-Item \"env:$n\" \"$v\" }",
+    "$upn = (Invoke-MgGraphRequest -Uri /v1.0/me).userPrincipalName; Set-LabVar MG_LAB_ADMIN_UPN $upn; Set-LabVar MG_LAB_DOMAIN $upn.Split('@')[1]",
+    "# values to write down (the episode changes nothing in the tenant); the baseline is edited against them",
+    "$s = Invoke-MgGraphRequest -Uri /v1.0/admin/sharepoint/settings -OutputType PSObject; $s | Select-Object personalSiteDefaultStorageLimitInMB, deletedUserPersonalSiteRetentionPeriodInDays, isUnmanagedSyncAppForTenantRestricted, isSyncButtonHiddenOnPersonalSite, isMacSyncAppEnabled",
+    "$c = Get-Content ./src/onedrive-baseline.json -Raw | ConvertFrom-Json; $c.accounts.inactiveDays = 3; $c.accounts.nearFullPercent = 90; $c.settings.deletedUserPersonalSiteRetentionPeriodInDays = [int]$s.deletedUserPersonalSiteRetentionPeriodInDays + 7; $c | ConvertTo-Json -Depth 8 | Set-Content ./src/onedrive-baseline.lab.json   # one real difference on purpose; the lab is days old, production inactiveDays is 180",
+    "(Invoke-MgGraphRequest -Uri /v1.0/admin/reportSettings).displayConcealedNames   # must be True: first beat of the audit screen",
+    "./src/Invoke-OneDriveAudit.ps1 -BaselineFile ./src/onedrive-baseline.lab.json   # off-camera dry run (concealed warning expected)",
+    "# the VM: start it, checkpoint it, copy src and the tenant id to C:\\mg (unzip it inside the VM in the first step of the apply screen)",
+    "if ((Get-VM -Name CON-W11-01).State -ne 'Running') { Start-VM -Name CON-W11-01 }",
+    "Enable-VMIntegrationService -VMName CON-W11-01 -Name 'Guest Service Interface'",
+    "Checkpoint-VM -Name CON-W11-01 -SnapshotName pre-mglab-ep12",
+    "$zip = Join-Path $env:TEMP 'mglab-ep12-src.zip'; Remove-Item $zip -ErrorAction SilentlyContinue; Compress-Archive -Path ./src/* -DestinationPath $zip; Copy-VMFile -VMName CON-W11-01 -SourcePath $zip -DestinationPath C:\\mg\\ -FileSource Host -CreateFullPath -Force",
+    "$tf = Join-Path $env:TEMP 'mglab-tenant.txt'; Set-Content $tf (Invoke-MgGraphRequest -Uri /v1.0/organization).value[0].id; Copy-VMFile -VMName CON-W11-01 -SourcePath $tf -DestinationPath C:\\mg\\ -FileSource Host -CreateFullPath -Force; Remove-Item $tf"
+  ],
+  "screens": [
+    {
+      "name": "settings",
+      "kind": "browser",
+      "url": "https://admin.microsoft.com/sharepoint/settings",
+      "account": "labadmin",
+      "steps": [
+        "SharePoint admin center > Settings",
+        "Open OneDrive: show Storage limit (default) and Retention (days to keep a deleted user's OneDrive; documented default 30)",
+        "Open Sync: show the real values, change nothing"
+      ],
+      "mask": [
+        "tenant name in the top bar and admin URL",
+        "labadmin e-mail"
+      ]
+    },
+    {
+      "name": "audit",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\microsoft-365\\episodes\\12-onedrive-for-business\\src",
+      "prompt": "PS> ",
+      "commands": [
+        "Connect-MgGraph -Scopes SharePointTenantSettings.Read.All, Reports.Read.All, ReportSettings.ReadWrite.All -NoWelcome",
+        "./Invoke-OneDriveAudit.ps1 -BaselineFile ./onedrive-baseline.lab.json",
+        "#pause 4",
+        "# clear 'Conceal user, group, and site names in all reports' (admin center > Settings > Org settings > Services > Reports); same setting through Graph:",
+        "Invoke-MgGraphRequest -Method PATCH -Uri /v1.0/admin/reportSettings -Body @{ displayConcealedNames = $false }",
+        "Start-Sleep -Seconds 300",
+        "./Invoke-OneDriveAudit.ps1 -BaselineFile ./onedrive-baseline.lab.json -OutFile ./report.lab.md",
+        "#pause 8"
+      ]
+    },
+    {
+      "name": "apply",
+      "kind": "app",
+      "app": "Hyper-V Virtual Machine Connection (VMConnect) to CON-W11-01, elevated PowerShell 7 as alex.demo",
+      "steps": [
+        "In the VM, elevated PowerShell 7: Expand-Archive C:\\mg\\mglab-ep12-src.zip C:\\mg\\src -Force; cd C:\\mg\\src",
+        "Type: $tid = (Get-Content C:\\mg\\tenant.txt).Trim()",
+        "Type: Test-Path HKLM:\\SOFTWARE\\Policies\\Microsoft\\OneDrive   (False: a clean first run)",
+        "Type: ./Set-OneDriveSyncPolicy.ps1 -TenantId $tid -RollbackFile .\\onedrive-policy.rollback.json -WhatIf   (status WhatIf)",
+        "Type: Test-Path HKLM:\\SOFTWARE\\Policies\\Microsoft\\OneDrive; Test-Path .\\onedrive-policy.rollback.json   (both still False)",
+        "Type: ./Set-OneDriveSyncPolicy.ps1 -TenantId $tid -RollbackFile .\\onedrive-policy.rollback.json   (status Written)",
+        "Type: Get-Content .\\onedrive-policy.rollback.json   (it records that the values did not exist before; the tenant id in it is masked)",
+        "Type: ./Set-OneDriveSyncPolicy.ps1 -TenantId $tid -Check   (every row Compliant)",
+        "Open regedit at HKLM\\SOFTWARE\\Policies\\Microsoft\\OneDrive to show the real values",
+        "If anything fails (the real registry provider may not accept New-ItemProperty -PropertyType -Force as the mocks assume), record the error: it is a finding for the code"
+      ],
+      "mask": [
+        "tenant id in the commands, the output, the rollback file and regedit"
+      ],
+      "account": "alex.demo (local administrator of the VM)"
+    },
+    {
+      "name": "result",
+      "kind": "app",
+      "app": "VMConnect to CON-W11-01 (File Explorer, OneDrive) and a browser on the lab tenant",
+      "steps": [
+        "In the VM: start OneDrive (it signs in alex.demo silently with the Windows account, SilentAccountConfig)",
+        "Show File Explorer: Desktop, Documents and Pictures now under the OneDrive folder; right-click Documents > Properties > Location; the status icons",
+        "If nothing moves within a few minutes, say so on camera and show the Sync Activity Center: do not cut it, do not stage it",
+        "Browser, https://www.office.com/launch/onedrive as alex.demo: OneDrive shows the same three folders and files",
+        "In the VM run ./Set-OneDriveSyncPolicy.ps1 -TenantId $tid -Check again"
+      ],
+      "mask": [
+        "tenant id",
+        "OneDrive URL (contains the tenant name)",
+        "profile path if it shows the tenant name"
+      ],
+      "account": "alex.demo"
+    }
+  ],
+  "teardown": [
+    "Restore-VMCheckpoint -VMName CON-W11-01 -Name pre-mglab-ep12 -Confirm:$false; Remove-VMCheckpoint -VMName CON-W11-01 -Name pre-mglab-ep12   # undoes the policy values, known-folder redirection and C:\\mg on the VM",
+    "Connect-MgGraph -Scopes ReportSettings.ReadWrite.All -NoWelcome",
+    "Invoke-MgGraphRequest -Method PATCH -Uri /v1.0/admin/reportSettings -Body @{ displayConcealedNames = $true }   # the privacy default again",
+    "Remove-Item ./src/onedrive-baseline.lab.json, ./src/report.lab.md, (Join-Path $env:TEMP 'mglab-ep12-src.zip') -ErrorAction SilentlyContinue",
+    "Stop-VM -Name CON-W11-01   # optional: shut the VM down",
+    "Disconnect-MgGraph",
+    "# by hand: put taylor.demo's storage maximum back and delete the files uploaded for the demo; delete casey.former permanently if it was created",
+    "foreach ($n in 'MG_LAB_ADMIN_UPN', 'MG_LAB_DOMAIN') { [Environment]::SetEnvironmentVariable($n, $null, 'User') }"
+  ],
+  "needs": [
+    "tenant",
+    "vm:CON-W11-01 (Windows 11, Entra joined as alex.demo, from episode 7)",
+    "trial:Microsoft 365 E5 (OneDrive)",
+    "role:Global Administrator (labadmin)",
+    "guest-services:Hyper-V Guest Service Interface (for Copy-VMFile)",
+    "manual:a few days earlier the lab users upload files to their OneDrive; taylor.demo storage maximum 1 GB with over 900 MB uploaded (NearFull)",
+    "wait:a few days for usage report data"
+  ]
+}

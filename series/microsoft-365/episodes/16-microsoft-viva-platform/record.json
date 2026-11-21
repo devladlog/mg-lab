@@ -1,0 +1,113 @@
+{
+  "note": "Live-session recording of the screen scenes (series/tools/rec). prepare/teardown run on the laptop, not recorded; commands are typed and run for real. Screens that mix a terminal and a portal carry the second half in also[] (when = before/after the main part). Scenes read MG_LAB_ADMIN_UPN / MG_LAB_DOMAIN (set by prepare, derived from the signed-in labadmin).",
+  "prepare": [
+    "if (-not (Get-Module -ListAvailable -Name Microsoft.Graph.Authentication)) { Install-Module Microsoft.Graph.Authentication -Scope CurrentUser -Force -AllowClobber }",
+    "Connect-MgGraph -Scopes Community.ReadWrite.All, Community.Read.All, EngagementRole.Read.All, Group.ReadWrite.All, Group.Read.All, User.ReadBasic.All -NoWelcome  # owner signs in (browser)",
+    "function Set-LabVar($n, $v) { [Environment]::SetEnvironmentVariable($n, \"$v\", 'User'); Set-Item \"env:$n\" \"$v\" }",
+    "$upn = (Invoke-MgGraphRequest -Uri /v1.0/me).userPrincipalName; Set-LabVar MG_LAB_ADMIN_UPN $upn; Set-LabVar MG_LAB_DOMAIN $upn.Split('@')[1]",
+    "(Invoke-MgGraphRequest -Uri /v1.0/employeeExperience/roles).value | Select-Object displayName   # note the exact Engage role names in the README (the audit matches 'Network Admin')",
+    "$raw = (Get-Content ./src/communities.json -Raw) -replace '@contoso\\.com', \"@$env:MG_LAB_DOMAIN\"; $raw | Set-Content ./src/communities.lab.json",
+    "# the native-mode check cannot be scripted: if the Engage network is not native the communities API fails here and the episode stops",
+    "try { Invoke-MgGraphRequest -Uri /v1.0/employeeExperience/communities | Out-Null } catch { throw \"Communities API refused (network not in native mode, or consent missing): $($_.Exception.Message)\" }"
+  ],
+  "screens": [
+    {
+      "name": "apply",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\microsoft-365\\episodes\\16-microsoft-viva-platform\\src",
+      "prompt": "PS> ",
+      "commands": [
+        "./Invoke-VivaEngage.ps1 -ConfigFile ./communities.lab.json -Apply -WhatIf",
+        "./Invoke-VivaEngage.ps1 -ConfigFile ./communities.lab.json -Apply -Verbose -Confirm:$false",
+        "#pause 5",
+        "./Invoke-VivaEngage.ps1 -ConfigFile ./communities.lab.json -Apply -Confirm:$false",
+        "#pause 4"
+      ],
+      "also": [
+        {
+          "kind": "browser",
+          "url": "https://engage.cloud.microsoft/",
+          "account": "labadmin",
+          "steps": [
+            "Viva Engage on the web: the three new communities in the sidebar",
+            "Open one community: owners and members (the creator labadmin is also an owner)"
+          ],
+          "mask": [
+            "tenant name",
+            "UPNs",
+            "community and network ids in the address bar"
+          ],
+          "when": "after"
+        }
+      ],
+      "note": "Creating takes 31+ seconds per community (polling): do not cut it. The runner signs in as labadmin interactively on the first call (owner signs in)."
+    },
+    {
+      "name": "audit",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\microsoft-365\\episodes\\16-microsoft-viva-platform\\src",
+      "prompt": "PS> ",
+      "prepare": [
+        "# off camera: make the tenant look like a real quarter. Through the community groups; if Graph refuses, do it in the Viva Engage UI",
+        "Connect-MgGraph -Scopes Group.ReadWrite.All, GroupMember.ReadWrite.All -NoWelcome",
+        "$gq = { param($n) (Invoke-MgGraphRequest -Uri \"/v1.0/groups?`$filter=displayName eq '$n'\").value[0].id }; $falcon = & $gq 'Project Falcon - Launch'; $ask = & $gq 'Contoso Ask Anything'",
+        "$samId = (Invoke-MgGraphRequest -Uri \"/v1.0/users/sam.demo@$env:MG_LAB_DOMAIN\").id; Invoke-MgGraphRequest -Method DELETE -Uri \"/v1.0/groups/$falcon/owners/$samId/`$ref\"   # FewOwners",
+        "Invoke-MgGraphRequest -Method PATCH -Uri \"/v1.0/groups/$ask\" -Body @{ visibility = 'Private' }   # PrivacyDrift (configured public)",
+        "# NoOwner on 'Falcon Customer Stories' only if Engage allows it; jordan.demo as Network Administrator is done by hand in the Engage admin center (admins); set settings.maxNetworkAdmins to 2 in communities.lab.json for TooManyNetworkAdmins"
+      ],
+      "commands": [
+        "./Invoke-VivaEngage.ps1 -ConfigFile ./communities.lab.json -Audit -OutFile ./viva-audit.md -SaveInventory ./inventory.lab.json",
+        "#pause 8"
+      ],
+      "also": [
+        {
+          "kind": "app",
+          "app": "VS Code",
+          "steps": [
+            "Open the report in the editor: code ./viva-audit.md",
+            "Scroll the findings table; mask UPNs"
+          ],
+          "mask": [
+            "user principal names",
+            "ids"
+          ],
+          "when": "after"
+        }
+      ]
+    },
+    {
+      "name": "teams",
+      "kind": "browser",
+      "url": "https://teams.microsoft.com/",
+      "account": "alex.demo (own browser profile)",
+      "steps": [
+        "Teams: open the Viva Engage app: the community list shows the communities the script created",
+        "Open the Viva Connections app only if the tenant already has a home site: show the dashboard as it is; do not set it up and do not open any Copilot feature (no licence)",
+        "If Viva Connections is not available, record Engage only and say so"
+      ],
+      "mask": [
+        "tenant name",
+        "UPNs",
+        "ids in the address bar"
+      ]
+    }
+  ],
+  "teardown": [
+    "Connect-MgGraph -Scopes Group.ReadWrite.All -NoWelcome",
+    "foreach ($nm in 'Project Falcon - Launch', 'Contoso Ask Anything', 'Falcon Customer Stories') { foreach ($g in (Invoke-MgGraphRequest -Uri \"/v1.0/groups?`$filter=displayName eq '$nm'\").value) { Invoke-MgGraphRequest -Method DELETE -Uri \"/v1.0/groups/$($g.id)\" } }   # deletes the three communities' Microsoft 365 groups; never run this for communities that existed before the recording",
+    "Remove-Item ./src/communities.lab.json, ./src/inventory.lab.json, ./src/viva-audit.md -ErrorAction SilentlyContinue",
+    "Disconnect-MgGraph",
+    "# by hand: remove jordan.demo as Network Administrator (Engage admin center); clear the browser profiles' sign-ins",
+    "foreach ($n in 'MG_LAB_ADMIN_UPN', 'MG_LAB_DOMAIN') { [Environment]::SetEnvironmentVariable($n, $null, 'User') }"
+  ],
+  "needs": [
+    "tenant",
+    "trial:Microsoft 365 E5 (Viva Engage, Viva Connections)",
+    "viva-engage:network in native mode (stop and tell the lead otherwise)",
+    "role:labadmin may create communities (not verified)",
+    "browser-profile:alex.demo",
+    "manual:jordan.demo as Network Administrator for the audit screen"
+  ]
+}

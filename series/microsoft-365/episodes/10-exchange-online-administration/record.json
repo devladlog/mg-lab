@@ -1,0 +1,144 @@
+{
+  "note": "Live-session recording of the screen scenes (series/tools/rec). prepare/teardown run on the laptop, not recorded; commands are typed and run for real. Screens that mix a terminal and a portal carry the second half in also[] (when = before/after the main part). Scenes read MG_LAB_ADMIN_UPN / MG_LAB_DOMAIN (set by prepare, derived from the signed-in labadmin).",
+  "prepare": [
+    "if (-not (Get-Module -ListAvailable -Name ExchangeOnlineManagement)) { Install-Module ExchangeOnlineManagement -Scope CurrentUser -Force -AllowClobber }",
+    "if (-not (Get-Module -ListAvailable -Name Microsoft.Graph.Authentication)) { Install-Module Microsoft.Graph.Authentication -Scope CurrentUser -Force -AllowClobber }",
+    "Connect-MgGraph -Scopes User.Read -NoWelcome  # owner signs in (browser); only to read the labadmin address",
+    "function Set-LabVar($n, $v) { [Environment]::SetEnvironmentVariable($n, \"$v\", 'User'); Set-Item \"env:$n\" \"$v\" }",
+    "$upn = (Invoke-MgGraphRequest -Uri /v1.0/me).userPrincipalName; Set-LabVar MG_LAB_ADMIN_UPN $upn; Set-LabVar MG_LAB_DOMAIN $upn.Split('@')[1]",
+    "Connect-ExchangeOnline -UserPrincipalName $env:MG_LAB_ADMIN_UPN -ShowBanner:$false  # owner signs in (browser)",
+    "# seeded leaks use reserved example addresses only; nothing is ever delivered",
+    "Set-Mailbox -Identity \"riley.demo@$env:MG_LAB_DOMAIN\" -ForwardingSmtpAddress 'riley.private@example.com' -DeliverToMailboxAndForward $false",
+    "try { New-InboxRule -Mailbox \"taylor.demo@$env:MG_LAB_DOMAIN\" -Name 'MG Lab forward' -ForwardTo 'taylor.private@example.com' -ErrorAction Stop | Out-Null } catch { Write-Warning \"Inbox rule refused: $($_.Exception.Message). Create it in Outlook on the web as taylor.demo (Settings > Mail > Rules) or skip that beat.\" }",
+    "if (-not (Get-TransportRule -Identity 'MG Lab test copy' -ErrorAction SilentlyContinue)) { New-TransportRule -Name 'MG Lab test copy' -From \"sam.demo@$env:MG_LAB_DOMAIN\" -BlindCopyTo 'counsel@example.org' -Mode Audit -Enabled $false | Out-Null }   # no comment on purpose, left disabled",
+    "$c = Get-Content ./src/exchange.json -Raw | ConvertFrom-Json; $c.fix.allowedRules = @('MailboxForwardingExternal'); $c | ConvertTo-Json -Depth 8 | Set-Content ./src/exchange.lab.json",
+    "[pscustomobject]@{ removeExtra = $false; mailboxes = @([pscustomobject]@{ alias = 'mglab-support'; displayName = 'MG Lab Support'; fullAccess = @(\"sam.demo@$env:MG_LAB_DOMAIN\"); sendAs = @(\"sam.demo@$env:MG_LAB_DOMAIN\") }) } | ConvertTo-Json -Depth 6 | Set-Content ./src/shared-mailboxes.lab.json",
+    "./src/Invoke-ExchangeAdmin.ps1 -SaveSnapshot ./src/snapshot.lab.json -OutFile ./src/audit.lab.md   # off-camera baseline: any CollectionError row must be fixed, not recorded around"
+  ],
+  "screens": [
+    {
+      "name": "audit",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\microsoft-365\\episodes\\10-exchange-online-administration\\src",
+      "prompt": "PS> ",
+      "commands": [
+        "Connect-ExchangeOnline -UserPrincipalName $env:MG_LAB_ADMIN_UPN -ShowBanner:$false",
+        "./Invoke-ExchangeAdmin.ps1 -OutFile ./audit.lab.md",
+        "#pause 8"
+      ]
+    },
+    {
+      "name": "fix",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\microsoft-365\\episodes\\10-exchange-online-administration\\src",
+      "prompt": "PS> ",
+      "commands": [
+        "Connect-ExchangeOnline -UserPrincipalName $env:MG_LAB_ADMIN_UPN -ShowBanner:$false",
+        "./Invoke-ExchangeAdmin.ps1 -Mode Fix -ConfigFile ./exchange.lab.json -RollbackFile ./rollback.lab.json -WhatIf",
+        "Test-Path ./rollback.lab.json",
+        "./Invoke-ExchangeAdmin.ps1 -Mode Fix -ConfigFile ./exchange.lab.json -RollbackFile ./rollback.lab.json -Confirm:$false",
+        "Get-Content ./rollback.lab.json",
+        "./Invoke-ExchangeAdmin.ps1 -ConfigFile ./exchange.lab.json -OutFile ./audit.lab.md",
+        "#pause 3",
+        "./Invoke-ExchangeAdmin.ps1 -Mode Restore -RollbackFile ./rollback.lab.json",
+        "#pause 4"
+      ],
+      "also": [
+        {
+          "kind": "browser",
+          "url": "https://admin.exchange.microsoft.com/",
+          "account": "labadmin",
+          "steps": [
+            "Between the Fix and the Restore: Exchange admin center > Recipients > Mailboxes > riley.demo > Manage email forwarding: forwarding is off",
+            "After the Restore: refresh, forwarding is back on",
+            "Show rollback.lab.json with the mailbox address masked"
+          ],
+          "mask": [
+            "tenant domain in every address",
+            "admin UPN"
+          ],
+          "when": "between"
+        }
+      ],
+      "note": "The Fix plan covers every mailbox with external forwarding that is not in forwarding.ignoreMailboxes; only riley.demo is seeded. If another mailbox shows up in the -WhatIf plan, it is a real finding: stop and add it to forwarding.ignoreMailboxes in exchange.lab.json before the confirmed run."
+    },
+    {
+      "name": "shared",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\microsoft-365\\episodes\\10-exchange-online-administration\\src",
+      "prompt": "PS> ",
+      "commands": [
+        "Connect-ExchangeOnline -UserPrincipalName $env:MG_LAB_ADMIN_UPN -ShowBanner:$false",
+        "./Invoke-ExchangeAdmin.ps1 -Mode SyncSharedMailboxes -DesiredFile ./shared-mailboxes.lab.json -WhatIf",
+        "./Invoke-ExchangeAdmin.ps1 -Mode SyncSharedMailboxes -DesiredFile ./shared-mailboxes.lab.json -Confirm:$false",
+        "./Invoke-ExchangeAdmin.ps1 -Mode SyncSharedMailboxes -DesiredFile ./shared-mailboxes.lab.json -Confirm:$false",
+        "#pause 4"
+      ],
+      "also": [
+        {
+          "kind": "browser",
+          "url": "https://outlook.office.com/mail/",
+          "account": "sam.demo",
+          "steps": [
+            "Outlook on the web as sam.demo: open the shared mailbox 'MG Lab Support' (right-click the folder list > Add shared folder or mailbox, or wait for auto-mapping)",
+            "New message from the shared mailbox to alex.demo, Send"
+          ],
+          "mask": [
+            "addresses beyond the lab aliases",
+            "tenant domain"
+          ],
+          "when": "after"
+        },
+        {
+          "kind": "terminal",
+          "steps": [],
+          "mask": [],
+          "when": "after",
+          "target": "host",
+          "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\microsoft-365\\episodes\\10-exchange-online-administration\\src",
+          "prompt": "PS> ",
+          "commands": [
+            "Connect-ExchangeOnline -UserPrincipalName $env:MG_LAB_ADMIN_UPN -ShowBanner:$false",
+            "./Invoke-ExchangeAdmin.ps1 -Mode Trace -ConfigFile ./exchange.lab.json -SenderAddress mglab-support@$env:MG_LAB_DOMAIN -Hours 1",
+            "#pause 4",
+            "./Invoke-ExchangeAdmin.ps1 -ConfigFile ./exchange.lab.json -OutFile ./audit.lab.md",
+            "#pause 5"
+          ]
+        },
+        {
+          "kind": "browser",
+          "url": "https://admin.microsoft.com/#/users",
+          "account": "labadmin",
+          "steps": [
+            "Microsoft 365 admin center > Users > Active users > MG Lab Support > Block sign-in",
+            "Re-run the audit in the terminal: the SharedMailboxSignInEnabled finding is gone"
+          ],
+          "mask": [
+            "tenant domain"
+          ],
+          "when": "after"
+        }
+      ]
+    }
+  ],
+  "teardown": [
+    "Connect-ExchangeOnline -UserPrincipalName $env:MG_LAB_ADMIN_UPN -ShowBanner:$false  # owner signs in (browser)",
+    "Set-Mailbox -Identity \"riley.demo@$env:MG_LAB_DOMAIN\" -ForwardingSmtpAddress $null -DeliverToMailboxAndForward $false",
+    "Get-InboxRule -Mailbox \"taylor.demo@$env:MG_LAB_DOMAIN\" | Where-Object Name -eq 'MG Lab forward' | Remove-InboxRule -Confirm:$false",
+    "Remove-TransportRule -Identity 'MG Lab test copy' -Confirm:$false -ErrorAction SilentlyContinue",
+    "Remove-Mailbox -Identity \"mglab-support@$env:MG_LAB_DOMAIN\" -Confirm:$false -ErrorAction SilentlyContinue",
+    "Remove-Item ./src/exchange.lab.json, ./src/shared-mailboxes.lab.json, ./src/snapshot.lab.json, ./src/audit.lab.md, ./src/rollback.lab.json -ErrorAction SilentlyContinue",
+    "Disconnect-ExchangeOnline -Confirm:$false; Disconnect-MgGraph",
+    "foreach ($n in 'MG_LAB_ADMIN_UPN', 'MG_LAB_DOMAIN') { [Environment]::SetEnvironmentVariable($n, $null, 'User') }"
+  ],
+  "needs": [
+    "tenant",
+    "trial:Microsoft 365 E5 (Exchange Online)",
+    "role:Global Administrator or Exchange Administrator (labadmin)",
+    "browser-profile:sam.demo",
+    "wait:message trace data after the shared-mailbox message can take minutes"
+  ]
+}

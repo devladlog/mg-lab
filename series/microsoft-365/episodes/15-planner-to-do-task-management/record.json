@@ -1,0 +1,157 @@
+{
+  "note": "Live-session recording of the screen scenes (series/tools/rec). prepare/teardown run on the laptop, not recorded; commands are typed and run for real. Screens that mix a terminal and a portal carry the second half in also[] (when = before/after the main part). Scenes read MG_LAB_ADMIN_UPN / MG_LAB_DOMAIN (set by prepare, derived from the signed-in labadmin).",
+  "prepare": [
+    "if (-not (Get-Module -ListAvailable -Name Microsoft.Graph.Authentication)) { Install-Module Microsoft.Graph.Authentication -Scope CurrentUser -Force -AllowClobber }",
+    "Connect-MgGraph -Scopes Group.ReadWrite.All, GroupMember.ReadWrite.All, Tasks.ReadWrite, User.ReadBasic.All, User.Read.All -NoWelcome  # owner signs in (browser)",
+    "function Set-LabVar($n, $v) { [Environment]::SetEnvironmentVariable($n, \"$v\", 'User'); Set-Item \"env:$n\" \"$v\" }",
+    "$upn = (Invoke-MgGraphRequest -Uri /v1.0/me).userPrincipalName; Set-LabVar MG_LAB_ADMIN_UPN $upn; Set-LabVar MG_LAB_DOMAIN $upn.Split('@')[1]",
+    "function Get-LabUserId($n) { (Invoke-MgGraphRequest -Uri \"/v1.0/users/$n@$env:MG_LAB_DOMAIN\").id }",
+    "$gs = (Invoke-MgGraphRequest -Uri \"/v1.0/groups?`$filter=groupTypes/any(c:c eq 'Unified')&`$select=id,displayName&`$top=999\").value | Where-Object displayName -match '^(TEAM_.*_)?Project Falcon$' | Select-Object -First 1; if (-not $gs) { throw 'Group Project Falcon not found: recreate it (episode 2) before recording' }; Set-Content (Join-Path $env:TEMP 'mglab-ep15-group.txt') $gs.id; Set-LabVar MG_FALCON_GROUP $gs.id",
+    "# labadmin and the four assignees must be MEMBERS of the group (Global Administrator is not enough to create a plan); note who was already a member",
+    "$was = (Invoke-MgGraphRequest -Uri \"/v1.0/groups/$($gs.id)/members?`$select=userPrincipalName\").value.userPrincipalName; $was | Set-Content (Join-Path $env:TEMP 'mglab-ep15-members.txt')",
+    "foreach ($u in 'sam.demo', 'jordan.demo', 'riley.demo', 'taylor.demo') { $upn = \"$u@$env:MG_LAB_DOMAIN\"; if ($upn -notin $was) { Invoke-MgGraphRequest -Method POST -Uri \"/v1.0/groups/$($gs.id)/members/`$ref\" -Body @{ '@odata.id' = \"https://graph.microsoft.com/v1.0/users/$(Get-LabUserId $u)\" } } }; if ($env:MG_LAB_ADMIN_UPN -notin $was) { Invoke-MgGraphRequest -Method POST -Uri \"/v1.0/groups/$($gs.id)/members/`$ref\" -Body @{ '@odata.id' = \"https://graph.microsoft.com/v1.0/users/$((Invoke-MgGraphRequest -Uri /v1.0/me).id)\" } }",
+    "$raw = (Get-Content ./src/plan.json -Raw) -replace '@contoso\\.com', \"@$env:MG_LAB_DOMAIN\"; $p = $raw | ConvertFrom-Json; $p.plan.groupId = $gs.id",
+    "foreach ($t in $p.tasks) { if ($t.title -in 'Draft customer announcement', 'Fix the three open blocker bugs') { $t.assignees = @(@($t.assignees) + \"alex.demo@$env:MG_LAB_DOMAIN\" | Select-Object -Unique) } }; $p | ConvertTo-Json -Depth 10 | Set-Content ./src/plan.lab.json   # Alex now has three tasks in the focus window"
+  ],
+  "screens": [
+    {
+      "name": "apply",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\microsoft-365\\episodes\\15-planner-to-do-task-management\\src",
+      "prompt": "PS> ",
+      "commands": [
+        "./Invoke-PlannerTodo.ps1 -PlanFile ./plan.lab.json -ApplyPlan -WhatIf",
+        "./Invoke-PlannerTodo.ps1 -PlanFile ./plan.lab.json -ApplyPlan -Confirm:$false",
+        "#pause 5",
+        "./Invoke-PlannerTodo.ps1 -PlanFile ./plan.lab.json -ApplyPlan -Confirm:$false",
+        "#pause 3"
+      ],
+      "also": [
+        {
+          "kind": "browser",
+          "url": "https://planner.cloud.microsoft/",
+          "account": "labadmin",
+          "steps": [
+            "Planner for the web: open the plan 'Project Falcon - Launch Readiness'",
+            "Board view grouped by bucket: Plan, Build, Launch in that order",
+            "Open one card: labels, assignees, due date and checklist"
+          ],
+          "mask": [
+            "group object id and plan id in the address bar",
+            "tenant name"
+          ],
+          "when": "after"
+        }
+      ]
+    },
+    {
+      "name": "audit",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\microsoft-365\\episodes\\15-planner-to-do-task-management\\src",
+      "prompt": "PS> ",
+      "prepare": [
+        "# off camera: make the plan look like a real week (Planner API with the task etags)",
+        "Connect-MgGraph -Scopes Tasks.ReadWrite, Group.Read.All -NoWelcome",
+        "$gid = (Get-Content (Join-Path $env:TEMP 'mglab-ep15-group.txt')).Trim(); $plan = (Invoke-MgGraphRequest -Uri \"/v1.0/groups/$gid/planner/plans\").value | Where-Object title -eq 'Project Falcon - Launch Readiness'; $tasks = (Invoke-MgGraphRequest -Uri \"/v1.0/planner/plans/$($plan.id)/tasks\").value",
+        "$set = { param($t, $b) Invoke-MgGraphRequest -Method PATCH -Uri \"/v1.0/planner/tasks/$($t.id)\" -Headers @{ 'If-Match' = $t.'@odata.etag'; Prefer = 'return=minimal' } -Body $b | Out-Null }",
+        "& $set ($tasks | Where-Object title -eq 'Confirm launch date with sponsors') @{ dueDateTime = (Get-Date).AddDays(-5).ToUniversalTime().ToString('yyyy-MM-ddT17:00:00Z') }",
+        "& $set ($tasks | Where-Object title -eq 'Freeze the release branch') @{ percentComplete = 100 }   # completed with its checklist left open; 'Retire the old landing page' stays unassigned and without a due date"
+      ],
+      "commands": [
+        "./Invoke-PlannerTodo.ps1 -PlanFile ./plan.lab.json -Audit -OutFile ./planner-audit.md -SaveInventory ./inventory.lab.json",
+        "#pause 8"
+      ],
+      "also": [
+        {
+          "kind": "app",
+          "app": "VS Code",
+          "steps": [
+            "Open the report in the editor: code ./planner-audit.md",
+            "Scroll the findings table; mask UPNs"
+          ],
+          "mask": [
+            "user principal names",
+            "ids"
+          ],
+          "when": "after"
+        }
+      ]
+    },
+    {
+      "name": "todo",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\microsoft-365\\episodes\\15-planner-to-do-task-management\\src",
+      "prompt": "PS> ",
+      "commands": [
+        "Disconnect-MgGraph",
+        "# sign in as alex.demo (delegated: To Do tasks do not support application permissions)",
+        "Connect-MgGraph -Scopes Tasks.ReadWrite -NoWelcome",
+        "./Invoke-PlannerTodo.ps1 -PlanFile ./plan.lab.json -FocusList -WhatIf",
+        "./Invoke-PlannerTodo.ps1 -PlanFile ./plan.lab.json -FocusList -Confirm:$false",
+        "#pause 5"
+      ],
+      "also": [
+        {
+          "kind": "browser",
+          "url": "https://to-do.office.com/tasks/",
+          "account": "alex.demo (own profile; the owner signs in)",
+          "steps": [
+            "Microsoft To Do for the web as alex.demo: the list 'Falcon focus' with importance and due dates",
+            "Open one task: the linked resource points to Microsoft Planner (note how the due date shows)",
+            "Planner as alex.demo: mark 'Confirm launch date with sponsors' complete"
+          ],
+          "mask": [
+            "tenant name",
+            "UPNs"
+          ],
+          "when": "after"
+        },
+        {
+          "kind": "terminal",
+          "steps": [],
+          "mask": [],
+          "when": "after",
+          "target": "host",
+          "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\microsoft-365\\episodes\\15-planner-to-do-task-management\\src",
+          "prompt": "PS> ",
+          "commands": [
+            "./Invoke-PlannerTodo.ps1 -PlanFile ./plan.lab.json -FocusList -Confirm:$false",
+            "#pause 4"
+          ]
+        },
+        {
+          "kind": "browser",
+          "url": "https://to-do.office.com/tasks/",
+          "account": "alex.demo",
+          "steps": [
+            "To Do: the task is checked off"
+          ],
+          "mask": [
+            "tenant name"
+          ],
+          "when": "after"
+        }
+      ]
+    }
+  ],
+  "teardown": [
+    "Connect-MgGraph -Scopes Tasks.ReadWrite, Group.ReadWrite.All, GroupMember.ReadWrite.All -NoWelcome  # owner signs in as labadmin",
+    "$gid = (Get-Content (Join-Path $env:TEMP 'mglab-ep15-group.txt')).Trim(); foreach ($pl in (Invoke-MgGraphRequest -Uri \"/v1.0/groups/$gid/planner/plans\").value | Where-Object title -eq 'Project Falcon - Launch Readiness') { $e = (Invoke-MgGraphRequest -Uri \"/v1.0/planner/plans/$($pl.id)\").'@odata.etag'; Invoke-MgGraphRequest -Method DELETE -Uri \"/v1.0/planner/plans/$($pl.id)\" -Headers @{ 'If-Match' = $e } }",
+    "$was = Get-Content (Join-Path $env:TEMP 'mglab-ep15-members.txt'); foreach ($m in (Invoke-MgGraphRequest -Uri \"/v1.0/groups/$gid/members?`$select=id,userPrincipalName\").value) { if ($m.userPrincipalName -notin $was) { Invoke-MgGraphRequest -Method DELETE -Uri \"/v1.0/groups/$gid/members/$($m.id)/`$ref\" } }",
+    "Remove-Item ./src/plan.lab.json, ./src/inventory.lab.json, ./src/planner-audit.md, (Join-Path $env:TEMP 'mglab-ep15-group.txt'), (Join-Path $env:TEMP 'mglab-ep15-members.txt') -ErrorAction SilentlyContinue",
+    "Disconnect-MgGraph",
+    "# by hand: To Do for the web as alex.demo: delete the list 'Falcon focus'; clear the browser profiles' sign-ins",
+    "foreach ($n in 'MG_LAB_ADMIN_UPN', 'MG_LAB_DOMAIN', 'MG_FALCON_GROUP') { [Environment]::SetEnvironmentVariable($n, $null, 'User') }"
+  ],
+  "needs": [
+    "tenant",
+    "trial:Microsoft 365 E5 (Planner, To Do; basic plans only)",
+    "role:labadmin must be a member of the Project Falcon group",
+    "browser-profile:alex.demo",
+    "owner signs in as alex.demo (delegated) during the todo screen and as labadmin again afterwards",
+    "episode-2 group Project Falcon"
+  ]
+}

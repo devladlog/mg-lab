@@ -1,0 +1,173 @@
+{
+  "note": "Live-session recording of the screen scenes (series/tools/rec). prepare/teardown run on the laptop, not recorded; commands are typed and run for real. Screens that mix a terminal and a portal carry the second half in also[] (when = before/after the main part). Scenes read MG_LAB_ADMIN_UPN / MG_LAB_DOMAIN (set by prepare, derived from the signed-in labadmin).",
+  "prepare": [
+    "if (-not (Get-Module -ListAvailable -Name ExchangeOnlineManagement)) { Install-Module ExchangeOnlineManagement -Scope CurrentUser -Force -AllowClobber }",
+    "if (-not (Get-Module -ListAvailable -Name Microsoft.Graph.Authentication)) { Install-Module Microsoft.Graph.Authentication -Scope CurrentUser -Force -AllowClobber }",
+    "Connect-MgGraph -Scopes Organization.Read.All, User.Read -NoWelcome  # owner signs in (browser)",
+    "function Set-LabVar($n, $v) { [Environment]::SetEnvironmentVariable($n, \"$v\", 'User'); Set-Item \"env:$n\" \"$v\" }",
+    "$upn = (Invoke-MgGraphRequest -Uri /v1.0/me).userPrincipalName; Set-LabVar MG_LAB_ADMIN_UPN $upn; Set-LabVar MG_LAB_DOMAIN $upn.Split('@')[1]",
+    "$org = (Invoke-MgGraphRequest -Uri /v1.0/organization).value[0]; $initial = ($org.verifiedDomains | Where-Object isInitial).name; $verified = @($org.verifiedDomains.name)",
+    "$p = Get-Content ./src/migration.json -Raw | ConvertFrom-Json; $p.waves.maxMailboxesPerWave = 3; $p.directory.upnFix.allowedRules = @('UpnNonRoutable'); $p.directory.upnFix.targetSuffix = $initial; $p | ConvertTo-Json -Depth 8 | Set-Content ./src/migration.lab.json",
+    "# safety net: checkpoint of the shared domain controller before anything is written to AD",
+    "Checkpoint-VM -Name CON-DC01 -SnapshotName pre-mglab-ep17",
+    "$s = New-PSSession -VMName CON-SRV02 -Credential $cred",
+    "Invoke-Command -Session $s { New-Item -ItemType Directory -Force C:\\mg | Out-Null; Remove-Item C:\\mg\\src -Recurse -Force -ErrorAction SilentlyContinue }",
+    "Copy-Item -ToSession $s -Path (Join-Path (Get-Location).Path 'src') -Destination C:\\mg\\src -Recurse -Force; Copy-Item -ToSession $s -Path ./src/migration.lab.json -Destination C:\\mg\\src\\migration.lab.json -Force",
+    "Invoke-Command -Session $s -ScriptBlock { param($v) Set-Content C:\\mg\\verified-domains.txt -Value $v } -ArgumentList (, $verified)",
+    "$v = $PSVersionTable.PSVersion.ToString(); $msi = Join-Path $env:TEMP \"PowerShell-$v-win-x64.msi\"",
+    "if (-not (Invoke-Command -Session $s { Test-Path 'C:\\Program Files\\PowerShell\\7\\pwsh.exe' })) { if (-not (Test-Path $msi)) { Invoke-WebRequest \"https://github.com/PowerShell/PowerShell/releases/download/v$v/PowerShell-$v-win-x64.msi\" -OutFile $msi }; Copy-Item -ToSession $s -Path $msi -Destination C:\\mg\\pwsh.msi -Force; Invoke-Command -Session $s { Start-Process msiexec.exe '/i C:\\mg\\pwsh.msi /quiet ADD_PATH=1 ENABLE_PSREMOTING=1' -Wait } }",
+    "Invoke-Command -Session $s { Install-WindowsFeature RSAT-AD-PowerShell | Out-Null }",
+    "# seed the lab OU (six disabled hy.* accounts) and register the tenant's initial domain as a UPN suffix (removed in teardown)",
+    "Invoke-Command -Session $s { Set-Location C:\\mg\\src\\setup; ./New-LabHybridOu.ps1 -Server 10.50.0.10 -Confirm:$false }",
+    "Invoke-Command -Session $s -ScriptBlock { param($x) Get-ADForest -Server 10.50.0.10 | Set-ADForest -UPNSuffixes @{ Add = $x } -Server 10.50.0.10 } -ArgumentList $initial",
+    "Remove-PSSession $s",
+    "# Exchange Online: departments (previous values saved for teardown), shared mailbox mglab-finance with sam.demo as delegate",
+    "Connect-ExchangeOnline -UserPrincipalName $env:MG_LAB_ADMIN_UPN -ShowBanner:$false  # owner signs in (browser)",
+    "$dep = @{ 'alex.demo' = 'IT'; 'sam.demo' = 'Finance'; 'taylor.demo' = 'Finance'; 'jordan.demo' = 'Sales'; 'riley.demo' = 'Sales' }; $old = @{}; foreach ($k in $dep.Keys) { $old[$k] = (Get-User \"$k@$env:MG_LAB_DOMAIN\").Department; Set-User \"$k@$env:MG_LAB_DOMAIN\" -Department $dep[$k] }; $old | ConvertTo-Json | Set-Content (Join-Path $env:TEMP 'mglab-ep17-departments.json')",
+    "if (-not (Get-Mailbox -Identity \"mglab-finance@$env:MG_LAB_DOMAIN\" -ErrorAction SilentlyContinue)) { New-Mailbox -Shared -Name 'MG Lab Finance' -DisplayName 'MG Lab Finance' -Alias mglab-finance | Out-Null; Start-Sleep -Seconds 20 }; Add-MailboxPermission -Identity \"mglab-finance@$env:MG_LAB_DOMAIN\" -User \"sam.demo@$env:MG_LAB_DOMAIN\" -AccessRights FullAccess -InheritanceType All -AutoMapping $false | Out-Null"
+  ],
+  "screens": [
+    {
+      "name": "strategy",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\microsoft-365\\episodes\\17-hybrid-migration-strategies\\src",
+      "prompt": "PS> ",
+      "commands": [
+        "./Invoke-HybridMigration.ps1 -Mode Strategy -Source Exchange2010OrLater -Mailboxes 120",
+        "#pause 4",
+        "./Invoke-HybridMigration.ps1 -Mode Strategy -Source Exchange2010OrLater -Mailboxes 400",
+        "#pause 4",
+        "./Invoke-HybridMigration.ps1 -Mode Strategy -Source Exchange2007 -Mailboxes 800",
+        "#pause 5"
+      ],
+      "also": [
+        {
+          "kind": "browser",
+          "url": "https://learn.microsoft.com/exchange/mailbox-migration/decide-on-a-migration-path",
+          "account": "none (public page)",
+          "steps": [
+            "Next to the terminal: the Learn page 'Decide on a migration path in Exchange Online' with its table visible"
+          ],
+          "mask": [],
+          "when": "before"
+        }
+      ]
+    },
+    {
+      "name": "directory",
+      "kind": "terminal",
+      "target": "CON-SRV02",
+      "workdir": "C:\\mg\\src",
+      "prompt": "PS C:\\mg\\src> ",
+      "configurationName": "PowerShell.7",
+      "commands": [
+        "./Invoke-HybridMigration.ps1 -Mode Directory -SearchBase 'OU=MG Lab Hybrid,DC=lab,DC=contoso,DC=com' -Server 10.50.0.10 -VerifiedDomain (Get-Content C:\\mg\\verified-domains.txt) -OutFile ./directory.lab.md",
+        "#pause 8"
+      ],
+      "also": [
+        {
+          "kind": "browser",
+          "url": "https://entra.microsoft.com/",
+          "account": "labadmin",
+          "steps": [
+            "Before the terminal: Entra admin center > Settings > Domain names (or Microsoft 365 admin center > Settings > Domains): the verified domains; lab.contoso.com is not in the list"
+          ],
+          "mask": [
+            "tenant name",
+            "initial domain name"
+          ],
+          "when": "before"
+        }
+      ],
+      "note": "-VerifiedDomain is used instead of -LiveDomains because the Graph sign-in is interactive and CON-SRV02 is reached through PowerShell Direct (no browser); the list is the verified domains read from the tenant. Say so on camera."
+    },
+    {
+      "name": "fix",
+      "kind": "terminal",
+      "target": "CON-SRV02",
+      "workdir": "C:\\mg\\src",
+      "prompt": "PS C:\\mg\\src> ",
+      "configurationName": "PowerShell.7",
+      "commands": [
+        "./Invoke-HybridMigration.ps1 -Mode FixUpn -SearchBase 'OU=MG Lab Hybrid,DC=lab,DC=contoso,DC=com' -Server 10.50.0.10 -VerifiedDomain (Get-Content C:\\mg\\verified-domains.txt) -ConfigFile ./migration.lab.json -RollbackFile ./rollback.lab.json -WhatIf",
+        "Test-Path ./rollback.lab.json",
+        "# real change for ONE account only: the search base is hy.alex's own distinguished name, still inside the lab OU",
+        "./Invoke-HybridMigration.ps1 -Mode FixUpn -SearchBase 'CN=hy.alex,OU=MG Lab Hybrid,DC=lab,DC=contoso,DC=com' -Server 10.50.0.10 -VerifiedDomain (Get-Content C:\\mg\\verified-domains.txt) -ConfigFile ./migration.lab.json -RollbackFile ./rollback.lab.json -Confirm:$false",
+        "Get-Content ./rollback.lab.json",
+        "Get-ADUser hy.alex -Server 10.50.0.10 | Select-Object Name, UserPrincipalName",
+        "#pause 3",
+        "./Invoke-HybridMigration.ps1 -Mode RestoreUpn -RollbackFile ./rollback.lab.json -Server 10.50.0.10 -Confirm:$false",
+        "Get-ADUser hy.alex -Server 10.50.0.10 | Select-Object Name, UserPrincipalName",
+        "#pause 4"
+      ],
+      "also": [
+        {
+          "kind": "app",
+          "app": "Active Directory Users and Computers (on CON-SRV02, VMConnect)",
+          "steps": [
+            "On the CON-SRV02 console: Active Directory Users and Computers > MG Lab Hybrid > hy.alex > Account tab: between the Fix and the Restore the suffix is the tenant's initial domain; after the Restore it is lab.contoso.com again",
+            "Show rollback.lab.json"
+          ],
+          "mask": [
+            "tenant initial domain name"
+          ],
+          "when": "between"
+        }
+      ],
+      "note": "Never run the fix with a -SearchBase outside the lab OU. Answering Yes for one account only is done by narrowing the search base to hy.alex (not verified that Get-ADUser accepts a user DN as search base: if it does not, run the -WhatIf plan and answer the confirmation prompt by hand for hy.alex only)."
+    },
+    {
+      "name": "waves",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\microsoft-365\\episodes\\17-hybrid-migration-strategies\\src",
+      "prompt": "PS> ",
+      "commands": [
+        "Connect-ExchangeOnline -UserPrincipalName $env:MG_LAB_ADMIN_UPN -ShowBanner:$false",
+        "./Invoke-HybridMigration.ps1 -Mode Waves -FromExchangeOnline -PilotUsers alex.demo@$env:MG_LAB_DOMAIN -ConfigFile ./migration.lab.json -WaveDirectory ./waves -OutFile ./waves.lab.md",
+        "#pause 6",
+        "Import-Csv ./waves/wave-01.csv",
+        "#pause 4"
+      ],
+      "also": [
+        {
+          "kind": "browser",
+          "url": "https://admin.exchange.microsoft.com/",
+          "account": "labadmin",
+          "steps": [
+            "Exchange admin center > Migration: no batches and no endpoints (real, empty)"
+          ],
+          "mask": [
+            "tenant domain in every address"
+          ],
+          "when": "after"
+        }
+      ],
+      "note": "The printed New-MigrationBatch text is labelled Not run: there is no on-premises Exchange endpoint in the lab; say so on screen. No Large wave unless a mailbox is at or above 40 GB (none is)."
+    }
+  ],
+  "teardown": [
+    "$s = New-PSSession -VMName CON-SRV02 -Credential $cred",
+    "Invoke-Command -Session $s { if (Test-Path C:\\mg\\src\\rollback.lab.json) { Set-Location C:\\mg\\src; ./Invoke-HybridMigration.ps1 -Mode RestoreUpn -RollbackFile ./rollback.lab.json -Server 10.50.0.10 -Confirm:$false }; Set-Location C:\\mg\\src\\setup; ./Remove-LabHybridOu.ps1 -Server 10.50.0.10 -Confirm:$false }",
+    "Connect-MgGraph -Scopes Organization.Read.All -NoWelcome; $initial = ((Invoke-MgGraphRequest -Uri /v1.0/organization).value[0].verifiedDomains | Where-Object isInitial).name",
+    "Invoke-Command -Session $s -ScriptBlock { param($x) Get-ADForest -Server 10.50.0.10 | Set-ADForest -UPNSuffixes @{ Remove = $x } -Server 10.50.0.10 } -ArgumentList $initial",
+    "Invoke-Command -Session $s { Remove-Item C:\\mg -Recurse -Force -ErrorAction SilentlyContinue }; Remove-PSSession $s",
+    "Remove-VMCheckpoint -VMName CON-DC01 -Name pre-mglab-ep17   # the safety-net checkpoint",
+    "Connect-ExchangeOnline -UserPrincipalName $env:MG_LAB_ADMIN_UPN -ShowBanner:$false  # owner signs in (browser)",
+    "Remove-Mailbox -Identity \"mglab-finance@$env:MG_LAB_DOMAIN\" -Confirm:$false -ErrorAction SilentlyContinue",
+    "$old = Get-Content (Join-Path $env:TEMP 'mglab-ep17-departments.json') -Raw | ConvertFrom-Json; foreach ($k in 'alex.demo', 'sam.demo', 'taylor.demo', 'jordan.demo', 'riley.demo') { Set-User \"$k@$env:MG_LAB_DOMAIN\" -Department $old.$k }",
+    "Remove-Item ./src/migration.lab.json, ./src/directory.lab.md, ./src/rollback.lab.json, ./src/waves.lab.md, ./src/waves, (Join-Path $env:TEMP 'mglab-ep17-departments.json') -Recurse -ErrorAction SilentlyContinue",
+    "Disconnect-ExchangeOnline -Confirm:$false; Disconnect-MgGraph",
+    "foreach ($n in 'MG_LAB_ADMIN_UPN', 'MG_LAB_DOMAIN') { [Environment]::SetEnvironmentVariable($n, $null, 'User') }"
+  ],
+  "needs": [
+    "lab-vms",
+    "tenant",
+    "trial:Microsoft 365 E5 (mailboxes)",
+    "role:Global Administrator (labadmin)",
+    "domain-admin:CONTOSO\\Administrator on CON-SRV02 (kit credential)",
+    "internet:CON-SRV02 can download PowerShell 7 and reach the PowerShell Gallery"
+  ],
+  "blocked": "No mailbox move is recorded: the lab has no on-premises Exchange Server and Microsoft Entra Connect is deliberately not installed; the New-MigrationBatch text is printed and labelled \"Not run\" (the script says so on screen)."
+}

@@ -75,6 +75,7 @@
     }
   ],
   "teardown": [
+    "Connect-MgGraph -Scopes LicenseAssignment.ReadWrite.All, User.ReadWrite.All -NoWelcome",
     "if (Test-Path ./src/rollback.lab.json) { ./src/Invoke-LicensingOptimization.ps1 -Restore ./src/rollback.lab.json }",
     "Invoke-MgGraphRequest -Method PATCH -Uri \"/v1.0/users/$((Invoke-MgGraphRequest -Uri \"/v1.0/users/taylor.demo@$env:MG_LAB_DOMAIN\").id)\" -Body @{ accountEnabled = $true }",
     "Remove-Item ./src/licensing.lab.json, ./src/snapshot.lab.json, ./src/audit.lab.md, ./src/rollback.lab.json -ErrorAction SilentlyContinue",

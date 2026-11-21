@@ -1,0 +1,114 @@
+{
+  "note": "Live-session recording of the screen scenes (series/tools/rec). prepare/teardown run on the laptop, not recorded; commands are typed and run for real. Screens that mix a terminal and a portal carry the second half in also[] (when = before/after the main part). Scenes read MG_LAB_ADMIN_UPN / MG_LAB_DOMAIN (set by prepare, derived from the signed-in labadmin).",
+  "prepare": [
+    "if (-not (Get-Module -ListAvailable -Name Microsoft.Graph.Authentication)) { Install-Module Microsoft.Graph.Authentication -Scope CurrentUser -Force -AllowClobber }",
+    "Connect-MgGraph -Scopes DeviceManagementApps.ReadWrite.All, Reports.Read.All, Group.ReadWrite.All, Organization.Read.All -NoWelcome  # owner signs in (browser)",
+    "function Set-LabVar($n, $v) { [Environment]::SetEnvironmentVariable($n, \"$v\", 'User'); Set-Item \"env:$n\" \"$v\" }",
+    "$upn = (Invoke-MgGraphRequest -Uri /v1.0/me).userPrincipalName; Set-LabVar MG_LAB_ADMIN_UPN $upn; Set-LabVar MG_LAB_DOMAIN $upn.Split('@')[1]",
+    "function Get-LabUserId($n) { (Invoke-MgGraphRequest -Uri \"/v1.0/users/$n@$env:MG_LAB_DOMAIN\").id }",
+    "$grp = (Invoke-MgGraphRequest -Uri \"/v1.0/groups?`$filter=displayName eq 'MG Lab - Intune Users'\").value | Select-Object -First 1; if (-not $grp) { $grp = Invoke-MgGraphRequest -Method POST -Uri /v1.0/groups -Body @{ displayName = 'MG Lab - Intune Users'; mailNickname = 'mglab-intune-users'; mailEnabled = $false; securityEnabled = $true; 'members@odata.bind' = @(\"https://graph.microsoft.com/v1.0/users/$(Get-LabUserId 'alex.demo')\", \"https://graph.microsoft.com/v1.0/users/$(Get-LabUserId 'sam.demo')\") } }",
+    "$c = Get-Content ./src/apps.json -Raw | ConvertFrom-Json; $c.intune.assignTo.groupId = $grp.id; $c | ConvertTo-Json -Depth 8 | Set-Content ./src/apps.lab.json",
+    "./src/Invoke-AppsDeploy.ps1 -BuildXml; ./src/Invoke-AppsDeploy.ps1 -ValidateXml   # off-camera dry run on the host",
+    "# VM CON-W11-01: start, checkpoint, copy src, the Office Deployment Tool and PowerShell 7 (installed in the VM in the first step of the install screen)",
+    "if ((Get-VM -Name CON-W11-01).State -ne 'Running') { Start-VM -Name CON-W11-01 }; Enable-VMIntegrationService -VMName CON-W11-01 -Name 'Guest Service Interface'; Checkpoint-VM -Name CON-W11-01 -SnapshotName pre-mglab-ep13",
+    "$zip = Join-Path $env:TEMP 'mglab-ep13-src.zip'; Remove-Item $zip -ErrorAction SilentlyContinue; Compress-Archive -Path ./src/* -DestinationPath $zip; Copy-VMFile -VMName CON-W11-01 -SourcePath $zip -DestinationPath C:\\mg\\ -FileSource Host -CreateFullPath -Force",
+    "$odt = Join-Path $env:TEMP 'mglab-odt'; New-Item -ItemType Directory -Force $odt | Out-Null; Invoke-WebRequest 'https://go.microsoft.com/fwlink/p/?LinkID=626065' -OutFile (Join-Path $odt 'odt.exe'); Start-Process (Join-Path $odt 'odt.exe') \"/quiet /extract:$odt\" -Wait; Copy-VMFile -VMName CON-W11-01 -SourcePath (Join-Path $odt 'setup.exe') -DestinationPath C:\\ODT\\ -FileSource Host -CreateFullPath -Force",
+    "$v = $PSVersionTable.PSVersion.ToString(); $msi = Join-Path $env:TEMP \"PowerShell-$v-win-x64.msi\"; if (-not (Test-Path $msi)) { Invoke-WebRequest \"https://github.com/PowerShell/PowerShell/releases/download/v$v/PowerShell-$v-win-x64.msi\" -OutFile $msi }; Copy-VMFile -VMName CON-W11-01 -SourcePath $msi -DestinationPath C:\\mg\\pwsh.msi -FileSource Host -CreateFullPath -Force"
+  ],
+  "screens": [
+    {
+      "name": "install",
+      "kind": "app",
+      "app": "VMConnect to CON-W11-01, elevated PowerShell 7 as alex.demo, then Word",
+      "steps": [
+        "In the VM (elevated Windows PowerShell): Start-Process msiexec.exe '/i C:\\mg\\pwsh.msi /quiet ADD_PATH=1' -Wait; Expand-Archive C:\\mg\\mglab-ep13-src.zip C:\\mg\\src -Force (off camera), then open elevated PowerShell 7 and cd C:\\mg\\src",
+        "Type: ./Invoke-AppsDeploy.ps1 -Inventory   (NotInstalled)",
+        "Type: ./Invoke-AppsDeploy.ps1 -Install -OdtPath C:\\ODT\\setup.exe -WhatIf   (Result WhatIf: the command and the configuration file)",
+        "Type: ./Invoke-AppsDeploy.ps1 -Install -OdtPath C:\\ODT\\setup.exe -Confirm:$false   (real install, several minutes; wait for 'Products configured successfully' as printed; if it is not printed, read the logs in %temp% and say what really happened)",
+        "Open Word, sign in as alex.demo if asked: File > Account shows the user, 'Product Activated' and the update channel as it really is"
+      ],
+      "mask": [
+        "UPN domain",
+        "tenant name"
+      ],
+      "account": "alex.demo (local administrator of the VM)"
+    },
+    {
+      "name": "publish",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\microsoft-365\\episodes\\13-microsoft-365-apps-deployment\\src",
+      "prompt": "PS> ",
+      "commands": [
+        "Connect-MgGraph -Scopes DeviceManagementApps.ReadWrite.All -NoWelcome",
+        "./Invoke-AppsDeploy.ps1 -ConfigFile ./apps.lab.json -PublishIntune -WhatIf",
+        "./Invoke-AppsDeploy.ps1 -ConfigFile ./apps.lab.json -PublishIntune -Confirm:$false",
+        "./Invoke-AppsDeploy.ps1 -ConfigFile ./apps.lab.json -PublishIntune -Confirm:$false",
+        "#pause 5"
+      ],
+      "also": [
+        {
+          "kind": "browser",
+          "url": "https://intune.microsoft.com/",
+          "account": "labadmin",
+          "steps": [
+            "Intune admin center > Apps > Windows > 'MG Lab - Microsoft 365 Apps (Monthly Enterprise)'",
+            "Properties: channel, architecture, languages, excluded apps; Assignments: MG Lab - Intune Users, Required",
+            "If Graph rejected a property in the terminal, show the real error instead and fix the module"
+          ],
+          "mask": [
+            "tenant name",
+            "group object id"
+          ],
+          "when": "after"
+        }
+      ],
+      "note": "Do not assign this app to the VM group while Office is already installed by the ODT unless you want to record what Intune really does with an existing install."
+    },
+    {
+      "name": "inventory",
+      "kind": "app",
+      "app": "VMConnect to CON-W11-01, elevated PowerShell 7",
+      "steps": [
+        "Type: cd C:\\mg\\src; ./Invoke-AppsDeploy.ps1 -Inventory   (property list and findings table exactly as they are; likely no findings on a fresh install)",
+        "Optional side by side: regedit at HKLM\\SOFTWARE\\Microsoft\\Office\\ClickToRun\\Inventory\\Office\\16.0 and ...\\ClickToRun\\Configuration",
+        "Do not invent findings; a real one can be shown by setting 'officeClientEdition' to 32 in the VM's apps.json and running -Inventory again (ArchitectureMismatch), then setting it back"
+      ],
+      "mask": [
+        "UPN domain if shown"
+      ],
+      "account": "alex.demo"
+    },
+    {
+      "name": "activation",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\microsoft-365\\episodes\\13-microsoft-365-apps-deployment\\src",
+      "prompt": "PS> ",
+      "commands": [
+        "Connect-MgGraph -Scopes Reports.Read.All -NoWelcome",
+        "./Invoke-AppsDeploy.ps1 -ActivationAudit -OutFile ./activation.lab.md",
+        "#pause 6"
+      ],
+      "note": "alex.demo appears once the activations report has refreshed after the VM activation (delay not documented): record the next day if he is missing. If names are concealed, say so (admin center > Settings > Org settings > Reports)."
+    }
+  ],
+  "teardown": [
+    "Connect-MgGraph -Scopes DeviceManagementApps.ReadWrite.All, Group.ReadWrite.All -NoWelcome",
+    "foreach ($a in (Invoke-MgGraphRequest -Uri \"/beta/deviceAppManagement/mobileApps?`$filter=displayName eq 'MG Lab - Microsoft 365 Apps (Monthly Enterprise)'\").value) { Invoke-MgGraphRequest -Method DELETE -Uri \"/beta/deviceAppManagement/mobileApps/$($a.id)\" }",
+    "Restore-VMCheckpoint -VMName CON-W11-01 -Name pre-mglab-ep13 -Confirm:$false; Remove-VMCheckpoint -VMName CON-W11-01 -Name pre-mglab-ep13   # removes Microsoft 365 Apps, C:\\ODT and C:\\mg from the VM",
+    "foreach ($g in (Invoke-MgGraphRequest -Uri \"/v1.0/groups?`$filter=displayName eq 'MG Lab - Intune Users'\").value) { Invoke-MgGraphRequest -Method DELETE -Uri \"/v1.0/groups/$($g.id)\" }   # skip if episode 7 still needs it",
+    "Remove-Item ./src/apps.lab.json, ./src/activation.lab.md, (Join-Path $env:TEMP 'mglab-odt'), (Join-Path $env:TEMP 'mglab-ep13-src.zip') -Recurse -ErrorAction SilentlyContinue",
+    "Disconnect-MgGraph",
+    "foreach ($n in 'MG_LAB_ADMIN_UPN', 'MG_LAB_DOMAIN') { [Environment]::SetEnvironmentVariable($n, $null, 'User') }"
+  ],
+  "needs": [
+    "tenant",
+    "vm:CON-W11-01 (Windows 11, Entra joined as alex.demo, Intune enrolled, from episode 7)",
+    "licence:Microsoft 365 Apps for enterprise enabled on alex.demo (E5 trial)",
+    "role:Reports Reader or Global Administrator (labadmin)",
+    "internet:VM reaches officecdn.microsoft.com and the Microsoft 365 sign-in endpoints",
+    "guest-services:Hyper-V Guest Service Interface (for Copy-VMFile)",
+    "wait:activation report refresh (record the activation screen the next day if needed)"
+  ]
+}

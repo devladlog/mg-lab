@@ -1,0 +1,130 @@
+{
+  "note": "Live-session recording of the screen scenes (series/tools/rec). prepare/teardown run on the laptop, not recorded; commands are typed and run for real. Screens that mix a terminal and a portal carry the second half in also[] (when = before/after the main part). Scenes read MG_LAB_ADMIN_UPN / MG_LAB_DOMAIN (set by prepare, derived from the signed-in labadmin).",
+  "prepare": [
+    "if (-not (Get-Module -ListAvailable -Name Microsoft.Graph.Authentication)) { Install-Module Microsoft.Graph.Authentication -Scope CurrentUser -Force -AllowClobber }",
+    "Connect-MgGraph -Scopes SharePointTenantSettings.ReadWrite.All, Reports.Read.All, ReportSettings.ReadWrite.All, Group.ReadWrite.All, Sites.ReadWrite.All, Files.ReadWrite.All -NoWelcome  # owner signs in (browser)",
+    "function Set-LabVar($n, $v) { [Environment]::SetEnvironmentVariable($n, \"$v\", 'User'); Set-Item \"env:$n\" \"$v\" }",
+    "$upn = (Invoke-MgGraphRequest -Uri /v1.0/me).userPrincipalName; Set-LabVar MG_LAB_ADMIN_UPN $upn; Set-LabVar MG_LAB_DOMAIN $upn.Split('@')[1]",
+    "# remember the real values: teardown puts isResharingByExternalUsersEnabled back",
+    "Invoke-MgGraphRequest -Uri /v1.0/admin/sharepoint/settings -OutputType PSObject | Select-Object sharingCapability, isResharingByExternalUsersEnabled, isRequireAcceptingUserToMatchInvitedUserEnabled, isLegacyAuthProtocolsEnabled, sharingDomainRestrictionMode, isSitesStorageLimitAutomatic | ConvertTo-Json | Set-Content (Join-Path $env:TEMP 'mglab-ep11-settings.json')",
+    "function New-LabSite($name, $nick) { $g = (Invoke-MgGraphRequest -Uri \"/v1.0/groups?`$filter=displayName eq '$name'\").value | Select-Object -First 1; if (-not $g) { $g = Invoke-MgGraphRequest -Method POST -Uri /v1.0/groups -Body @{ displayName = $name; mailNickname = $nick; mailEnabled = $true; securityEnabled = $false; groupTypes = @('Unified'); 'owners@odata.bind' = @(\"https://graph.microsoft.com/v1.0/users/$((Invoke-MgGraphRequest -Uri /v1.0/me).id)\") } }; $d = $null; for ($i = 0; $i -lt 30 -and -not $d; $i++) { Start-Sleep -Seconds 10; try { $d = Invoke-MgGraphRequest -Uri \"/v1.0/groups/$($g.id)/sites/root/drive\" } catch {} }; [pscustomobject]@{ Group = $g; Drive = $d } }",
+    "function Add-LabFile($drive, $path, $text) { Invoke-MgGraphRequest -Method PUT -Uri \"/v1.0/drives/$($drive.id)/root:/$($path):/content\" -ContentType 'text/plain' -Body $text | Out-Null }",
+    "# MG Lab Finance: three files so it has activity; MG Lab Archive: one file, then leave it alone for at least inactiveDays; MG Lab Empty: nothing",
+    "$fin = New-LabSite 'MG Lab Finance' 'mglab-finance-site'; 1..3 | ForEach-Object { Add-LabFile $fin.Drive \"Budget $_.txt\" 'Contoso lab file' }",
+    "$arc = New-LabSite 'MG Lab Archive' 'mglab-archive-site'; Add-LabFile $arc.Drive 'Old plan.txt' 'Contoso lab file'",
+    "$emp = New-LabSite 'MG Lab Empty' 'mglab-empty-site'",
+    "$c = Get-Content ./src/sharepoint-baseline.json -Raw | ConvertFrom-Json; $c.sites.inactiveDays = 3; $c.remediate.allowedSettings = @('isResharingByExternalUsersEnabled'); $c | ConvertTo-Json -Depth 8 | Set-Content ./src/sharepoint-baseline.lab.json   # the lab is days old; production default is 90",
+    "(Invoke-MgGraphRequest -Uri /v1.0/admin/reportSettings).displayConcealedNames   # must be True: it is the first beat of the audit screen",
+    "./src/Invoke-SharePointAdmin.ps1 -BaselineFile ./src/sharepoint-baseline.lab.json   # off-camera dry run; add system sites to sites.ignoreSiteUrlPatterns if any show up"
+  ],
+  "screens": [
+    {
+      "name": "sharing-policy",
+      "kind": "browser",
+      "url": "https://admin.microsoft.com/sharepoint",
+      "account": "labadmin",
+      "steps": [
+        "Policies > Sharing: show the External sharing level for SharePoint",
+        "Expand 'More external sharing settings'",
+        "Tick 'Allow guests to share items they don't own'",
+        "Save (this is the real drift the audit finds)"
+      ],
+      "mask": [
+        "tenant name in the top bar and in the admin URL",
+        "labadmin e-mail"
+      ]
+    },
+    {
+      "name": "audit",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\microsoft-365\\episodes\\11-sharepoint-online-administration\\src",
+      "prompt": "PS> ",
+      "commands": [
+        "Connect-MgGraph -Scopes SharePointTenantSettings.Read.All, Reports.Read.All, ReportSettings.ReadWrite.All -NoWelcome",
+        "./Invoke-SharePointAdmin.ps1 -BaselineFile ./sharepoint-baseline.lab.json",
+        "#pause 4",
+        "# clear 'Conceal user, group, and site names in all reports' (admin center > Settings > Org settings > Services > Reports); same setting through Graph:",
+        "Invoke-MgGraphRequest -Method PATCH -Uri /v1.0/admin/reportSettings -Body @{ displayConcealedNames = $false }",
+        "Start-Sleep -Seconds 300",
+        "./Invoke-SharePointAdmin.ps1 -BaselineFile ./sharepoint-baseline.lab.json -OutFile ./report.lab.md",
+        "#pause 8"
+      ]
+    },
+    {
+      "name": "remediate",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\microsoft-365\\episodes\\11-sharepoint-online-administration\\src",
+      "prompt": "PS> ",
+      "commands": [
+        "Connect-MgGraph -Scopes SharePointTenantSettings.ReadWrite.All -NoWelcome",
+        "./Invoke-SharePointAdmin.ps1 -BaselineFile ./sharepoint-baseline.lab.json -Remediate -RollbackFile ./rollback.lab.json -WhatIf",
+        "Test-Path ./rollback.lab.json",
+        "./Invoke-SharePointAdmin.ps1 -BaselineFile ./sharepoint-baseline.lab.json -Remediate -RollbackFile ./rollback.lab.json -Confirm:$false",
+        "#pause 3",
+        "Get-Content ./rollback.lab.json",
+        "#pause 4"
+      ],
+      "also": [
+        {
+          "kind": "browser",
+          "url": "https://admin.microsoft.com/sharepoint",
+          "account": "labadmin",
+          "steps": [
+            "Reload SharePoint admin center > Policies > Sharing > More external sharing settings: 'Allow guests to share items they don't own' is cleared",
+            "If it still shows ticked, wait, reload and say so on camera"
+          ],
+          "mask": [
+            "tenant name in the top bar and admin URL"
+          ],
+          "when": "after"
+        }
+      ]
+    },
+    {
+      "name": "restore",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\microsoft-365\\episodes\\11-sharepoint-online-administration\\src",
+      "prompt": "PS> ",
+      "commands": [
+        "Connect-MgGraph -Scopes SharePointTenantSettings.ReadWrite.All -NoWelcome",
+        "./Invoke-SharePointAdmin.ps1 -Restore ./rollback.lab.json",
+        "#pause 4"
+      ],
+      "also": [
+        {
+          "kind": "browser",
+          "url": "https://admin.microsoft.com/sharepoint",
+          "account": "labadmin",
+          "steps": [
+            "Reload Policies > Sharing > More external sharing settings: the box is ticked again",
+            "Then untick it by hand so the lab ends clean (if the restore said Skipped, read the message on camera: someone changed the value after us)"
+          ],
+          "mask": [
+            "tenant name in the top bar and admin URL"
+          ],
+          "when": "after"
+        }
+      ]
+    }
+  ],
+  "teardown": [
+    "Connect-MgGraph -Scopes SharePointTenantSettings.ReadWrite.All, ReportSettings.ReadWrite.All, Group.ReadWrite.All -NoWelcome",
+    "$o = Get-Content (Join-Path $env:TEMP 'mglab-ep11-settings.json') -Raw | ConvertFrom-Json; Invoke-MgGraphRequest -Method PATCH -Uri /v1.0/admin/sharepoint/settings -Body @{ isResharingByExternalUsersEnabled = [bool]$o.isResharingByExternalUsersEnabled }",
+    "Invoke-MgGraphRequest -Method PATCH -Uri /v1.0/admin/reportSettings -Body @{ displayConcealedNames = $true }   # the privacy default again",
+    "foreach ($nm in 'MG Lab Finance', 'MG Lab Archive', 'MG Lab Empty') { foreach ($g in (Invoke-MgGraphRequest -Uri \"/v1.0/groups?`$filter=displayName eq '$nm'\").value) { Invoke-MgGraphRequest -Method DELETE -Uri \"/v1.0/groups/$($g.id)\" } }",
+    "Start-Sleep -Seconds 30; foreach ($g in (Invoke-MgGraphRequest -Uri \"/v1.0/directory/deletedItems/microsoft.graph.group?`$filter=startswith(displayName,'MG Lab ')\").value) { Invoke-MgGraphRequest -Method DELETE -Uri \"/v1.0/directory/deletedItems/$($g.id)\" }",
+    "Remove-Item ./src/sharepoint-baseline.lab.json, ./src/report.lab.md, ./src/rollback.lab.json, (Join-Path $env:TEMP 'mglab-ep11-settings.json') -ErrorAction SilentlyContinue",
+    "Disconnect-MgGraph",
+    "# by hand: SharePoint admin center > Sites > Deleted sites: delete the three MG Lab sites permanently",
+    "foreach ($n in 'MG_LAB_ADMIN_UPN', 'MG_LAB_DOMAIN') { [Environment]::SetEnvironmentVariable($n, $null, 'User') }"
+  ],
+  "needs": [
+    "tenant",
+    "trial:Microsoft 365 E5 (SharePoint Online)",
+    "role:Global Administrator (labadmin)",
+    "wait:at least 3 days after prepare (usage report data and an inactive MG Lab Archive); the Reports concealment is cleared during the audit screen and set back in teardown"
+  ]
+}
