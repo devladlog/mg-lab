@@ -7,7 +7,7 @@ around the click-through (the app, the scripts, the cloud flow, the checks) is b
 
 | Path | What it is |
 |---|---|
-| [`src/legacy-app/`](src/legacy-app) | The "legacy" app: `Core` (validation, CSV ledger, PO numbering), `App` (WinForms, net8.0-windows, built on Linux with `EnableWindowsTargeting`), `Tests` (xUnit, 9 tests) |
+| [`src/legacy-app/`](src/legacy-app) | The "legacy" app: `Core` (validation, CSV ledger, PO numbering), `App` (WinForms, net10.0-windows, built on Linux with `EnableWindowsTargeting`), `Tests` (xUnit, 9 tests) |
 | [`src/scripts/`](src/scripts) | `Test-PurchaseOrder.ps1` (pre-flight validation, culture-safe amount), `Confirm-PurchaseOrder.ps1` (reads the ledger back), `Invoke-DesktopFlow.ps1` (Dataverse `RunDesktopFlow`, poll `flowsession`, outputs, cancel; `-WhatIf`) |
 | [`src/desktop-flow/`](src/desktop-flow) | The contract (inputs and outputs) and a **draft** of the desktop flow actions (see "What was not verified") |
 | [`src/solution/`](src/solution) | Unpacked solution `PurchaseRpa`: cloud flow *Enter approved purchase orders* (Try / Catch scopes, `RunUIFlow_V2`), 3 connection references |
@@ -23,7 +23,7 @@ around the click-through (the app, the scripts, the cloud flow, the checks) is b
 cd series/power-automate/episodes/14-desktop-flows-rpa
 python -m pytest                                              # 23 passed (includes the Pester suite and pac solution pack)
 pwsh -NoProfile -Command "Invoke-Pester ./tests/Scripts.Tests.ps1"   # 23 passed (Pester 6.2, PowerShell 7.6)
-dotnet test src/legacy-app/Tests -m:1                         # 9 passed (.NET 8)
+dotnet test src/legacy-app/Tests -m:1                         # 9 passed (.NET 10)
 
 cd src
 python -m padkit lint desktop-flow/enter-purchase-order.robin.txt --contract desktop-flow/enter-purchase-order.contract.json   # OK

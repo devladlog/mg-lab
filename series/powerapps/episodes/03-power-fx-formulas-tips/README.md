@@ -34,7 +34,7 @@ Power Fx tips covered, each with a test:
 ```bash
 cd tests
 dotnet test EquipmentDesk.Formulas.Tests -m:1
-# Passed!  - Failed: 0, Passed: 208, Skipped: 0, Total: 208 (.NET 8, Microsoft.PowerFx.Interpreter 1.8.1)
+# Passed!  - Failed: 0, Passed: 208, Skipped: 0, Total: 208 (.NET 10, Microsoft.PowerFx.Interpreter 1.8.1)
 ```
 
 How the harness runs `App.Formulas`: named formulas are evaluated and stored as values (re-evaluated by `Recalc()` when a

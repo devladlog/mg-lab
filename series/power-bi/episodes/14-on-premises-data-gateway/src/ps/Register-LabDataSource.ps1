@@ -19,7 +19,7 @@ param(
     [string] $WorkspaceId,
     [string] $DatasetId,
     [securestring] $Password = (Read-Host -AsSecureString "Password of the SQL login"),
-    [string] $ToolPath = (Join-Path $PSScriptRoot '..' 'GatewayCredential' 'bin' 'Debug' 'net8.0' 'gateway-credential.dll')
+    [string] $ToolPath = (Join-Path $PSScriptRoot '..' 'GatewayCredential' 'bin' 'Debug' 'net10.0' 'gateway-credential.dll')
 )
 $ErrorActionPreference = 'Stop'
 Import-Module (Join-Path $PSScriptRoot 'GatewayOps' 'GatewayOps.psd1')

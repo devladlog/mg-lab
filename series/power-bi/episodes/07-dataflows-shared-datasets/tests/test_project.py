@@ -12,7 +12,7 @@ from conftest import SRC, schema_errors
 REPORT = SRC / "ContosoSales.Report"
 THIN = SRC / "thin-report"
 MODEL = SRC / "ContosoSales.SemanticModel" / "definition"
-TMDL_LOAD = SRC / "TmdlLoad" / "bin" / "Debug" / "net8.0" / "tmdl-load.dll"
+TMDL_LOAD = SRC / "TmdlLoad" / "bin" / "Debug" / "net10.0" / "tmdl-load.dll"
 needs_tom = pytest.mark.skipif(not TMDL_LOAD.exists(), reason="build tmdl-load first: dotnet build src/TmdlLoad -m:1")
 
 

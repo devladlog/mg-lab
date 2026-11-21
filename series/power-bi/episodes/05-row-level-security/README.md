@@ -31,7 +31,7 @@ This episode adds **dynamic row-level security** for store managers and makes it
 | [`src/tools/`](src/tools) | Episode 4's `build_report.py` (extended with the second page) and `report_lint.py` |
 | [`src/data/store_access.csv`](src/data/store_access.csv), [`role_members.csv`](src/data/role_members.csv) | Who manages which store; who goes in which role in the service (lab users only) |
 | [`src/data/generate_export.py`, `build_star.py`](src/data) | Episode 1 generator + star builder (the reference rebuilds the data in memory) |
-| [`src/RlsLint/`](src/RlsLint) | `rls-lint` (.NET 8, `Microsoft.AnalysisServices` 19.120.1) |
+| [`src/RlsLint/`](src/RlsLint) | `rls-lint` (.NET 10, `Microsoft.AnalysisServices` 19.120.1) |
 | [`src/reference/rls_reference.py`](src/reference/rls_reference.py) | Expected results per user → [`expected/rls_matrix.csv`](src/reference/expected/rls_matrix.csv) |
 | [`src/service/RlsMatrix.psm1`](src/service/RlsMatrix.psm1), [`Test-RlsMatrix.ps1`](src/service/Test-RlsMatrix.ps1) | The in-service test (MicrosoftPowerBIMgmt, `Invoke-PowerBIRestMethod`) |
 | [`tests/RlsLint.Tests/`](tests/RlsLint.Tests) | xUnit: the episode model passes, mutations of it fail the right rule, the [leaky fixture](tests/fixtures/leaky-model) breaks all 12 |

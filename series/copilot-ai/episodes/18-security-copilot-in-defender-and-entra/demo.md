@@ -10,7 +10,7 @@
 | Capacity | **NEEDS SECURITY COPILOT CAPACITY, not free.** Two ways, pick one: (a) the tenant has Microsoft 365 E5 or E7: capacity is auto-provisioned, 400 SCUs a month per 1,000 licences, no hourly bill (Learn). (b) Otherwise provision **1 SCU, overage 0**: **US$4 per SCU per hour, billed per started hour** (Microsoft Security Copilot pricing page, 2026-11-21). A two-hour recording session is about US$8 and a forgotten day is US$96, so **delete the capacity right after recording**. Overage costs US$6 per SCU if you allow it: do not |
 | Licences for the agents | **Conditional Access Optimization Agent:** Microsoft Entra ID P1 (US$7 per user per month, paid yearly, on the Microsoft Entra pricing page, 2026-11-21; P2 is US$10 and is needed for the risky-user suggestions). **Phishing Triage Agent:** Microsoft Defender for Office 365 Plan 2, price not checked: read it on the Microsoft price page before you promise a number on camera. If either is not in the tenant, **skip that agent's scene** and say on camera what it needs. Nothing is bought for this episode |
 | Azure | none, unless option (b): provisioning through Azure needs a subscription and resource group, so use the in-product option (*Provision capacity within Security Copilot*, Learn recommends it) |
-| Recording machine | .NET 8 SDK, browser as `alex.demo`. No `az login`, no device codes |
+| Recording machine | .NET 10 SDK, browser as `alex.demo`. No `az login`, no device codes |
 
 ## What was verified where
 

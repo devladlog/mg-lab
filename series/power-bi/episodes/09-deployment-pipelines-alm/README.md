@@ -24,7 +24,7 @@ Blog guide: <https://www.devladlog.com/articles/power-bi/2026-05-02-deployment-p
 | [`src/pipeline/stages.json`](src/pipeline/stages.json) | The pipeline as documentation: stages, workspaces and the rule values |
 | [`src/pipeline/PbiPipelines/`](src/pipeline/PbiPipelines), [`Invoke-PipelineRelease.ps1`](src/pipeline/Invoke-PipelineRelease.ps1) | The module (11 functions, rules PD001-PD005) and the release script |
 | [`src/ci/pr-gate.yml`](src/ci/pr-gate.yml) | GitHub Actions: `alm_check` check, diff against the base branch, rules sheet, Pester |
-| [`src/tools/extract_m.py`](src/tools/extract_m.py), [`src/pq-lint/`](src/pq-lint), [`src/TmdlLoad/`](src/TmdlLoad) | Microsoft's Power Query parser over every partition and expression; the Tabular Object Model loading the TMDL (.NET 8, `Microsoft.AnalysisServices` 19.120.1) |
+| [`src/tools/extract_m.py`](src/tools/extract_m.py), [`src/pq-lint/`](src/pq-lint), [`src/TmdlLoad/`](src/TmdlLoad) | Microsoft's Power Query parser over every partition and expression; the Tabular Object Model loading the TMDL (.NET 10, `Microsoft.AnalysisServices` 19.120.1) |
 | [`tests/`](tests) | pytest (37 tests), Pester (29 tests), Learn shaped REST fixtures with zero GUIDs, vendored Microsoft schemas |
 
 ## Rules
@@ -56,7 +56,7 @@ python3 tools/expected.py                              # Dev 283 orders / Test, 
 # 2. the M and the TMDL, checked by Microsoft's own libraries
 cd pq-lint && npm ci --no-audit --no-fund && npm test && cd ..
 python3 tools/extract_m.py ContosoSales.SemanticModel/definition /tmp/m && node pq-lint/dist/src/cli.js /tmp/m --strict   # 6 queries: 0 error(s)
-dotnet build TmdlLoad -m:1 -v q && dotnet TmdlLoad/bin/Debug/net8.0/tmdl-load.dll ContosoSales.SemanticModel/definition
+dotnet build TmdlLoad -m:1 -v q && dotnet TmdlLoad/bin/Debug/net10.0/tmdl-load.dll ContosoSales.SemanticModel/definition
 #   2 table(s), 3 parameter(s), 1 other expression(s), 0 relationship(s), 0 role(s): loaded
 
 # 3. tests (from the episode folder)

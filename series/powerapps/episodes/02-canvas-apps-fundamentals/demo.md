@@ -8,7 +8,7 @@
 | Tenant environment | Power Platform environment **`DEV`** with episode 1's tables, model-driven app and test data. Created here: canvas app *Equipment Desk (phone)* in the *Equipment Desk* solution |
 | Lab users | `labadmin` (the recording account): maker, runs the app. For the optional warning cutaway: **`riley.demo` (Riley Demo)** with a custom role that can create Loans but has **no Write on Equipment** (role created and removed in this episode). Borrower in the app: `alex.demo@contoso.com` |
 | Licences / trials | **Power Apps Premium** (in the lab) for `labadmin` and any lab user who runs the app; cost 0 |
-| Recording machine | The Windows lab laptop: maker portal / Power Apps Studio / the running app in the browser with `pipeline/mask.js`; Power Apps mobile or the browser's phone preview for the phone shots; `pac` CLI (signed in to `DEV` off camera) and .NET 8 SDK for `pac canvas download` and the tests |
+| Recording machine | The Windows lab laptop: maker portal / Power Apps Studio / the running app in the browser with `pipeline/mask.js`; Power Apps mobile or the browser's phone preview for the phone shots; `pac` CLI (signed in to `DEV` off camera) and .NET 10 SDK for `pac canvas download` and the tests |
 
 The formulas were tested locally (`dotnet test`: 52 passed) on the open-source Power Fx interpreter. Everything below
 **needs the lab tenant** and has not been run there: the control type names in the `.pa.yaml` files and the delegation

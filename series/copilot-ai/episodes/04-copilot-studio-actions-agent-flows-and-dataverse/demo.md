@@ -9,7 +9,7 @@
 | Accounts | `labadmin` (Global Administrator, **Copilot Studio trial licence**) does everything: table script, flow, agent, test chat. Nobody else is needed |
 | Licences / purchases | **Nothing bought. Cost 0.** The trial licence builds and tests but cannot publish (Learn); testing an agent flow from the designer or the agent's test chat does **not** consume Copilot Studio capacity (Learn, *Agent flows overview*). Do **not** publish the agent and do not link a pay-as-you-go plan: the credit slide (`cost` scene) is a calculation from the Learn rates, not something recorded. Published-agent rates used there: agent action 5 Copilot Credits, agent flow actions 13 per 100 actions, pay-as-you-go US$0.01 per credit (series episode 1 has the source). Open point: confirm the trial licence "includes the use of flows in Copilot Studio" (Learn prerequisite for creating agent flows); if the flow designer is blocked, stop and tell the owner what it asks for |
 | Azure | none (the token comes from `Connect-AzAccount`, no resource is created) |
-| Recording machine | Windows lab laptop: browser as `labadmin`, PowerShell 7 with `Az.Accounts` (`Install-Module Az.Accounts -Scope CurrentUser`), .NET 8 SDK for the test run |
+| Recording machine | Windows lab laptop: browser as `labadmin`, PowerShell 7 with `Az.Accounts` (`Install-Module Az.Accounts -Scope CurrentUser`), .NET 10 SDK for the test run |
 
 ## What was verified where
 

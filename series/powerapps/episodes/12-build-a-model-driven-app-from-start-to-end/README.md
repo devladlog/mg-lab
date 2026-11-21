@@ -51,7 +51,7 @@ the recording shows) and the logic is checked locally from the plan files.
 # 1. Python: schema, solution source, pac round trip, rules (needs pac on PATH; about 90 seconds, pac is slow)
 cd tests/python && python3 -m pytest -q          # 75 passed
 
-# 2. Power Fx on Microsoft's open-source interpreter (.NET 8 SDK; one build at a time)
+# 2. Power Fx on Microsoft's open-source interpreter (.NET 10 SDK; one build at a time)
 cd tests/ContosoInspections.PowerFx.Tests && dotnet test -m:1     # 46 passed
 
 # 3. Regenerate the solution source (deterministic GUIDs: running it twice changes nothing)

@@ -10,7 +10,7 @@ CON-SRV01, CON-SQL01, CON-SQL02 and CON-DC01 are out; **CON-SRV02** is the only 
 |---|---|---|
 | **CON-SRV02** (gateway host) | Windows Server 2025 Datacenter Eval, Desktop Experience, 10.50.0.22, domain `lab.contoso.com`. Learn recommends 8 cores and 8 GB; the lab VM has 2 vCPU / 2-3 GB: raise its memory to 4 GB for the recording (the laptop has plenty), say honestly that it is a lab sizing. Install here: **PowerShell 7** (MSI from the PowerShell GitHub releases, needed by `Test-GatewayHost.ps1`) and **the standard mode gateway** (download link in Learn's install article). Copy this episode folder to `C:\MGLab\ep14` | free |
 | **CON-SQL01** (the source) | SQL Server 2022 Developer, 10.50.0.30, TCP 1433, mixed authentication. Database **`ContosoBikesDW`** from episode 11 (its scripts `01-create-database.sql`, `02-load-data.sql`; `03` isn't needed). Then this episode's `sql/01-gateway-login.sql` | free |
-| Recording laptop (Windows) | Power BI Desktop, PowerShell 7 + `MicrosoftPowerBIMgmt`, .NET 8 SDK (builds `GatewayCredential`), SSMS or `sqlcmd`, browser on the lab tenant. Reaches 10.50.0.30 and 10.50.0.22 | free |
+| Recording laptop (Windows) | Power BI Desktop, PowerShell 7 + `MicrosoftPowerBIMgmt`, .NET 10 SDK (builds `GatewayCredential`), SSMS or `sqlcmd`, browser on the lab tenant. Reaches 10.50.0.30 and 10.50.0.22 | free |
 | Lab tenant | Fabric + Power BI trial capacity, workspace `Contoso Sales (Lab)`, `labadmin` (Global Administrator, workspace Admin, registers the gateway and becomes its admin) | trial, €0 |
 
 Screens are recorded on the laptop (Desktop, browser) and in the **Hyper-V console of CON-SRV02** (installer, gateway app, terminal).
@@ -29,7 +29,7 @@ Screens are recorded on the laptop (Desktop, browser) and in the **Hyper-V conso
 ## Setup (off camera, once)
 
 1. **CON-SQL01**: episode 11's database exists (`SELECT COUNT_BIG(*) FROM ContosoBikesDW.dbo.FactSales` = 4,071). Run `src\sql\01-gateway-login.sql` with `-v GatewayPassword="<typed>"`, then `02-checks.sql` as the new login: CanRead 1, CanWrite 0, 4,071 lines, 1,862,401.98, 5 stores.
-2. **Laptop**: `dotnet build src\GatewayCredential -m:1`, `dotnet src\GatewayCredential\bin\Debug\net8.0\gateway-credential.dll --self-test` (both key sizes must PASS on Windows), `Invoke-Pester .\tests` (24 passed).
+2. **Laptop**: `dotnet build src\GatewayCredential -m:1`, `dotnet src\GatewayCredential\bin\Debug\net10.0\gateway-credential.dll --self-test` (both key sizes must PASS on Windows), `Invoke-Pester .\tests` (24 passed).
 3. **Laptop**: `Connect-PowerBIServiceAccount` as `labadmin`. Desktop: blank query with `src\queries\sales-by-store.pq` in the advanced editor, Close & apply (credentials: Database, user `pbi_gateway_reader`), a card for Sales Amount (sum), one for Order Lines (sum), a table by Store. Save as `ContosoGateway`. **Do not publish yet** (screen 1).
 4. **Rehearsal of the code path** (then undo, so the UI can create it on camera): on CON-SRV02 after installing the gateway, `./src/ps/Register-LabDataSource.ps1 -GatewayName contoso-lab-gw -WhatIf`, then for real, check `Get-GatewayDataSource`, then remove the data source in the portal. Note which of Learn's two spellings the service accepts (`dataSourceName` is what the SDK sends).
 5. Capture-ready window layout: Hyper-V console of CON-SRV02 at 1920x1080 with Windows Terminal (PowerShell 7) open in `C:\MGLab\ep14\src\ps`.

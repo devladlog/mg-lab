@@ -20,7 +20,7 @@ Power BI (no sign-in in the container): every `screen` scene is recorded on the 
 | [`src/tillstream/cli.py`](src/tillstream/cli.py) | `python -m tillstream send / push / expect / inventory`; secrets only from environment variables |
 | [`src/kql/01-schema.kql`](src/kql/01-schema.kql) | Eventhouse: `TillEventsRaw` table, JSON ingestion mapping, retention, and the **deduplicating materialized view** `TillEventsUnique` |
 | [`src/kql/queries/`](src/kql/queries) | Six queries: live KPIs, sales per minute, orders-per-minute anomalies (`series_decompose_anomalies`), duplicates, ingestion lag, totals check |
-| [`src/KqlCheck/`](src/KqlCheck) | .NET 8 console app: parses and semantically analyses every `.kql` statement with Microsoft's `Kusto.Language` |
+| [`src/KqlCheck/`](src/KqlCheck) | .NET 10 console app: parses and semantically analyses every `.kql` statement with Microsoft's `Kusto.Language` |
 | [`src/ContosoLive.SemanticModel/`](src/ContosoLive.SemanticModel), [`ContosoLive.Report/`](src/ContosoLive.Report), [`ContosoLive.pbip`](src/ContosoLive.pbip) | TMDL model: **one DirectQuery table** over `TillEventsUnique` (`AzureDataExplorer.Contents`), four measures, two parameters (`KqlClusterUri`, `KqlDatabase`); an empty PBIR report with one page for the visuals built on camera |
 | [`tests/`](tests) | pytest, 82 tests (below) |
 | [`script.yaml`](script.yaml), [`demo.md`](demo.md) | Draft script (15 scenes, about 890 words) and the recorder's shot list |

@@ -3,7 +3,7 @@
 The Equipment Desk apps from episodes [1](../01-model-driven-apps/), [2](../02-canvas-apps-fundamentals/) and
 [3](../03-power-fx-formulas-tips/) own the **loan** side of each device. The company's **asset register** (a separate
 system, here a nightly CSV export) owns what a device *is*: name, category, serial number, purchase date, repair and
-retirement. **EquipmentSync** is a small .NET 8 console app that keeps the two in step with the Dataverse SDK for .NET:
+retirement. **EquipmentSync** is a small .NET 10 console app that keeps the two in step with the Dataverse SDK for .NET:
 
 1. `setup` — an **alternate key** on `contoso_assettag` (wait for its index to be **Active**) and **change tracking** on
    the Equipment table (explicit opt-in: it can't be turned off again).
@@ -28,7 +28,7 @@ retirement. **EquipmentSync** is a small .NET 8 console app that keeps the two i
 
 ```bash
 cd tests
-dotnet test EquipmentSync.Tests -m:1            # Passed! - Failed: 0, Passed: 47, Total: 47 (.NET 8, Dataverse.Client 1.2.27)
+dotnet test EquipmentSync.Tests -m:1            # Passed! - Failed: 0, Passed: 47, Total: 47 (.NET 10, Dataverse.Client 1.2.27)
 
 cd ../src/EquipmentSync
 dotnet run -- import ../../samples/asset-register.csv --dry-run

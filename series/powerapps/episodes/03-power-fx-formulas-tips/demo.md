@@ -8,7 +8,7 @@
 | Tenant environment | Power Platform environment **`DEV`** with episodes 1–2 (tables Equipment and Loan, canvas app *Equipment Desk (phone)*). Created here: `LoansScreen`, the five test loans |
 | Lab users | `labadmin` (the recording account): maker, runs the app. Borrowers in the test loans are the lab users `alex.demo`, `jordan.demo`, `sam.demo` (addresses as plain text). Optional: Teams with the app as a tab (cutaway) |
 | Licences / trials | **Power Apps Premium** (in the lab) for `labadmin` and any lab user who runs the app; cost 0 |
-| Recording machine | The Windows lab laptop: maker portal / Power Apps Studio / the running app in the browser with `pipeline/mask.js`; an Outlook on the web draft window (never sent) or a text editor for the pasted reminder; `pac` CLI and .NET 8 SDK for the download and the tests |
+| Recording machine | The Windows lab laptop: maker portal / Power Apps Studio / the running app in the browser with `pipeline/mask.js`; an Outlook on the web draft window (never sent) or a text editor for the pasted reminder; `pac` CLI and .NET 10 SDK for the download and the tests |
 
 The formulas were tested locally (`dotnet test`: 208 passed, 39 test methods) on the open-source Power Fx interpreter
 with a fixed clock. Everything below **needs the lab tenant** and has not been run there. In particular, Studio must accept

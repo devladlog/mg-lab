@@ -7,7 +7,7 @@ namespace ContosoHolidays.Tests;
 
 /// <summary>
 /// Learn's custom code FAQ: an update fails with a bare "internal server error" when the script doesn't compile, so
-/// "use the supporting classes to test compilation errors locally". The test project compiles script.csx for .NET 8,
+/// "use the supporting classes to test compilation errors locally". The test project compiles script.csx for .NET 10,
 /// which is more forgiving than the platform. This compiles it again the strict way: .NET Standard 2.0 reference
 /// assemblies (Learn: "The currently supported .NET version is .NET Standard 2.0"), only the supported namespaces as
 /// usings, and C# 7.3 (Learn doesn't name a C# version, so we stay conservative and refuse anything newer).

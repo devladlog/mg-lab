@@ -26,7 +26,7 @@ Query), [episode 5](../05-row-level-security/) (RLS) and [episode 6](../06-dashb
 | [`src/ContosoSales.Report/`](src/ContosoSales.Report), [`src/ContosoSales.pbip`](src/ContosoSales.pbip) | The model owner's report (two pages, bound by path), generated |
 | [`src/thin-report/`](src/thin-report) | `StoreManagers.pbip` + report with a `byConnection` reference to `Contoso Data (Lab)` / `ContosoSales`, generated |
 | [`src/tools/build_report.py`](src/tools/build_report.py), [`report_lint.py`](src/tools/report_lint.py) | Episode 4/5's generator (now two reports) and its lint (alt text, grid, tab order, fields exist in the model) |
-| [`src/TmdlLoad/`](src/TmdlLoad) | `tmdl-load` (.NET 8, `Microsoft.AnalysisServices` 19.120.1): loads the TMDL folder with TOM and prints tables, entities, parameters, roles |
+| [`src/TmdlLoad/`](src/TmdlLoad) | `tmdl-load` (.NET 10, `Microsoft.AnalysisServices` 19.120.1): loads the TMDL folder with TOM and prints tables, entities, parameters, roles |
 | [`src/data/ContosoBikesData/`](src/data/ContosoBikesData) | The SharePoint site's *Documents* library as the dataflow expects it: `exports/` (24 CSV + `_README.txt`, same files as episode 3) and `security/store_access.csv` |
 | [`src/reference/pq_reference.py`](src/reference/pq_reference.py) | Python mirror of the queries (episode 3's, moved to SharePoint layout + contract names) → [`expected/summary.json`](src/reference/expected/summary.json), incl. what every lab user must see |
 | [`src/service/PbiShared/`](src/service/PbiShared), [`Invoke-SharedModelCheck.ps1`](src/service/Invoke-SharedModelCheck.ps1) | `Get-PbiSharedModelInventory`, `Test-PbiSharedModel` (SM001-SM004), `Set-PbiModelParameter` (REST) |
@@ -75,7 +75,7 @@ python3 reference/pq_reference.py                              # expected number
 # 2. model against the contract, TOM, reports
 python3 tools/check_contract.py --model ContosoSales.SemanticModel/definition
 #   INFO DC005 Store Access: entity column 'UserAlias' isn't loaded ...   6 entities, 6 model tables: 0 error(s), 1 info
-dotnet build TmdlLoad -m:1 -v q && dotnet TmdlLoad/bin/Debug/net8.0/tmdl-load.dll ContosoSales.SemanticModel/definition
+dotnet build TmdlLoad -m:1 -v q && dotnet TmdlLoad/bin/Debug/net10.0/tmdl-load.dll ContosoSales.SemanticModel/definition
 #   6 table(s), 3 parameter(s), 5 relationship(s), 2 role(s): loaded
 python3 tools/build_report.py --check                          # reports match the spec
 python3 tools/report_lint.py thin-report/StoreManagers.Report --model ContosoSales.SemanticModel/definition   # 0 error(s), 0 warning(s)

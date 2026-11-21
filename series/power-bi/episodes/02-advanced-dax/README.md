@@ -24,7 +24,7 @@ people actually get wrong:
 | [`src/ContosoSales.SemanticModel/DAXQueries/`](src/ContosoSales.SemanticModel/DAXQueries) | `01 Time intelligence` · `02 YoY gotcha` · `03 Context transition` · `04 Ranking and share` · `05 Ship date` |
 | [`src/reference/dax_reference.py`](src/reference/dax_reference.py) | Hand-written Python equivalent of each measure and query (not a DAX engine) |
 | [`src/reference/expected/`](src/reference/expected) | Expected result of each saved query (amounts 2 decimals, ratios 4 decimals, empty = BLANK) |
-| [`src/DaxLint/`](src/DaxLint) | `dax-lint` (.NET 8, `Microsoft.AnalysisServices` 19.120.1); `--script` writes the TMDL view script |
+| [`src/DaxLint/`](src/DaxLint) | `dax-lint` (.NET 10, `Microsoft.AnalysisServices` 19.120.1); `--script` writes the TMDL view script |
 | [`src/ContosoSales.SemanticModel/TMDLScripts/create-model.tmdl`](src/ContosoSales.SemanticModel/TMDLScripts/create-model.tmdl) | The whole model as one `createOrReplace` script (fallback for TMDL view) |
 | [`src/data/`](src/data) | Generator + star CSVs (identical to episode 1; a test rebuilds them byte for byte) |
 | [`src/ContosoSales.pbip`](src/ContosoSales.pbip), [`src/ContosoSales.Report/`](src/ContosoSales.Report) | Power BI Project wrapper (as in episode 1) |

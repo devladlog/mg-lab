@@ -71,7 +71,7 @@ cd tests/python && python3 -m pytest -q                                   # 37 p
 cd tests/pester && pwsh -NoProfile -Command "Invoke-Pester -Path ./Provision.Tests.ps1"   # 19 passed
 ```
 
-Needs the .NET 8 SDK, Python 3 with pytest and PyYAML, PowerShell 7 with Pester 5 or later, and the Power Platform CLI (`pac`, tested
+Needs the .NET 10 SDK, Python 3 with pytest and PyYAML, PowerShell 7 with Pester 5 or later, and the Power Platform CLI (`pac`, tested
 with 2.16.1) on the path. `pac` is only used for `solution pack` and `unpack`. The NuGet packages restore on the first run
 (Microsoft.PowerFx.Interpreter 1.8.1, xunit 2.9.2, YamlDotNet 16.3.0, JsonSchema.Net 7.3.4). Delete `bin`, `obj`, `.pytest_cache` and
 `__pycache__` afterwards. The tests that compare against episode 12 expect its folder next to this one.

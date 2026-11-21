@@ -4,7 +4,7 @@ using Xunit;
 
 public class LinterTests
 {
-    // tests/StarSchemaLinter.Tests/bin/Debug/net8.0 -> episode folder
+    // tests/StarSchemaLinter.Tests/bin/Debug/net10.0 -> episode folder
     static readonly string Episode = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../.."));
     static readonly string StarModel = Path.Combine(Episode, "src/ContosoSales.SemanticModel/definition");
     static readonly string StarData = Path.Combine(Episode, "src/data/star");

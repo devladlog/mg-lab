@@ -74,7 +74,7 @@ Optional B-roll (code scenes, no sign-in needed), from the episode folder:
 ```bash
 python3 src/tools/build_dataflow.py --check                  # dataflow item matches the queries
 python3 src/tools/check_contract.py --model src/ContosoSales.SemanticModel/definition
-dotnet src/TmdlLoad/bin/Debug/net8.0/tmdl-load.dll src/ContosoSales.SemanticModel/definition
+dotnet src/TmdlLoad/bin/Debug/net10.0/tmdl-load.dll src/ContosoSales.SemanticModel/definition
 ```
 
 ## Things to record and report (the README and the narration depend on them)

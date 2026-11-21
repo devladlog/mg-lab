@@ -28,7 +28,7 @@ same one used by episode 3's business rule and episode 4's BPF branch.
 | [`src/MGLab.D365.Plugins/AssessProjectRequestApi.cs`](src/MGLab.D365.Plugins/AssessProjectRequestApi.cs) | Custom API main operation (stage 30): reads 4 columns, counts other open requests (capped), sets 3 output parameters |
 | [`src/MGLab.D365.Plugins/RiskScoreRefreshPlugin.cs`](src/MGLab.D365.Plugins/RiskScoreRefreshPlugin.cs) | Async post-operation: calls the custom API, compares with the post-image, writes `mgl_riskscore` only when it changed |
 | [`src/MGLab.D365.Plugins/PluginBase.cs`](src/MGLab.D365.Plugins/PluginBase.cs) | Services, tracing, unexpected errors → traced `InvalidPluginExecutionException`; shared column names |
-| [`src/MGLab.D365.Plugins.Tests/`](src/MGLab.D365.Plugins.Tests/) | 28 xUnit + Moq tests; compile the plug-in sources against the .NET 8 Dataverse SDK, so they run on Linux |
+| [`src/MGLab.D365.Plugins.Tests/`](src/MGLab.D365.Plugins.Tests/) | 28 xUnit + Moq tests; compile the plug-in sources against the .NET Dataverse SDK, so they run on Linux |
 | [`plugins.json`](plugins.json) | Single source of truth: solution, assembly, plug-in types, custom API, column, steps |
 | [`src/apikit/registration.py`](src/apikit/registration.py) | Bodies for assembly, types, custom API (deep insert), steps, post-image, integer column + Learn's rules as checks |
 | [`src/apikit/deploy.py`](src/apikit/deploy.py) | `deploy` (create or update, in order, in the solution; refuses immutable changes), `remove` |

@@ -9,7 +9,7 @@ Code and test scenes in `script.yaml` are real (from this folder). The four `scr
 ## Lab environment
 
 Recorded on the **lab Windows laptop** (host): Edge (Power BI service / Fabric portal, Azure portal), **Power BI Desktop**, VS Code with the
-TMDL extension, Windows Terminal with PowerShell 7 and the .NET 8 SDK. No Hyper-V VM and no Azure resource of its own: this episode adds **no
+TMDL extension, Windows Terminal with PowerShell 7 and the .NET 10 SDK. No Hyper-V VM and no Azure resource of its own: this episode adds **no
 resource group**. Nothing from `series/LAB.md` is consumed except the tenant, the **Fabric + Power BI 60-day trial** (West Europe capacity)
 and the lab users. No IP is used on 10.50.0.0/24.
 

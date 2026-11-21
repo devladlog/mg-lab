@@ -10,7 +10,7 @@
 | Lab users | `labadmin` builds. `alex.demo` runs the canvas app. `sam.demo` runs the model-driven app. Alex and Sam each start the self-service **Power Apps Premium trial** (custom connectors and Dataverse are premium) the first time: say so on camera |
 | Licences / trials | Power Apps Premium self-service trial for the demo users; Power Automate Premium self-service trial for `labadmin` (the flow uses a custom connector, Learn: "You must have a premium or trial license to run any flow that uses a custom connector"). **No AI credits and no pay-as-you-go plan** (`series/LAB.md`): the **AI Builder route cannot run in an app**; it is shown in the prompt builder, where testing is free (Learn: *Licensing and Copilot Credits*, rule 4) |
 | **Needs the owner** | An **Anthropic API account with a small prepaid balance** and one API key, created by the owner and typed by the recorder off camera. Not in `series/LAB.md` today. Without it, skip the Claude route and say so |
-| Recording machine | Windows lab laptop: Azure portal, maker portal, Power Apps Studio and the running apps in the browser (use `pipeline/mask.js`); WSL terminal with Python 3, .NET 8 SDK, `pac` (offline only), `az` and `bicep` |
+| Recording machine | Windows lab laptop: Azure portal, maker portal, Power Apps Studio and the running apps in the browser (use `pipeline/mask.js`); WSL terminal with Python 3, .NET 10 SDK, `pac` (offline only), `az` and `bicep` |
 
 ### Azure resources and estimated cost for a one-day recording window
 

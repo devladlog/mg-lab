@@ -7,7 +7,7 @@
 | VMs / tenant / Azure | none. The report is not published, so no workspace and no use of the Fabric/Power BI trial; no sign-in needed |
 | Data | The 24 export CSVs + `_README.txt` of `src/data/exports/`, copied to `C:\MGLab\power-bi\exports\` (the semantic model's real data source: Power BI Desktop reads the files itself; no mock involved) |
 | Licences / cost | Power BI Desktop is free; cost 0 |
-| Recording machine | The Windows lab laptop: current **Power BI Desktop**, signed out (or account masked); terminal B-roll on the same laptop (.NET 8 SDK, Python 3, Node where listed) |
+| Recording machine | The Windows lab laptop: current **Power BI Desktop**, signed out (or account masked); terminal B-roll on the same laptop (.NET 10 SDK, Python 3, Node where listed) |
 
 Like episodes 1 and 2, this is **local only**: no tenant, workspace or licence. Power BI Desktop (free) on Windows
 runs the M; everything else was built and tested in the Linux container.

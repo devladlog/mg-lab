@@ -21,7 +21,7 @@ The app is kept as **source code** (`*.pa.yaml`, the format Power Apps Studio wr
 
 ```bash
 cd tests
-dotnet test EquipmentDesk.Canvas.Tests -m:1      # Passed! Failed: 0, Passed: 52, Total: 52 (.NET 8)
+dotnet test EquipmentDesk.Canvas.Tests -m:1      # Passed! Failed: 0, Passed: 52, Total: 52 (.NET 10)
 ```
 
 What the tests do and don't prove:

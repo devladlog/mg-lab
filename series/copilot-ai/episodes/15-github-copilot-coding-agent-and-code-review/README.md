@@ -26,7 +26,7 @@ cloud-agent custom agent). Episodes 13 and 14 of this series (VS Code agent mode
 | [`src/agent_ready/assign.py`](src/agent_ready/assign.py) | Builds the documented REST requests (`copilot-swe-agent[bot]` + `agent_assignment`; `copilot-pull-request-reviewer[bot]`); sends them through `gh api` only with `--execute` |
 | [`src/agent_ready/review_gate.py`](src/agent_ready/review_gate.py) | Read-only merge-readiness check from the pull request, its reviews and the workflow runs of the head commit |
 | [`src/agent_ready/cli.py`](src/agent_ready/cli.py) | `setup-steps`, `issue`, `instructions`, `assign`, `review`, `gate` |
-| [`src/demo-repo/`](src/demo-repo/) | The throwaway repository: .NET 8 pricing library + xunit tests, `copilot-instructions.md`, two path instruction files, `copilot-setup-steps.yml`, `ci.yml`, two issues (one ready, one deliberately vague) |
+| [`src/demo-repo/`](src/demo-repo/) | The throwaway repository: .NET 10 pricing library + xunit tests, `copilot-instructions.md`, two path instruction files, `copilot-setup-steps.yml`, `ci.yml`, two issues (one ready, one deliberately vague) |
 | [`src/demo-repo/review-demo/0001-add-bulk-discount.patch`](src/demo-repo/review-demo/0001-add-bulk-discount.patch) | A pull request with four planted problems (`double` for money, `Math.Round` without the midpoint rule, no validation, swallowed exception). It builds and its test passes, so only a reviewer finds them |
 | [`tests/`](tests) | 59 pytest tests |
 | [`script.yaml`](script.yaml), [`demo.md`](demo.md) | Draft script (14 scenes) and recording shot list |
@@ -55,7 +55,7 @@ python3 -m agent_ready gate --repo OWNER/contoso-bikes-pricing --pull 3 --reques
 ```
 
 Verified here: pytest 59 passed (Python 3.13); `dotnet test` on the demo repo 8 passed, and on a copy with the review
-patch applied (`git apply --check` clean) 9 passed (.NET 8 SDK, xunit 2.9.2).
+patch applied (`git apply --check` clean) 9 passed (.NET 10 SDK, xunit 2.9.2).
 Needs the real GitHub account: assigning, the agent session, the Copilot review, `assign --execute`, `review --execute`
 and `gate --repo`. The REST and `gh` calls are tested only against a fake runner.
 

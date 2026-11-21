@@ -18,7 +18,7 @@ def lint_dll():
     proj = SRC / "CompositeLint"
     r = subprocess.run(["dotnet", "build", str(proj), "-m:1", "-nologo", "-v", "q"], capture_output=True, text=True)
     assert r.returncode == 0, r.stdout + r.stderr
-    yield proj / "bin" / "Debug" / "net8.0" / "composite-lint.dll"
+    yield proj / "bin" / "Debug" / "net10.0" / "composite-lint.dll"
     for d in ("bin", "obj"):
         shutil.rmtree(proj / d, ignore_errors=True)
 

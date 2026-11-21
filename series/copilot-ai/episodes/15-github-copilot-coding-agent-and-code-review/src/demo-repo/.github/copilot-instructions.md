@@ -2,7 +2,7 @@
 
 ## Build and test
 - Build and run all tests with `dotnet test Contoso.Bikes.sln`. Run it before you finish; the pull request must be green.
-- Target framework is net8.0. Do not add packages unless the task says so.
+- Target framework is net10.0. Do not add packages unless the task says so.
 
 ## Money
 - Money is always `decimal`, never `double` or `float`.

@@ -24,7 +24,7 @@ writes to Dataverse.** The person at the desk picks the status and confirms.
 
 ## Run the tests (no tenant needed, no credits spent)
 
-Needs the .NET SDK (10.0 here; the project targets net8.0 and uses xunit, `Microsoft.PowerFx.Interpreter` and `Microsoft.PowerFx.Json` 1.8.1, YamlDotNet, JsonSchema.Net from NuGet).
+Needs the .NET SDK (10.0 here; the project targets net10.0 and uses xunit, `Microsoft.PowerFx.Interpreter` and `Microsoft.PowerFx.Json` 1.8.1, YamlDotNet, JsonSchema.Net from NuGet).
 
 ```bash
 cd tests

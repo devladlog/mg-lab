@@ -14,7 +14,7 @@ import perf_lint as pl
 import reduce_demo
 from conftest import AFTER, AFTER_REPORT, BEFORE, BEFORE_REPORT, SRC
 
-TMDL_LOAD = SRC / "TmdlLoad" / "bin" / "Debug" / "net8.0" / "tmdl-load.dll"
+TMDL_LOAD = SRC / "TmdlLoad" / "bin" / "Debug" / "net10.0" / "tmdl-load.dll"
 PQ_LINT = SRC / "pq-lint" / "dist" / "src" / "cli.js"
 needs_tom = pytest.mark.skipif(not TMDL_LOAD.exists(), reason="build tmdl-load first: dotnet build src/TmdlLoad -m:1")
 needs_pq_lint = pytest.mark.skipif(not PQ_LINT.exists(), reason="build pq-lint first: cd src/pq-lint && npm ci && npm test")

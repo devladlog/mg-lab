@@ -15,7 +15,7 @@ No VMs and no Azure resources: cloud tenant only, recorded from a terminal and t
 | Dynamics 365 **"Sales trial"** environment (exists, ends ~21 Dec 2026) | Only for the second half of screen 5 (`workflows --all`): it ships the managed processes of a real Dynamics 365 app. Record it **before 21 Dec 2026**; if it has expired, drop that half | none (trial) |
 | Episodes 1 and 3 done in DEV | `mgl_projectrequest` with the 18 imported records, Business Justification column | none |
 | Lab users | `labadmin` (recording, System Customizer or System Administrator in DEV), `alex.demo` with episode 2's *Project Requester* role (or any role with read/write on Project Request) for the form screen | none (E5 + D365 trial licences exist) |
-| Recording laptop | .NET 8 SDK, Python 3.10+ with `pip install --user -r requirements.txt`, terminal (dark, font 18+), browser with `pipeline/mask.js` | none |
+| Recording laptop | .NET 10 SDK, Python 3.10+ with `pip install --user -r requirements.txt`, terminal (dark, font 18+), browser with `pipeline/mask.js` | none |
 | Strong-name key | `sn -k src/MGLab.D365.Plugins/MGLab.D365.Plugins.snk` on the laptop (never committed) | none |
 
 ## Setup (before recording)

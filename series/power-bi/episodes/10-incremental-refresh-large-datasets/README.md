@@ -72,7 +72,7 @@ python3 tools/build_report.py --check               # report matches the spec
 python3 tools/ir_partitions.py --model ContosoSalesIR.SemanticModel/definition --date 2026-11-21 --rows-from ../expected/daily-2m.json
 cd pq-lint && npm ci --no-audit --no-fund && npm test && cd ..
 python3 tools/extract_m.py ContosoSalesIR.SemanticModel/definition /tmp/m && node pq-lint/dist/src/cli.js /tmp/m --strict   # 7 queries: 0 error(s)
-dotnet build TmdlLoad -m:1 -v q && dotnet TmdlLoad/bin/Debug/net8.0/tmdl-load.dll ContosoSalesIR.SemanticModel/definition
+dotnet build TmdlLoad -m:1 -v q && dotnet TmdlLoad/bin/Debug/net10.0/tmdl-load.dll ContosoSalesIR.SemanticModel/definition
 #   refresh policy: Import, keep 3 Year(s), refresh 10 Day(s), offset 0, detect data changes ...   1 table(s), 4 parameter(s) ...: loaded
 # 3. tests (from the episode folder)
 cd .. && python3 -m pytest tests -q                 # 53 passed

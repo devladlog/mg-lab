@@ -18,7 +18,7 @@ Category episodes this builds on: [Power Fx formulas and tips](../../../powerapp
 
 | Path | What it is |
 |---|---|
-| [`src/PowerFxReview/`](src/PowerFxReview) | .NET 8 console tool. `FormulaExtractor` (YAML), `ReviewContext` (tables, controls, variables, sample rows), `Reviewer` (engine check + rules), `Evaluator` (run), `Program` (CLI) |
+| [`src/PowerFxReview/`](src/PowerFxReview) | .NET 10 console tool. `FormulaExtractor` (YAML), `ReviewContext` (tables, controls, variables, sample rows), `Reviewer` (engine check + rules), `Evaluator` (run), `Program` (CLI) |
 | [`src/samples/Src/`](src/samples/Src) | `App.pa.yaml` and `ListScreen.pa.yaml`, **hand-written** in the documented `.pa.yaml` shape with 15 formulas, some wrong on purpose. Not Copilot output |
 | [`src/samples/context.json`](src/samples/context.json), [`sample-data.json`](src/samples/sample-data.json) | What the formulas may name, and five fictional loans (dates relative to today) |
 | [`tests/PowerFxReview.Tests/`](tests/PowerFxReview.Tests) | 40 xUnit tests |

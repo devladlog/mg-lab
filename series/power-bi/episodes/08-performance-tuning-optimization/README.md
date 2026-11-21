@@ -25,7 +25,7 @@ numbers on the report don't move:
 | [`src/tools/expected_totals.py`](src/tools/expected_totals.py) | The card values both reports must show ([200k](src/expected/totals-200k.json), [2M](src/expected/totals-2m.json)) |
 | [`src/tools/perf_compare.py`](src/tools/perf_compare.py), [`results/`](src/results) | Before/after table from the Performance Analyzer durations you type into a CSV |
 | [`src/tools/extract_m.py`](src/tools/extract_m.py), [`src/pq-lint/`](src/pq-lint) | Writes every partition's M to `.pq` files; `pq-lint` (episode 3) parses them with Microsoft's Power Query parser |
-| [`src/TmdlLoad/`](src/TmdlLoad) | `tmdl-load` (.NET 8, `Microsoft.AnalysisServices` 19.120.1): loads a TMDL folder with the Tabular Object Model |
+| [`src/TmdlLoad/`](src/TmdlLoad) | `tmdl-load` (.NET 10, `Microsoft.AnalysisServices` 19.120.1): loads a TMDL folder with the Tabular Object Model |
 | [`src/queries/`](src/queries) | Three `.dax` files for DAX query view (**need Desktop**, not run in the container) |
 | [`tests/`](tests) | pytest (86 tests), vendored Microsoft schemas in `tests/schemas` |
 
@@ -79,7 +79,7 @@ python3 tools/perf_lint.py --model ContosoPerf.After.SemanticModel/definition --
 # 3. the M and the TMDL, checked by Microsoft's own libraries
 cd pq-lint && npm ci --no-audit --no-fund && npm test && cd ..                          # tsc builds pq-lint
 python3 tools/extract_m.py ContosoPerf.After.SemanticModel/definition /tmp/m && node pq-lint/dist/src/cli.js /tmp/m --strict   # 6 queries: 0 error(s)
-dotnet build TmdlLoad -m:1 -v q && dotnet TmdlLoad/bin/Debug/net8.0/tmdl-load.dll ContosoPerf.Before.SemanticModel/definition
+dotnet build TmdlLoad -m:1 -v q && dotnet TmdlLoad/bin/Debug/net10.0/tmdl-load.dll ContosoPerf.Before.SemanticModel/definition
 #   6 table(s), 1 parameter(s), 5 relationship(s), 0 role(s): loaded
 
 # 4. tests (from the episode folder)

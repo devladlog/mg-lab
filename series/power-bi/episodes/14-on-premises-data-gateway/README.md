@@ -11,7 +11,7 @@ What we build:
 1. a **read-only SQL login** for the gateway (`sql/`), plus checks and tear-down
 2. an import **M query** against `10.50.0.30` / `ContosoBikesDW` (`queries/sales-by-store.pq`) and `gateway/datasource.json`, the one definition of the data source
 3. **`GatewayOps`**, a PowerShell 7 module: network test for the gateway machine, gateway and data source listing, the **server and database match check**, data source creation, binding, refresh and wait, and the `SqlTrustedServers` setting
-4. **`gateway-credential`**, a small .NET 8 tool that writes the *Create Datasource* body with the credentials **encrypted by the Power BI SDK's own encryptor**
+4. **`gateway-credential`**, a small .NET 10 tool that writes the *Create Datasource* body with the credentials **encrypted by the Power BI SDK's own encryptor**
 5. two scripts: `Test-GatewayHost.ps1` (run on the gateway machine) and `Register-LabDataSource.ps1`
 
 | Path | What it is |
@@ -20,7 +20,7 @@ What we build:
 | [`src/queries/sales-by-store.pq`](src/queries/sales-by-store.pq), [`src/gateway/datasource.json`](src/gateway/datasource.json) | The query and the gateway data source it must match (a test compares them) |
 | [`src/ps/GatewayOps/`](src/ps/GatewayOps) | The module, 13 functions. Findings GW001 (error: no data source with exactly this server and database), GW002 (info: parameterised source), GW003 (info: match) |
 | [`src/ps/Test-GatewayHost.ps1`](src/ps/Test-GatewayHost.ps1), [`Register-LabDataSource.ps1`](src/ps/Register-LabDataSource.ps1) | Network check for the gateway machine; check + create data source + optional bind (`-WhatIf` sends nothing) |
-| [`src/GatewayCredential/`](src/GatewayCredential) | `gateway-credential` (.NET 8, `Microsoft.PowerBI.Api` 4.22.0): `--public-key-file`, `--self-test`; password only from `GATEWAY_DS_PASSWORD` |
+| [`src/GatewayCredential/`](src/GatewayCredential) | `gateway-credential` (.NET 10, `Microsoft.PowerBI.Api` 4.22.0): `--public-key-file`, `--self-test`; password only from `GATEWAY_DS_PASSWORD` |
 | [`src/tools/expected.py`](src/tools/expected.py), [`src/data/star/`](src/data/star) | What the refresh must load: 4,071 lines, 1,862,401.98, five stores. The two CSVs are episode 11's (a test compares them byte for byte) |
 | [`tests/GatewayOps.Tests.ps1`](tests/GatewayOps.Tests.ps1), [`tests/fixtures/rest/`](tests/fixtures/rest) | Pester: 24 tests, REST cmdlet mocked with Learn-shaped responses (zero GUIDs) |
 | [`tests/test_project.py`](tests/test_project.py), [`tests/test_script.py`](tests/test_script.py) | pytest: 11 + 5 tests (query vs data source definition, T-SQL syntax, numbers, no secrets or real GUIDs, module manifest; the script follows the brief and its code scenes are real excerpts) |
@@ -31,7 +31,7 @@ What we build:
 cd src
 python3 tools/expected.py                  # 4,071 order lines, Sales Amount 1,862,401.98, 5 stores (+ per store)
 dotnet build GatewayCredential -m:1 -v q
-dotnet GatewayCredential/bin/Debug/net8.0/gateway-credential.dll --self-test
+dotnet GatewayCredential/bin/Debug/net10.0/gateway-credential.dll --self-test
 #   10 PASS (1024-bit key), 1 SKIP: the SDK's encryptor for keys above 1024 bits needs Windows CNG, so the 2048-bit case runs on the Windows laptop
 cd ..
 pip install --user pyyaml sqlglot pytest    # once

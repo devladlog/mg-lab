@@ -3,7 +3,7 @@
 // executed locally (procedures, functions, security DDL): syntax first, then structure (parameters, SET options,
 // TRY/CATCH, THROW, which built-in functions a module calls, GRANT targets...).
 //
-//   dotnet run -c Release -- file1.sql file2.sql ...      (or the built dll: dotnet bin/Release/net8.0/TsqlParse.dll ...)
+//   dotnet run -c Release -- file1.sql file2.sql ...      (or the built dll: dotnet bin/Release/net10.0/TsqlParse.dll ...)
 //
 // Exit code 0 when every file parses, 1 when any file has a syntax error.
 using System.Text.Json;

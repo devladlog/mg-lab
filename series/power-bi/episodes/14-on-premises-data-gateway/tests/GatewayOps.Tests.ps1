@@ -11,7 +11,7 @@ BeforeAll {
     Import-Module (Join-Path $script:Src 'ps' 'GatewayOps' 'GatewayOps.psd1') -Force
     $script:Fix = Join-Path $PSScriptRoot 'fixtures' 'rest'
     $script:Query = Join-Path $script:Src 'queries' 'sales-by-store.pq'
-    $script:Tool = Join-Path $script:Src 'GatewayCredential' 'bin' 'Debug' 'net8.0' 'gateway-credential.dll'
+    $script:Tool = Join-Path $script:Src 'GatewayCredential' 'bin' 'Debug' 'net10.0' 'gateway-credential.dll'
     $script:WS = '00000000-0000-0000-0000-0000000000b1'
     $script:DS = '00000000-0000-0000-0000-0000000000c1'
     $script:GW = '00000000-0000-0000-0000-0000000000a1'
@@ -198,7 +198,7 @@ Describe 'GatewayOps' {
 
     Describe 'New-GatewayDataSource (credentials encrypted by the Power BI SDK, tool must be built)' {
         BeforeAll { $script:HasTool = Test-Path $script:Tool }
-        It 'builds a Create Datasource body whose credentials are ciphertext, and leaves no password in the environment' -Skip:(-not (Test-Path (Join-Path $PSScriptRoot '..' 'src' 'GatewayCredential' 'bin' 'Debug' 'net8.0' 'gateway-credential.dll'))) {
+        It 'builds a Create Datasource body whose credentials are ciphertext, and leaves no password in the environment' -Skip:(-not (Test-Path (Join-Path $PSScriptRoot '..' 'src' 'GatewayCredential' 'bin' 'Debug' 'net10.0' 'gateway-credential.dll'))) {
             $pw = ConvertTo-SecureString 'Pa55-not-a-real-one!' -AsPlainText -Force
             $gw = (Get-GatewayCluster -Name 'contoso-lab-gw')
             $json = New-GatewayDataSourceRequest -Gateway $gw -Name 'Contoso Bikes DW (lab)' -Server '10.50.0.30' -Database 'ContosoBikesDW' -Username 'pbi_gateway_reader' -Password $pw -ToolPath $script:Tool
@@ -213,7 +213,7 @@ Describe 'GatewayOps' {
             $json | Should -Not -BeLike '*pbi_gateway_reader*'
             $env:GATEWAY_DS_PASSWORD | Should -BeNullOrEmpty
         }
-        It 'creates the data source on the gateway found by name; -WhatIf posts nothing' -Skip:(-not (Test-Path (Join-Path $PSScriptRoot '..' 'src' 'GatewayCredential' 'bin' 'Debug' 'net8.0' 'gateway-credential.dll'))) {
+        It 'creates the data source on the gateway found by name; -WhatIf posts nothing' -Skip:(-not (Test-Path (Join-Path $PSScriptRoot '..' 'src' 'GatewayCredential' 'bin' 'Debug' 'net10.0' 'gateway-credential.dll'))) {
             $pw = ConvertTo-SecureString 'Pa55-not-a-real-one!' -AsPlainText -Force
             New-GatewayDataSource -GatewayName 'contoso-lab-gw' -Name 'n' -Server '10.50.0.30' -Database 'ContosoBikesDW' -Username 'u' -Password $pw -ToolPath $script:Tool -Confirm:$false | Out-Null
             $post = $global:GwTest.Calls | Where-Object { $_.Method -eq 'Post' }

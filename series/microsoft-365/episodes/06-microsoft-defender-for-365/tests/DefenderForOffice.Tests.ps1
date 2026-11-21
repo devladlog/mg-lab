@@ -234,16 +234,16 @@ Describe 'Get-DefenderInventory (mocked)' {
     }
 }
 
-Describe 'KQL compiles against the EmailEvents schema (Kusto.Language)' -Skip:(-not (Test-Path "$PSScriptRoot/kql/bin/Release/net8.0/KqlCheck.dll")) {
+Describe 'KQL compiles against the EmailEvents schema (Kusto.Language)' -Skip:(-not (Test-Path "$PSScriptRoot/kql/bin/Release/net10.0/KqlCheck.dll")) {
     It '<Kind> has no errors' -ForEach @(@{ Kind = 'ThreatSummary' }, @{ Kind = 'Recipient' }) {
         $q = if ($Kind -eq 'Recipient') { New-DOHuntingQuery -Kind Recipient -Recipient 'sam.demo@contoso.onmicrosoft.com' -Days 1 } else { New-DOHuntingQuery -Kind ThreatSummary -Days 7 }
         $f = Join-Path $TestDrive "$Kind.kql"; Set-Content -LiteralPath $f -Value $q
-        $out = & dotnet "$PSScriptRoot/kql/bin/Release/net8.0/KqlCheck.dll" $f 2>&1
+        $out = & dotnet "$PSScriptRoot/kql/bin/Release/net10.0/KqlCheck.dll" $f 2>&1
         $LASTEXITCODE | Should -Be 0 -Because ($out -join "`n")
     }
     It 'catches a wrong column name (proves the check works)' {
         $f = Join-Path $TestDrive 'bad.kql'; Set-Content -LiteralPath $f -Value 'EmailEvents | where Verdict == "Phish"'
-        & dotnet "$PSScriptRoot/kql/bin/Release/net8.0/KqlCheck.dll" $f 2>&1 | Out-Null
+        & dotnet "$PSScriptRoot/kql/bin/Release/net10.0/KqlCheck.dll" $f 2>&1 | Out-Null
         $LASTEXITCODE | Should -Be 1
     }
 }

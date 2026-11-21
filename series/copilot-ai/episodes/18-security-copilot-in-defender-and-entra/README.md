@@ -117,7 +117,7 @@ After a run delete `src/*/bin`, `src/*/obj`; they are not committed.
 
 ## Verified here and not
 
-Verified in the build container (Linux, .NET 8 runtime, SDK 10): `dotnet test SecCopilotKit.Tests -m:1` gives **115 passed**
+Verified in the build container (Linux, .NET 10 runtime, SDK 10): `dotnet test SecCopilotKit.Tests -m:1` gives **115 passed**
 (build with 0 warnings); the CLI commands above ran; the plugin and agent manifests pass the checker; the planted mistakes
 are all reported. The Learn rules and the three table schemas were read on 2026-11-21.
 

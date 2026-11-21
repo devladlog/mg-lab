@@ -29,7 +29,7 @@ it for the phone it really runs on:
 ```bash
 cd tests
 dotnet test EquipmentDesk.Mobile.Tests -m:1
-# Passed!  - Failed: 0, Passed: 112, Skipped: 0, Total: 112 (.NET 8, Microsoft.PowerFx.Interpreter 1.8.1)
+# Passed!  - Failed: 0, Passed: 112, Skipped: 0, Total: 112 (.NET 10, Microsoft.PowerFx.Interpreter 1.8.1)
 ```
 The tests need episode 7's folder next to this one (they read its library source).
 

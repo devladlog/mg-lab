@@ -35,7 +35,7 @@ semantic model `ContosoSales` of episode 1 published. No Azure resource is creat
 3. Open `src\ContosoSalesComposite.pbip` in Desktop. If `SqlServer` or `SqlDatabase` need changing: **Transform data >
    Edit parameters**. Sign in with the SQL login. Check the storage modes in Model view before recording. (Needs Desktop:
    if Desktop refuses a file, write down the message and fix the TMDL before the recording.)
-4. Optional rehearsal of the prediction: `dotnet src/CompositeLint/bin/Debug/net8.0/composite-lint.dll
+4. Optional rehearsal of the prediction: `dotnet src/CompositeLint/bin/Debug/net10.0/composite-lint.dll
    src/ContosoSalesComposite.SemanticModel/definition --explain` after `dotnet build -m:1 src/CompositeLint`.
 
 ## Steps and screens (match the `screen` scenes in script.yaml)

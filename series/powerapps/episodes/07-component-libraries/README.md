@@ -31,7 +31,7 @@ holds look and logic, and the app keeps the data.
 ```bash
 cd tests
 dotnet test EquipmentDesk.Components.Tests -m:1
-# Passed!  - Failed: 0, Passed: 109, Skipped: 0, Total: 109 (.NET 8, Microsoft.PowerFx.Interpreter 1.8.1)
+# Passed!  - Failed: 0, Passed: 109, Skipped: 0, Total: 109 (.NET 10, Microsoft.PowerFx.Interpreter 1.8.1)
 ```
 
 What the groups prove:

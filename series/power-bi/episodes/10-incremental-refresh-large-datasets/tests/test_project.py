@@ -9,7 +9,7 @@ import yaml
 from conftest import MODEL, REPORT, ROOT, SRC, schema_errors
 
 PQ_LINT = SRC / "pq-lint" / "dist" / "src" / "cli.js"
-TMDL_LOAD = SRC / "TmdlLoad" / "bin" / "Debug" / "net8.0" / "tmdl-load.dll"
+TMDL_LOAD = SRC / "TmdlLoad" / "bin" / "Debug" / "net10.0" / "tmdl-load.dll"
 needs_pq_lint = pytest.mark.skipif(not PQ_LINT.exists(), reason="build pq-lint first: cd src/pq-lint && npm ci && npm test")
 needs_tom = pytest.mark.skipif(not TMDL_LOAD.exists() or not shutil.which("dotnet"), reason="build tmdl-load first: dotnet build src/TmdlLoad -m:1")
 

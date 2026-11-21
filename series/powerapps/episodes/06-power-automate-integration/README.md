@@ -27,7 +27,7 @@ episode 1 solution with **FlowDeploy**, a small .NET console that uses the Datav
 ```bash
 cd tests
 dotnet test FlowTests -m:1
-# Passed!  - Failed: 0, Passed: 44, Skipped: 0, Total: 44 (.NET 8, Microsoft.PowerFx.Connectors/Interpreter 1.8.1)
+# Passed!  - Failed: 0, Passed: 44, Skipped: 0, Total: 44 (.NET 10, Microsoft.PowerFx.Connectors/Interpreter 1.8.1)
 
 cd ../src/FlowDeploy
 dotnet run -- ../flow/SendLoanReminder.clientdata.json --dry-run --activate

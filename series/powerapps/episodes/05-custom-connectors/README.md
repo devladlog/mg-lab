@@ -32,7 +32,7 @@ its holidays from `ContosoHolidays.GetDaysOff(...)` and its working-day function
 ```bash
 cd tests
 dotnet test ContosoHolidays.Tests -m:1
-# Passed!  - Failed: 0, Passed: 51, Skipped: 2, Total: 53 (.NET 8, Microsoft.PowerFx.Connectors 1.8.1, Roslyn 4.11)
+# Passed!  - Failed: 0, Passed: 51, Skipped: 2, Total: 53 (.NET 10, Microsoft.PowerFx.Connectors 1.8.1, Roslyn 4.11)
 
 LIVE_HOLIDAYS=1 dotnet test ContosoHolidays.Tests -m:1 --filter Category=Live
 # Passed!  - Failed: 0, Passed: 2, Skipped: 0, Total: 2   (the same script against the real date.nager.at, Nov 2026)
@@ -87,7 +87,7 @@ This has **not yet run against the lab tenant**.
   and both have a `Formatting` type. With all of them as usings, `JObject.ToString(Formatting.None)` doesn't compile (CS0104),
   and Learn's FAQ says a compile failure shows up only as an "internal server error" on update. We don't know whether the
   platform imports every namespace; we qualify `Newtonsoft.Json.Formatting` and the compile test pins it.
-- **Test the compile the strict way.** Learn: the supported version is **.NET Standard 2.0**. The tests compile for .NET 8 too,
+- **Test the compile the strict way.** Learn: the supported version is **.NET Standard 2.0**. The tests compile for .NET 10 too,
   which accepts things the platform won't (`Math.Clamp`, `DateOnly`). `ScriptCompileTests` uses the .NET Standard 2.0 reference
   assemblies. `System.Web.HttpUtility` *is* in .NET Standard 2.0 (we first assumed it wasn't), so the script uses
   `HttpUtility.ParseQueryString`.

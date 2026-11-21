@@ -43,7 +43,7 @@ python3 src/ag_lab.py                # order counts of the drill on DuckDB: matc
 python3 -m pytest tests -q           # 109 passed
 ```
 
-The tests need Python 3.10+ and the .NET 8 SDK (they build `tools/TsqlParse`, which references Microsoft's ScriptDom).
+The tests need Python 3.10+ and the .NET 10 SDK (they build `tools/TsqlParse`, which references Microsoft's ScriptDom).
 
 ## Run it for real (needs the lab, see demo.md)
 

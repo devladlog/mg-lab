@@ -7,7 +7,7 @@
 | VMs / tenant / Azure | none. The report is not published, so no workspace and no use of the Fabric/Power BI trial; no sign-in needed |
 | Data | The committed star CSVs `src/data/star/*.csv`, copied to `C:\MGLab\power-bi\star\` on the laptop (the semantic model's real data source: Power BI Desktop reads the files itself; no mock involved) |
 | Licences / cost | Power BI Desktop is free; cost 0 |
-| Recording machine | The Windows lab laptop: current **Power BI Desktop**, signed out (or account masked); terminal B-roll on the same laptop (.NET 8 SDK, Python 3, Node where listed) |
+| Recording machine | The Windows lab laptop: current **Power BI Desktop**, signed out (or account masked); terminal B-roll on the same laptop (.NET 10 SDK, Python 3, Node where listed) |
 
 Everything in this episode is local: **no tenant, no workspace, no licence** is needed. Power BI Desktop (free) on a
 Windows machine is the only requirement for the screen scenes. Nothing is published to the Power BI service.
@@ -23,7 +23,7 @@ Windows machine is the only requirement for the screen scenes. Nothing is publis
 
 ## Prerequisites
 - Windows 10/11 PC with the current **Power BI Desktop** (Microsoft Store or download). Cost: free.
-- This repo cloned. .NET 8 SDK + Python 3 on the same PC if you also want to record the terminal scenes there
+- This repo cloned. .NET 10 SDK + Python 3 on the same PC if you also want to record the terminal scenes there
   (they can also be recorded on Linux/macOS, the tools are cross-platform).
 - Power BI Desktop option: **File > Options and settings > Options > Global > Data load > Time intelligence**:
   untick *Auto date/time for new files* (we have our own date table; Learn's auto date/time guidance).

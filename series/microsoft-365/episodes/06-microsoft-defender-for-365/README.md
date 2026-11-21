@@ -33,7 +33,7 @@ sent internally, and **Attack simulation training** with a Microsoft payload aga
 | [`src/DefenderForOffice/DefenderForOffice.psd1`](src/DefenderForOffice/DefenderForOffice.psd1) | Module manifest |
 | [`src/Invoke-DefenderForOffice.ps1`](src/Invoke-DefenderForOffice.ps1) | Runner: `-Audit` (live or `-InventoryFile`), `-ApplyPresets [-WhatIf]`, `-Hunt [-Recipient] [-ShowQuery]`, `-SimulationReport` (live or `-ReportFile`) |
 | [`tests/DefenderForOffice.Tests.ps1`](tests/DefenderForOffice.Tests.ps1) | 48 Pester tests (Exchange Online and Graph mocked; 3 compile the KQL with Kusto.Language; 2 check our calls against the real ExchangeOnlineManagement and Microsoft.Graph.Authentication modules) |
-| [`tests/kql/`](tests/kql/) | `KqlCheck`: .NET 8 console using `Microsoft.Azure.Kusto.Language` 12.4.1 with the EmailEvents schema from Learn |
+| [`tests/kql/`](tests/kql/) | `KqlCheck`: .NET 10 console using `Microsoft.Azure.Kusto.Language` 12.4.1 with the EmailEvents schema from Learn |
 | [`tests/fixtures/`](tests/fixtures/) | Fictional inventory (the AND trap, a disabled Strict rule, a Built-in protection exception, 2 analyzer rows), a simulation report, a runHuntingQuery response |
 | [`sample/defender-audit.md`](sample/defender-audit.md) | Coverage + audit of the fictional inventory, generated offline |
 | [`script.yaml`](script.yaml) · [`demo.md`](demo.md) | Draft video script and the shot list for the lab recording |
@@ -49,7 +49,7 @@ pwsh -NoProfile -Command 'Invoke-Pester ./tests'
 # With the KQL checker and both modules installed:      Tests Passed: 48, Failed: 0, Skipped: 0
 ```
 
-All three results were produced in this repo's container (PowerShell 7.6, Pester 6.2.0, .NET 8 SDK,
+All three results were produced in this repo's container (PowerShell 7.6, Pester 6.2.0, .NET 10 SDK,
 ExchangeOnlineManagement 3.11.1 and Microsoft.Graph.Authentication 2.41.2 saved to a temp folder on `PSModulePath`).
 PSScriptAnalyzer 1.25.0 (Warning and Error) reports 0 issues on `src/`. `tests/kql/bin` and `obj` were deleted after
 the run (rebuild with the command above).

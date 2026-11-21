@@ -53,7 +53,7 @@ Install-VendorRequestTable -OrgUrl $org -AccessToken $token -SolutionUniqueName 
 Get-VendorRequest -OrgUrl $org -AccessToken $token -Top 3 | Format-Table
 ```
 
-Verified here: `dotnet test` 27 passed (.NET 8, Power Fx 1.8.1), Pester 18 passed (PowerShell 7.6, Pester 6.2).
+Verified here: `dotnet test` 27 passed (.NET 10, Power Fx 1.8.1), Pester 18 passed (PowerShell 7.6, Pester 6.2).
 **Not verified without the tenant:** the table and column payloads against a live Dataverse (in particular an
 autonumber as the *primary name* column of a new table, see `demo.md` open point 1), and everything built in
 Copilot Studio: the agent flow, the topic, the Dataverse MCP server tool and the test chat. The agent flow and the topic

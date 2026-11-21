@@ -10,7 +10,7 @@
 | Licence | **A paid GitHub Copilot plan on the requester account is required** for the cloud agent (GitHub plans page, read 21 Nov 2026: Pro $10, Pro+ $39, Max $100 per month; Business $19 and Enterprise $39 per seat; Free has no cloud agent). **Which plan the owner has is not known: confirm at Settings > Billing and plans > Copilot before recording.** The owner decides whether to buy or trial one; never bought by the builder. If it is a Business/Enterprise organisation account, an admin must enable the cloud agent policy first |
 | Cost of the recording | Copilot plan as above (monthly, cancel afterwards) plus GitHub Actions minutes and AI credits used by one or two agent sessions and a few CI runs. Expect a few minutes of Actions time and a small number of credits on a tiny repo; **not verified**, check Billing after the first session |
 | Azure | none; no resource group |
-| Recording machine | The Windows lab laptop: browser signed in as the requester (dark theme, zoom 125 %), PowerShell 7 or Windows Terminal (dark, 18 pt, window 1600x900), Python 3.10+, .NET 8 SDK, Git, GitHub CLI (`gh`) |
+| Recording machine | The Windows lab laptop: browser signed in as the requester (dark theme, zoom 125 %), PowerShell 7 or Windows Terminal (dark, 18 pt, window 1600x900), Python 3.10+, .NET 10 SDK, Git, GitHub CLI (`gh`) |
 | Tools to install | `python -m pip install -r src/requirements.txt` in the episode folder; `gh auth login` as the requester (off camera, never `pac auth`; the OAuth token it stores is a user-to-server token, which the assignment API accepts) |
 
 ## What was verified where

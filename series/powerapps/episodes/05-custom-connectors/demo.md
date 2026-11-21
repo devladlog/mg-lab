@@ -13,7 +13,7 @@ No VM and no Azure resource. The holiday source is the free public API `https://
 | Recording user with **System Customizer** (or System Administrator) in DEV and a **Power Apps Premium** licence | premium already needed for Dataverse; the free plan only allows one custom connector and no sharing (Learn FAQ) | existing |
 | `pac` CLI on the recording laptop (lab Windows host), signed in to DEV | `pac auth create --environment <DEV URL>`, device code **off camera** | free |
 | Outbound HTTPS from Power Platform to `date.nager.at` | if the tenant has a **data policy**, an admin classifies Contoso Holidays (environment policy, by name) or `https://date.nager.at*` (tenant policy, host pattern) in the **same group as Dataverse**; otherwise the app is blocked | free |
-| .NET 8 SDK on the laptop | only for the optional `dotnet test` cutaway | free |
+| .NET 10 SDK on the laptop | only for the optional `dotnet test` cutaway | free |
 
 All screens are recorded on the **lab Windows host**: terminal + browser on the lab tenant.
 

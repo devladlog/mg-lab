@@ -9,7 +9,7 @@
 | Accounts | `labadmin` (Global Administrator, the recording account) creates the tables and the app. Learn requires the **system customizer** role in the environment to create tables with Copilot: check in the admin center (`DEV`, Users) that `labadmin` holds System Administrator or System Customizer there, and add it if not. No other account is needed |
 | Licences / purchases | **Nothing bought, cost 0.** Learn (Power Apps licensing FAQ): no licence is needed to build canvas apps; running an app on Dataverse tables needs premium use rights, so `labadmin` starts the self-service **Power Apps trial** the first time Studio or the player asks (there are no spare Power Apps Premium licences, LAB.md). **Not recorded, need licences the lab does not have:** Microsoft Copilot in canvas apps (preview; Learn: users need a Microsoft 365 Copilot licence, US$30 per user per month, paid yearly, per series/LAB-REQUESTS.md, pricing page read 21 Nov 2026) and apps built in Copilot Studio (usage-based billing in Copilot Credits; Learn: US$1 buys 100 Copilot Credits; no pay-as-you-go plan is set in the lab). The owner decides whether either is ever bought |
 | Azure | none |
-| Recording machine | Windows lab laptop: browser on the lab tenant (labadmin profile) for `make.powerapps.com`, Power Apps Studio and `admin.powerplatform.microsoft.com`; PowerShell 7 terminal; **.NET 8 SDK or later** (the project targets net8.0); this repo cloned |
+| Recording machine | Windows lab laptop: browser on the lab tenant (labadmin profile) for `make.powerapps.com`, Power Apps Studio and `admin.powerplatform.microsoft.com`; PowerShell 7 terminal; **.NET 10 SDK or later** (the project targets net10.0); this repo cloned |
 
 ## What was verified where
 

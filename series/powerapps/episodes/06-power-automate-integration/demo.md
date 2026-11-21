@@ -13,7 +13,7 @@ No VM and no Azure resource.
 | Recording user: **System Administrator** or **System Customizer** in DEV, **Power Apps Premium** licence, an Exchange Online mailbox (M365 E5 trial) | the licence covers flows run from the Power Apps trigger (Learn FAQ); the owner of a flow with a Dataverse invoker connection needs **Act on behalf of another user** (Learn: Delegate role; System Administrator has it) | existing |
 | A second lab test user as the **borrower**, with a mailbox, shown as `alex.demo@contoso.com` on screen | the reminder goes to this mailbox; its address must end with the lab domain the flow allows (see note) | existing licence |
 | Azure CLI on the recording laptop (lab Windows host) | only to get a Dataverse token: `az login --allow-no-subscriptions` (off camera), no subscription needed | free |
-| .NET 8 SDK on the laptop | `dotnet run` for FlowDeploy | free |
+| .NET 10 SDK on the laptop | `dotnet run` for FlowDeploy | free |
 
 **Domain note:** the flow allows only `@contoso.com` (fictional). In the lab, temporarily change `'@contoso.com'` in the
 `Problem` expression of `SendLoanReminder.clientdata.json` to the lab tenant's domain **off camera**, deploy, and never commit

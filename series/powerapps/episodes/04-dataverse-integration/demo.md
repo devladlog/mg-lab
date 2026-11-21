@@ -9,7 +9,7 @@
 | Lab users | `labadmin` (the recording account) with System Customizer for `setup` (interactive OAuth, signed in off camera). The nightly-job identity is an **application user** (app registration with a client secret, custom role *Equipment Sync*), created and removed in this episode; application users are unlicensed |
 | Entra | App registration for the nightly job, client secret with a short expiry; deleted (or its secret deleted) in tear-down |
 | Licences / trials | **Power Apps Premium** (in the lab) for `labadmin` and any lab user who runs the app; cost 0 |
-| Recording machine | The Windows lab laptop: maker portal / Power Apps Studio / the running app in the browser with `pipeline/mask.js`; .NET 8 SDK and a terminal (PowerShell or WSL bash) for `dotnet run` from `src/EquipmentSync` |
+| Recording machine | The Windows lab laptop: maker portal / Power Apps Studio / the running app in the browser with `pipeline/mask.js`; .NET 10 SDK and a terminal (PowerShell or WSL bash) for `dotnet run` from `src/EquipmentSync` |
 
 EquipmentSync was built and tested locally (`dotnet test`: 47 passed) against an in-memory fake of the Dataverse messages
 it uses; `import --dry-run` runs without a connection. Everything below **needs the lab tenant** and has not been run
@@ -30,7 +30,7 @@ Things to confirm in the lab and report back (fix code/tests/README if they diff
 | `labadmin` with **System Customizer** (or System Administrator) | for `setup` only, interactive `AuthType=OAuth` (sign in off camera) | existing |
 | Entra **app registration** with a client secret (lab tenant, off camera) | for the nightly-job identity | free |
 | **Application user** for that app in DEV + custom role "Equipment Sync" | Equipment: Create, Write (user/BU is fine), **Read at Organization level** (RetrieveEntityChanges requires it); Learn: application users are unlicensed and need a custom role | free |
-| .NET 8 SDK on the recording machine | `dotnet run` from `src/EquipmentSync` | free |
+| .NET 10 SDK on the recording machine | `dotnet run` from `src/EquipmentSync` | free |
 
 Secrets: put the connection string in an environment variable in a terminal **off camera**; never echo it. Delete the
 client secret after recording.
