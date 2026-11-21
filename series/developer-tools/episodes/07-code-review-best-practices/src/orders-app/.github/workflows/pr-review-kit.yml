@@ -1,0 +1,60 @@
+# The mechanical half of code review, so people can spend the review on design and correctness.
+#
+#   pr-size         ─ lines a human has to read, per area (lock files and generated code excluded); fails above size/L
+#   pr-description  ─ the four sections a reviewer needs are there and filled in
+#   review-routing  ─ who has to review which files (CODEOWNERS), in the job summary
+#
+# `edited` is in the list on purpose: by default a pull_request workflow runs only for opened, synchronize and
+# reopened, so a description fixed after the first run would never be re-checked.
+name: pr-review-kit
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-review-kit-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  pr-size:
+    name: pr-size
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0                  # the merge base must be in the clone
+      - name: Size of the pull request
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: python3 tools/review_kit/cli.py size --base "$BASE_SHA" --head "$HEAD_SHA" --fail-above L
+
+  pr-description:
+    name: pr-description
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Description has what a reviewer needs
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}       # through env, never pasted into the script
+        run: printf '%s' "$PR_BODY" | python3 tools/review_kit/cli.py description -
+
+  review-routing:
+    name: review-routing
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Who has to review what
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: python3 tools/review_kit/cli.py owners --base "$BASE_SHA" --head "$HEAD_SHA"

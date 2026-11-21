@@ -1,0 +1,254 @@
+# DEVLADLOG Dev Tools — episode 08. Code excerpts and outputs are real (src/orders-app, tests/, run on the build
+# machine on 21 Nov 2026 with Newman 6.2.3). The four `screen` scenes are recorded later on the Windows recording
+# laptop (Postman desktop app, Windows Terminal, browser on GitHub): see demo.md.
+episode: 8
+slug: api-testing-with-postman
+series_label: "DEV TOOLS"
+series_name: "DEVLADLOG Dev Tools"
+file_prefix: "developer-tools"
+title: "API testing with Postman: tests that can actually fail"
+subtitle: "OpenAPI, a real collection, data-driven tests, Newman in CI"
+voice: am_michael
+thumbnail_text: "ALL GREEN.\nZERO TESTS.\nPOSTMAN"
+youtube:
+  title: "Postman API Testing in CI: OpenAPI, Data-Driven Tests, Newman and Gates | DEVLADLOG Dev Tools #8"
+  tags: [Postman, API testing, Newman, Postman CLI, OpenAPI, ASP.NET Core, JSON schema, data-driven testing, GitHub Actions, DevTools]
+sources:
+  - https://www.devladlog.com/articles/developer-tools/2025-12-16-api-testing-with-postman-complete-guide-2025/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "All green. How many tests ran?"
+    sub: "API tests that can actually fail"
+    short: hook
+    narration: >
+      Your API tests pass. The pipeline is green. Now answer one question: how many assertions actually ran?
+      Because a Postman collection with no tests exits with success, and nobody notices. Today we build API tests
+      that can fail, for the orders API from the last episodes. Welcome to DEVLADLOG Dev Tools.
+
+  - id: plan
+    type: bullets
+    heading: "From contract to gate"
+    bullets:
+      - "The API publishes its OpenAPI document"
+      - "A collection tests status, shape and flow"
+      - "A data file drives the negative cases"
+      - "Newman runs it headless, locally and in CI"
+      - "Gates check that tests exist, ran and cover the contract"
+    narration: >
+      The plan. The API publishes its own contract. A Postman collection tests status codes, response shape, and a
+      small flow. A data file drives the negative cases. The same collection runs headless in a pipeline. And three
+      small gates check that the tests exist, that they ran, and that they cover what the contract promises.
+
+  - id: openapi
+    type: code
+    heading: "The API describes itself"
+    lang: csharp
+    code: |
+      builder.Services.AddOpenApi();          // Microsoft.AspNetCore.OpenApi
+
+      // setting, default on: the container under test serves the document too
+      if (app.Configuration.GetValue("OpenApi:Enabled", true)) app.MapOpenApi();
+
+      app.MapPost("/orders", async (NewOrder input, OrdersDb db) => { /* ... */ })
+          .WithName("CreateOrder")
+          .Produces<Order>(StatusCodes.Status201Created)
+          .ProducesValidationProblem();
+
+      // GET /openapi/v1.json  ->  "openapi": "3.1.1", 3 paths
+      // python3 tools/export_openapi.py http://localhost:8080 openapi.v1.json
+    narration: >
+      First the contract. Three lines in the orders API add the Open A P I package, serve the document at slash
+      open A P I slash v1 dot json, and name each operation with the status codes it can return. On dot net ten the
+      document is Open A P I three point one. We commit a snapshot, so a contract change shows up in a pull request.
+
+  - id: import
+    type: screen
+    heading: "Import the spec, get requests"
+    image: screens/import.jpg
+    bar: "Postman desktop · Import · openapi.v1.json"
+    demo: >
+      Postman desktop app, signed in with the lab account, a new empty workspace. Import the file openapi.v1.json
+      (Import, Files). Show the choice "collection only / spec with collection", then the generated collection:
+      folders and requests for /healthz, /orders, /orders/{id}. Open one request and its saved example response.
+      Mask the account name and the workspace owner.
+    narration: >
+      Now Postman. Import the snapshot, and you get a collection with folders, requests and example responses for
+      every operation. That's a very good start. But look at the Tests tab: the assertions are ours to write.
+
+  - id: create
+    type: code
+    heading: "A request that checks what matters"
+    lang: javascript
+    code: |
+      pm.test("create: 201 Created", () => pm.response.to.have.status(201));
+      const order = pm.response.json();
+      pm.test("create: the body is an order (strict schema)", () => {
+        pm.response.to.have.jsonSchema(JSON.parse(pm.collectionVariables.get("orderSchema")));
+      });
+      pm.test("create: Location points at the new order", () => {
+        pm.expect(pm.response.headers.get("Location")).to.eql("/orders/" + order.id);
+      });
+      // Chain: the next requests read this order back.
+      pm.collectionVariables.set("orderId", order.id);
+      pm.collectionVariables.set("createdOrder", JSON.stringify(order));
+    narration: >
+      The create request. Check the status. Validate the whole body against a schema. Check that the location
+      header points at the new order. Then save the new id in a collection variable. The next request reads that
+      order back and expects exactly the same body. A flow, not a pile of unrelated calls.
+
+  - id: schema
+    type: code
+    heading: "Gotcha: the generated schema is too polite"
+    lang: text
+    code: |
+      # openapi.v1.json, generated by .NET 10.0.15
+      "id": { "type": ["integer", "string"], "pattern": "^-?(?:0|[1-9]\\d*)$", "format": "int32" }
+
+      # collection variable orderSchema, written by hand
+      { "type": "object", "additionalProperties": false,
+        "required": ["id", "customer", "total", "created"],
+        "properties": {
+          "id":       { "type": "integer", "minimum": 1 },
+          "customer": { "type": "string", "minLength": 1, "maxLength": 100 },
+          "total":    { "type": "number", "exclusiveMinimum": 0 },
+          "created":  { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" } } }
+    narration: >
+      An honest gotcha. The schema in the generated document says an integer may also be a string, so a test built
+      from it would happily accept an id written as text. Our collection carries a strict schema written by hand:
+      real integers, no extra properties. Strict means a new field fails the test until someone approves it.
+      That's the point here.
+
+  - id: runner
+    type: screen
+    heading: "Run the folders in Postman"
+    image: screens/runner.jpg
+    bar: "Postman desktop · Collection Runner · local API"
+    demo: >
+      The API runs in a container on the laptop (docker run -p 8080:8080 contoso/orders-api:dev), environment "local"
+      selected (baseUrl http://localhost:8080). First capture: send "Create order" and show the Test Results tab with
+      its tests passing, and the Collection variables tab with orderId filled. Second capture: Collection Runner on
+      Health, Orders and Validation, Run: all requests green, assertion count visible. Mask the account name.
+    narration: >
+      The collection, against the API in a container on this laptop. Send the create request, and every test shows up
+      in the results, with the order id waiting in the variables. Then the collection runner plays the health, orders
+      and validation folders. Thirty one assertions, all green.
+
+  - id: data
+    type: code
+    heading: "One request, six invalid orders"
+    lang: bash
+    code: |
+      # data/invalid-orders.json: one object per iteration, values are JSON literals
+      { "case": "customer missing", "badCustomer": "null",  "badTotal": "10", "expectedField": "customer" }
+      { "case": "total zero",       "badCustomer": "\"Fabrikam\"", "badTotal": "0",  "expectedField": "total" }
+
+      # body of the request:  { "customer": {{badCustomer}}, "total": {{badTotal}} }
+      pm.test("invalid order " + label + ": the error is about " + field, () => {
+        pm.expect(pm.response.json().errors).to.have.property(field);
+      });
+
+      newman run orders-api.postman_collection.json -e environments/local.postman_environment.json \
+        --folder Data-driven -d data/invalid-orders.json        # 6 iterations, 24 assertions
+    short: data
+    narration: >
+      Negative cases belong in data, not in copies of a request. One object per row, and the values are Jason
+      literals, so null and an empty string can be sent too. The same request runs once per row, and each test
+      says which row it is. Six invalid orders, each rejected for the right field.
+
+  - id: headless
+    type: code
+    heading: "One script, laptop and CI"
+    lang: bash
+    code: |
+      # scripts/run-api-tests.sh  (starts the API in Production mode, or --no-start for a running one)
+      "$NEWMAN" run orders-api.postman_collection.json "${common[@]}" \
+        --folder Health --folder Orders --folder Validation \
+        --reporter-junit-export "$results/junit-main.xml" || status=1
+      "$NEWMAN" run orders-api.postman_collection.json "${common[@]}" \
+        --folder Data-driven -d data/invalid-orders.json \
+        --reporter-junit-export "$results/junit-data.xml" || status=1
+
+      # Newman exits 0 for a collection without tests. Count what ran.
+      python3 tools/junit_gate.py "$results/junit-main.xml" --min-tests 31 || status=1
+      python3 tools/junit_gate.py "$results/junit-data.xml" --min-tests 24 || status=1
+    narration: >
+      Headless is one script. It starts the API in production mode, because development mode answers errors
+      differently, then runs Newman twice and writes J Unit reports. Newman is open source and installs from npm.
+      Postman says it won't get updates and recommends the Postman command line, which runs collection files too.
+      The collection is the asset. The runner is replaceable.
+
+  - id: zero
+    type: code
+    heading: "Gotcha: no tests is not a failure"
+    lang: text
+    code: |
+      $ newman run notests.postman_collection.json -e local.postman_environment.json
+      ...
+      │              requests │        9 │        0 │
+      │            assertions │        0 │        0 │
+      exit code: 0
+
+      $ python3 tools/junit_gate.py results/junit.xml --min-tests 1
+      results/junit.xml: 0 passed, 0 failed, 0 skipped, 0 total
+      ✗ only 0 assertions ran, expected at least 1
+      exit code: 1
+    short: zero
+    narration: >
+      Here's the trap. I removed every test from the collection and ran it. Nine requests, zero assertions, and
+      Newman exits with zero. Green. The gate counts assertions in the report and wants at least the number we
+      expect. A linter also rejects any request without tests of its own. Nothing to fail is not the same as
+      everything passed.
+
+  - id: regression
+    type: screen
+    heading: "Break the API, watch one test go red"
+    image: screens/regression.jpg
+    bar: "Windows Terminal · scripts/run-api-tests.sh"
+    demo: >
+      Windows Terminal in the repo folder (Git Bash or WSL). First: `npm ci` was done, run scripts/run-api-tests.sh:
+      show the two Newman runs green and the two gate lines "31 passed" and "24 passed", exit code 0. Then edit Orders.cs: MaxPageSize = 100 becomes 1000. Run the script again: exactly one failure,
+      "cap: asking for 500 returns at most 100", and the gate line "1 failed". Show `echo $?` is 1. Undo the edit.
+    narration: >
+      Now prove it can fail. Green first: both runs, both gates. Then I change the maximum page size in the API from
+      one hundred to one thousand. Run again, and exactly one test goes red, the one that says asking for five hundred
+      returns at most one hundred. Nothing else breaks, so the message points straight at the change.
+
+  - id: ci
+    type: screen
+    heading: "The same run in GitHub Actions"
+    image: screens/ci.jpg
+    bar: "Browser · GitHub Actions · api-tests"
+    demo: >
+      Throwaway repo orders-app-api-tests (public, contents of src/orders-app). A pull request with a small change
+      opens the workflow run "api-tests": show the steps Lint the collection, Every documented operation and response has
+      a test (the coverage table, 4 operations all ok), Run the collection (Newman output, 32 and 24 assertions).
+      Then the run Summary: artifact api-test-results (junit-main.xml, junit-data.xml).
+    narration: >
+      In GitHub Actions it's one job. Install Newman from the lock file, lint the collection, check that every
+      documented operation and every documented status code has a test, run the collection against the API built from
+      this commit, and keep the reports. The coverage step fails when someone adds an endpoint and no test.
+
+  - id: recap
+    type: bullets
+    heading: "Five habits"
+    bullets:
+      - "Publish the contract and commit a snapshot of it"
+      - "Assert status, shape and flow, not just status"
+      - "Put negative cases in a data file"
+      - "Run the mode you ship, headless, in CI"
+      - "Count assertions: zero tests is not a pass"
+    narration: >
+      Five habits. Publish the contract and commit a snapshot. Assert status, shape and flow. Put negative cases in
+      a data file. Run the mode you ship, headless, in the pipeline. And count assertions, because zero tests is
+      not a pass. Forty five automated tests check all of this before it reaches Postman.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The collection, the scripts and every test are on GitHub, and the complete guide is on devladlog dot com.
+      Next time we debug the thing when a test does go red. Subscribe so you don't miss it. This was DEVLADLOG Dev
+      Tools, by Momento Galático.

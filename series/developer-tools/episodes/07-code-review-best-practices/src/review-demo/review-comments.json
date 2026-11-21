@@ -1,0 +1,123 @@
+[
+  {
+    "id": 101,
+    "pull_request_review_id": 4001,
+    "path": "tests/Contoso.Orders.Api.Tests/CancelTests.cs",
+    "line": 12,
+    "side": "RIGHT",
+    "commit_id": "af84581ac17e22353da16b4dbb892dfd7ef480a4",
+    "body": "praise: A focused change with a test that reads like a sentence. Easy to review, thank you.",
+    "user": {
+      "login": "sam-demo"
+    },
+    "created_at": "2026-11-03T14:41:00Z"
+  },
+  {
+    "id": 102,
+    "pull_request_review_id": 4001,
+    "path": "src/Contoso.Orders.Api/Program.cs",
+    "start_line": 54,
+    "start_side": "RIGHT",
+    "line": 55,
+    "side": "RIGHT",
+    "commit_id": "af84581ac17e22353da16b4dbb892dfd7ef480a4",
+    "body": "issue (blocking): `order!` hides the null from the compiler, it doesn't remove it. For an unknown id this throws and the caller gets a 500.\n\n```suggestion\n    if (await db.Orders.FindAsync(id) is not { } order) return Results.NotFound();\n    order.Status = \"cancelled\";\n```\n\nI reproduced it: POST /orders/2147483647/cancel answers 500.",
+    "user": {
+      "login": "sam-demo"
+    },
+    "created_at": "2026-11-03T14:42:00Z"
+  },
+  {
+    "id": 103,
+    "pull_request_review_id": 4001,
+    "path": "src/Contoso.Orders.Api/Program.cs",
+    "line": 55,
+    "side": "RIGHT",
+    "commit_id": "af84581ac17e22353da16b4dbb892dfd7ef480a4",
+    "body": "question (blocking): What should cancelling an order that is already cancelled do? Today it silently answers 200 again. If a client retries after a timeout that is fine, if two screens disagree it hides a bug. I'd say 409, but it's your call, I just need it decided and tested.",
+    "user": {
+      "login": "sam-demo"
+    },
+    "created_at": "2026-11-03T14:43:00Z"
+  },
+  {
+    "id": 104,
+    "pull_request_review_id": 4001,
+    "path": "src/Contoso.Orders.Api/Orders.cs",
+    "line": 12,
+    "side": "RIGHT",
+    "commit_id": "af84581ac17e22353da16b4dbb892dfd7ef480a4",
+    "body": "suggestion (non-blocking): \"open\" and \"cancelled\" are strings repeated in the endpoint and the test. A small `OrderStatus` class with two constants keeps them in one place (strings on purpose, they are what the API returns).",
+    "user": {
+      "login": "sam-demo"
+    },
+    "created_at": "2026-11-03T14:44:00Z"
+  },
+  {
+    "id": 105,
+    "pull_request_review_id": 4001,
+    "path": "tests/Contoso.Orders.Api.Tests/CancelTests.cs",
+    "line": 12,
+    "side": "RIGHT",
+    "commit_id": "af84581ac17e22353da16b4dbb892dfd7ef480a4",
+    "body": "todo (blocking): Add the unhappy paths: unknown id, and cancelling twice. They are the two comments above, and the first one currently fails with a 500.",
+    "user": {
+      "login": "sam-demo"
+    },
+    "created_at": "2026-11-03T14:45:00Z"
+  },
+  {
+    "id": 106,
+    "pull_request_review_id": 4001,
+    "path": "src/Contoso.Orders.Api/Program.cs",
+    "line": 52,
+    "side": "RIGHT",
+    "commit_id": "af84581ac17e22353da16b4dbb892dfd7ef480a4",
+    "body": "nitpick (non-blocking): `/orders/{id:int}/cancel` as a POST is fine. A name for the route (`WithName(\"CancelOrder\")`) will help once we publish the OpenAPI document (episode 8).",
+    "user": {
+      "login": "sam-demo"
+    },
+    "created_at": "2026-11-03T14:46:00Z"
+  },
+  {
+    "id": 107,
+    "pull_request_review_id": 4001,
+    "path": "src/Contoso.Orders.Api/Program.cs",
+    "line": 52,
+    "side": "RIGHT",
+    "commit_id": "af84581ac17e22353da16b4dbb892dfd7ef480a4",
+    "body": "thought (non-blocking): Later we may want `GET /orders?status=open`. Not for this PR, just noting that `Status` will need an index when that day comes.",
+    "user": {
+      "login": "sam-demo"
+    },
+    "created_at": "2026-11-03T14:47:00Z"
+  },
+  {
+    "id": 108,
+    "pull_request_review_id": 4001,
+    "path": "src/Contoso.Orders.Api/Program.cs",
+    "line": 55,
+    "side": "RIGHT",
+    "commit_id": "af84581ac17e22353da16b4dbb892dfd7ef480a4",
+    "body": "Fair point, fixed in the next commit. I'd go with 409 and a clear title.",
+    "user": {
+      "login": "alex-demo"
+    },
+    "created_at": "2026-11-04T08:48:00Z",
+    "in_reply_to_id": 103
+  },
+  {
+    "id": 109,
+    "pull_request_review_id": 4001,
+    "path": "src/Contoso.Orders.Api/Program.cs",
+    "line": 55,
+    "side": "RIGHT",
+    "commit_id": "af84581ac17e22353da16b4dbb892dfd7ef480a4",
+    "body": "Resolved with 0002: 404 for unknown ids, 409 when already cancelled, both tested.",
+    "user": {
+      "login": "alex-demo"
+    },
+    "created_at": "2026-11-04T08:49:00Z",
+    "in_reply_to_id": 102
+  }
+]

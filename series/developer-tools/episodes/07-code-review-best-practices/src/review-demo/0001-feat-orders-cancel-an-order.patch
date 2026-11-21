@@ -1,0 +1,75 @@
+From af84581ac17e22353da16b4dbb892dfd7ef480a4 Mon Sep 17 00:00:00 2001
+From: Alex Demo <alex.demo@contoso.example>
+Date: Tue, 3 Nov 2026 10:15:00 +0000
+Subject: [PATCH 1/2] feat(orders): cancel an order
+
+Adds POST /orders/{id}/cancel, which sets the order's status to cancelled.
+---
+ src/Contoso.Orders.Api/Orders.cs              |  1 +
+ src/Contoso.Orders.Api/Program.cs             |  8 +++++++
+ tests/Contoso.Orders.Api.Tests/CancelTests.cs | 22 +++++++++++++++++++
+ 3 files changed, 31 insertions(+)
+ create mode 100644 tests/Contoso.Orders.Api.Tests/CancelTests.cs
+
+diff --git a/src/Contoso.Orders.Api/Orders.cs b/src/Contoso.Orders.Api/Orders.cs
+index 65c7c7d..9fbfc1c 100644
+--- a/src/Contoso.Orders.Api/Orders.cs
++++ b/src/Contoso.Orders.Api/Orders.cs
+@@ -9,6 +9,7 @@ public sealed class Order
+     [MaxLength(100)] public required string Customer { get; set; }
+     public decimal Total { get; set; }
+     public DateOnly Created { get; set; }
++    public string Status { get; set; } = "open";
+ }
+ 
+ public sealed record NewOrder(string? Customer, decimal Total);
+diff --git a/src/Contoso.Orders.Api/Program.cs b/src/Contoso.Orders.Api/Program.cs
+index 53f1f84..ce4d276 100644
+--- a/src/Contoso.Orders.Api/Program.cs
++++ b/src/Contoso.Orders.Api/Program.cs
+@@ -49,6 +49,14 @@ app.MapPost("/orders", async (NewOrder input, OrdersDb db) =>
+     return Results.Created($"/orders/{order.Id}", order);
+ });
+ 
++app.MapPost("/orders/{id:int}/cancel", async (int id, OrdersDb db) =>
++{
++    var order = await db.Orders.FindAsync(id);
++    order!.Status = "cancelled";
++    await db.SaveChangesAsync();
++    return Results.Ok(order);
++});
++
+ app.Run();
+ 
+ public partial class Program;
+diff --git a/tests/Contoso.Orders.Api.Tests/CancelTests.cs b/tests/Contoso.Orders.Api.Tests/CancelTests.cs
+new file mode 100644
+index 0000000..de8acea
+--- /dev/null
++++ b/tests/Contoso.Orders.Api.Tests/CancelTests.cs
+@@ -0,0 +1,22 @@
++using System.Net;
++using System.Net.Http.Json;
++using Contoso.Orders.Api;
++
++namespace Contoso.Orders.Api.Tests;
++
++public class CancelTests(ApiFactory factory) : IClassFixture<ApiFactory>
++{
++    private readonly HttpClient _client = factory.CreateClient();
++
++    [Fact]
++    public async Task Cancel_marks_the_order_cancelled()
++    {
++        var created = await (await _client.PostAsJsonAsync("/orders", new NewOrder("Alex Demo", 10m)))
++            .Content.ReadFromJsonAsync<Order>();
++
++        var response = await _client.PostAsync($"/orders/{created!.Id}/cancel", content: null);
++
++        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
++        Assert.Equal("cancelled", (await response.Content.ReadFromJsonAsync<Order>())!.Status);
++    }
++}
+-- 
+2.43.0
+

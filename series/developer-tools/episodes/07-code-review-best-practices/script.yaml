@@ -1,0 +1,232 @@
+# DEVLADLOG Dev Tools — episode 07. Code excerpts and outputs are real (src/orders-app, src/review-demo, tests/, run on the
+# build machine on 21 Nov 2026). The four `screen` scenes are recorded later on the Windows recording laptop
+# (browser on a throwaway GitHub repo, Windows Terminal): see demo.md. One person records, so no second reviewer appears.
+episode: 7
+slug: code-review-best-practices
+series_label: "DEV TOOLS"
+series_name: "DEVLADLOG Dev Tools"
+file_prefix: "developer-tools"
+title: "Code review best practices: automate the boring half"
+subtitle: "Small pull requests, labelled comments, a reproduced bug"
+voice: am_michael
+thumbnail_text: "GREEN CI.\nSTILL A 500.\nCODE REVIEW"
+youtube:
+  title: "Code Review Best Practices: PR Size, Conventional Comments, Suggestions | DEVLADLOG Dev Tools #7"
+  tags: [code review, pull request, GitHub, Conventional Comments, CODEOWNERS, suggested changes, GitHub Actions, review metrics, ASP.NET Core, DevTools]
+sources:
+  - https://www.devladlog.com/articles/developer-tools/2025-12-24-code-review-best-practices-complete-guide-2025/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "CI was green. The review found a 500."
+    sub: "Make the review the part machines can't do"
+    short: hook
+    narration: >
+      The tests are green, the pull request is small, and the code still returns a five hundred for a perfectly
+      normal request. That's what a code review is for. So let's stop spending it on formatting and missing
+      descriptions, and build a review process whose human part finds this, with the machines doing the rest. Welcome to DEVLADLOG Dev Tools.
+
+  - id: plan
+    type: bullets
+    heading: "A review is a pipeline too"
+    bullets:
+      - "Authors: small changes, explained"
+      - "Machines: size, description, who reviews what"
+      - "Humans: design and correctness, with labelled comments"
+      - "Proof: reproduce the bug, then fix it"
+      - "Measure the queue, never the people"
+    narration: >
+      The plan. Authors send small changes with an explanation. Machines check what machines can check: the size, the
+      description, and who has to look. Humans spend their time on design and correctness, with comments that say
+      how serious they are. Bugs get reproduced before they get fixed. And we measure the queue, never the people.
+
+  - id: template
+    type: code
+    heading: "The description is the reviewer's map"
+    lang: text
+    code: |
+      ## What and why          ## How to verify
+      ## Where to look         ## Risk and rollback        (## Out of scope: optional)
+
+      $ python3 tools/review_kit/cli.py description < pr-body.md
+      The pull request description is missing what a reviewer needs:
+      - What and why: is empty or a placeholder (needs at least 20 characters of your own words)
+      - How to verify: is empty or a placeholder (needs at least 20 characters ...)
+      - Where to look: is empty or a placeholder (needs at least 20 characters ...)
+      - Risk and rollback: is empty or a placeholder (needs at least 20 characters ...)
+      exit code: 1
+    narration: >
+      Start before the review. The template has four sections written for the reviewer: what and why, how to verify,
+      where to look, and risk and rollback. A small job checks they exist and aren't placeholders. One detail: pull
+      request workflows don't run on an edited description unless you list the edited event, so ours does.
+
+  - id: size
+    type: code
+    heading: "Size and routing, before a human looks"
+    lang: text
+    code: |
+      $ python3 tools/review_kit/cli.py size --base main --head HEAD --fail-above L
+      size/S: 31 changed lines in 3 files (0 ignored: lock files, generated, snapshots)
+      | Area                           | Files | Lines |
+      | tests/Contoso.Orders.Api.Tests |     1 |    22 |
+      | src/Contoso.Orders.Api         |     2 |     9 |
+
+      $ python3 tools/review_kit/cli.py owners --base main --head HEAD
+      | @contoso/orders-team               | Orders.cs, Program.cs |
+      | @contoso/orders-team or @contoso/qa | CancelTests.cs        |
+    narration: >
+      Size counts the lines a person has to read, per area, and skips lock files and generated code. The limits are our
+      own defaults, not a standard, so tune them for your team: small, medium, large, and the job fails above large. Routing reads the code owners file the way
+      GitHub does, last match wins, and shows who has to look at which files. This one is small and goes to one team.
+
+  - id: propen
+    type: screen
+    heading: "The pull request, with its three checks"
+    image: screens/pr-open.jpg
+    bar: "Browser · GitHub · pull request"
+    demo: >
+      Throwaway repo (orders-app-review-demo). Pull request "feat(orders): cancel an order", branch feat/cancel-order,
+      body from src/review-demo/pr-body.good.md. Capture the conversation tab: the description with its four sections,
+      the Checks list (pr-size, pr-description, review-routing green), and one job summary (the size table).
+      Then edit the body to the "bad" version and show pr-description turning red after the edit.
+    narration: >
+      Here's the pull request. Four sections in the description. Three checks, all green, and the summary shows the
+      size table and the owners. And because we listed the edited event, if I empty the description, the check goes
+      red again. Now the human part.
+
+  - id: bug
+    type: code
+    heading: "Green CI, and the bug is still there"
+    lang: text
+    code: |
+      var order = await db.Orders.FindAsync(id);
+      order!.Status = "cancelled";                       // the ! hides the null, it doesn't remove it
+
+      $ dotnet test        # the author's commit
+      Passed!  - Failed: 0, Passed: 22, Skipped: 4
+
+      $ dotnet test        # plus the reviewer's two reproductions
+      Cancelling_an_unknown_order_is_404_not_500
+        Expected: NotFound   Actual: InternalServerError
+      Cancelling_twice_is_a_409_with_a_reason
+        Expected: Conflict   Actual: OK
+      Failed!  - Failed: 2, Passed: 22, Skipped: 4
+    short: bug
+    narration: >
+      The change adds a cancel endpoint. The author's test passes. But look at the exclamation mark: it tells the
+      compiler the order isn't null, so an unknown id throws, and the caller gets a five hundred. Cancelling twice
+      quietly succeeds. The reviewer wrote two tests for these, and both fail. Now the comment has proof, not just an opinion, and the author can run it.
+
+  - id: comments
+    type: code
+    heading: "Comments that say how serious they are"
+    lang: text
+    code: |
+      praise: A focused change with a test that reads like a sentence.
+
+      issue (blocking): `order!` hides the null from the compiler, it doesn't
+      remove it. For an unknown id this throws and the caller gets a 500.
+        ```suggestion ... ```
+
+      question (blocking): What should cancelling an already cancelled order do?
+
+      suggestion (non-blocking): "open" and "cancelled" are repeated strings.
+
+      nitpick (non-blocking): name the route once we publish the OpenAPI document.
+    narration: >
+      The comments use the Conventional Comments format. A label, optional decorations, then the subject. Praise.
+      An issue that's blocking. A question that's blocking, because the behaviour has to be decided. A suggestion and a
+      nitpick that aren't. The label tells the author what to do, and a small linter enforces our house rule: issues,
+      questions and to dos must say blocking or non blocking.
+
+  - id: review
+    type: screen
+    heading: "Reviewing on GitHub"
+    image: screens/review.jpg
+    bar: "Browser · GitHub · Files changed"
+    demo: >
+      Pull request, Files changed. Add the review comments from src/review-demo/review-comments.json as one review
+      ("Comment"; authors cannot approve or request changes on their own pull request, say so on camera): at least the
+      issue (blocking) with its suggestion block on Program.cs lines 54 to 55, the question (blocking), and the praise.
+      Submit the review. Then run `gh api repos/<owner>/orders-app-review-demo/pulls/1/comments > comments.json` and
+      `python3 tools/review_kit/cli.py comments comments.json` in Windows Terminal: summary table and "Blocking (n)".
+    narration: >
+      On GitHub, the issue comment carries a suggestion block, a change the author can commit with one click. Pull
+      request authors can't approve their own pull request, so on this one account I can only leave a comment review.
+      With two people it would be request changes. The tool reads the comments from the A P I and lists what blocks.
+
+  - id: suggestion
+    type: code
+    heading: "Gotcha: a suggestion replaces exactly its lines"
+    lang: text
+    code: |
+      # comment anchored on lines 54-55 (declaration and use)
+      ```suggestion
+          if (await db.Orders.FindAsync(id) is not { } order) return Results.NotFound();
+      ```
+
+      $ dotnet test        # suggestion applied as written
+      Failed Cancel_marks_the_order_cancelled
+        Expected: "cancelled"   Actual: "open"
+      Failed!  - Failed: 1, Passed: 21, Skipped: 4
+      # fix: the suggestion has to include `order.Status = "cancelled";` too
+    short: suggestion
+    narration: >
+      An honest gotcha, and my own. My first suggestion replaced the two lines it was anchored to with a single
+      guard clause, and I dropped the assignment. Applied exactly as written, the author's own test failed: the status
+      stayed open. A suggestion replaces precisely the lines it's on, so build it, run the tests, then post it.
+
+  - id: followup
+    type: screen
+    heading: "Fix, resolve, merge"
+    image: screens/followup.jpg
+    bar: "Browser · GitHub · pull request"
+    demo: >
+      Push the second commit (git am of src/review-demo/0002-*.patch, or the commit-2 changes made by hand): the checks
+      run again and stay green, the new tests are in the Files changed. Reply to the blocking threads (replies are in
+      review-comments.json: "Fair point, fixed in the next commit"), click Resolve conversation on each, show "All
+      conversations resolved". Squash and merge. Say on camera that with two people the ruleset from episode one also
+      needs an approval, which one account can't give.
+    narration: >
+      The author answers each blocking comment, with a four oh four for the unknown id and a four oh nine, with a reason,
+      for cancelling twice. Status values move into one place. The new tests are in. The author replies, resolves the
+      threads, and the checks are green. In a team, the ruleset from episode one would also need one approval. Squash,
+      and merge.
+
+  - id: metrics
+    type: screen
+    heading: "Measure the queue, not the people"
+    image: screens/metrics.jpg
+    bar: "Windows Terminal · review_kit metrics"
+    demo: >
+      After the merge, in Windows Terminal: `python3 tools/review_kit/cli.py metrics --repo <owner>/orders-app-review-demo
+      --limit 5`. One merged pull request: lines, hours to merge, and (because only the author reviewed) the line
+      "Never reviewed by anyone but the author: #1". Explain on camera that this is the metric working as designed.
+    narration: >
+      The last step is the queue. The tool asks the GitHub A P I for the last closed pull requests and prints hours to
+      first review and to merge. Here only I reviewed my own pull request, so it says nobody else did, which is exactly
+      what that number is for. Use it to see waiting, never to rank people.
+
+  - id: recap
+    type: bullets
+    heading: "Five habits"
+    bullets:
+      - "Write the description for the reviewer"
+      - "Keep it small; let machines check size and routing"
+      - "Label every comment: how serious is it?"
+      - "Reproduce before you argue; test a suggestion before you post it"
+      - "Watch the waiting time, not the people"
+    narration: >
+      Five habits. Write the description for the reviewer. Keep changes small and let machines check size and routing.
+      Label every comment. Reproduce before you argue, and test a suggestion before you post it. And watch the waiting
+      time, not the people. Sixty nine automated tests, including real builds of this pull request, back the tools.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The tools, the pull request and every test are on GitHub, and the complete guide is on devladlog dot com. Next
+      time we test that A P I from the outside, with Postman. Subscribe so you don't miss it. This was DEVLADLOG Dev
+      Tools, by Momento Galático.
