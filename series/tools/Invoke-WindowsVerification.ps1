@@ -100,7 +100,9 @@ foreach ($ep in $episodes) {
         $cmd = "`$ErrorActionPreference='Stop'; Import-Module Pester -MinimumVersion 5.0; `$c = New-PesterConfiguration; `$c.Run.Path = @($paths); `$c.Run.Exit = `$true; `$c.Output.Verbosity = 'Normal'; Invoke-Pester -Configuration `$c"
         $enc = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($cmd))
         if ($pwsh) { Invoke-Suite $name 'pester:pwsh7' $ep.FullName $pwsh @('-NoProfile', '-NonInteractive', '-EncodedCommand', $enc) | Out-Null }
-        if ($AlsoWindowsPowerShell -and $winps) { Invoke-Suite $name 'pester:winps51' $ep.FullName $winps @('-NoProfile', '-NonInteractive', '-EncodedCommand', $enc) | Out-Null }
+        $needs7 = Get-ChildItem $ep.FullName -Recurse -Include *.ps1, *.psm1 -File | Where-Object { $_.FullName -notmatch $skip } |
+            Select-String -Pattern '#Requires\s+-Version\s+7|-PSEdition\s+Core' -List | Select-Object -First 1
+        if ($AlsoWindowsPowerShell -and $winps -and -not $needs7) { Invoke-Suite $name 'pester:winps51' $ep.FullName $winps @('-NoProfile', '-NonInteractive', '-EncodedCommand', $enc) | Out-Null }
     }
 
     if ($IncludePython -and $python -and (Test-Path (Join-Path $ep.FullName 'tests'))) {
