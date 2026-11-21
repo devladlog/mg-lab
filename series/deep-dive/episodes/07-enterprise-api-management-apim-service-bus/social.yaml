@@ -1,0 +1,89 @@
+episode: 7
+series: "DEVLADLOG Deep Dive"
+status: draft-hold-for-review
+ai_label: true
+youtube_url: "{YOUTUBE_URL}"
+linkedin_company:
+  text: |
+    A network blip, the app retries, and finance reviews the same seven thousand euro purchase twice.
+
+    In DEVLADLOG Deep Dive episode 7 every system that wants to send Contoso a purchase event comes through one front door: Azure API Management in front of a Service Bus topic.
+    - The gateway checks the Entra token (issuer, audience and the Purchase.Submit app role), then a rate limit, then the body against the OpenAPI schema
+    - It enqueues with its own managed identity and answers 202: accepted, not processed
+    - The caller's idempotency key becomes the MessageId, and duplicate detection is on at topic creation
+    - Two subscriptions read the topic: everything, and only the big purchases for finance
+
+    We also go through the Consumption tier limits we found in Learn, and test the policy size limit.
+
+    Watch the episode: {YOUTUBE_URL}
+    Code: {REPO_URL}
+    Guide: {BLOG_URL}
+
+    Narration uses an AI voice.
+
+    #AzureAPIManagement #ServiceBus #Azure #APIDesign #EntraID
+linkedin_personal:
+  text: |
+    A gateway should do identity, rate and shape. The services behind it should keep the business rules.
+
+    In episode 7 of the DEVLADLOG Deep Dive the APIM policy checks the token, then a rate limit, then the body against the schema, cheap checks first. Then it puts the event on a Service Bus topic and answers 202. The caller's key becomes the MessageId, so a retry does not reach finance twice.
+
+    The design detail that is easy to miss: duplicate detection cannot be switched on later. You decide when you create the topic.
+
+    {YOUTUBE_URL}
+
+    Narration uses an AI voice.
+
+    #AzureAPIManagement #ServiceBus
+facebook:
+  text: |
+    A network blip, the app retries, and finance reviews the same purchase twice. How do you stop that?
+
+    In episode 7 of the DEVLADLOG Deep Dive we put Azure API Management in front of a Service Bus topic. The gateway checks identity, rate and shape, and the caller's key becomes the message ID.
+
+    Watch it here: {YOUTUBE_URL}
+
+    Narration uses an AI voice.
+
+    #AzureAPIManagement #Azure
+shorts:
+  - id: hook
+    youtube_short_title: "The app retries. Finance gets it twice. #Shorts"
+    instagram_reel:
+      caption: |
+        A network blip, the app retries, and finance reviews the same seven thousand euro purchase twice.
+        So every system that wants to send events comes through one front door: Azure API Management, in front of a Service Bus topic.
+        The caller's key becomes the message ID, and the gateway answers 202: accepted, not processed.
+        Full episode: link in bio.
+        #AzureAPIManagement #ServiceBus #Azure
+      cover_text: "Finance gets it twice"
+    tiktok:
+      caption: "The app retries after a blip and finance reviews the same purchase twice. One front door: API Management in front of a Service Bus topic. #AzureAPIManagement #ServiceBus #Azure"
+  - id: policy
+    youtube_short_title: "APIM policy: three checks, cheap ones first #Shorts"
+    instagram_reel:
+      caption: |
+        Here is the gateway policy, in order.
+        First the token: right issuer from the tenant, right audience, and the Purchase.Submit app role.
+        Then a rate limit of 20 calls a minute.
+        Then the body, checked against the schema from the OpenAPI definition, with no extra properties allowed.
+        Cheap checks first, so bad calls never cost more.
+        Full episode: link in bio.
+        #AzureAPIManagement #APIDesign #Azure
+      cover_text: "Three checks, in this order"
+    tiktok:
+      caption: "APIM policy order: token (issuer, audience, app role), rate limit of 20 a minute, then body schema with no extra properties. #AzureAPIManagement #Azure"
+  - id: gotcha
+    youtube_short_title: "API Management Consumption tier: read the fine print #Shorts"
+    instagram_reel:
+      caption: |
+        Gotchas on the API Management Consumption tier, all from Learn.
+        Rate limit by key is not available, so we limit per subscription key instead.
+        The built-in send-service-bus-message policy is for the classic tiers, so we call the REST API.
+        The policy document is capped at 16 KiB, and our tests check that.
+        And duplicate detection on a topic is fixed when you create it.
+        Full episode: link in bio.
+        #AzureAPIManagement #ServiceBus #Azure
+      cover_text: "Read the fine print"
+    tiktok:
+      caption: "APIM Consumption tier: no rate-limit-by-key, no send-service-bus-message policy, 16 KiB policy cap. And duplicate detection is immutable. #AzureAPIManagement #ServiceBus"

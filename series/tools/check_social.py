@@ -16,7 +16,7 @@ def words(t):
 
 
 def tags(t):
-    return re.findall(r"(?<!\w)#\w+", t)
+    return re.findall(r"(?<!\w)#[A-Za-z]\w*", t)
 
 
 def check(folder: Path):

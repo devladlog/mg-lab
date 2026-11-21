@@ -1,0 +1,83 @@
+episode: 7
+series: "DEVLADLOG Microsoft 365"
+status: draft-hold-for-review
+ai_label: true
+youtube_url: "{YOUTUBE_URL}"
+linkedin_company:
+  text: |
+    Intune says your devices are compliant. Compliant with what, and are all of them even covered?
+
+    Episode 7 of DEVLADLOG Microsoft 365 enrolls a real Windows 11 machine, keeps a compliance policy in one file, pushes it with Microsoft Graph, and audits every managed device for what the dashboard tends to hide:
+    - Devices that haven't synced for 30 days, or never synced
+    - Unencrypted drives and Windows builds below the policy minimum
+    - Userless and personal devices
+    - Two records sharing one serial number, which a re-enrolled machine leaves behind
+
+    The gotcha: the grace period is not part of the policy. Actions for noncompliance are a separate object with their own endpoint, so patching the policy does nothing useful. The module sends each change to the endpoint that owns it.
+
+    Fifty-eight Pester tests run without a tenant.
+
+    Watch: {YOUTUBE_URL}
+    Code: {REPO_URL}
+    Guide: {BLOG_URL}
+
+    Narration uses an AI voice.
+
+    #Microsoft365 #Intune #MicrosoftGraph #PowerShell
+linkedin_personal:
+  text: |
+    I spent a while wondering why changing the grace period in my Intune compliance policy file did nothing. The answer is in the Graph model: actions for noncompliance are a separate object, with a dedicated schedule actions for rules action, and the policy must keep exactly one block action.
+
+    So the module now sends each change to the endpoint that owns it, and a second run reports "unchanged".
+
+    Episode 7 also audits the whole fleet for stale, unencrypted and duplicate devices.
+
+    Watch: {YOUTUBE_URL}
+
+    Narration uses an AI voice.
+
+    #Microsoft365 #Intune
+facebook:
+  text: |
+    Intune says your devices are compliant. But compliant with what, and are they all covered?
+
+    In episode 7 of DEVLADLOG Microsoft 365 we enroll a real Windows 11 machine, keep the compliance policy in one file, push it with Microsoft Graph, and audit the whole fleet for stale, unencrypted and duplicate devices. Everything runs in our lab tenant.
+
+    Watch it here: {YOUTUBE_URL}
+
+    Narration uses an AI voice.
+
+    #Microsoft365 #Intune
+shorts:
+  - id: hook
+    youtube_short_title: "Intune says compliant. Compliant with what? #Shorts"
+    instagram_reel:
+      caption: |
+        Intune says your devices are compliant. But compliant with what, and are all of them even covered?
+        We enroll a real Windows 11 machine, keep a compliance policy in one file, push it with Microsoft Graph, then audit every managed device for the things the dashboard tends to hide.
+        Full episode: link in bio
+        #Microsoft365 #Intune #MicrosoftGraph
+      cover_text: "Compliant, or not checked?"
+    tiktok:
+      caption: "Intune says your devices are compliant. With what policy, and are they all covered? A compliance policy as code, plus a fleet audit. #Microsoft365 #Intune #MicrosoftGraph"
+  - id: gotcha
+    youtube_short_title: "Intune grace period: why patching the policy does nothing #Shorts"
+    instagram_reel:
+      caption: |
+        Change a setting and you patch the policy. Change the grace period and a patch does nothing useful, because actions for noncompliance are a separate object.
+        Graph has a dedicated action, schedule actions for rules, and the policy must keep exactly one block action. Our module sends each change to the endpoint that owns it.
+        Full episode: link in bio
+        #Microsoft365 #Intune #MicrosoftGraph
+      cover_text: "Actions have own endpoint"
+    tiktok:
+      caption: "Patching an Intune compliance policy won't change the grace period. Actions for noncompliance are a separate object with their own Graph endpoint. #Microsoft365 #Intune #MicrosoftGraph"
+  - id: audit
+    youtube_short_title: "Intune audit: what the compliance dashboard hides #Shorts"
+    instagram_reel:
+      caption: |
+        Compliance state is one signal. Our audit also flags devices that haven't synced for 30 days, devices that never synced, unencrypted drives, Windows builds below the policy minimum, userless and personal devices, and two records that share one serial number, which is what a re-enrolled machine leaves behind.
+        Full episode: link in bio
+        #Microsoft365 #Intune #PowerShell
+      cover_text: "What the dashboard hides"
+    tiktok:
+      caption: "Beyond compliance state: stale devices, never-synced, unencrypted drives, old builds, personal devices and duplicate serial numbers. An Intune audit in PowerShell. #Microsoft365 #Intune #PowerShell"

@@ -1,0 +1,87 @@
+episode: 2
+series: "DEVLADLOG Deep Dive"
+status: draft-hold-for-review
+ai_label: true
+youtube_url: "{YOUTUBE_URL}"
+linkedin_company:
+  text: |
+    An employee and a manager ask the HR copilot the same question: what is the salary range for band M2? The manager gets the answer with a citation. The employee gets "I couldn't find this in the documents you have access to."
+
+    That is not the model being polite. The employee's request never saw the document. In DEVLADLOG Deep Dive episode 2 we build that behaviour:
+    - SharePoint libraries ingested with Microsoft Graph, chunked and pushed to Azure AI Search with the Entra groups allowed to read each one
+    - A security filter on every query, built only from validated group GUIDs
+    - Hybrid search (keywords plus vectors) and answers from Azure OpenAI
+    - A Copilot Studio agent calling the API through a custom connector with the user's own sign-in
+
+    We also cover what to do when a user is in more than 200 groups, and why a document can contain instructions.
+
+    Watch the episode: {YOUTUBE_URL}
+    Code: {REPO_URL}
+    Guide: {BLOG_URL}
+
+    Narration uses an AI voice.
+
+    #AzureAI #MicrosoftCopilot #AzureOpenAI #SharePoint #CopilotStudio
+linkedin_personal:
+  text: |
+    If your copilot answers from SharePoint, the permission check has to happen at retrieval, not in the prompt.
+
+    In our build every search carries a filter on the caller's Entra groups, so a document the user cannot read never reaches the model. An empty group list raises an error instead of running an unfiltered query, and if nothing permitted comes back, there is no model call at all.
+
+    One more thing I would tell a colleague: Azure AI Search can now ingest SharePoint permissions itself (GA in the 2026-10-01 API). Check that first.
+
+    DEVLADLOG Deep Dive, episode 2: {YOUTUBE_URL}
+
+    Narration uses an AI voice.
+
+    #AzureAI #CopilotStudio
+facebook:
+  text: |
+    Same question, two answers. A manager asking the HR copilot about a salary band gets the answer with a citation. An employee gets "I couldn't find this in the documents you have access to", because their request never saw that document.
+
+    In episode 2 of the DEVLADLOG Deep Dive we build that with Azure AI Search, Azure OpenAI and Copilot Studio.
+
+    Watch it here: {YOUTUBE_URL}
+
+    Narration uses an AI voice.
+
+    #AzureAI #MicrosoftCopilot
+shorts:
+  - id: hook
+    youtube_short_title: "Same question, two answers: a copilot that respects permissions #Shorts"
+    instagram_reel:
+      caption: |
+        A manager and an employee ask the HR copilot the same question: the salary range for band M2.
+        The manager gets the answer, with a citation. The employee gets "I couldn't find this in the documents you have access to."
+        That is not the model being polite. The employee's request never even saw the document.
+        We build it with Azure AI Search, Azure OpenAI and Copilot Studio.
+        Full episode: link in bio.
+        #AzureAI #MicrosoftCopilot #CopilotStudio
+      cover_text: "Same question, two answers"
+    tiktok:
+      caption: "Manager and employee ask the HR copilot the same question. One gets an answer with a citation, one gets 'not found'. The model never saw it. #AzureAI #MicrosoftCopilot"
+  - id: trimming
+    youtube_short_title: "The security filter that runs on every AI Search query #Shorts"
+    instagram_reel:
+      caption: |
+        This is the heart of a permission-aware copilot: every Azure AI Search query carries a filter on the caller's group IDs, using search.in.
+        Only validated GUIDs go into the filter, never free text. An empty group list raises an error instead of running an unfiltered query.
+        The search itself is hybrid: keywords plus vectors.
+        Full episode: link in bio.
+        #AzureAI #AzureAISearch #MicrosoftCopilot
+      cover_text: "The security filter"
+    tiktok:
+      caption: "Every AI Search query carries the caller's group IDs as a filter. Only validated GUIDs, and an empty list raises an error. #AzureAI #AzureAISearch"
+  - id: gotcha
+    youtube_short_title: "3 honest notes on building an enterprise copilot #Shorts"
+    instagram_reel:
+      caption: |
+        Three notes from building a permission-aware copilot.
+        Users in more than 200 groups get no groups claim, so assign only the HR groups to the app and fail closed.
+        Documents can contain instructions, so keep them inside source envelopes and turn on document attack detection.
+        And Azure AI Search can now ingest SharePoint permissions itself, GA in the 2026-10-01 API. If it fits, start there.
+        Full episode: link in bio.
+        #AzureAI #AzureAISearch #SharePoint
+      cover_text: "Three honest notes"
+    tiktok:
+      caption: "200+ groups means no groups claim: fail closed. Documents can hold instructions: treat them as data. AI Search can now ingest SharePoint ACLs. #AzureAI #SharePoint"

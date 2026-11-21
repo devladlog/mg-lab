@@ -1,0 +1,87 @@
+episode: 10
+series: "DEVLADLOG Deep Dive"
+status: draft-hold-for-review
+ai_label: true
+youtube_url: "{YOUTUBE_URL}"
+linkedin_company:
+  text: |
+    A finance review queue is nearly idle on a quiet night and flooded at month end. The worker that drains it should scale with the backlog, down to zero.
+
+    In DEVLADLOG Deep Dive episode 10 we build that on AKS with Dapr, KEDA and Service Bus:
+    - Service Bus holds the messages
+    - Dapr delivers them to the app through a sidecar, so the code never touches a Service Bus library
+    - KEDA watches the subscription and sets the replica count: one more replica for every five messages waiting, up to ten, and zero when empty
+    - Every component signs in with workload identity, so there is no connection string anywhere
+
+    We also list the gotchas from the docs: the Dapr extension's high-availability default, keeping the subscription name identical in three places, and why the free tier and no-HA choices are for a recording, not production.
+
+    Watch the episode: {YOUTUBE_URL}
+    Code: {REPO_URL}
+    Guide: {BLOG_URL}
+
+    Narration uses an AI voice.
+
+    #AKS #Dapr #KEDA #ServiceBus #Azure
+linkedin_personal:
+  text: |
+    One name, three places. In episode 10 of the DEVLADLOG Deep Dive the Service Bus subscription name has to match in Bicep, in the Dapr component (as consumerID) and in KEDA's subscriptionName. So we keep it in a single test.
+
+    The other lesson: Dapr's raw payload mode means giving up CloudEvent features like tracing and de-duplication by message ID.
+
+    And the Dapr extension installs in high availability by default, three replicas of each service. That is a lot for a small lab cluster, and lab choices are not production choices.
+
+    {YOUTUBE_URL}
+
+    Narration uses an AI voice.
+
+    #Dapr #KEDA
+facebook:
+  text: |
+    Quiet at midnight, a flood at month end. In episode 10 of the DEVLADLOG Deep Dive a worker on Kubernetes drains a Service Bus subscription, and KEDA scales it from zero up to ten replicas and back, based on the backlog.
+
+    Dapr delivers the messages and workload identity replaces connection strings.
+
+    Watch it here: {YOUTUBE_URL}
+
+    Narration uses an AI voice.
+
+    #AKS #Azure
+shorts:
+  - id: hook
+    youtube_short_title: "Idle at midnight, ten workers at month end: scale to zero on AKS #Shorts"
+    instagram_reel:
+      caption: |
+        A finance review queue runs a few big purchases on a quiet night, and hundreds at month end.
+        A worker on Kubernetes drains the Service Bus subscription, and the cluster scales that worker from zero to ten and back on its own.
+        Dapr delivers, KEDA scales, Service Bus holds.
+        Full episode: link in bio.
+        #AKS #KEDA #Dapr #Azure
+      cover_text: "Idle at midnight"
+    tiktok:
+      caption: "Quiet night, month-end flood. A worker on AKS scales from zero to ten and back on its own. Dapr delivers, KEDA scales, Service Bus holds. #AKS #KEDA #Dapr"
+  - id: scale
+    youtube_short_title: "KEDA: the backlog sets the replica count, down to zero #Shorts"
+    instagram_reel:
+      caption: |
+        This is the whole autoscaler.
+        KEDA signs in with its own identity and watches the finance review subscription. For every five messages waiting, it wants another replica, up to ten. With nothing waiting, zero.
+        One detail: the namespace is the short name, not the host name, exactly as in Learn's tutorial.
+        Full episode: link in bio.
+        #KEDA #AKS #ServiceBus
+      cover_text: "The backlog sets replicas"
+    tiktok:
+      caption: "KEDA config: one replica per five messages waiting, up to ten, zero when empty. Namespace is the short name, not the host name. #KEDA #AKS #ServiceBus"
+  - id: gotcha
+    youtube_short_title: "AKS, Dapr and KEDA gotchas, all from the docs #Shorts"
+    instagram_reel:
+      caption: |
+        Gotchas, all from the docs.
+        The Dapr extension installs in high availability by default, three replicas of each service. A lot for a small lab cluster.
+        The subscription name must be the same in Bicep, in Dapr and in KEDA.
+        Raw payload gives up CloudEvent tracing and de-duplication by message ID.
+        And the KEDA operator needs its own federated credential, then an annotation and a restart.
+        Full episode: link in bio.
+        #Dapr #KEDA #AKS
+      cover_text: "Gotchas, all from the docs"
+    tiktok:
+      caption: "Dapr on AKS defaults to HA with 3 replicas. The subscription name must match in Bicep, Dapr and KEDA. KEDA needs its own federated credential. #Dapr #KEDA #AKS"

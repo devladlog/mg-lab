@@ -1,0 +1,86 @@
+episode: 3
+series: "DEVLADLOG Deep Dive"
+status: draft-hold-for-review
+ai_label: true
+youtube_url: "{YOUTUBE_URL}"
+linkedin_company:
+  text: |
+    Sam is an approver. Sam also submits purchase requests. What stops Sam from approving his own? In most low-code apps, a hidden button.
+
+    In DEVLADLOG Deep Dive episode 3 the app is just the screen, and every rule lives in a .NET API that trusts only the caller's Entra token:
+    - A Power Apps canvas app calling a custom connector that signs in as the user
+    - An ASP.NET Core API that checks scope first, then roles, then business rules
+    - Azure SQL reached with the API's own managed identity, with an append-only audit table
+    - Rules as pure functions, so they are easy to test: you cannot decide your own request, and anything above 5,000 euros needs the finance role
+
+    We also walk through the token traps: v1 versus v2 issuer and audience, and claim mapping that renames roles.
+
+    Watch the episode: {YOUTUBE_URL}
+    Code: {REPO_URL}
+    Guide: {BLOG_URL}
+
+    Narration uses an AI voice.
+
+    #PowerApps #DotNet #AzureSQL #EntraID #PowerPlatform
+linkedin_personal:
+  text: |
+    A valid token is not the same as an allowed request. That is the lesson I keep relearning.
+
+    In episode 3 of the DEVLADLOG Deep Dive, the Power Apps canvas app only draws the screen. The API decides: scope first, then roles, then business rules, and the caller's identity always comes from the token, never from the request body. So Sam cannot approve his own request, whatever roles he holds.
+
+    The gotcha that cost the most time: the token version is chosen by the API's app registration, not by the client. Validate the wrong issuer and audience pair and a good token gets a 401.
+
+    {YOUTUBE_URL}
+
+    Narration uses an AI voice.
+
+    #DotNet #PowerApps #EntraID
+facebook:
+  text: |
+    Can an approver approve their own purchase request? In most low-code apps, only a hidden button says no.
+
+    In episode 3 of the DEVLADLOG Deep Dive we put the rules in a .NET API instead. The Power Apps app is just the screen, and the API trusts only the caller's Entra token.
+
+    Watch it here: {YOUTUBE_URL}
+
+    Narration uses an AI voice.
+
+    #PowerApps #DotNet
+shorts:
+  - id: hook
+    youtube_short_title: "Approve your own request? No. The API says so, not a hidden button #Shorts"
+    instagram_reel:
+      caption: |
+        Sam is an approver. Sam also submits purchase requests. So what stops Sam approving his own?
+        In most low-code apps, a hidden button. Here the Power Apps app is only the screen.
+        Every rule lives in a .NET API that trusts only the caller's Entra token, so nobody can bypass it, not even with their own valid token.
+        Full episode: link in bio.
+        #PowerApps #DotNet #EntraID #PowerPlatform
+      cover_text: "Approve your own request?"
+    tiktok:
+      caption: "An approver who also submits requests. What stops them approving their own? Not a hidden button: a .NET API that trusts only the token. #PowerApps #DotNet #EntraID"
+  - id: rules
+    youtube_short_title: "Business rules nobody can skip: pure functions in a .NET API #Shorts"
+    instagram_reel:
+      caption: |
+        Roles say who can try. Business rules say what is allowed.
+        You cannot decide on your own request, whatever roles you hold. Above 5,000 euros, approval needs the finance role.
+        The rules are pure functions, so they are trivial to test, and the caller's identity comes from the token, never from the request body.
+        Full episode: link in bio.
+        #DotNet #PowerApps #EntraID
+      cover_text: "Rules nobody can skip"
+    tiktok:
+      caption: "Roles say who can try. Business rules say what's allowed: no deciding your own request, finance role above 5,000 euros. Pure functions. #DotNet #PowerApps"
+  - id: gotcha
+    youtube_short_title: "Valid Entra token, still refused: v1 vs v2 tokens #Shorts"
+    instagram_reel:
+      caption: |
+        Valid token, still refused. Three traps.
+        The token version is chosen by the API's registration, not the client. v1 and v2 have a different issuer and audience, so validate the wrong pair and a good token gets a 401.
+        Default claim mapping renames roles and scope, so every policy fails with a 403. Our tests prove both.
+        The free tier SQL setup needs "Allow Azure services", which admits other tenants too. Use a private endpoint in production.
+        Full episode: link in bio.
+        #EntraID #DotNet #AzureSQL
+      cover_text: "Valid token, still refused"
+    tiktok:
+      caption: "Valid Entra token, still refused? The API registration picks the token version, and default claim mapping renames roles. #EntraID #DotNet"

@@ -1,0 +1,87 @@
+episode: 8
+series: "DEVLADLOG Deep Dive"
+status: draft-hold-for-review
+ai_label: true
+youtube_url: "{YOUTUBE_URL}"
+linkedin_company:
+  text: |
+    Someone updates a dependency, and a build nobody reviewed lands in production. A pipeline should decide what is allowed to ship.
+
+    In DEVLADLOG Deep Dive episode 8 we build that pipeline with GitHub Actions, Azure DevOps and container security, with no cloud secret stored anywhere:
+    - A managed identity trusts tokens from one GitHub environment only, so a pull request, another branch or another job cannot get a token
+    - That identity can push to the registry and update one container app, nothing else; a second identity that can only pull runs the app
+    - A vulnerability gate that blocks, with waivers that expire
+    - Actions pinned to a commit SHA, and the image scanned before push and deployed by digest
+
+    We also cover where this bites, including role assignments that take minutes to propagate.
+
+    Watch the episode: {YOUTUBE_URL}
+    Code: {REPO_URL}
+    Guide: {BLOG_URL}
+
+    Narration uses an AI voice.
+
+    #DevSecOps #GitHubActions #AzureDevOps #DevTools #Azure
+linkedin_personal:
+  text: |
+    The best secret to protect is the one you never store.
+
+    In episode 8 of the DEVLADLOG Deep Dive the pipeline signs in to Azure with OIDC. A managed identity trusts tokens from one GitHub environment, so the subject names the repository and the production environment. A pull request or another branch cannot get a token, and the identity can update only one container app.
+
+    Two habits from the same episode: pin actions to a SHA because tags move, and give every vulnerability waiver an expiry date. Exceptions that never expire become the policy.
+
+    {YOUTUBE_URL}
+
+    Narration uses an AI voice.
+
+    #DevSecOps #GitHubActions
+facebook:
+  text: |
+    A dependency gets updated and a build nobody reviewed lands in production. How do you stop that?
+
+    In episode 8 of the DEVLADLOG Deep Dive we build a pipeline with GitHub Actions and Azure DevOps that decides what is allowed to ship, with no cloud secret stored anywhere.
+
+    Watch it here: {YOUTUBE_URL}
+
+    Narration uses an AI voice.
+
+    #DevSecOps #GitHubActions
+shorts:
+  - id: hook
+    youtube_short_title: "Nobody reviewed the build. It shipped anyway. #Shorts"
+    instagram_reel:
+      caption: |
+        Someone updates a dependency, and a build nobody reviewed lands in production.
+        We build the pipeline that decides what is allowed to ship: least privilege tokens, pinned actions, a vulnerability gate that blocks, and no cloud secret stored anywhere.
+        GitHub Actions, Azure DevOps and container security.
+        Full episode: link in bio.
+        #DevSecOps #GitHubActions #DevTools
+      cover_text: "Nobody reviewed the build"
+    tiktok:
+      caption: "A dependency update and a build nobody reviewed lands in production. We build the pipeline that decides what ships, with no stored cloud secret. #DevSecOps #GitHubActions"
+  - id: oidc
+    youtube_short_title: "No secret to steal: GitHub OIDC to Azure with a managed identity #Shorts"
+    instagram_reel:
+      caption: |
+        This replaces the stored password.
+        A managed identity trusts tokens from one GitHub environment. The subject names the repository and the production environment, so a pull request, another branch or another job cannot get a token.
+        The identity can push to the registry and update one container app, nothing else. A second identity, which can only pull, runs the app.
+        Full episode: link in bio.
+        #GitHubActions #DevSecOps #Azure
+      cover_text: "No secret to steal"
+    tiktok:
+      caption: "GitHub OIDC to Azure: a managed identity trusts one environment only. PRs and other branches can't get a token. No stored password. #GitHubActions #DevSecOps #Azure"
+  - id: gotcha
+    youtube_short_title: "4 DevSecOps pipeline gotchas: moving tags, waivers, digests #Shorts"
+    instagram_reel:
+      caption: |
+        Four things that bite in a secure pipeline.
+        Tags move, so pin the hash and let Dependabot update it.
+        Waivers must expire, or exceptions become the policy.
+        Scan before you push and deploy the digest, not the tag.
+        And a new role assignment can take minutes, so the first container app deployment may need a rerun.
+        Full episode: link in bio.
+        #DevSecOps #GitHubActions #DevTools
+      cover_text: "Where this bites"
+    tiktok:
+      caption: "Pipeline gotchas: tags move so pin the SHA, waivers must expire, scan before push and deploy the digest. #DevSecOps #GitHubActions #DevTools"

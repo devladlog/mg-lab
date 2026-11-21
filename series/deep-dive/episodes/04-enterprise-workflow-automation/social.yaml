@@ -1,0 +1,86 @@
+episode: 4
+series: "DEVLADLOG Deep Dive"
+status: draft-hold-for-review
+ai_label: true
+youtube_url: "{YOUTUBE_URL}"
+linkedin_company:
+  text: |
+    An invoice needs approval and the manager is on holiday. Two days later it should go to someone else automatically. And when the manager comes back and taps approve on the old request, that answer must not count.
+
+    In DEVLADLOG Deep Dive episode 4 we build approvals that wait, escalate and cannot be answered twice:
+    - A flow puts each ready invoice on a Service Bus queue
+    - A Durable Functions orchestration runs the approval: manager first, finance director above 5,000 euros
+    - A durable timer races an external event, and the loser is cancelled
+    - A second Power Automate flow is the human interface, with approvals in Teams and Outlook
+
+    The trap with orchestrators is replay. The Durable analyzer failed our build on DateTime.UtcNow and on an unbounded loop, and we show the fix.
+
+    Watch the episode: {YOUTUBE_URL}
+    Code: {REPO_URL}
+    Guide: {BLOG_URL}
+
+    Narration uses an AI voice.
+
+    #DurableFunctions #PowerAutomate #ServiceBus #Azure #DotNet
+linkedin_personal:
+  text: |
+    Orchestrator code runs again and again on replay, and it has to make the same decisions every time.
+
+    In episode 4 of the DEVLADLOG Deep Dive my first draft had an unbounded while loop, and I tried DateTime.UtcNow in the stage loop. The Durable Functions analyzer, which ships with the extension, failed the build on both. The fix: take time and IDs from the orchestration context, pass settings in the input, and keep every call to the outside world in an activity.
+
+    While an approval waits for a human, no function is running at all.
+
+    {YOUTUBE_URL}
+
+    Narration uses an AI voice.
+
+    #DurableFunctions #Azure
+facebook:
+  text: |
+    The manager is on holiday and an invoice needs approval. After two days it should escalate on its own, and the manager's late answer must not count.
+
+    In episode 4 of the DEVLADLOG Deep Dive we build that with Durable Functions, Service Bus and Power Automate approvals in Teams.
+
+    Watch it here: {YOUTUBE_URL}
+
+    Narration uses an AI voice.
+
+    #DurableFunctions #PowerAutomate
+shorts:
+  - id: hook
+    youtube_short_title: "The manager is on holiday: approvals that escalate on their own #Shorts"
+    instagram_reel:
+      caption: |
+        An invoice needs approval, and the manager is on holiday. Two days later it should go to someone else automatically.
+        And when the manager comes back and taps approve on the old request, that answer must not count.
+        We build approvals that wait, escalate and cannot be answered twice, with Durable Functions, Service Bus and Power Automate.
+        Full episode: link in bio.
+        #DurableFunctions #PowerAutomate #Azure
+      cover_text: "The manager is on holiday"
+    tiktok:
+      caption: "Manager on holiday? The approval escalates after two days, and the late answer on the old request doesn't count. Durable Functions + Power Automate. #DurableFunctions #Azure"
+  - id: race
+    youtube_short_title: "A durable timer races the human: Durable Functions approvals #Shorts"
+    instagram_reel:
+      caption: |
+        Each approval request gets a new ID and a deadline from the orchestration clock.
+        We send the request through an activity, then race two tasks: a durable timer and an external event.
+        If the person answers first, the timer is cancelled. If the timer wins, we escalate once.
+        While it waits, no function is running at all.
+        Full episode: link in bio.
+        #DurableFunctions #Azure #DotNet
+      cover_text: "A timer races the human"
+    tiktok:
+      caption: "Durable timer vs external event: the person answers first, cancel the timer. Timer wins, escalate once. No function runs while it waits. #DurableFunctions #Azure"
+  - id: gotcha
+    youtube_short_title: "Durable Functions: deterministic, or the build fails #Shorts"
+    instagram_reel:
+      caption: |
+        Orchestrator code replays, so it must make the same decisions every time.
+        Our first draft used an unbounded while loop and DateTime.UtcNow in the stage loop. The Durable analyzer failed the build on both.
+        Take time and IDs from the context, pass settings in the input, and keep every call to the outside world in an activity.
+        Full episode: link in bio.
+        #DurableFunctions #DotNet #Azure
+      cover_text: "Deterministic, or broken"
+    tiktok:
+      caption: "Durable Functions replay your code. DateTime.UtcNow and an unbounded loop both failed our build. Use the context, keep I/O in activities. #DurableFunctions #DotNet"

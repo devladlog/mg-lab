@@ -1,0 +1,85 @@
+episode: 1
+series: "DEVLADLOG Deep Dive"
+status: draft-hold-for-review
+ai_label: true
+youtube_url: "{YOUTUBE_URL}"
+linkedin_company:
+  text: |
+    Document Intelligence can read an invoice. The harder question is who decides whether the result is good enough.
+
+    In DEVLADLOG Deep Dive episode 1 we build invoice intake on Azure AI Document Intelligence, Power Automate and SharePoint:
+    - A SharePoint library is the inbox; a flow sends each new file to an Azure Function
+    - The function calls the prebuilt invoice model and applies our business rules in code, with unit tests
+    - Every file ends up Ready, or Needs review with the exact reason written next to it
+    - A managed identity, so there is no Document Intelligence key to store or leak
+    - One contract file shared by the function, the library script and the flow
+
+    We also cover two traps we designed around: a "created or modified" trigger that loops on its own update, and retries that multiply because the SDK already retries.
+
+    Watch the episode: {YOUTUBE_URL}
+    Code: {REPO_URL}
+    Guide: {BLOG_URL}
+
+    Narration uses an AI voice.
+
+    #AzureAI #DocumentIntelligence #PowerAutomate #SharePoint #Azure
+linkedin_personal:
+  text: |
+    The part of invoice automation that took the most thinking was not the extraction. It was the decision.
+
+    The model returns values and a confidence per field. Whether 0.78 is good enough is a business call, so in our build it lives in a policy you set per environment, and every "needs review" carries a reason a person can act on, like "subtotal plus tax does not match the total".
+
+    Second lesson: the flow's default retry policy stacks on top of the SDK's own retries. Know who retries before you add retries.
+
+    Episode 1 of the DEVLADLOG Deep Dive: {YOUTUBE_URL}
+
+    Narration uses an AI voice.
+
+    #AzureAI #PowerAutomate
+facebook:
+  text: |
+    Drop an invoice into SharePoint and let the system fill in the vendor, number, dates and totals. Then comes the real question: when should a person check it?
+
+    In the first DEVLADLOG Deep Dive we build it with Azure AI Document Intelligence, Power Automate and an Azure Function. Business rules live in code with tests, and every flagged invoice says why.
+
+    Watch it here: {YOUTUBE_URL}
+
+    Narration uses an AI voice.
+
+    #AzureAI #PowerAutomate
+shorts:
+  - id: hook
+    youtube_short_title: "Invoices that file themselves, and know when to ask a human #Shorts"
+    instagram_reel:
+      caption: |
+        Someone drops an invoice into SharePoint. The vendor, number, dates and totals get filled in, and the file is marked Ready or flagged for review with the exact reason.
+        No keys stored anywhere, and every rule is tested.
+        This is the invoice intake we build with Document Intelligence, Power Automate and an Azure Function.
+        Full episode: link in bio.
+        #AzureAI #PowerAutomate #SharePoint #Azure
+      cover_text: "Invoices that file themselves"
+    tiktok:
+      caption: "Drop an invoice in SharePoint: fields filled in, marked Ready or flagged with the exact reason. No keys, every rule tested. #AzureAI #PowerAutomate #SharePoint"
+  - id: rules
+    youtube_short_title: "The model extracts. Your policy decides. #Shorts"
+    instagram_reel:
+      caption: |
+        The invoice model gives you values and a confidence per field. Whether 0.78 is good enough is a business decision, not a model decision.
+        We keep it in a policy set per environment. A missing required field, a subtotal plus tax that does not match the total, or an amount over the approval limit all go to a person, with the reason written down.
+        Full episode: link in bio.
+        #AzureAI #DocumentIntelligence #PowerAutomate #Azure
+      cover_text: "Your policy decides"
+    tiktok:
+      caption: "The model gives a confidence per field. Is 0.78 good enough? That is a business decision, so ours lives in a policy. #AzureAI #DocumentIntelligence #Azure"
+  - id: gotcha
+    youtube_short_title: "Two Power Automate traps: a trigger loop and retries that multiply #Shorts"
+    instagram_reel:
+      caption: |
+        Two traps we designed around in the invoice flow.
+        One: "when a file is created or modified" fires again when your own flow updates the file's properties, so you build a loop. Use "when a file is created (properties only)".
+        Two: the SDK already retries a 429, so one call became four in our tests. The flow's default policy adds up to four more, so we set it to two.
+        Full episode: link in bio.
+        #PowerAutomate #SharePoint #AzureFunctions #Azure
+      cover_text: "One call became four"
+    tiktok:
+      caption: "Power Automate trap: 'created or modified' loops on your own update. And the SDK already retries a 429, so one call became four. #PowerAutomate #SharePoint #Azure"

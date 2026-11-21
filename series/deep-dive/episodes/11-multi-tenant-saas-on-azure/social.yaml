@@ -1,0 +1,87 @@
+episode: 11
+series: "DEVLADLOG Deep Dive"
+status: draft-hold-for-review
+ai_label: true
+youtube_url: "{YOUTUBE_URL}"
+linkedin_company:
+  text: |
+    Contoso's purchase request platform works. Now Northwind and Adventure Works want it too, sharing one app and one database. Somewhere in that code, one day, somebody will forget a WHERE clause.
+
+    In DEVLADLOG Deep Dive episode 11 we build the system so that the mistake does not matter. Three locks:
+    - Identity: the customer signs in with their own Entra tenant, and the API takes the tenant from the validated token and nowhere else
+    - Application: Entity Framework query filters add the tenant to every query
+    - Data: row-level security in SQL repeats the rule, with the tenant stored read-only in the session context
+
+    We also cover what bit us: Platform admin only counting from the home tenant, a query filter that one call can skip, and our own tests catching that we had locked out our own staff.
+
+    Watch the episode: {YOUTUBE_URL}
+    Code: {REPO_URL}
+    Guide: {BLOG_URL}
+
+    Narration uses an AI voice.
+
+    #MultiTenant #SaaS #EntraID #SQLServer #DotNet
+linkedin_personal:
+  text: |
+    In a multi-tenant app, the question is not whether somebody will forget a WHERE clause. It is what happens when they do.
+
+    In episode 11 of the DEVLADLOG Deep Dive the tenant comes from the validated token's tid claim and nowhere else. EF Core filters every query by it, and row-level security in the database repeats the rule. The query filter is just code, and IgnoreQueryFilters skips it, which is exactly why the database needs its own lock.
+
+    A small lesson from our own tests: they caught that we had locked out our own staff, because the home tenant is not a customer.
+
+    {YOUTUBE_URL}
+
+    Narration uses an AI voice.
+
+    #MultiTenant #DotNet
+facebook:
+  text: |
+    One shared app and one database for several companies. Somewhere, one day, somebody will forget a WHERE clause. So what then?
+
+    In episode 11 of the DEVLADLOG Deep Dive we build three locks: the tenant from the Entra token, an Entity Framework filter, and row-level security in the database.
+
+    Watch it here: {YOUTUBE_URL}
+
+    Narration uses an AI voice.
+
+    #MultiTenant #DotNet
+shorts:
+  - id: hook
+    youtube_short_title: "One forgotten WHERE clause in a multi-tenant app #Shorts"
+    instagram_reel:
+      caption: |
+        Other companies want to use your app, and they will share one app and one database. Somewhere in that code, one day, somebody will forget a WHERE clause.
+        So we build the system so the mistake does not matter.
+        Three locks: identity (the tenant comes from the token), application (an EF Core query filter) and data (row-level security).
+        Full episode: link in bio.
+        #MultiTenant #SQLServer #DotNet #Azure
+      cover_text: "One forgotten WHERE clause"
+    tiktok:
+      caption: "Shared app, shared database, and one day someone forgets a WHERE clause. Three locks: token tenant, EF query filter, row-level security. #MultiTenant #SQLServer #DotNet"
+  - id: rls
+    youtube_short_title: "Row-level security: the database repeats the rule #Shorts"
+    instagram_reel:
+      caption: |
+        This is the second lock, in the database.
+        A predicate function compares each row's tenant to the tenant in the session context. The policy filters reads and blocks writes.
+        When a connection opens, the app stores the tenant read-only, so nothing can change it until the connection returns to the pool.
+        No tenant in the session means no rows.
+        Full episode: link in bio.
+        #SQLServer #RowLevelSecurity #MultiTenant
+      cover_text: "The database repeats the rule"
+    tiktok:
+      caption: "Row-level security: a predicate compares each row's tenant to the session context. Filters reads, blocks writes. No tenant in the session, no rows. #SQLServer #MultiTenant"
+  - id: gotcha
+    youtube_short_title: "Multi-tenant gotchas: admin roles, query filters, home tenant #Shorts"
+    instagram_reel:
+      caption: |
+        What bit us building a multi-tenant API.
+        A customer's admin can assign our app roles to their own users, so Platform admin only counts from the home tenant.
+        The query filter is just code, and one call skips it, which is why the database repeats it.
+        Learn warns that the tenant value on the consent redirect must never identify anyone.
+        And our own tests caught that we had locked out our own staff, because the home tenant is not a customer.
+        Full episode: link in bio.
+        #MultiTenant #EntraID #DotNet
+      cover_text: "What bit us"
+    tiktok:
+      caption: "Multi-tenant gotchas: customer admins can assign your app roles, query filters are skippable code, and we locked out our own staff. #MultiTenant #EntraID #DotNet"
