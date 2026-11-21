@@ -25,7 +25,13 @@ param(
     [string]$OutName = 'verify-results'
 )
 $ErrorActionPreference = 'Stop'
-if (Test-Path (Join-Path $Root 'verify-results\rerun-failed.flag')) { $RerunFailed = $true; Write-Host 'rerun-failed.flag found: running only the episodes that failed last time' -ForegroundColor Yellow }
+$flagFile = Join-Path $Root 'verify-results\rerun-failed.flag'
+$onlyEpisodes = @()
+if (Test-Path $flagFile) {
+    $RerunFailed = $true
+    $onlyEpisodes = @(Get-Content $flagFile | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+    Write-Host ("rerun-failed.flag found: running " + $(if ($onlyEpisodes) { $onlyEpisodes -join ', ' } else { 'only the episodes that failed last time' })) -ForegroundColor Yellow
+}
 $out = Join-Path $Root $OutName
 $previous = @()
 if ($RerunFailed) {
@@ -90,7 +96,7 @@ $skip = '\\(bin|obj|node_modules|\.venv|venv|\.git|reference|naive|legacy)\\'
 $episodes = Get-ChildItem (Join-Path $Root 'series\*\episodes\*') -Directory |
     Where-Object { Test-Path (Join-Path $_.FullName 'script.yaml') } |
     Where-Object { -not $Series -or ($Series -contains $_.Parent.Parent.Name) } |
-    Where-Object { -not $RerunFailed -or ($previous -contains "$($_.Parent.Parent.Name)/$($_.Name)") } |
+    Where-Object { -not $RerunFailed -or ($(if ($onlyEpisodes) { $onlyEpisodes } else { $previous }) -contains "$($_.Parent.Parent.Name)/$($_.Name)") } |
     Sort-Object FullName
 
 foreach ($ep in $episodes) {
