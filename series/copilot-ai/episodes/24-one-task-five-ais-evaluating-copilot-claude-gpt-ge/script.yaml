@@ -1,0 +1,218 @@
+# DEVLADLOG Copilot & AI - episode 24 (draft: screen scenes need the recording described in demo.md)
+episode: 24
+slug: one-task-five-ais-evaluating-copilot-claude-gpt-ge
+series_label: "COPILOT & AI"
+series_name: "DEVLADLOG Copilot & AI"
+file_prefix: "copilot-ai"
+title: "One Task, Five AIs"
+subtitle: "Copilot, Claude, GPT, Gemini and a local model on the same seven tasks"
+voice: am_michael
+thumbnail_text: "ONE TASK\nFIVE AIS\nWHO WINS?"
+youtube:
+  title: "One Task, Five AIs: Copilot vs Claude vs GPT vs Gemini vs a Local Model (Real Test) | DEVLADLOG Copilot & AI #24"
+  tags: [Microsoft Copilot, Copilot Chat, Claude, GPT, Gemini, local LLM, Ollama, AI evaluation, LLM benchmark, blind review, Responses API, Messages API, generateContent]
+next_episode: ""
+sources:
+  - "https://learn.microsoft.com/microsoft-365/copilot/extensibility/api/ai-services/chat/overview"
+  - "https://learn.microsoft.com/copilot/plan/microsoft-copilot-requirements"
+  - "https://platform.claude.com/docs/en/api/versioning"
+  - "https://developers.openai.com/api/docs/guides/text"
+  - "https://ai.google.dev/gemini-api/docs/generate-content/text-generation"
+  - "https://docs.ollama.com/api/openai-compatibility"
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Which AI is best? Ask your own tasks."
+    sub: "Copilot, Claude, GPT, Gemini and a local model, same seven tasks"
+    short: hook
+    narration: >
+      Every vendor says theirs is the best. So we test them on Contoso's own work: a policy question, a question the
+      policy does not answer, an invoice email with a trap in it, code that really runs, and some arithmetic. Same words
+      to five A I s, scored by plain rules, then reviewed blind. Welcome to Dev Lad Log, Copilot and A I.
+
+  - id: five
+    type: bullets
+    heading: "The five contestants, and how each is called"
+    bullets:
+      - "Copilot Chat: by hand, in the browser"
+      - "Claude: Messages API"
+      - "GPT: Responses API"
+      - "Gemini: generateContent"
+      - "Local model: OpenAI-compatible server"
+    narration: >
+      Four of them have an A P I and we call them with plain H T T P, no S D K needed: Claude, G P T, Gemini, and a
+      model running on our own graphics card from episode twenty three. The fifth is Microsoft Copilot Chat, which we
+      use through the browser, and after the task list we see why.
+
+  - id: tasks
+    type: bullets
+    heading: "Seven Contoso tasks, all scored by rules"
+    bullets:
+      - "Policy question with arithmetic, and one the policy does not answer"
+      - "Invoice email to JSON, with an injection line inside"
+      - "A Python function, executed against five test cases"
+      - "A Graph PowerShell cmdlet name: a hallucination probe"
+      - "A word-limited summary and a discount-then-VAT sum"
+    narration: >
+      The seven tasks come from Contoso's procurement desk. A travel policy question with arithmetic, and a second one the
+      policy does not answer, where the right reply is not stated. An invoice email that must become J S O N, with an
+      instruction hidden inside. A Python function that we actually run. The name of a Graph PowerShell cmdlet, which
+      catches made up commands. A summary with a word limit, and a discount followed by V A T.
+
+  - id: licence-screen
+    type: screen
+    heading: "Why Copilot is collected by hand"
+    image: screens/chat-api-licence.jpg
+    bar: "learn.microsoft.com · Microsoft 365 Copilot Chat API (preview)"
+    demo: "Browser on the Learn page 'Overview of the Microsoft 365 Copilot Chat API (preview)': the title with '(preview)' and the Licensing section (available to users with a Microsoft 365 Copilot add-on licence; support without it is not currently available). Microsoft's own page, unedited."
+    narration: >
+      Microsoft does have a Copilot Chat A P I. Learn says it is in preview, and that it is available to users with a
+      Microsoft 365 Copilot add on licence. Our lab has no such licence, so we do not fake it. We use the free Copilot
+      Chat, one new chat per task, and paste the answers in unedited.
+
+  - id: prompt-code
+    type: code
+    heading: "Everyone gets exactly the same words"
+    lang: python
+    code: |
+      def build_prompt(instructions: str, question: str, mode: str):
+          """mode 'inline': the same text for every AI (Copilot Chat has no
+          system prompt we control)."""
+          if mode == "inline":
+              return None, f"{instructions}\n\n{question}"
+          if mode == "system":
+              return instructions, question
+          raise ValueError("instructions_mode must be 'inline' or 'system'")
+    narration: >
+      Fairness starts with the prompt. In inline mode the instructions are glued to the question, so all five see
+      identical text. Copilot Chat has no system prompt we control, and the printed prompts are what we paste into it.
+
+  - id: copilot-screen
+    type: screen
+    heading: "Copilot Chat, real answer"
+    image: screens/copilot-chat.jpg
+    bar: "Microsoft Copilot Chat · alex.demo · no Copilot add-on licence"
+    demo: "Browser, Microsoft Copilot Chat signed in as alex.demo (mask the tenant name and email): the printed prompt of the policy-unanswerable or invoice-json task pasted in a NEW chat, and Copilot's real answer. No regeneration unless the first attempt errored."
+    narration: >
+      Here is Copilot Chat on the invoice email, signed in as an ordinary user with no add on. This is its real answer,
+      and it goes into the answers file exactly as it is, good or bad.
+
+  - id: config-code
+    type: code
+    heading: "Models and prices come from your config, keys from the environment"
+    lang: json
+    code: |
+      { "id": "claude", "kind": "anthropic", "api_key_env": "ANTHROPIC_API_KEY",
+        "model": "REPLACE-with-a-model-id-from-the-Anthropic-models-list",
+        "anthropic_version": "2026-10-21" },
+      { "id": "gpt", "kind": "openai", "api_key_env": "OPENAI_API_KEY",
+        "model": "REPLACE-with-a-model-id-from-the-OpenAI-models-list" },
+      { "id": "local", "kind": "local", "model": "REPLACE-with-a-name-from-ollama-list",
+        "base_url": "http://127.0.0.1:11434/v1" }
+
+      python -m five_ais plan --config config.json --tasks tasks.json
+      # 5 providers x 7 tasks x 1 repeat(s) = 35 answers
+    narration: >
+      The config names the models and the environment variables that hold the keys, never the keys themselves. Model
+      names are placeholders on purpose, because they change, and the plan command refuses to run a provider whose model
+      or key is missing. Thirty five answers in all, a few thousand tokens per vendor.
+
+  - id: adapters-code
+    type: code
+    heading: "Three vendors, three request shapes"
+    lang: python
+    code: |
+      # Anthropic: version header required; temperature removed from 2026-10-21
+      {"x-api-key": key, "anthropic-version": "2026-10-21"}
+      body = {"model": m, "max_tokens": 1500, "messages": [{"role": "user", "content": q}]}
+
+      # OpenAI: text lives in message items, not output[0]
+      text = "".join(part["text"] for item in d["output"] if item["type"] == "message"
+                     for part in item["content"] if part["type"] == "output_text")
+
+      # Gemini: key in a header, thinking parts skipped
+      {"x-goog-api-key": key}
+      text = "".join(p["text"] for p in parts if not p.get("thought"))
+    narration: >
+      Each adapter follows the vendor's reference. Anthropic wants a version header and a max tokens value. Open A I
+      says not to assume the text is the first output item, so we collect every output text part. Gemini takes the key in
+      a header, and we skip its thinking parts. An A P I failure becomes a result row, never a crash.
+
+  - id: scoring-code
+    type: code
+    heading: "Scored by rules, including code that really runs"
+    lang: python
+    code: |
+      "checks": { "python_tests": { "cases": [
+        { "call": "business_days('2026-11-23', '2026-11-27', [])", "expect": 5 },
+        { "call": "business_days('2026-11-21', '2026-11-22', [])", "expect": 0 },
+        { "call": "business_days('2026-12-01', '2026-12-04', ['2026-12-01'])", "expect": 3 }
+      ] } }
+
+      reason = sandbox.vet(code)        # AST allow-list: no os, no open, no eval
+      # then: python -I, empty environment, temp folder, timeout
+    narration: >
+      Scoring is plain rules: numbers, forbidden words, J S O N fields, word limits, and for the code task, real test
+      cases. Model written code is dangerous, so it is off unless you ask, vetted against an allow list, and run in a
+      separate isolated process. That is a precaution, not a security boundary.
+
+  - id: run-screen
+    type: screen
+    heading: "The scorecard"
+    image: screens/run.jpg
+    bar: "lab Windows terminal · python -m five_ais run"
+    short: result
+    demo: "Terminal on the lab laptop (dark theme, 18 pt) with the three API keys already set off camera: 'python -m five_ais run --config config.json --tasks samples/tasks.json --out results.json --allow-code-exec'. Visible: progress lines per provider and task, the scorecard (mean score, full passes, errors, seconds, tokens, cost), the per-category table, and the Errors and Failed checks lists. Real output only."
+    narration: >
+      And the real scorecard. Mean score, full passes, errors, seconds, tokens and, with your own price list, an
+      estimated cost. Below it, the failed checks, so you see exactly which rule each A I broke. The Copilot row has no
+      timing, because a human collected that answer. If an A P I returns an error, that answer scores zero and is listed
+      under errors, so a broken key never looks like a bad model.
+
+  - id: blind-screen
+    type: screen
+    heading: "Blind review: scores without names"
+    image: screens/blind-review.jpg
+    bar: "VS Code · review-sheet.md · python -m five_ais unblind"
+    demo: "VS Code split: review-sheet.md at one task with answers labelled A to E and no provider names, beside the terminal after 'python -m five_ais unblind results.json --key review-key.json --scores scores.json' showing the report with the human score column filled. Score the sheet for real before the take, without opening the key."
+    narration: >
+      Rules cannot judge tone or usefulness. So we shuffle the answers, label them A to E, and score them from one to five
+      without knowing who wrote them. Only then do we open the key and add the human column to the report. If a model
+      that passed every rule still reads badly, this is where you find out.
+
+  - id: gotchas
+    type: bullets
+    heading: "Gotchas, honestly"
+    short: gotcha
+    bullets:
+      - "Temperature is removed or ignored on the newest models"
+      - "Copilot Chat: no model, no system prompt, no seed"
+      - "Seven tasks is a smoke test: use repeats"
+      - "Gemini has two APIs: generateContent and Interactions"
+      - "Prices and model names are never hard-coded"
+    narration: >
+      Gotchas. Anthropic's newest A P I version removes temperature and returns an error if you send it. Google says
+      newer Gemini models ignore it. So reproducibility means repeats, not seeds. Copilot Chat is not a controlled
+      experiment. Seven tasks is a smoke test. Gemini now has a newer Interactions A P I next to generateContent. And
+      model names and prices come from your own config, because they change.
+
+  - id: use
+    type: bullets
+    heading: "What to do with the result"
+    bullets:
+      - "Add tasks from your own work"
+      - "Route by category, not by brand"
+      - "Re-run when a model changes"
+    narration: >
+      Do not crown a winner, route by task. Add your own tasks from real work, run each A P I model more than once, keep
+      the cheapest model that passes each category, and read the failed checks, not just the average. Then run it again
+      whenever a vendor changes a model, because they do.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The harness, the seven tasks and the fifty six tests are on GitHub. That closes the Copilot and A I series. Thanks
+      for watching.
