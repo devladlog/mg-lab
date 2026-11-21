@@ -1,0 +1,523 @@
+# DEVLADLOG Power Apps — episode 12 (Build Special). Draft: code scenes are real excerpts from src/ and tests/, screen scenes need the lab recording.
+episode: 12
+slug: build-a-model-driven-app-from-start-to-end
+series_label: "POWER APPS"
+series_name: "DEVLADLOG Power Apps"
+file_prefix: "powerapps"
+title: "Build a model-driven app from start to end"
+subtitle: "Forms, rules, a process flow, Power Fx commands, a custom page, security, one solution"
+voice: am_michael
+thumbnail_text: "MODEL-DRIVEN\nSTART TO\nEND"
+youtube:
+  title: "Build a Model-Driven App Start to End: Forms, Rules, Power Fx, Security | DEVLADLOG Power Apps #12"
+  tags: [model-driven apps, Power Apps, Dataverse, app designer, business rules, business process flow, command bar, Power Fx, custom page, security roles, column security, solutions, Power Platform, low code]
+sources:
+  - https://www.devladlog.com/articles/powerapps/2026-02-10-model-driven-apps-complete-guide-2026/
+  - https://learn.microsoft.com/power-apps/maker/model-driven-apps/commanding-use-powerfx
+  - https://learn.microsoft.com/power-apps/maker/model-driven-apps/page-powerfx-in-model-app
+  - https://learn.microsoft.com/power-apps/maker/model-driven-apps/create-business-rules-recommendations-apply-logic-form
+  - https://learn.microsoft.com/power-apps/developer/data-platform/column-level-security
+
+scenes:
+  - id: hook
+    type: title
+    heading: "A model-driven app, start to end"
+    sub: "Forms, rules, a process flow, Power Fx, security, one solution"
+    short: hook
+    narration: >
+      In this special we build one model-driven app from an empty app to a tested solution. Inspection Back Office:
+      forms, views, business rules, a business process flow, a dashboard, command bar buttons written in Power Fx, a custom
+      page, security roles and a secured column. At the end we sign in as a normal back office user and see what they see.
+      Welcome to DEVLADLOG Power Apps.
+
+  - id: plan
+    type: bullets
+    heading: "The plan: ContosoInspections"
+    bullets:
+      - "One Dataverse solution, publisher prefix cin"
+      - "Inspectors visit sites; each inspection has findings"
+      - "Back office reviews, approves or rejects"
+      - "Everything inside one solution, tested as Sam Demo"
+    narration: >
+      The scenario is Contoso Inspections. Inspectors visit sites, and every inspection has findings. The back office reviews
+      them and approves or rejects. Four tables: inspector, site, inspection and inspection item. Everything lives in one
+      solution with the publisher prefix c i n, so it can move between environments as a unit. And everything is fictional.
+
+  - id: whymodel
+    type: bullets
+    heading: "Why model-driven for this one"
+    bullets:
+      - "Data in Dataverse, with real relationships"
+      - "Forms, views and navigation come from the model"
+      - "Roles decide who sees which rows"
+      - "Every user needs a Power Apps premium licence"
+    narration: >
+      Why model-driven for a back office? The data is relational, so inspections, items and sites all link. Forms, views and
+      navigation come from the data model instead of being drawn screen by screen. Roles decide who sees which rows. And a
+      reviewer who works through fifty inspections a day wants lists, filters and keyboard speed, not a custom layout. One
+      cost to name early: every user who runs the app needs a Power Apps premium licence. In our lab Sam has a trial.
+
+  - id: model
+    type: code
+    heading: "The data model is one file"
+    lang: json
+    code: |
+      "primaryName": {"logicalName": "cin_name", "displayName": "Inspection number", "maxLength": 100, "autoNumber": "INS-{SEQNUM:5}"},
+      ...
+      {"logicalName": "cin_reviewernotes", "displayName": "Reviewer notes", "type": "memo", "maxLength": 2000, "secured": true}
+    narration: >
+      The data model is a single schema file. Inspection gets an autonumber name, I N S dash five digits, and a reviewer
+      notes column that is marked as secured. A Python script turns that file into a real solution, and everything in this
+      episode is checked against it: forms, views, the app, the roles. Remember the secured column. It comes back at the end.
+
+  - id: roots
+    type: code
+    heading: "Pack worked. Import is another test."
+    lang: python
+    code: |
+      roots += [f'      <RootComponent type="60" id="{m.dashboard_id}" behavior="0" />',
+                # SolutionPackager (pac 2.16.1) only accepts the app and its site map by unique name here:
+                # with id="{guid}" it stops with "RootComponent validation failed".
+                f'      <RootComponent type="62" schemaName="{app["uniqueName"]}" behavior="0" />',
+                f'      <RootComponent type="80" schemaName="{app["uniqueName"]}" behavior="0" />']
+    narration: >
+      The script writes the solution files, and the Power Platform command line packs and unpacks them offline, no sign in.
+      It caught a real problem: the app and its site map must be referenced by name, not by id, or the pack stops with root
+      component validation failed. Now the honest part. Packing works and round trips identically, but I have not imported
+      this into a tenant. Pack success is not import success, so the recording starts from a clean environment.
+
+  - id: data
+    type: screen
+    heading: "Start with the tables"
+    image: screens/tables.jpg
+    bar: "Power Apps · Solutions · Contoso Inspections"
+    demo: >
+      make.powerapps.com in the lab DEV environment, Solutions > Contoso Inspections > Objects, data-only version imported
+      (python3 build_solution.py --profile data, zip it, import). Visible: the four tables, then Inspections > Data with the
+      seed rows imported from the CSV files (INS-01000 to INS-01007). Mask the environment name and the user avatar.
+    narration: >
+      We start from the data. A solution with only the four tables, and the sample rows imported from the C S V files in
+      order: inspectors and sites first, then inspections, then items. Notice the inspection numbers. The autonumber starts
+      at the seed, one thousand, so the first row is I N S zero one thousand. Cancelled rows leave gaps, and the seed does not
+      travel with the solution, so you set it again after every import.
+
+  - id: designer
+    type: screen
+    heading: "App designer and site map"
+    image: screens/app-designer.jpg
+    bar: "Power Apps · app designer · Inspection Back Office"
+    demo: >
+      New > App > Model-driven app, name Inspection Back Office, in the Contoso Inspections solution. Add pages: Dashboard,
+      Inspections, Findings, Sites, Inspectors. Navigation shows one area with groups Overview, Review and Reference.
+      Show the preview. Mask the environment name.
+    narration: >
+      In the modern app designer we create Inspection Back Office inside the solution. Pages are the building blocks: a
+      dashboard, then inspections and findings under a Review group, and sites and inspectors under Reference. The
+      navigation is the site map, and the designer keeps it for us. Save, publish, and we already have a working app. Open the preview and you can click through it before anyone has a login. One tip: add pages in the order people work, because the site map follows the order you give it, and a reviewer should never hunt for the list they use ten times a day.
+
+  - id: quickcreate
+    type: screen
+    heading: "Quick create from anywhere"
+    image: screens/quick-create.jpg
+    bar: "Model-driven app · Inspection Back Office · Quick Create"
+    demo: >
+      In the running app click + New in the command bar, choose Inspection: the quick create panel opens with Site,
+      Inspector and Inspection date. Fill it with Harbor Warehouse, Alex Demo, today, Save and close. Show the new row in the
+      list with the next autonumber. Mask the user avatar.
+    narration: >
+      Quick create is a small panel from the new button. It carries only site, inspector and date, which is enough to start
+      an inspection from anywhere in the app. Save and close, and the new inspection appears in the list with the next
+      autonumber. Everything else, the score, the findings, the reviewer notes, comes later on the main form.
+
+  - id: forms
+    type: screen
+    heading: "Forms: main and quick create"
+    image: screens/forms.jpg
+    bar: "Power Apps · form designer · Inspection main form"
+    demo: >
+      Inspection main form in the form designer. Header: status, score, date, owner. Tabs General, Findings (a subgrid of
+      inspection items) and Review (reviewer notes). Then open the quick create form with site, inspector and date only.
+      Mask the environment name.
+    narration: >
+      Forms make the app. The inspection main form has a header with status, score and date, a General tab, a Findings tab
+      with a sub grid of items, and a Review tab for the reviewer. Quick create is the short version: site, inspector and
+      date, enough to start an inspection from anywhere in the app. Keep forms small. A form with every column is slow and
+      tiring. On the inspection form the reviewer notes sit on their own tab, which matters later, because that tab is where the secured column lives.
+
+  - id: views
+    type: screen
+    heading: "Views that answer a question"
+    image: screens/views.jpg
+    bar: "Model-driven app · Inspection Back Office · Inspections"
+    demo: >
+      Running app, Inspections. Switch between Active Inspections, Inspections to review (three submitted rows) and Needs
+      follow-up. Then Findings > Open critical findings. Mask the user avatar.
+    narration: >
+      Views answer a question. Active inspections is the default, inspections to review filters to submitted, needs follow up
+      filters on the flag, and open critical findings is the one the back office checks first. Each view is a saved query with
+      its own columns and sort order. Name views after the question they answer. Views also feed the dashboard, so a good view is reused twice.
+  - id: rules
+    type: bullets
+    heading: "Business rules: pick the scope first"
+    bullets:
+      - "Table: forms and server, so canvas apps get it too"
+      - "All forms: model-driven forms only"
+      - "One form: just that form"
+      - "Lock, show and hide, required: form scope only"
+    narration: >
+      Business rules. The scope decides everything. Table scope runs on every form and on the server, so a canvas app gets
+      the same rule. All forms and single form scopes are model-driven only. Set field value, default value and show error
+      message work everywhere. Lock, show or hide and business required are for forms only, and they are ignored on the
+      server. We have five rules, and the plan file lists the scope of each.
+
+  - id: ruleyaml
+    type: code
+    heading: "A rule that must hold everywhere"
+    lang: yaml
+    code: |
+      - name: A submitted inspection needs a score
+        table: cin_inspection
+        scope: table            # server side too: the canvas app gets the same error
+        when:
+          all:
+            - {column: cin_status, op: eq, value: Submitted}
+            - {column: cin_score, op: isnull}
+        then:
+          - {action: show_error, column: cin_score, message: "Enter a score from 0 to 100 before you submit."}
+    narration: >
+      This one is table scope on purpose. When the status is submitted and the score is empty, show an error on the score.
+      Because it is table scope, nobody can submit without a score, in this app or in the canvas app from episode eleven.
+      The other four are form rules: the follow up date shows and becomes required when follow up is needed, approved
+      inspections lock, and major or critical findings default to not passed.
+
+  - id: ruledesigner
+    type: screen
+    heading: "Built in the business rule designer"
+    image: screens/business-rule.jpg
+    bar: "Power Apps · business rule designer · Inspection"
+    demo: >
+      Inspection table > Business rules > the rule "A submitted inspection needs a score": scope Table, condition Status
+      equals Submitted AND Score does not contain data, action Show error message on Score. Then in the app set an inspection
+      to Submitted with no score and save: the error appears on the score. Mask the environment name.
+    narration: >
+      In the designer it is a condition and an action, with the scope in the toolbar. Set a draft inspection to submitted,
+      leave the score empty, and save. The error appears on the score field and the save is blocked. Business rules are
+      server side logic you can see, so describe them clearly, because nobody finds a rule that has no name. In the same table you can open all five rules, switch one off, and see its scope at a glance. If a rule seems to do nothing, check the scope first, then whether the rule is active.
+
+  - id: bpf
+    type: bullets
+    heading: "The process flow: Inspection review"
+    bullets:
+      - "Capture: site, inspector, date (required)"
+      - "Findings: score and summary (required)"
+      - "Review: follow-up flag and date"
+      - "Decision: status (required)"
+    narration: >
+      A business process flow guides people through the same steps every time. Ours has four stages: capture, findings,
+      review and decision. A required step blocks the next stage until it is filled in. One catch from the docs: a required
+      step on a yes or no column only passes when the value is yes. Microsoft allows up to thirty stages per flow, but four is
+      plenty. Keep the flow short.
+
+  - id: bpfyaml
+    type: code
+    heading: "The plan the designer is filled from"
+    lang: yaml
+    code: |
+      stages:
+        - name: Capture
+          steps:
+            - {column: cin_siteid, required: true}
+            - {column: cin_inspectorid, required: true}
+            - {column: cin_inspectiondate, required: true}
+        - name: Findings
+          steps:
+            - {column: cin_score, required: true}
+            - {column: cin_summary, required: true}
+    narration: >
+      A process flow is not part of the solution files we generate. It is a process plus a generated table, built in the
+      designer. So we keep the plan as a small file: stages, steps and which are required. The tests check every column in the
+      plan exists on the table. The designer then follows the plan, and the plan is what you read before you click.
+
+  - id: bpfscreen
+    type: screen
+    heading: "The flow above the form"
+    image: screens/bpf.jpg
+    bar: "Model-driven app · Inspection Back Office · INS-01003"
+    demo: >
+      Business process flow designer for Inspection review (four stages, steps and required flags), then the running app:
+      inspection INS-01003 with the process bar at the top, stage Review active, the flyout open showing the follow-up
+      fields. Mask the environment name.
+    narration: >
+      The flow is built in the process designer and appears as a bar across the top of the form. Open a stage and the
+      flyout shows its steps. Click next stage and the app checks the required ones first. It is guidance, not security:
+      someone calling the A P I does not see the bar at all.
+
+  - id: dashboard
+    type: screen
+    heading: "A dashboard that starts the day"
+    image: screens/dashboard.jpg
+    bar: "Model-driven app · Inspection Back Office · Overview"
+    demo: >
+      Overview dashboard: chart Inspections by status (columns), chart Open findings by severity (bar), list of inspections
+      to review, list of open critical findings. Click a column in the status chart to drill down. Mask the avatar.
+    narration: >
+      The dashboard has four components: inspections by status as a column chart, open findings by severity as a bar chart,
+      and two lists, inspections to review and open critical findings. A dashboard can hold up to six components, and a chart
+      reads a view of at most fifty thousand rows. Click a bar and you drill into the records behind it.
+
+  - id: cmdintro
+    type: bullets
+    heading: "Command bar buttons in Power Fx"
+    bullets:
+      - "Approve and Reject, on the form and the grid"
+      - "Flag for follow-up, on the grid, many rows"
+      - "Review board: opens the custom page"
+      - "Self.Selected gives Item, AllItems and State"
+    narration: >
+      Now the command bar. The modern command designer takes Power Fx for the action and for the visibility. The host gives
+      you Self dot Selected: the selected item, all selected items, and the form state. We build four commands. Approve and
+      reject on the form and the grid, flag for follow up on the grid for many rows at once, and review board, which opens
+      a custom page.
+
+  - id: approve
+    type: code
+    heading: "Approve: ask, write, report"
+    lang: powerfx
+    code: |
+      If(
+          Confirm("Approve " & Self.Selected.Item.'Inspection number' & "?", {ConfirmButton: "Approve", CancelButton: "Keep in review"}),
+          IfError(
+              Patch(Inspections, Self.Selected.Item, {Status: 'Status (Inspections)'.Approved}),
+              Notify("Could not approve: " & FirstError.Message, NotificationType.Error),
+              Notify("Approved " & Self.Selected.Item.'Inspection number' & ".")
+          )
+      )
+    narration: >
+      Approve asks first with Confirm. Then Patch writes the status, wrapped in IfError, so a refused write shows the real
+      error and never claims success. Choices from a table are named column, space, table plural in brackets, here status
+      inspections. Success uses the plain Notify, because the docs say the success notification type is not supported in
+      commands and just shows as information.
+
+  - id: reject
+    type: code
+    heading: "Gotcha: is a space blank?"
+    lang: powerfx
+    short: gotcha
+    code: |
+      If(
+          IsBlank(Trim(Self.Selected.Item.'Reviewer notes')),
+          Notify("Add reviewer notes on the Review tab before you reject.", NotificationType.Warning),
+    narration: >
+      Here is a gotcha I wrote myself. The reject command first checked that reviewer notes were not blank. But a text
+      containing only spaces is not blank in Power Fx, so a reviewer could reject with a single space. The fix is to trim
+      first. There is a test for exactly that. Run it without the trim and it fails.
+
+  - id: flag
+    type: code
+    heading: "Many rows: AllItems, not Item"
+    lang: powerfx
+    code: |
+      IfError(
+          ForAll(
+              Self.Selected.AllItems,
+              Patch(Inspections, ThisRecord, {'Requires follow-up': true, 'Follow-up date': DateAdd(Today(), 14, TimeUnit.Days)})
+          ),
+          Notify("Could not flag the selected inspections: " & FirstError.Message, NotificationType.Error),
+          Notify(CountRows(Self.Selected.AllItems) & " inspection(s) flagged for follow-up.")
+      )
+    narration: >
+      Flag for follow up works on many rows. The docs say Item is blank whenever more than one row is selected, so a
+      single record command can never quietly act on the first row. This one loops over all items instead and sets the flag
+      and a date two weeks out. Also remember that the form is saved before a command runs, so unsaved edits are committed
+      first.
+
+  - id: cmdscreen
+    type: screen
+    heading: "Command designer, then the running button"
+    image: screens/command-bar.jpg
+    bar: "Power Apps · command designer · Inspection main form"
+    demo: >
+      App designer > Inspections page > ... > Edit command bar > Main form. Show the Approve command: label, icon, Action
+      Run formula, Visible formula. Then in the running app open submitted inspection INS-01003: Approve and Reject are
+      visible; on an approved one they are hidden. Click Approve, show the confirmation dialog and the notification. Mask the
+      environment name and the avatar.
+    narration: >
+      In the command designer, each button has a label, an icon, a formula for the action and a formula for visible. Approve
+      and reject only show when the status is submitted. In the running app, open a submitted inspection, click approve,
+      confirm, and the notification says approved. Open an approved one and the buttons are gone.
+
+  - id: custompage
+    type: bullets
+    heading: "A custom page for the review board"
+    bullets:
+      - "A canvas page that runs inside the app"
+      - "Opened with Navigate and the selected record"
+      - "Reads the record with Param id"
+      - "Logic in named formulas, not in controls"
+    narration: >
+      A custom page is a canvas page that lives inside the model-driven app. Our review board opens from the command with
+      Navigate, passing the selected record. In the page, Param id gives the record to look up. All the logic is in named
+      formulas at the app level. Custom pages follow the model-driven licence and do not count as separate apps. Navigate always opens them inline, not as a dialog.
+
+  - id: namedformulas
+    type: code
+    heading: "Named formulas, one per line"
+    lang: powerfx
+    code: |
+      InspectionId = GUID(Param("id"));
+      ThisInspection = LookUp(Inspections, Inspection = InspectionId);
+      Findings = Filter('Inspection items', Inspection.Inspection = InspectionId);
+      OpenFindings = Filter(Findings, Passed = false && IsBlank('Resolved on'));
+      OpenCritical = CountRows(Filter(OpenFindings, Severity = 'Severity (Inspection items)'.Critical));
+      PassRate = If(CountRows(Findings) = 0, 0, Round(100 * CountRows(Filter(Findings, Passed = true)) / CountRows(Findings), 0));
+    narration: >
+      The page reads its inspection from the id, finds its findings, keeps the open ones, counts the critical ones and
+      computes a pass rate. Notice the guard on the pass rate: with no findings it returns zero instead of a division
+      error. Because these are plain formulas, we can run them outside Power Apps, on Microsoft's open source Power Fx
+      interpreter, against the sample data.
+
+  - id: custompagescreen
+    type: screen
+    heading: "The review board in the app"
+    image: screens/review-board.jpg
+    bar: "Model-driven app · Inspection Back Office · Review board"
+    demo: >
+      On INS-01002 click Review board: the page opens inline with the score badge (red), "1 open critical", the pass rate and
+      the suggested decision, and a gallery of open findings. Click Open inspection to return to the form. Mask the
+      environment name and the avatar.
+    narration: >
+      Click review board on an inspection and the page opens inline. The score badge changes colour by band, the counts come
+      from the named formulas, and the suggested decision follows simple rules: open critical findings mean reject, a missing
+      or low score means send back, otherwise approve. A person still makes the decision. The page only suggests. The page never writes data. It reads, calculates and links back to the form, which keeps the risky actions in the command bar where they ask for confirmation.
+
+  - id: tests
+    type: code
+    heading: "A refused write, tested without a tenant"
+    lang: csharp
+    code: |
+      h.MakeReadOnly("Inspections", "Principal user is missing prvWritecin_inspection privilege.");
+      h.SelectOne("INS-01002");
+      Run("approve");
+      Assert.Equal("Submitted", h.Status("INS-01002"));
+      Assert.Equal(new[]
+      {
+          "Confirm: Approve INS-01002? [Approve/Keep in review]",
+          "Notify(Error): Could not approve: Principal user is missing prvWritecin_inspection privilege.",
+      }, h.Calls);
+    narration: >
+      This is how we test the formulas. The harness builds in memory tables from the schema file, makes the inspections
+      table refuse writes, runs the approve formula, and checks that the status did not change and the user saw the error.
+      Forty six tests cover the commands and the page. Be clear about the limit: this tests formula logic, not delegation,
+      security or how the real designer behaves.
+
+  - id: suites
+    type: code
+    heading: "Two suites, no sign in"
+    lang: text
+    code: |
+      $ python3 -m pytest -q
+      75 passed
+      $ dotnet test -m:1
+      Passed!  - Failed:     0, Passed:    46, Skipped:     0, Total:    46
+    narration: >
+      Two local suites. Seventy five Python tests check the schema, the solution source, the pack and unpack round trip and
+      the business rules. Forty six dotnet tests run the commands and the custom page on the Power Fx interpreter. Neither needs a
+      tenant. Neither replaces opening the real app, which is the next part.
+
+  - id: security
+    type: bullets
+    heading: "Security: roles and a secured column"
+    bullets:
+      - "Back Office role: Global on all four tables"
+      - "Field Inspector role: Basic on inspection and items"
+      - "Reviewer notes is a secured column"
+      - "A field security profile grants read and write"
+    narration: >
+      Security has two layers. Roles decide who can do what to which rows. Inspection Back Office gets organization level on
+      all four tables. Field Inspector gets basic level on inspections and items, so inspectors see only their own, and read
+      access to sites and inspectors. Then column security: reviewer notes is secured, and only a field security profile
+      gives access to it.
+
+  - id: securityscreen
+    type: screen
+    heading: "Roles and the field security profile"
+    image: screens/security.jpg
+    bar: "Power Platform admin center · Security roles · Inspection Back Office"
+    demo: >
+      Admin center > DEV > Settings > Users + permissions > Security roles > Inspection Back Office, Custom tables tab with
+      the four cin_ tables. Then Field security profiles > Inspection reviewer notes: the Reviewer notes permission with Read,
+      Create and Update allowed, and sam.demo in the Users tab. Mask the environment name and tenant name.
+    narration: >
+      In the admin center the role shows each table with its privilege and access level. The field security profile lists
+      the secured column with read, create and update, and the people who hold it. Assign the back office role and the
+      profile to Sam Demo, and the app is shared with that role. Field inspectors get the other role, and they never see the review tab data at all, because they are not in the profile.
+
+  - id: sam
+    type: screen
+    heading: "Tested as Sam Demo"
+    image: screens/sam-demo.jpg
+    bar: "Model-driven app · Inspection Back Office · signed in as Sam Demo"
+    short: sam
+    demo: >
+      Signed in as sam.demo in an InPrivate window: the app appears in the app list, opens on the Overview dashboard. Open a
+      submitted inspection: the Review tab shows Reviewer notes. Remove sam.demo from the field security profile, reload:
+      Reviewer notes shows a lock icon and cannot be read. Mask the avatar and the URL.
+    narration: >
+      Now Sam Demo, a normal user, not an administrator. The app is in the list, the dashboard opens, and on a submitted
+      inspection the Review tab shows the reviewer notes. Remove Sam from the field security profile and reload: the column
+      shows a lock and the value is hidden. This is why we test as Sam. A system administrator always sees secured columns,
+      so testing as admin proves nothing. So always test security with the least privileged account that should work, and then with one that should not.
+
+  - id: pack
+    type: screen
+    heading: "Package it: one solution"
+    image: screens/export.jpg
+    bar: "Power Apps · Solutions · Contoso Inspections · Export"
+    demo: >
+      Solutions > Contoso Inspections > Export > Managed. Show the objects list: tables, app, dashboard, charts, roles, field
+      security profile, process, business rules, custom page, command component library. Then pac solution unpack on the
+      downloaded zip in a terminal (no sign in), listing the folder. Mask the environment name.
+    narration: >
+      Last, packaging. Everything we built is in one solution: tables, app, site map, dashboard, charts, roles, the field
+      security profile, the process, the business rules, the custom page and the command library. Export it managed for test
+      and production, and unpack it with the command line to keep the source in git. Remember to set the autonumber seed again
+      after you import. Test with a managed import into a second environment before production, and keep a version number on the solution so upgrades are clean.
+
+  - id: unverified
+    type: bullets
+    heading: "What I have not verified"
+    bullets:
+      - "The generated solution was never imported"
+      - "Rules, flow and commands: designer results come from the recording"
+      - "Formula tests run logic only, not the real host"
+      - "Column security and roles need a real user"
+    narration: >
+      Let me be straight about what is not proven. The generated solution packs and unpacks, but the tenant import is the
+      real test, and the demo has a fallback if it fails. Business rules, the process flow and the commands are built in the
+      designers, so what you see on screen is the evidence. The formula tests check logic only. And column security needs a
+      real user, which is why Sam is in the video.
+
+  - id: recap
+    type: bullets
+    heading: "Seven rules"
+    bullets:
+      - "Model the data first; the app follows"
+      - "Name views after the question they answer"
+      - "Pick the business rule scope on purpose"
+      - "Commands: confirm, write, report errors, trim input"
+      - "Test as a real user, not as admin"
+      - "Pack success is not import success"
+      - "Keep it all in one solution"
+    narration: >
+      Seven rules. Model the data first. Name views after the question they answer. Pick the business rule scope on purpose.
+      In commands, confirm, write, report the error, and trim input. Test as a real user, never as admin. Pack success is not
+      import success. And keep it all in one solution.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The schema, the generator, the rules, the commands, the custom page and all the tests are on GitHub, and the complete
+      guide to model-driven apps is on devladlog dot com. Links are in the description. Subscribe so you don't miss the next
+      special.

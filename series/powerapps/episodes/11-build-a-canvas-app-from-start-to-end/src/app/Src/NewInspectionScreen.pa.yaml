@@ -1,0 +1,78 @@
+# New inspection: pick a site and a date. The reference is built by InspectionRef (site-date-initials-sequence);
+# the inspector is the signed-in person's Inspector row, so nobody types their own name.
+Screens:
+  NewInspectionScreen:
+    Properties:
+      Fill: =RGBA(245, 246, 250, 1)
+      Width: =Max(App.Width, If(App.Width < App.Height, App.DesignWidth, App.DesignHeight))
+      Height: =Max(App.Height, If(App.Width < App.Height, App.DesignHeight, App.DesignWidth))
+    Children:
+      - lblNewTitle:
+          Control: Label
+          Properties:
+            Text: ="New inspection"
+            Role: =TextRole.Heading1
+            Size: =24
+            FontWeight: =FontWeight.Semibold
+            Color: =RGBA(255, 255, 255, 1)
+            Fill: =RGBA(0, 90, 158, 1)
+            X: =0
+            Y: =0
+            Width: =Parent.Width - TapTarget
+            Height: =TapTarget
+      - btnBackNew:
+          Control: Classic/Button
+          Properties:
+            Text: ="‹"
+            OnSelect: =Back()
+            AccessibleLabel: ="Back to inspections"
+            TabIndex: =0
+            X: =Parent.Width - TapTarget
+            Y: =0
+            Width: =TapTarget
+            Height: =TapTarget
+      - conNewForm:
+          Control: GroupContainer
+          Variant: AutoLayout
+          Properties:
+            LayoutDirection: =LayoutDirection.Vertical
+            LayoutGap: =12
+            PaddingLeft: =16
+            PaddingRight: =16
+            PaddingTop: =16
+            X: =0
+            Y: =TapTarget
+            Width: =Parent.Width
+            Height: =Parent.Height - Self.Y
+          Children:
+            - lblWho:
+                Control: Label
+                Properties:
+                  Text: |-
+                    =If(IsBlank(CurrentInspector), "You are not set up as an inspector yet. Ask your lead to add you.", "Inspector: " & CurrentInspector.'Full name')
+                  Color: =If(IsBlank(CurrentInspector), RGBA(164, 38, 44, 1), RGBA(50, 49, 48, 1))
+                  Live: =Live.Polite
+                  Height: =56
+            - drpSite:
+                Control: Classic/Dropdown
+                Properties:
+                  Items: =Sort(Sites, 'Site code')
+                  AccessibleLabel: ="Site"
+                  TabIndex: =0
+                  Height: =TapTarget
+            - dpInspectionDate:
+                Control: Classic/DatePicker
+                Properties:
+                  DefaultDate: =Today()
+                  AccessibleLabel: ="Inspection date"
+                  TabIndex: =0
+                  Height: =TapTarget
+            - btnStart:
+                Control: Classic/Button
+                Properties:
+                  Text: ="Start inspection"
+                  DisplayMode: =If(IsBlank(CurrentInspector) || IsBlank(drpSite.Selected), DisplayMode.Disabled, DisplayMode.Edit)
+                  OnSelect: =If(StartInspection(drpSite.Selected.'Site code', dpInspectionDate.SelectedDate), Navigate(InspectionScreen, ScreenTransition.Cover))
+                  AccessibleLabel: ="Start inspection"
+                  TabIndex: =0
+                  Height: =TapTarget

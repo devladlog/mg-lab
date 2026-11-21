@@ -1,0 +1,190 @@
+# One inspection: its details, its findings, and Submit. Findings are filtered by the inspection's own id.
+#   Small (phone upright)   one column: details, findings, submit
+#   Medium and up           details+submit on the left, findings on the right (two panes), same controls
+#   Submit                  disabled once the inspection isn't a draft; the rules live in ValidateSubmit (App.Formulas)
+Screens:
+  InspectionScreen:
+    Properties:
+      Fill: =RGBA(245, 246, 250, 1)
+      Width: =Max(App.Width, If(App.Width < App.Height, App.DesignWidth, App.DesignHeight))
+      Height: =Max(App.Height, If(App.Width < App.Height, App.DesignHeight, App.DesignWidth))
+    Children:
+      - lblInspectionTitle:
+          Control: Label
+          Properties:
+            Text: =selectedInspection.Reference
+            Role: =TextRole.Heading1
+            Size: =24
+            FontWeight: =FontWeight.Semibold
+            Color: =RGBA(255, 255, 255, 1)
+            Fill: =RGBA(0, 90, 158, 1)
+            X: =0
+            Y: =0
+            Width: =Parent.Width - TapTarget
+            Height: =TapTarget
+      - btnBackInspection:
+          Control: Classic/Button
+          Properties:
+            Text: ="‹"
+            OnSelect: =Back()
+            AccessibleLabel: ="Back to inspections"
+            TabIndex: =0
+            X: =Parent.Width - TapTarget
+            Y: =0
+            Width: =TapTarget
+            Height: =TapTarget
+      - conInspectionBody:
+          Control: GroupContainer
+          Variant: AutoLayout
+          Properties:
+            LayoutDirection: =If(InspectionScreen.Size >= ScreenSize.Medium, LayoutDirection.Horizontal, LayoutDirection.Vertical)
+            LayoutGap: =16
+            PaddingLeft: =16
+            PaddingRight: =16
+            PaddingTop: =12
+            X: =0
+            Y: =TapTarget
+            Width: =Parent.Width
+            Height: =Parent.Height - Self.Y
+          Children:
+            - conDetails:
+                Control: GroupContainer
+                Variant: AutoLayout
+                Properties:
+                  LayoutDirection: =LayoutDirection.Vertical
+                  LayoutGap: =8
+                  FillPortions: =1
+                  LayoutMinWidth: =480
+                Children:
+                  - lblSite:
+                      Control: Label
+                      Properties:
+                        Text: =selectedInspection.Site.'Site name' & " (" & selectedInspection.Site.'Site code' & ")"
+                        FontWeight: =FontWeight.Semibold
+                        Size: =20
+                        Height: =48
+                  - lblWhen:
+                      Control: Label
+                      Properties:
+                        Text: =Text(selectedInspection.'Inspection date', "dddd d mmmm yyyy", "en-GB") & " · " & Text(selectedInspection.'Inspection status')
+                        Height: =48
+                  - drpResult:
+                      Control: Classic/Dropdown
+                      Properties:
+                        Items: =["Pass", "Needs follow-up", "Fail"]
+                        AccessibleLabel: ="Result"
+                        DisplayMode: =If(selectedInspection.'Inspection status' = 'Inspection status (Inspections)'.Draft, DisplayMode.Edit, DisplayMode.View)
+                        TabIndex: =0
+                        Height: =TapTarget
+                  - lblSuggest:
+                      Control: Label
+                      Properties:
+                        # A hint, not a rule: SuggestResult counts the severities of this inspection's findings.
+                        Text: |-
+                          ="Suggested from the findings: " & SuggestResult(
+                              CountRows(Filter(Findings, Inspection.cin_inspectionid = selectedInspection.cin_inspectionid && Severity = 'Severity (Findings)'.Critical)),
+                              CountRows(Filter(Findings, Inspection.cin_inspectionid = selectedInspection.cin_inspectionid && Severity = 'Severity (Findings)'.Major)),
+                              CountRows(Filter(Findings, Inspection.cin_inspectionid = selectedInspection.cin_inspectionid && Severity = 'Severity (Findings)'.Minor))
+                          )
+                        Height: =48
+                  - txtSummary:
+                      Control: Classic/TextInput
+                      Properties:
+                        Default: =Coalesce(selectedInspection.Summary, "")
+                        Mode: =TextMode.MultiLine
+                        HintText: ="Summary (required for a failed inspection)"
+                        AccessibleLabel: ="Summary"
+                        DisplayMode: =If(selectedInspection.'Inspection status' = 'Inspection status (Inspections)'.Draft, DisplayMode.Edit, DisplayMode.View)
+                        TabIndex: =0
+                        Height: =160
+                  - btnSubmit:
+                      Control: Classic/Button
+                      Properties:
+                        Text: ="Submit inspection"
+                        DisplayMode: =If(selectedInspection.'Inspection status' = 'Inspection status (Inspections)'.Draft, DisplayMode.Edit, DisplayMode.Disabled)
+                        OnSelect: =If(SubmitInspection(drpResult.Selected.Value, txtSummary.Text), Back())
+                        AccessibleLabel: ="Submit inspection"
+                        TabIndex: =0
+                        Height: =TapTarget
+            - conFindings:
+                Control: GroupContainer
+                Variant: AutoLayout
+                Properties:
+                  LayoutDirection: =LayoutDirection.Vertical
+                  LayoutGap: =8
+                  FillPortions: =1
+                  LayoutMinWidth: =480
+                Children:
+                  - lblFindings:
+                      Control: Label
+                      Properties:
+                        Text: =FindingCount(selectedInspection.cin_inspectionid) & If(FindingCount(selectedInspection.cin_inspectionid) = 1, " finding", " findings")
+                        Role: =TextRole.Heading2
+                        FontWeight: =FontWeight.Semibold
+                        Size: =20
+                        Height: =48
+                  - galFindings:
+                      Control: Gallery
+                      Properties:
+                        # The lookup's id comparison is the one filter here whose delegation Learn doesn't spell out: check Studio shows no
+                        # blue underline. Severity sorts by its stored value, not its label.
+                        Items: |-
+                          =Sort(
+                              Filter(Findings, Inspection.cin_inspectionid = selectedInspection.cin_inspectionid),
+                              Severity,
+                              SortOrder.Descending
+                          )
+                        OnSelect: =Set(selectedFinding, ThisItem)
+                        AccessibleLabel: ="Findings"
+                        TemplateSize: =120
+                        FillPortions: =1
+                      Children:
+                        - lblFindingTitle:
+                            Control: Label
+                            Properties:
+                              Text: =ThisItem.Title
+                              FontWeight: =FontWeight.Semibold
+                              Size: =18
+                              X: =24
+                              Y: =12
+                              Width: =Parent.TemplateWidth - 48
+                              Height: =44
+                        - lblFindingMeta:
+                            Control: Label
+                            Properties:
+                              # Severity and state are words, not only colour.
+                              Text: |-
+                                =Text(ThisItem.Severity) & " · " & If(ThisItem.Resolved, "Resolved", "Open, resolve by " & Text(ThisItem.'Resolve by', "d mmm", "en-GB"))
+                              Color: =If(!ThisItem.Resolved && !IsBlank(ThisItem.'Resolve by') && ThisItem.'Resolve by' < Today(), RGBA(164, 38, 44, 1), RGBA(50, 49, 48, 1))
+                              X: =24
+                              Y: =60
+                              Width: =Parent.TemplateWidth - 48
+                              Height: =44
+                  - conFindingActions:
+                      Control: GroupContainer
+                      Variant: AutoLayout
+                      Properties:
+                        LayoutDirection: =LayoutDirection.Horizontal
+                        LayoutGap: =8
+                        Height: =TapTarget
+                      Children:
+                        - btnAddFinding:
+                            Control: Classic/Button
+                            Properties:
+                              Text: ="Add finding"
+                              DisplayMode: =If(selectedInspection.'Inspection status' = 'Inspection status (Inspections)'.Draft, DisplayMode.Edit, DisplayMode.Disabled)
+                              OnSelect: =Navigate(FindingScreen, ScreenTransition.Cover)
+                              AccessibleLabel: ="Add a finding to this inspection"
+                              TabIndex: =0
+                              FillPortions: =1
+                              Height: =TapTarget
+                        - btnResolve:
+                            Control: Classic/Button
+                            Properties:
+                              Text: ="Mark resolved"
+                              DisplayMode: =If(!IsBlank(selectedFinding) && !selectedFinding.Resolved, DisplayMode.Edit, DisplayMode.Disabled)
+                              OnSelect: =ResolveFinding()
+                              AccessibleLabel: ="Mark the selected finding as resolved"
+                              TabIndex: =0
+                              FillPortions: =1
+                              Height: =TapTarget

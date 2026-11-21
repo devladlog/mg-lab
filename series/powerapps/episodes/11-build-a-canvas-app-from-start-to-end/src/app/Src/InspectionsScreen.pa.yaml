@@ -1,0 +1,195 @@
+# Inspections list: the inspector's own inspections (Dataverse returns only their rows, Basic scope), newest first.
+#   Search + status chips   StartsWith and = on one table: both delegate to Dataverse (Learn: Dataverse delegable operations)
+#   Sort                    always sorted, because rows can come in a different order offline (Learn: offline limitations)
+#   Phone first             Width/Height use Learn's orientation formulas; Size follows App.SizeBreakpoints
+#   Offline                 banner + sync icon (Connection.Sync); creating and editing works offline, syncing waits for a signal
+Screens:
+  InspectionsScreen:
+    Properties:
+      Fill: =RGBA(245, 246, 250, 1)
+      OnVisible: =If(IsBlank(statusFilter), Set(statusFilter, Blank()))
+      Width: =Max(App.Width, If(App.Width < App.Height, App.DesignWidth, App.DesignHeight))
+      Height: =Max(App.Height, If(App.Width < App.Height, App.DesignHeight, App.DesignWidth))
+    Children:
+      - lblListTitle:
+          Control: Label
+          Properties:
+            Text: ="Inspections"
+            Role: =TextRole.Heading1
+            Size: =24
+            FontWeight: =FontWeight.Semibold
+            Color: =RGBA(255, 255, 255, 1)
+            Fill: =RGBA(0, 90, 158, 1)
+            X: =0
+            Y: =0
+            Width: =Parent.Width - TapTarget
+            Height: =TapTarget
+      - icoSync:
+          Control: Classic/Icon
+          Properties:
+            Icon: |-
+              =Switch(Connection.Sync,
+                  ConnectionSync.Connected, Icon.Globe,
+                  ConnectionSync.ConnectedWithWarning, Icon.GlobeWarning,
+                  ConnectionSync.ConnectedPendingUpsync, Icon.GlobeChangesPending,
+                  ConnectionSync.ConnectedError, Icon.GlobeError,
+                  ConnectionSync.ConnectedRefresh, Icon.GlobeRefresh,
+                  ConnectionSync.NotConnected, Icon.GlobeNotConnected,
+                  ConnectionSync.NotConnectedWithWarning, Icon.GlobeWarning,
+                  ConnectionSync.NotConnectedPendingUpsync, Icon.GlobeChangesPending,
+                  ConnectionSync.NotConnectedSyncError, Icon.GlobeError)
+            Visible: =Host.OfflineEnabled
+            OnSelect: =ShowHostInfo(HostInfo.OfflineSync)
+            AccessibleLabel: ="Sync status"
+            TabIndex: =0
+            Fill: =RGBA(0, 90, 158, 1)
+            Color: =RGBA(255, 255, 255, 1)
+            X: =Parent.Width - TapTarget
+            Y: =0
+            Width: =TapTarget
+            Height: =TapTarget
+      - lblOffline:
+          Control: Label
+          Properties:
+            Visible: =!Connection.Connected
+            Text: ="Offline. Changes stay on this phone and sync when you're back online."
+            Live: =Live.Polite
+            Fill: =RGBA(255, 244, 206, 1)
+            Color: =RGBA(50, 49, 48, 1)
+            X: =0
+            Y: =TapTarget
+            Width: =Parent.Width
+            Height: =If(Self.Visible, 64, 0)
+      - conListBody:
+          Control: GroupContainer
+          Variant: AutoLayout
+          Properties:
+            LayoutDirection: =LayoutDirection.Vertical
+            LayoutGap: =12
+            PaddingLeft: =16
+            PaddingRight: =16
+            PaddingTop: =12
+            X: =0
+            Y: =TapTarget + lblOffline.Height
+            Width: =Parent.Width
+            Height: =Parent.Height - Self.Y
+          Children:
+            - lblSummary:
+                Control: Label
+                Properties:
+                  # Counts are delegable: CountRows + Filter on Dataverse. Text and shape, not colour alone, carry the warning.
+                  Text: |-
+                    =DraftCount & If(DraftCount = 1, " draft", " drafts") & " · " &
+                    If(OverdueFindingCount = 0, "no overdue findings", OverdueFindingCount & If(OverdueFindingCount = 1, " finding is overdue", " findings are overdue"))
+                  Color: =If(OverdueFindingCount = 0, RGBA(16, 110, 16, 1), RGBA(164, 38, 44, 1))
+                  Height: =56
+            - txtSearch:
+                Control: Classic/TextInput
+                Properties:
+                  Default: =""
+                  HintText: ="Search by reference, e.g. CWN-01"
+                  AccessibleLabel: ="Search inspections by reference"
+                  TabIndex: =0
+                  Height: =TapTarget
+            - conChips:
+                Control: GroupContainer
+                Variant: AutoLayout
+                Properties:
+                  LayoutDirection: =LayoutDirection.Horizontal
+                  LayoutGap: =8
+                  Height: =TapTarget
+                Children:
+                  - btnAll:
+                      Control: Classic/Button
+                      Properties:
+                        Text: ="All"
+                        # The pressed chip is bold and filled, not only a different colour.
+                        Fill: =If(IsBlank(statusFilter), RGBA(0, 90, 158, 1), RGBA(255, 255, 255, 1))
+                        Color: =If(IsBlank(statusFilter), RGBA(255, 255, 255, 1), RGBA(0, 90, 158, 1))
+                        FontWeight: =If(IsBlank(statusFilter), FontWeight.Bold, FontWeight.Normal)
+                        OnSelect: =Set(statusFilter, Blank())
+                        AccessibleLabel: ="Show all inspections"
+                        TabIndex: =0
+                        FillPortions: =1
+                        Height: =TapTarget
+                  - btnDraft:
+                      Control: Classic/Button
+                      Properties:
+                        Text: ="Draft"
+                        Fill: =If(statusFilter = 'Inspection status (Inspections)'.Draft, RGBA(0, 90, 158, 1), RGBA(255, 255, 255, 1))
+                        Color: =If(statusFilter = 'Inspection status (Inspections)'.Draft, RGBA(255, 255, 255, 1), RGBA(0, 90, 158, 1))
+                        FontWeight: =If(statusFilter = 'Inspection status (Inspections)'.Draft, FontWeight.Bold, FontWeight.Normal)
+                        OnSelect: =Set(statusFilter, 'Inspection status (Inspections)'.Draft)
+                        AccessibleLabel: ="Show draft inspections"
+                        TabIndex: =0
+                        FillPortions: =1
+                        Height: =TapTarget
+                  - btnSubmitted:
+                      Control: Classic/Button
+                      Properties:
+                        Text: ="Submitted"
+                        Fill: =If(statusFilter = 'Inspection status (Inspections)'.Submitted, RGBA(0, 90, 158, 1), RGBA(255, 255, 255, 1))
+                        Color: =If(statusFilter = 'Inspection status (Inspections)'.Submitted, RGBA(255, 255, 255, 1), RGBA(0, 90, 158, 1))
+                        FontWeight: =If(statusFilter = 'Inspection status (Inspections)'.Submitted, FontWeight.Bold, FontWeight.Normal)
+                        OnSelect: =Set(statusFilter, 'Inspection status (Inspections)'.Submitted)
+                        AccessibleLabel: ="Show submitted inspections"
+                        TabIndex: =0
+                        FillPortions: =1
+                        Height: =TapTarget
+            - galInspections:
+                Control: Gallery
+                Properties:
+                  # Delegable to Dataverse: Filter, StartsWith (text), = on a choice, || with a value that is the same for every row,
+                  # Sort on one column. No Search, no Left/Len on columns, no AddColumns.
+                  Items: |-
+                    =Sort(
+                        Filter(
+                            Inspections,
+                            StartsWith(Reference, txtSearch.Text) && (IsBlank(statusFilter) || 'Inspection status' = statusFilter)
+                        ),
+                        'Inspection date',
+                        SortOrder.Descending
+                    )
+                  OnSelect: =Set(selectedInspection, ThisItem); Navigate(InspectionScreen, ScreenTransition.Cover)
+                  AccessibleLabel: ="Inspections"
+                  TemplateSize: =128
+                  FillPortions: =1
+                Children:
+                  - lblRef:
+                      Control: Label
+                      Properties:
+                        Text: =ThisItem.Reference & " · " & ThisItem.Site.'Site name'
+                        FontWeight: =FontWeight.Semibold
+                        Size: =18
+                        X: =24
+                        Y: =16
+                        Width: =Parent.TemplateWidth - 104
+                        Height: =44
+                  - lblMeta:
+                      Control: Label
+                      Properties:
+                        # Status is written out as text; the leading mark is a second cue besides the colour.
+                        Text: |-
+                          =If(ThisItem.'Inspection status' = 'Inspection status (Inspections)'.Draft, "● ", "✓ ") &
+                          Text(ThisItem.'Inspection status') & " · " & Text(ThisItem.'Inspection date', "ddd d mmm", "en-GB")
+                        X: =24
+                        Y: =64
+                        Width: =Parent.TemplateWidth - 104
+                        Height: =44
+                  - icoOpen:
+                      Control: Classic/Icon
+                      Properties:
+                        # Decorative: the whole row is the target, so no AccessibleLabel.
+                        Icon: =Icon.ChevronRight
+                        X: =Parent.TemplateWidth - 72
+                        Y: =40
+                        Width: =48
+                        Height: =48
+            - btnNew:
+                Control: Classic/Button
+                Properties:
+                  Text: ="New inspection"
+                  OnSelect: =Navigate(NewInspectionScreen, ScreenTransition.Cover)
+                  AccessibleLabel: ="Start a new inspection"
+                  TabIndex: =0
+                  Height: =TapTarget

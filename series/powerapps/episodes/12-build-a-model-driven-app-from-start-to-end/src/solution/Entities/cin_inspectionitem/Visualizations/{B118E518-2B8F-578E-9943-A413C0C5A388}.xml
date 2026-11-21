@@ -1,0 +1,58 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<visualization xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <savedqueryvisualizationid>{B118E518-2B8F-578E-9943-A413C0C5A388}</savedqueryvisualizationid>
+  <name>Open findings by severity</name>
+  <description></description>
+  <primaryentitytypecode>cin_inspectionitem</primaryentitytypecode>
+  <datadescription>
+    <datadefinition>
+      <fetchcollection>
+        <fetch mapping="logical" aggregate="true">
+          <entity name="cin_inspectionitem">
+            <attribute name="cin_inspectionitemid" alias="count_cin_inspectionitemid" aggregate="count" />
+            <attribute name="cin_severity" groupby="true" alias="group_cin_severity" />
+            <filter type="and">
+              <condition attribute="cin_resolvedon" operator="null" />
+            </filter>
+          </entity>
+        </fetch>
+      </fetchcollection>
+      <categorycollection>
+        <category alias="group_cin_severity">
+          <measurecollection>
+            <measure alias="count_cin_inspectionitemid" />
+          </measurecollection>
+        </category>
+      </categorycollection>
+    </datadefinition>
+  </datadescription>
+  <presentationdescription>
+    <Chart Palette="None" PaletteCustomColors="55,118,193; 206,77,72; 134,171,70; 112,89,145; 70,170,197; 232,128,56">
+      <Series>
+        <Series ChartType="Bar" IsValueShownAsLabel="True" Font="{0}, 9.5px" LabelForeColor="59, 59, 59" CustomProperties="PointWidth=0.75, MaxPixelPointWidth=40">
+          <SmartLabelStyle Enabled="True" />
+        </Series>
+      </Series>
+      <ChartAreas>
+        <ChartArea BorderColor="White" BorderDashStyle="Solid">
+          <AxisY LabelAutoFitMinFontSize="8" TitleForeColor="59, 59, 59" TitleFont="{0}, 9.5px" LineColor="165, 172, 181" IntervalAutoMode="VariableCount">
+            <MajorGrid LineColor="239, 242, 246" />
+            <MajorTickMark LineColor="165, 172, 181" />
+            <LabelStyle Font="{0}, 9.5px" ForeColor="59, 59, 59" />
+          </AxisY>
+          <AxisX LabelAutoFitMinFontSize="8" TitleForeColor="59, 59, 59" TitleFont="{0}, 9.5px" LineColor="165, 172, 181" IntervalAutoMode="VariableCount">
+            <MajorTickMark LineColor="165, 172, 181" />
+            <MajorGrid LineColor="Transparent" />
+            <LabelStyle Font="{0}, 9.5px" ForeColor="59, 59, 59" />
+          </AxisX>
+        </ChartArea>
+      </ChartAreas>
+      <Titles>
+        <Title Alignment="TopLeft" DockingOffset="-3" Font="{0}, 13px" ForeColor="59, 59, 59" />
+      </Titles>
+    </Chart>
+  </presentationdescription>
+  <isdefault>0</isdefault>
+  <componentstate>0</componentstate>
+  <introducedversion>1.0.0.0</introducedversion>
+</visualization>

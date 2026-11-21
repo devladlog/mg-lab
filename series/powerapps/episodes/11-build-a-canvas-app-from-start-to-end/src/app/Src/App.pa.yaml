@@ -1,0 +1,130 @@
+# Contoso Inspections (phone), Power Apps Build Special 11: a canvas app built from an empty environment to a published app.
+# App settings that pa.yaml doesn't hold (set them in Studio, Settings > Display): Scale to fit OFF, Lock aspect ratio OFF,
+# Lock orientation OFF (Learn: build responsive apps). Settings > General: "Can be used offline" ON only after the offline
+# profile exists (Learn: set up mobile offline for canvas apps); Settings > Updates: Data row limit stays 500.
+#
+# One file holds the rules, so every screen stays thin:
+#   Named formulas   values that follow the data (counts, the signed-in inspector) and constants (TapTarget, MaxPhotoKB)
+#   Pure UDFs        ValidateFinding, ValidateSubmit, SuggestResult, InspectionRef ... no side effects, unit-tested
+#   Behavior UDFs    StartInspection, AddFinding, ResolveFinding, SubmitInspection: the four writes. Each returns true or false
+#                    and leaves navigation to the screen, so the UDFs never name a screen.
+# Security is NOT in the app: the Contoso Inspector role gives Basic (own records) on Inspection and Finding, so Dataverse
+# only returns the signed-in inspector's rows. The app has no "my inspections" filter to get wrong.
+App:
+  Properties:
+    StartScreen: =InspectionsScreen
+    SizeBreakpoints: =[1200, 1800, 2400]
+    MinScreenWidth: =640
+    MinScreenHeight: =640
+    Formulas: |-
+      =TapTarget = 88;
+      MaxPhotoKB = 10240;
+      MinSeriousDetails = 10;
+      CurrentInspector = LookUp(Inspectors, 'Work email' = User().Email);
+      DraftCount = CountRows(Filter(Inspections, 'Inspection status' = 'Inspection status (Inspections)'.Draft));
+      OverdueFindingCount = CountRows(Filter(Findings, Resolved = false && !IsBlank('Resolve by') && 'Resolve by' < Today()));
+      SeverityRank(severity: Text): Number = Switch(severity, "Critical", 4, "Major", 3, "Minor", 2, 1);
+      IsSerious(severity: Text): Boolean = SeverityRank(severity) >= 3;
+      ResolveByFor(severity: Text): Date = DateAdd(Today(), Switch(severity, "Critical", 1, "Major", 7, "Minor", 30, 90));
+      Initials(fullName: Text): Text = Concat(ForAll(Split(Trim(fullName), " "), Upper(Left(Value, 1))), Value);
+      RefPrefix(siteCode: Text, fullName: Text): Text = siteCode & "-" & Text(Today(), "yyyymmdd") & "-" & Initials(fullName) & "-";
+      InspectionRef(prefix: Text, existing: Number): Text = prefix & Text(existing + 1, "000");
+      SuggestResult(critical: Number, major: Number, minor: Number): Text =
+          If(critical > 0 || major >= 2, "Fail", major > 0 || minor > 2, "Needs follow-up", "Pass");
+      ValidateFinding(title: Text, details: Text, severity: Text, hasPhoto: Boolean): Text =
+          If(
+              Len(Trim(title)) < 3, "Give the finding a title of at least 3 characters.",
+              IsSerious(severity) && Len(Trim(details)) < MinSeriousDetails, "Major and critical findings need details (at least 10 characters).",
+              IsSerious(severity) && !hasPhoto, "Major and critical findings need a photo.",
+              ""
+          );
+      ValidateSubmit(findingCount: Number, result: Text, summary: Text): Text =
+          If(
+              IsBlank(result), "Choose a result before submitting.",
+              result <> "Pass" && findingCount = 0, "A result other than Pass needs at least one finding.",
+              result = "Fail" && Len(Trim(summary)) < 10, "A failed inspection needs a summary (at least 10 characters).",
+              ""
+          );
+      FindingCount(inspectionId: GUID): Number = CountRows(Filter(Findings, Inspection.cin_inspectionid = inspectionId));
+      StartInspection(siteCode: Text, inspectionDate: Date): Boolean = {
+          With(
+              {
+                  site: LookUp(Sites, 'Site code' = siteCode),
+                  prefix: RefPrefix(siteCode, CurrentInspector.'Full name')
+              },
+              With(
+                  { reference: InspectionRef(prefix, CountRows(Filter(Inspections, StartsWith(Reference, prefix)))) },
+                  IfError(
+                      Collect(
+                          Inspections,
+                          {
+                              Reference: reference,
+                              Site: site,
+                              Inspector: CurrentInspector,
+                              'Inspection date': inspectionDate,
+                              'Inspection status': 'Inspection status (Inspections)'.Draft
+                          }
+                      ),
+                      Notify("Couldn't start the inspection: " & FirstError.Message, NotificationType.Error); false,
+                      Set(selectedInspection, LookUp(Inspections, Reference = reference)); true
+                  )
+              )
+          )
+      };
+      AddFinding(title: Text, details: Text, severity: Text, category: Text): Boolean = {
+          With(
+              { problem: ValidateFinding(title, details, severity, !IsBlank(findingPhoto)) },
+              If(
+                  problem <> "", Notify(problem, NotificationType.Warning); false,
+                  IfError(
+                      Collect(
+                          Findings,
+                          {
+                              Title: Trim(title),
+                              Inspection: selectedInspection,
+                              Severity: Switch(severity, "Critical", 'Severity (Findings)'.Critical, "Major", 'Severity (Findings)'.Major,
+                                  "Minor", 'Severity (Findings)'.Minor, 'Severity (Findings)'.Observation),
+                              Category: Switch(category, "Safety", 'Category (Findings)'.Safety, "Equipment", 'Category (Findings)'.Equipment,
+                                  "Documentation", 'Category (Findings)'.Documentation, 'Category (Findings)'.Housekeeping),
+                              Details: Trim(details),
+                              // Learn (take and upload photos, Dataverse): an image column takes a record with Full and Value, both set to the image URI.
+                              Photo: If(IsBlank(findingPhoto), Blank(), { Full: findingPhoto, Value: findingPhoto }),
+                              Resolved: false,
+                              'Resolve by': ResolveByFor(severity)
+                          }
+                      ),
+                      Notify("Couldn't save the finding: " & FirstError.Message, NotificationType.Error); false,
+                      Set(findingPhoto, Blank()); Notify("Finding added", NotificationType.Success); true
+                  )
+              )
+          )
+      };
+      ResolveFinding(): Boolean = {
+          IfError(
+              Patch(Findings, selectedFinding, { Resolved: true }),
+              Notify("Couldn't resolve it: " & FirstError.Message, NotificationType.Error); false,
+              Set(selectedFinding, Blank()); Notify("Marked as resolved", NotificationType.Success); true
+          )
+      };
+      SubmitInspection(result: Text, summary: Text): Boolean = {
+          With(
+              { problem: ValidateSubmit(FindingCount(selectedInspection.cin_inspectionid), result, summary) },
+              If(
+                  problem <> "", Notify(problem, NotificationType.Warning); false,
+                  IfError(
+                      Patch(
+                          Inspections,
+                          selectedInspection,
+                          {
+                              'Inspection status': 'Inspection status (Inspections)'.Submitted,
+                              Result: Switch(result, "Fail", 'Result (Inspections)'.Fail, "Needs follow-up", 'Result (Inspections)'.'Needs follow-up',
+                                  'Result (Inspections)'.Pass),
+                              Summary: Trim(summary)
+                          }
+                      ),
+                      Notify("Couldn't submit: " & FirstError.Message, NotificationType.Error); false,
+                      Notify("Inspection submitted", NotificationType.Success); true
+                  )
+              )
+          )
+      };

@@ -1,0 +1,86 @@
+Screens:
+  ReviewBoard:
+    Properties:
+      Fill: =RGBA(245, 246, 250, 1)
+    Children:
+      - lblTitle:
+          Control: Label
+          Properties:
+            Text: ="Review " & ThisInspection.'Inspection number' & " - " & ThisInspection.Site.'Site name'
+            X: =24
+            Y: =16
+            Width: =Parent.Width - 48
+            Height: =48
+            Size: =22
+      - lblScore:
+          Control: Label
+          Properties:
+            Text: =Coalesce(Text(ThisInspection.Score), "No score")
+            Fill: =Switch(ScoreBand, "good", RGBA(46, 139, 87, 1), "watch", RGBA(230, 160, 20, 1), "poor", RGBA(200, 50, 50, 1), RGBA(190, 190, 190, 1))
+            Color: =RGBA(255, 255, 255, 1)
+            X: =24
+            Y: =80
+            Width: =140
+            Height: =64
+            Size: =28
+      - lblOpenCritical:
+          Control: Label
+          Properties:
+            Text: =OpenCritical & " open critical"
+            X: =180
+            Y: =80
+            Width: =200
+            Height: =64
+      - lblPassRate:
+          Control: Label
+          Properties:
+            Text: =PassRate & "% of checks passed"
+            X: =396
+            Y: =80
+            Width: =240
+            Height: =64
+      - lblVerdict:
+          Control: Label
+          Properties:
+            Text: '="Suggested decision: " & Verdict'
+            X: =24
+            Y: =160
+            Width: =Parent.Width - 48
+            Height: =40
+            FontWeight: =FontWeight.Semibold
+      - galFindings:
+          Control: Gallery
+          Properties:
+            Items: =Sort(OpenFindings, Item)
+            TemplateSize: =72
+            X: =24
+            Y: =216
+            Width: =Parent.Width - 48
+            Height: =Parent.Height - 300
+          Children:
+            - lblFinding:
+                Control: Label
+                Properties:
+                  Text: =ThisItem.Item & " - " & ThisItem.Severity.Value
+                  X: =12
+                  Y: =12
+                  Width: =Parent.TemplateWidth - 24
+                  Height: =48
+      - btnOpenRecord:
+          Control: Classic/Button
+          Properties:
+            Text: ="Open inspection"
+            OnSelect: =Navigate(ThisInspection)
+            X: =24
+            Y: =Parent.Height - 72
+            Width: =200
+            Height: =48
+      - btnBack:
+          Control: Classic/Button
+          Properties:
+            Text: ="Back to inspections"
+            OnSelect: =Navigate(Inspections)
+            X: =240
+            Y: =Parent.Height - 72
+            Width: =220
+            Height: =48

@@ -1,0 +1,71 @@
+# Business rules for ContosoInspections, written down as data so they can be checked and executed in tests.
+# They are BUILT IN THE BUSINESS RULE DESIGNER (a business rule is a classic Workflow row with XAML; the designer is the
+# supported way to author it). Every rule here has the same name, scope, condition and actions as in the designer.
+#
+# scope: table        -> "Entity" in the designer: model-driven forms AND the server (so canvas apps get it too)
+#        all_forms    -> every form of the table (model-driven only)
+#        form:<name>  -> one form
+# Learn: actions Set Field Value, Set Default Value and Show Error Message work at every scope; Lock/Unlock,
+# Set Visibility, Set Business Required and Recommendation are model-driven form scopes only.
+rules:
+  - name: Follow-up date is required when follow-up is needed
+    table: cin_inspection
+    scope: all_forms
+    when: {column: cin_requiresfollowup, op: eq, value: true}
+    then:
+      - {action: set_visibility, column: cin_followupdate, visible: true}
+      - {action: set_business_required, column: cin_followupdate, required: true}
+    otherwise:
+      - {action: set_business_required, column: cin_followupdate, required: false}
+      - {action: set_visibility, column: cin_followupdate, visible: false}
+
+  - name: Approved inspections are locked
+    table: cin_inspection
+    scope: all_forms
+    when: {column: cin_status, op: eq, value: Approved}
+    then:
+      - {action: lock, column: cin_siteid}
+      - {action: lock, column: cin_inspectorid}
+      - {action: lock, column: cin_inspectiondate}
+      - {action: lock, column: cin_score}
+      - {action: lock, column: cin_summary}
+      - {action: lock, column: cin_requiresfollowup}
+      - {action: lock, column: cin_followupdate}
+    otherwise:
+      - {action: unlock, column: cin_siteid}
+      - {action: unlock, column: cin_inspectorid}
+      - {action: unlock, column: cin_inspectiondate}
+      - {action: unlock, column: cin_score}
+      - {action: unlock, column: cin_summary}
+      - {action: unlock, column: cin_requiresfollowup}
+      - {action: unlock, column: cin_followupdate}
+
+  - name: A submitted inspection needs a score
+    table: cin_inspection
+    scope: table            # server side too: the canvas app gets the same error
+    when:
+      all:
+        - {column: cin_status, op: eq, value: Submitted}
+        - {column: cin_score, op: isnull}
+    then:
+      - {action: show_error, column: cin_score, message: "Enter a score from 0 to 100 before you submit."}
+
+  - name: A critical finding cannot be marked as passed
+    table: cin_inspectionitem
+    scope: table
+    when:
+      all:
+        - {column: cin_severity, op: eq, value: Critical}
+        - {column: cin_passed, op: eq, value: true}
+    then:
+      - {action: show_error, column: cin_passed, message: "A critical finding cannot be marked as passed."}
+
+  - name: New findings start as not passed when the severity is Major or Critical
+    table: cin_inspectionitem
+    scope: all_forms
+    when:
+      any:
+        - {column: cin_severity, op: eq, value: Major}
+        - {column: cin_severity, op: eq, value: Critical}
+    then:
+      - {action: set_value, column: cin_passed, value: false}

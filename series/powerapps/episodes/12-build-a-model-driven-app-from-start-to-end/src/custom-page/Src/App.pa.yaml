@@ -1,0 +1,17 @@
+# Custom page "Inspection review board" for the Inspection Back Office model-driven app.
+# Hand-written in the Power Apps source code format (schema v3.0), like the earlier canvas episodes. The page is a canvas app
+# of the special "page" type (Learn: "Overview of custom pages"): one screen, opened with
+#   Navigate(Self.Selected.Item, {Page: 'Inspection review board'})      (from a command)
+# which hands over the record as Param("etn") and Param("id").
+# Named formulas: the page's logic lives here, not in controls, so it can be tested without a browser.
+App:
+  Properties:
+    Formulas: |-
+      =InspectionId = GUID(Param("id"));
+      ThisInspection = LookUp(Inspections, Inspection = InspectionId);
+      Findings = Filter('Inspection items', Inspection.Inspection = InspectionId);
+      OpenFindings = Filter(Findings, Passed = false && IsBlank('Resolved on'));
+      OpenCritical = CountRows(Filter(OpenFindings, Severity = 'Severity (Inspection items)'.Critical));
+      PassRate = If(CountRows(Findings) = 0, 0, Round(100 * CountRows(Filter(Findings, Passed = true)) / CountRows(Findings), 0));
+      ScoreBand = If(IsBlank(ThisInspection.Score), "none", If(ThisInspection.Score >= 80, "good", If(ThisInspection.Score >= 70, "watch", "poor")));
+      Verdict = If(OpenCritical > 0, "Reject: open critical findings", If(ScoreBand = "none" || ScoreBand = "poor", "Send back: score missing or below 70", If(PassRate < 50, "Send back: fewer than half of the checks passed", "Approve")));

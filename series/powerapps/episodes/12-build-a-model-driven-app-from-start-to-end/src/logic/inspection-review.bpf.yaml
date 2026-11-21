@@ -1,0 +1,25 @@
+# Business process flow "Inspection review" on Inspection. BUILT IN THE BUSINESS PROCESS FLOW DESIGNER (Power Automate
+# for the designer, model-driven app for the experience). This file is the plan the designer is filled from and the
+# thing the tests check against the schema. Learn limits: up to 30 stages per process, 30 steps per stage,
+# up to 10 active flows per table, up to 5 tables per flow.
+name: Inspection review
+unique_name: cin_inspectionreview
+table: cin_inspection
+description: From a captured inspection to an approved or rejected one.
+stages:
+  - name: Capture
+    steps:
+      - {column: cin_siteid, required: true}
+      - {column: cin_inspectorid, required: true}
+      - {column: cin_inspectiondate, required: true}
+  - name: Findings
+    steps:
+      - {column: cin_score, required: true}
+      - {column: cin_summary, required: true}
+  - name: Review
+    steps:
+      - {column: cin_requiresfollowup}
+      - {column: cin_followupdate}
+  - name: Decision
+    steps:
+      - {column: cin_status, required: true}

@@ -1,0 +1,67 @@
+# Command bar commands for the Inspection table (modern command designer, Power Fx).
+# Built in the app designer: select the Inspections page > Edit command bar > Main form / Main grid.
+# Learn (Using Power Fx with commands): Self.Selected.Item, Self.Selected.AllItems and Self.Selected.State are
+# provided by the host; Set, Collect, UpdateContext, Param, User and others are NOT supported in commands;
+# NotificationType.Success is not supported (it shows an informational notification).
+table: cin_inspection
+commands:
+  - id: approve
+    label: Approve
+    icon: Accept
+    locations: [mainForm, mainGrid]
+    visible: |-
+      Self.Selected.Item.Status = 'Status (Inspections)'.Submitted
+    onSelect: |-
+      If(
+          Confirm("Approve " & Self.Selected.Item.'Inspection number' & "?", {ConfirmButton: "Approve", CancelButton: "Keep in review"}),
+          IfError(
+              Patch(Inspections, Self.Selected.Item, {Status: 'Status (Inspections)'.Approved}),
+              Notify("Could not approve: " & FirstError.Message, NotificationType.Error),
+              Notify("Approved " & Self.Selected.Item.'Inspection number' & ".")
+          )
+      )
+
+  - id: reject
+    label: Reject
+    icon: Cancel
+    locations: [mainForm, mainGrid]
+    visible: |-
+      Self.Selected.Item.Status = 'Status (Inspections)'.Submitted
+    onSelect: |-
+      If(
+          IsBlank(Trim(Self.Selected.Item.'Reviewer notes')),
+          Notify("Add reviewer notes on the Review tab before you reject.", NotificationType.Warning),
+          If(
+              Confirm("Reject " & Self.Selected.Item.'Inspection number' & "?", {ConfirmButton: "Reject", CancelButton: "Keep in review"}),
+              IfError(
+                  Patch(Inspections, Self.Selected.Item, {Status: 'Status (Inspections)'.Rejected}),
+                  Notify("Could not reject: " & FirstError.Message, NotificationType.Error),
+                  Notify("Rejected " & Self.Selected.Item.'Inspection number' & ". The inspector can correct and resubmit.")
+              )
+          )
+      )
+
+  - id: flagfollowup
+    label: Flag for follow-up
+    icon: Flag
+    locations: [mainGrid]
+    visible: |-
+      CountRows(Self.Selected.AllItems) > 0
+    onSelect: |-
+      IfError(
+          ForAll(
+              Self.Selected.AllItems,
+              Patch(Inspections, ThisRecord, {'Requires follow-up': true, 'Follow-up date': DateAdd(Today(), 14, TimeUnit.Days)})
+          ),
+          Notify("Could not flag the selected inspections: " & FirstError.Message, NotificationType.Error),
+          Notify(CountRows(Self.Selected.AllItems) & " inspection(s) flagged for follow-up.")
+      )
+
+  - id: reviewboard
+    label: Review board
+    icon: ReviewSolid
+    locations: [mainForm]
+    visible: |-
+      Self.Selected.State <> FormMode.New
+    onSelect: |-
+      Navigate(Self.Selected.Item, {Page: 'Inspection review board'})

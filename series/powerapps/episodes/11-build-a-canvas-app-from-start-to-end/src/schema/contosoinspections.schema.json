@@ -1,0 +1,338 @@
+{
+  "$comment": "ContosoInspections: the one Dataverse schema shared by the three build specials (canvas app, model-driven app, agents/AI). Source of truth for Provision-ContosoInspections.ps1 and for the test harness. Display names are what Power Fx sees in a canvas app. Fictional business, no real identifiers.",
+  "solution": {
+    "uniqueName": "ContosoInspections",
+    "friendlyName": "Contoso Inspections",
+    "version": "1.0.0.0",
+    "publisher": {
+      "uniqueName": "contosolab",
+      "friendlyName": "Contoso Lab",
+      "prefix": "cin",
+      "optionValuePrefix": 72700
+    }
+  },
+  "tables": [
+    {
+      "schemaName": "cin_Site",
+      "displayName": "Site",
+      "pluralName": "Sites",
+      "description": "A place that gets inspected: a warehouse, a plant or a depot.",
+      "ownership": "OrganizationOwned",
+      "availableOffline": true,
+      "primaryName": {
+        "schemaName": "cin_Name",
+        "displayName": "Site name",
+        "maxLength": 100
+      },
+      "columns": [
+        {
+          "schemaName": "cin_SiteCode",
+          "displayName": "Site code",
+          "type": "string",
+          "maxLength": 20,
+          "required": true,
+          "description": "Short unique code printed on the site's signs, for example CWN-01."
+        },
+        {
+          "schemaName": "cin_Address",
+          "displayName": "Address",
+          "type": "string",
+          "maxLength": 200
+        },
+        {
+          "schemaName": "cin_City",
+          "displayName": "City",
+          "type": "string",
+          "maxLength": 100
+        },
+        {
+          "schemaName": "cin_RiskRating",
+          "displayName": "Risk rating",
+          "type": "choice",
+          "options": [
+            "Low",
+            "Medium",
+            "High"
+          ]
+        }
+      ]
+    },
+    {
+      "schemaName": "cin_Inspector",
+      "displayName": "Inspector",
+      "pluralName": "Inspectors",
+      "description": "A person who carries out inspections. The work email is how the canvas app recognises the signed-in user.",
+      "ownership": "OrganizationOwned",
+      "availableOffline": true,
+      "primaryName": {
+        "schemaName": "cin_Name",
+        "displayName": "Full name",
+        "maxLength": 100
+      },
+      "columns": [
+        {
+          "schemaName": "cin_WorkEmail",
+          "displayName": "Work email",
+          "type": "string",
+          "format": "Email",
+          "maxLength": 100,
+          "required": true
+        },
+        {
+          "schemaName": "cin_Region",
+          "displayName": "Region",
+          "type": "string",
+          "maxLength": 50
+        },
+        {
+          "schemaName": "cin_Certified",
+          "displayName": "Certified",
+          "type": "boolean",
+          "trueLabel": "Yes",
+          "falseLabel": "No",
+          "default": false
+        }
+      ]
+    },
+    {
+      "schemaName": "cin_Inspection",
+      "displayName": "Inspection",
+      "pluralName": "Inspections",
+      "description": "One visit to one site by one inspector.",
+      "ownership": "UserOwned",
+      "availableOffline": true,
+      "primaryName": {
+        "schemaName": "cin_Reference",
+        "displayName": "Reference",
+        "maxLength": 60
+      },
+      "columns": [
+        {
+          "schemaName": "cin_InspectionDate",
+          "displayName": "Inspection date",
+          "type": "date",
+          "required": true
+        },
+        {
+          "schemaName": "cin_Status",
+          "displayName": "Inspection status",
+          "type": "choice",
+          "required": true,
+          "options": [
+            "Draft",
+            "Submitted",
+            "Reviewed",
+            "Closed"
+          ]
+        },
+        {
+          "schemaName": "cin_Result",
+          "displayName": "Result",
+          "type": "choice",
+          "options": [
+            "Pass",
+            "Needs follow-up",
+            "Fail"
+          ]
+        },
+        {
+          "schemaName": "cin_Summary",
+          "displayName": "Summary",
+          "type": "memo",
+          "maxLength": 2000
+        }
+      ]
+    },
+    {
+      "schemaName": "cin_Finding",
+      "displayName": "Finding",
+      "pluralName": "Findings",
+      "description": "A problem or observation recorded during an inspection, with an optional photo.",
+      "ownership": "UserOwned",
+      "availableOffline": true,
+      "primaryName": {
+        "schemaName": "cin_Title",
+        "displayName": "Title",
+        "maxLength": 100
+      },
+      "columns": [
+        {
+          "schemaName": "cin_Severity",
+          "displayName": "Severity",
+          "type": "choice",
+          "required": true,
+          "options": [
+            "Observation",
+            "Minor",
+            "Major",
+            "Critical"
+          ]
+        },
+        {
+          "schemaName": "cin_Category",
+          "displayName": "Category",
+          "type": "choice",
+          "options": [
+            "Safety",
+            "Housekeeping",
+            "Equipment",
+            "Documentation"
+          ]
+        },
+        {
+          "schemaName": "cin_Details",
+          "displayName": "Details",
+          "type": "memo",
+          "maxLength": 2000
+        },
+        {
+          "schemaName": "cin_Photo",
+          "displayName": "Photo",
+          "type": "image",
+          "maxSizeKB": 10240
+        },
+        {
+          "schemaName": "cin_Resolved",
+          "displayName": "Resolved",
+          "type": "boolean",
+          "trueLabel": "Yes",
+          "falseLabel": "No",
+          "default": false
+        },
+        {
+          "schemaName": "cin_ResolveBy",
+          "displayName": "Resolve by",
+          "type": "date"
+        }
+      ]
+    }
+  ],
+  "relationships": [
+    {
+      "schemaName": "cin_site_inspection",
+      "referenced": "cin_Site",
+      "referencing": "cin_Inspection",
+      "lookup": {
+        "schemaName": "cin_SiteId",
+        "displayName": "Site",
+        "required": true
+      },
+      "cascade": "Referential"
+    },
+    {
+      "schemaName": "cin_inspector_inspection",
+      "referenced": "cin_Inspector",
+      "referencing": "cin_Inspection",
+      "lookup": {
+        "schemaName": "cin_InspectorId",
+        "displayName": "Inspector",
+        "required": true
+      },
+      "cascade": "Referential"
+    },
+    {
+      "schemaName": "cin_inspection_finding",
+      "referenced": "cin_Inspection",
+      "referencing": "cin_Finding",
+      "lookup": {
+        "schemaName": "cin_InspectionId",
+        "displayName": "Inspection",
+        "required": true
+      },
+      "cascade": "Parental"
+    }
+  ],
+  "securityRole": {
+    "name": "Contoso Inspector",
+    "description": "Field inspectors: create and edit their own inspections and findings, read sites and inspectors. Everything user-owned stays at Basic (own records) so Dataverse, not the app, decides who sees what.",
+    "privileges": [
+      {
+        "table": "cin_site",
+        "schemaName": "cin_Site",
+        "Read": "Global",
+        "AppendTo": "Global"
+      },
+      {
+        "table": "cin_inspector",
+        "schemaName": "cin_Inspector",
+        "Read": "Global",
+        "AppendTo": "Global"
+      },
+      {
+        "table": "cin_inspection",
+        "schemaName": "cin_Inspection",
+        "Create": "Basic",
+        "Read": "Basic",
+        "Write": "Basic",
+        "Append": "Basic",
+        "AppendTo": "Basic"
+      },
+      {
+        "table": "cin_finding",
+        "schemaName": "cin_Finding",
+        "Create": "Basic",
+        "Read": "Basic",
+        "Write": "Basic",
+        "Delete": "Basic",
+        "Append": "Basic",
+        "AppendTo": "Basic"
+      },
+      {
+        "table": "canvasapp",
+        "schemaName": "CanvasApp",
+        "Read": "Global",
+        "why": "Learn (mobile offline for canvas apps): needed to open an offline-enabled app"
+      },
+      {
+        "table": "mobileofflineprofile",
+        "schemaName": "MobileOfflineProfile",
+        "Read": "Global",
+        "why": "same"
+      },
+      {
+        "table": "syncerror",
+        "schemaName": "SyncError",
+        "Read": "Global",
+        "why": "same"
+      }
+    ]
+  },
+  "sampleData": {
+    "sites": [
+      {
+        "name": "Contoso Warehouse North",
+        "code": "CWN-01",
+        "city": "Porto",
+        "risk": "Medium"
+      },
+      {
+        "name": "Contoso Plant East",
+        "code": "CPE-02",
+        "city": "Braga",
+        "risk": "High"
+      },
+      {
+        "name": "Contoso Depot South",
+        "code": "CDS-03",
+        "city": "Faro",
+        "risk": "Low"
+      }
+    ],
+    "inspectors": [
+      {
+        "name": "Alex Demo",
+        "emailParameter": "AlexEmail",
+        "defaultEmail": "alex.demo@contoso.com",
+        "region": "North",
+        "certified": true
+      },
+      {
+        "name": "Sam Demo",
+        "emailParameter": "SamEmail",
+        "defaultEmail": "sam.demo@contoso.com",
+        "region": "South",
+        "certified": true
+      }
+    ]
+  }
+}
