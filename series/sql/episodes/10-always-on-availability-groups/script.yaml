@@ -108,6 +108,7 @@ scenes:
     type: screen
     heading: "Synchronized and healthy"
     image: screens/a07-health.jpg
+    video: screens/a07-health.mp4
     bar: "SSMS · CON-SQL01 · master · a07-health.sql"
     demo: "SSMS connected to CON-SQL01 (masked), a07-health.sql after the seed has finished. Result grid, two rows: CON-SQL01 PRIMARY and CON-SQL02 SECONDARY, both SYNCHRONOUS_COMMIT and AUTOMATIC, both CONNECTED, SyncState SYNCHRONIZED, SyncHealth HEALTHY, IsSuspended 0. Optional second shot: the Always On High Availability dashboard for ag_contoso, all green."
     narration: >
@@ -145,6 +146,7 @@ scenes:
     type: screen
     heading: "Error 976, and a one line fix"
     image: screens/a08-error-976.jpg
+    video: screens/a08-error-976.mp4
     bar: "SSMS · CON-SQL02 · master · a08-secondary-read-fails.sql"
     short: gotcha
     demo: "SSMS connected to CON-SQL02 (masked), a08-secondary-read-fails.sql. Messages tab: Msg 976, Level 14, 'The target database, ContosoBikesAG, is participating in an availability group and is currently not accessible for queries. Either data movement is suspended or the availability replica is not enabled for read access.' Then the same query after a09-allow-read.sql: Orders 8, role SECONDARY."
@@ -180,6 +182,7 @@ scenes:
     type: screen
     heading: "Roles swapped, nothing lost"
     image: screens/a12-failover.jpg
+    video: screens/a12-failover.mp4
     bar: "Terminal + SSMS · CON-SQL02 · a12-failover.sql"
     short: failover
     demo: "Split screen. Left: the terminal running py src/ag_lab.py --engine sqlserver --step a12-failover, showing 'step took N s (limit 60 s)' and '=> OK'. Right: SSMS connected to CON-SQL02 (masked) with the a12 health grid: CON-SQL02 PRIMARY and CON-SQL01 SECONDARY, both SYNCHRONIZED and HEALTHY, then the order count on CON-SQL02: 9, order 1009 present. Object Explorer shows ag_contoso with CON-SQL02 as (Primary)."

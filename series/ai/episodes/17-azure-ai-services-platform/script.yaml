@@ -83,6 +83,7 @@ scenes:
     type: screen
     heading: "The resource in the portal"
     image: screens/resource.jpg
+    video: screens/resource.mp4
     bar: "Azure portal · Foundry resource"
     demo: "Azure portal > the Foundry resource in rg-mglab-ai-17: Overview (kind AI Services, region West Europe, endpoint with the custom subdomain masked), the Keys and Endpoint view showing local authentication disabled, Diagnostic settings showing the setting that sends Audit, RequestResponse and AllMetrics to the Log Analytics workspace. Mask subscription, tenant, user and the resource-name suffix."
     narration: >
@@ -95,6 +96,7 @@ scenes:
     type: screen
     heading: "Owner is not enough: four times 403"
     image: screens/forbidden.jpg
+    video: screens/forbidden.mp4
     bar: "Terminal · python -m aiplatform probe"
     short: owner
     demo: "Terminal, before the role assignment: PYTHONPATH=src python -m aiplatform probe --endpoint $AI17 ; echo exit=$?. The table with four rows (Language, Translator, Content Safety, Document Intelligence), HTTP 403 and verdict forbidden on each, the hint lines about the missing data-plane role, the line '0 of 4 services answered', exit=1. The signed-in account is the subscription Owner."
@@ -126,6 +128,7 @@ scenes:
     type: screen
     heading: "Same identity, four services"
     image: screens/probe.jpg
+    video: screens/probe.mp4
     bar: "Terminal · python -m aiplatform probe"
     demo: "Terminal, after the Cognitive Services User role is assigned and about five minutes have passed: the same command. Four rows with HTTP 200 and verdict ok: the detected language and confidence, the Portuguese translation, the four content-safety severities, and the custom model count with its limit; milliseconds per call; the line '4 of 4 services answered with the same identity.'"
     narration: >
@@ -151,6 +154,7 @@ scenes:
     type: screen
     heading: "Audit, then usage"
     image: screens/operate.jpg
+    video: screens/operate.mp4
     bar: "Terminal · python -m aiplatform audit / usage"
     demo: "Terminal: python -m aiplatform audit ; echo exit=$? then python -m aiplatform usage --minutes 30. The audit lines (PASS for kind, subdomain, local authentication, diagnostics, roles; WARN for the open public network) and the counts; then the usage table with one row per ApiName: calls, errors, 4xx, 5xx, average milliseconds, and the billable units lines. The earlier 403 attempts should show as client errors."
     narration: >
@@ -182,6 +186,7 @@ scenes:
     type: screen
     heading: "Our own series, scanned"
     image: screens/lifecycle.jpg
+    video: screens/lifecycle.mp4
     bar: "Terminal · python -m aiplatform lifecycle"
     short: retire
     demo: "Terminal: PYTHONPATH=src python -m aiplatform lifecycle ../ --no-lines ; echo exit=$? (then once without --no-lines for the file and line list). The output lists Azure Vision Image Analysis (from episode 13) and the Language sentiment and key phrase features (from episode 12), each with its retirement date, days left, replacement and Learn source."

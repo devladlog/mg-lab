@@ -111,6 +111,7 @@ scenes:
     type: screen
     heading: "The pipeline, running on the cluster"
     image: screens/pipeline.jpg
+    video: screens/pipeline.mp4
     bar: "Azure ML studio · Jobs · slabreach-train-and-gate"
     demo: "Terminal: RG=rg-mglab-ai-14 WS=<workspace> scripts/train-and-register.sh (first run, production AUC 0). Then Azure ML studio > Jobs > the pipeline job: the graph prepare > train > evaluate, all completed, and the evaluate step's log with the PROMOTE line. Show the terminal's final line 'registered sla-breach version 1'. Mask subscription, tenant, workspace suffix."
     narration: >
@@ -123,6 +124,7 @@ scenes:
     type: screen
     heading: "The gate says no"
     image: screens/gate.jpg
+    video: screens/gate.mp4
     bar: "Terminal + Azure ML studio · failed job"
     demo: "Terminal: python -m slabreach generate --out build/raw --scenario noisy --seed 4, then scripts/train-and-register.sh. The script prints the production AUC read from the registry tag, then 'ended as Failed: nothing is registered'. Then studio > the failed job > evaluate step > Outputs + logs: the REJECT line with its reasons. Then Models: still only version 1."
     narration: >
@@ -153,6 +155,7 @@ scenes:
     type: screen
     heading: "The registry keeps the evidence"
     image: screens/registry.jpg
+    video: screens/registry.mp4
     bar: "Azure ML studio · Models · sla-breach"
     demo: "Azure ML studio > Models > sla-breach: the version list (v1, then v2 after the good second run: python -m slabreach generate --out build/raw --seed 2 then scripts/train-and-register.sh), open a version: type MLflow, tags test_auc and pipeline_job, then the job link. Mask workspace suffix."
     narration: >
@@ -179,6 +182,7 @@ scenes:
     type: screen
     heading: "Two versions, one endpoint"
     image: screens/endpoint.jpg
+    video: screens/endpoint.mp4
     bar: "Azure ML studio · Endpoints · slabreach"
     demo: "Terminal: scripts/deploy-canary.sh 1 (first time), then scripts/deploy-canary.sh 2. Studio > Endpoints > the endpoint: Details tab with blue 90 and green 10, authentication Microsoft Entra token. Terminal: az ml online-endpoint invoke --name <endpoint> --request-file aml/sample-request.json showing two predictions. Mask endpoint name suffix and scoring URI."
     narration: >

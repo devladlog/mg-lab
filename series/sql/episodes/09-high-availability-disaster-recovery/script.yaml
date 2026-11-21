@@ -88,6 +88,7 @@ scenes:
     type: screen
     heading: "The standby is readable"
     image: screens/h03-standby-readable.jpg
+    video: screens/h03-standby-readable.mp4
     bar: "SSMS · CON-SQL01 · master · h03-ship-log.sql"
     demo: "SSMS connected to CON-SQL01 (masked). After running h02, d01 and h03: the result grid shows Orders on the primary 9, Orders on the standby 9, Log backups restored on the standby 1; Object Explorer, refreshed, shows ContosoBikesHA_Standby with the label (Standby / Read-Only)."
     narration: >
@@ -110,6 +111,7 @@ scenes:
     type: screen
     heading: "Gotcha two: someone took a log backup"
     image: screens/h06-chain-broken.jpg
+    video: screens/h06-chain-broken.mp4
     bar: "SSMS · CON-SQL01 · master · h06-ship-log-fails.sql"
     short: gotcha
     demo: "SSMS, after running d02 and h05, then d03 and h06-ship-log-fails.sql. Messages tab: Msg 4305, 'The log in this backup set begins at LSN ..., which is too recent to apply to the database. An earlier log backup that includes LSN ... can be restored.' followed by 'RESTORE LOG is terminating abnormally.' Result grid: primary 11, standby 9, log backups restored on the standby 1."
@@ -147,6 +149,7 @@ scenes:
     type: screen
     heading: "Failover, with a stopwatch"
     image: screens/h08-failover.jpg
+    video: screens/h08-failover.mp4
     bar: "Terminal + SSMS · CON-SQL01 · h08-failover.sql"
     short: failover
     demo: "Split screen. Left: the terminal running py src/ha_lab.py --engine sqlserver --step h08-failover, showing 'step took N s (limit 60 s)' and '=> OK'. Right: SSMS with the h08 result grid: Old primary state RESTORING, Promoted copy state ONLINE, Orders on the promoted copy 12, Order 1012 on the promoted copy 1. Object Explorer shows ContosoBikesHA as (Restoring...)."
@@ -174,6 +177,7 @@ scenes:
     type: screen
     heading: "After the failover, who is protected?"
     image: screens/h10-rpo-after.jpg
+    video: screens/h10-rpo-after.mp4
     bar: "Terminal · ha_lab.py --report --rpo 15"
     demo: "Terminal on the laptop, py src/ha_lab.py --engine sqlserver --report --rpo 15 (connection string never shown). Output: ContosoBikesHA SKIPPED (RESTORING), ContosoBikesHA_Standby NO BACKUP (no full backup in msdb history). Optional second shot: the h10-rpo-after step table with the times visible."
     narration: >

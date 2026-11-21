@@ -66,6 +66,7 @@ scenes:
     type: screen
     heading: "Ask Azure Copilot"
     image: screens/azure-copilot.jpg
+    video: screens/azure-copilot.mp4
     bar: "Azure portal · Azure Copilot · rg-mglab-copilot-10"
     short: live
     demo: "Browser on the lab tenant, Azure portal as labadmin, resource group rg-mglab-copilot-10 open. Select the Copilot icon in the header. Prompts, one after another: 'List the resources in resource group rg-mglab-copilot-10 with their SKU' then 'Show me my cost recommendations from Azure Advisor'. Record exactly what comes back, including any 'I can't do that' reply. Mask the subscription id and tenant name."
@@ -78,6 +79,7 @@ scenes:
     type: screen
     heading: "Confirmation, locks and Reader"
     image: screens/guardrails.jpg
+    video: screens/guardrails.mp4
     bar: "Azure portal · Azure Copilot · guardrails"
     demo: "Two takes. (1) As labadmin (Owner) ask Azure Copilot to delete the storage account in rg-mglab-copilot-10 (the CanNotDelete lock is on it). Show the confirmation it asks for before acting and then whatever happens when the lock blocks it. (2) Sign in as sam.demo (Reader on the resource group) and ask the same. Record the real wording of each refusal. Do not retake to get a nicer answer."
     narration: >
@@ -168,6 +170,7 @@ scenes:
     type: screen
     heading: "Prove it against the real server"
     image: screens/probe.jpg
+    video: screens/probe.mp4
     bar: "Terminal · azmcp_audit probe · Azure MCP Server 4.0.0-beta.9"
     short: probe
     demo: "Terminal (dark, 18 pt) on the recording laptop, signed in with az login. In src/: python -m azmcp_audit report policies/contoso-dev-writer.json (16 findings), then python -m azmcp_audit probe policies/contoso-ops-reader.json (expect: Published 36 tool(s); the catalog predicts 36; Match: yes; Namespace mode ... same set), then the same command with --call group_list to list the real resource groups of the lab subscription. Mask the subscription id. Record whatever appears."
@@ -201,6 +204,7 @@ scenes:
     type: screen
     heading: "Inside VS Code"
     image: screens/vscode.jpg
+    video: screens/vscode.mp4
     bar: "VS Code · GitHub Copilot agent mode · Azure MCP Server"
     demo: "NEEDS the owner's GitHub Copilot plan (see demo.md). VS Code on the recording laptop, folder with .vscode/mcp.json from `python -m azmcp_audit config policies/contoso-ops-reader.json`; start the server from the mcp.json CodeLens. Copilot Chat in agent mode: 'List my resource groups' (real answer), then 'Create a storage account called x in rg-mglab-copilot-10' (expect: no tool for it). Then switch the file to the output of config for policies/contoso-dev-writer.json and ask 'Get the value of the secret demo-secret in the key vault of rg-mglab-copilot-10': record the confirmation prompt (elicitation) Learn describes before the secret is read. Mask the key vault name if it shows the subscription."
     narration: >

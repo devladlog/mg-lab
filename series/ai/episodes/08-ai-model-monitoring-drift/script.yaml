@@ -98,6 +98,7 @@ scenes:
     type: screen
     heading: "Two windows through the real model"
     image: screens/traffic.jpg
+    video: screens/traffic.mp4
     bar: "Terminal · python -m hrmon.traffic"
     demo: "Terminal: PYTHONPATH=src python -m hrmon.traffic --data data/baseline.jsonl --window baseline --aoai-endpoint $AOAI --appinsights \"$APPINSIGHTS\" --golden data/golden.jsonl, then the same with data/current.jsonl --window current. Both print 'window ...: 40 triaged, 0 failed' and a golden accuracy line."
     narration: >
@@ -110,6 +111,7 @@ scenes:
     type: screen
     heading: "The records in Log Analytics"
     image: screens/kql.jpg
+    video: screens/kql.mp4
     bar: "Azure portal · Log Analytics · Logs"
     demo: "Azure portal, the workspace in rg-mglab-ai-08 > Logs, KQL: AppTraces | where Message == \"triage\" | summarize n=count() by window=tostring(Properties[\"hr_window\"]), lang=tostring(Properties[\"hr_lang\"]) | order by window — results table (and optionally the column chart) showing English and Portuguese counts per window. Resource names masked."
     narration: >
@@ -142,6 +144,7 @@ scenes:
     type: screen
     heading: "The drift report, from the real workspace"
     image: screens/monitor.jpg
+    video: screens/monitor.mp4
     bar: "Terminal · python -m hrmon.monitor"
     demo: "Terminal: PYTHONPATH=src python -m hrmon.monitor --workspace-id $WS --baseline baseline --current current --appinsights \"$APPINSIGHTS\" ; echo exit=$?  — the table (lang, length, category, urgency, needs_human with n, PSI, JS, status, biggest shift), the model versions line, the golden accuracy line, 'ALERT: YES' or 'ALERT: no', and the exit code."
     narration: >
@@ -196,6 +199,7 @@ scenes:
     type: screen
     heading: "Azure Monitor raises the alert"
     image: screens/alert.jpg
+    video: screens/alert.mp4
     bar: "Azure portal · Monitor · Alerts"
     demo: "Azure portal > Monitor > Alerts (filtered to rg-mglab-ai-08): the fired alert 'mglab-mon-drift-alert' (severity 2) opened, showing the condition (query on AppTraces drift_report, Count > 0) and the fired time. Subscription and names masked."
     narration: >

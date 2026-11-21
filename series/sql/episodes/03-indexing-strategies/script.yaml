@@ -87,6 +87,7 @@ scenes:
     type: screen
     heading: "No index: scan. Narrow index: seek plus lookups"
     image: screens/q01-plans.jpg
+    video: screens/q01-plans.mp4
     bar: "SSMS · CON-SQL01 · ContosoBikesPerf · q01 actual execution plans"
     demo: "SSMS connected to CON-SQL01, database ContosoBikesPerf. Two actual execution plans of q01-customer-orders.sql stacked: first with no lab index (Clustered Index Scan on PK_Orders, plus Sort; keep the green Missing Index text if SSMS shows it), second after ix01 (Index Seek on IX_Orders_CustomerId, Nested Loops, Key Lookup on PK_Orders, Sort). Hover the Key Lookup so the tooltip shows Number of Executions 7."
     narration: >
@@ -121,6 +122,7 @@ scenes:
     type: screen
     heading: "Four steps, measured"
     image: screens/runner-customer-orders.jpg
+    video: screens/runner-customer-orders.mp4
     bar: "Terminal · index_lab.py --engine sqlserver"
     demo: "Terminal (dark theme, 18 pt) on the recording laptop: `python src/index_lab.py --engine sqlserver --setup --save-plans plans`, scrolled to the customer-orders table: four steps with plan, pages read, index pages and check columns, all OK; below it the optimizer's missing index request line (or the 'none' line) and 'results: 7 rows, identical to expected/ in every step'. SQL_CONNECTION_STRING set off-screen."
     narration: >
@@ -155,6 +157,7 @@ scenes:
     type: screen
     heading: "The same seek, a fraction of the size"
     image: screens/runner-open-orders.jpg
+    video: screens/runner-open-orders.mp4
     bar: "Terminal · index_lab.py --engine sqlserver"
     demo: "Same terminal run, scrolled to the open-orders table: no index (Clustered Index Scan), full-table index (Index Seek on IX_Orders_Status_OrderDate) and filtered index (Index Seek on IX_Orders_Open); the index pages column shows the filtered index far smaller than the full-table one; all checks OK, 49 rows identical in every step."
     narration: >
@@ -187,6 +190,7 @@ scenes:
     type: screen
     heading: "Columnstore scan, batch mode"
     image: screens/q03-columnstore-plan.jpg
+    video: screens/q03-columnstore-plan.mp4
     bar: "SSMS · CON-SQL01 · ContosoBikesPerf · q03 actual execution plan"
     demo: "SSMS actual execution plan of q03-revenue-by-year-channel.sql after ix06: Columnstore Index Scan on NCCI_Orders_Reporting selected, Properties pane open showing Actual Execution Mode = Batch and Storage = ColumnStore. Optional inset: the runner's revenue-report table (no index vs columnstore, pages read, both OK)."
     narration: >
@@ -214,6 +218,7 @@ scenes:
     type: screen
     heading: "Every index has a price"
     image: screens/runner-final-dmvs.jpg
+    video: screens/runner-final-dmvs.mp4
     bar: "Terminal · index_lab.py · final design"
     demo: "End of the same terminal run: the dmv-index-sizes.sql table (PK_Orders, IX_Orders_CustomerId_OrderDate, IX_Orders_Open with Filtered = 1, NCCI_Orders_Reporting with used pages and MB), the dmv-index-usage.sql table (seeks, scans, lookups, updates per index), and the final line '9/9 steps behaved as expected on sqlserver'."
     narration: >

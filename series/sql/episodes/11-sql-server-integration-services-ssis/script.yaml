@@ -43,6 +43,7 @@ scenes:
     type: screen
     heading: "The package in Visual Studio"
     image: screens/ssis-designer.jpg
+    video: screens/ssis-designer.mp4
     bar: "Visual Studio 2022 · PartnerSalesProject · PartnerSalesLoad.dtsx"
     demo: "Visual Studio 2022 on the lab laptop with the SQL Server Integration Services Projects extension. PartnerSalesLoad.dtsx open in the designer. Control Flow tab: three tasks in a row, Prepare load, Load partner file, Merge into Sales.PartnerSales, joined by green precedence arrows. Then the Data Flow tab of Load partner file: Flat File Source, Conditional Split, and two OLE DB destinations named Staging table and Rejected rows table. Solution Explorer shows the Package Parameters tab with InputFile and ServerName."
     narration: >
@@ -73,6 +74,7 @@ scenes:
     type: screen
     heading: "Deployed to the SSIS catalog"
     image: screens/ssis-catalog.jpg
+    video: screens/ssis-catalog.mp4
     bar: "SSMS · CON-SQL01 · Integration Services Catalogs · SSISDB"
     demo: "SSMS connected to CON-SQL01 (masked). Object Explorer expanded: Integration Services Catalogs, SSISDB, MGLab, Projects, PartnerSalesProject, Packages, PartnerSalesLoad.dtsx, and Environments, Lab. Query window with c00-deploy-project.sql after running: the result grid shows FolderName MGLab, ProjectName PartnerSalesProject, PackageName PartnerSalesLoad.dtsx. Then c01-environment.sql grid: environment Lab, variable ServerName, value localhost."
     narration: >
@@ -100,6 +102,7 @@ scenes:
     type: screen
     heading: "Run one: three bad rows, none loaded"
     image: screens/ssis-run1.jpg
+    video: screens/ssis-run1.mp4
     bar: "SSMS · CON-SQL01 · ContosoBikesEtl · c03-results.sql"
     demo: "SSMS, after c02-run-package.sql has run with LoggingLevel 1 and the 21 May file. c03-results.sql grid, seven rows: Execution status Succeeded; Rows staged 6; Rows rejected 3; Lines inserted 5; Lines updated 0; Lines in Sales.PartnerSales 5; Rows sent by Flat File Source (data statistics) 0. In a second tab SELECT * FROM Etl.RejectedRows showing PO-88010 line 2 and PO-88011 line 1 with the quantity reason, and PO-99001 line 1 with Unknown ProductId."
     narration: >
@@ -111,6 +114,7 @@ scenes:
     type: screen
     heading: "Gotcha: Basic logging hides the row counts"
     image: screens/ssis-run2-verbose.jpg
+    video: screens/ssis-run2-verbose.mp4
     bar: "SSMS · CON-SQL01 · ContosoBikesEtl · c03-results.sql"
     short: gotcha
     demo: "SSMS, after run two: c02-run-package.sql edited to LoggingLevel 3 and run again on the same 21 May file. c03-results.sql grid: Execution status Succeeded; Rows staged 6; Rows rejected 3; Lines inserted 0; Lines updated 0; Lines in Sales.PartnerSales 5; Rows sent by Flat File Source (data statistics) 8. Keep the last row visible, and the earlier run-one grid next to it showing 0."
@@ -138,6 +142,7 @@ scenes:
     type: screen
     heading: "Run three: a correction arrives"
     image: screens/ssis-run3.jpg
+    video: screens/ssis-run3.mp4
     bar: "SSMS · CON-SQL01 · ContosoBikesEtl · c03-results.sql"
     demo: "SSMS, after run three: c02-run-package.sql with LoggingLevel 3 and the 22 May file. c03-results.sql grid: Execution status Succeeded; Rows staged 3; Rows rejected 0; Lines inserted 2; Lines updated 1; Lines in Sales.PartnerSales 7; Rows sent by Flat File Source (data statistics) 3. Then SELECT Qty, LoadedRunLogId FROM Sales.PartnerSales WHERE PartnerOrderRef = 'PO-77001' AND LineNumber = 1 returning 3 and 3."
     narration: >

@@ -61,6 +61,7 @@ scenes:
     type: screen
     heading: "DSPM: posture and objectives"
     image: screens/dspm-posture.jpg
+    video: screens/dspm-posture.mp4
     bar: "purview.microsoft.com · Solutions · DSPM · Lab Admin"
     demo: "Browser as labadmin on purview.microsoft.com, Solutions, DSPM (NOT the classic entries). Show Posture, then Objectives with the card 'Prevent oversharing of sensitive data' and 'Prevent data exposure in Microsoft 365 Copilot and Microsoft Copilot interactions', and Setup tasks. Record the real state: Copilot interaction numbers will be empty (no Copilot licence). Mask tenant name."
     narration: >
@@ -72,6 +73,7 @@ scenes:
     type: screen
     heading: "Data risk assessments: the oversharing report"
     image: screens/risk-assessment.jpg
+    video: screens/risk-assessment.mp4
     bar: "Purview · DSPM · Discover · Data risk assessments"
     short: assessment
     demo: "Same portal: Discover, Data risk assessments, Microsoft 365 tab. Show the default assessment summary (items found, sensitive items, links sharing data with anyone) and open one site's flyout with Overview, Identify, Protect and Monitor. Mask site URLs that contain the tenant name."
@@ -107,6 +109,7 @@ scenes:
     type: screen
     heading: "The checks, before the fix"
     image: screens/posture-before.jpg
+    video: screens/posture-before.mp4
     bar: "lab Windows terminal · python -m copilot_governance"
     demo: "Terminal on the lab laptop (dark theme, 18 pt): connect (off camera), run ./src/scripts/Export-CopilotGovernanceSnapshot.ps1 -OutFile before.json, then 'cd src; python -m copilot_governance ../before.json'. Visible: FAIL on G03 (no Copilot DLP policy) and the WARN lines for the Everyone except external users claim and external sharing. Record the real output of the tenant and mask the tenant domain; do not edit the text."
     narration: >
@@ -138,6 +141,7 @@ scenes:
     type: screen
     heading: "The policy in Purview, in simulation"
     image: screens/dlp-policy.jpg
+    video: screens/dlp-policy.mp4
     bar: "Purview · Data Loss Prevention · Policies"
     demo: "Run ./src/scripts/New-CopilotLabelDlpPolicy.ps1 -LabelName 'Highly Confidential' first WITHOUT -Apply (dry-run JSON on screen), then with -Apply. Then show Purview, Data Loss Prevention, Policies: the policy 'MG Lab - Copilot: block labelled content', location Microsoft Copilot, Copilot Chat, and Copilot Cowork, mode in simulation. Needs the label 'Highly Confidential' to exist (see demo.md setup)."
     narration: >
@@ -164,6 +168,7 @@ scenes:
     type: screen
     heading: "A sensitive prompt, blocked"
     image: screens/prompt-block.jpg
+    video: screens/prompt-block.mp4
     bar: "copilot.cloud.microsoft · Alex Demo · policy enforcing"
     demo: "Only if the preview 'block sensitive information types in prompts' has reached the lab tenant (check first). Add a second rule to the policy: Content contains, Sensitive information types, Credit Card Number, action Prevent Copilot from processing content, Processing prompts; mode Enable; wait up to four hours. As alex.demo in Copilot Chat paste a prompt that contains the public test card number 4111 1111 1111 1111. Capture the real block message. If nothing is blocked, drop this scene and say so."
     narration: >

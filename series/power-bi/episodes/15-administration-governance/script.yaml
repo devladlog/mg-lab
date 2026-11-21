@@ -113,6 +113,7 @@ scenes:
     type: screen
     heading: "The Monday report"
     image: screens/governance-report.jpg
+    video: screens/governance-report.mp4
     bar: "Windows Terminal and Markdown preview · lab tenant · Contoso Sales (Lab)"
     demo: "Terminal in the episode's src folder, Connect-PowerBIServiceAccount done off camera as labadmin. Run './Invoke-GovernanceAudit.ps1 -BaselinePath ./policy/tenant-baseline.json -FabricToken $fabric' (prompts and tokens off camera). Then open out/governance-<date>.md in the preview: the sections Tenant settings drift, Orphaned workspaces, Scan findings (table with rule, severity, workspace, item) and Activity. Names and user aliases only; blur the workspace GUIDs if any are visible. Also show './Invoke-GovernanceAudit.ps1 -ScanResultPath ../tests/fixtures/scan-result.json -SkipActivity' as the offline run with 12 findings. Needs the tenant for the real run."
     narration: >
@@ -160,6 +161,7 @@ scenes:
     type: screen
     heading: "Change a setting, see the drift"
     image: screens/settings-drift.jpg
+    video: screens/settings-drift.mp4
     bar: "Power BI admin portal and Windows Terminal · lab tenant"
     demo: "Admin portal, Tenant settings: switch off one harmless setting from the baseline (write down which one, for example Certification, with its group 'Contoso Certifiers (Lab)'), Apply. In the terminal run the audit after the wait (see the gotcha scene) and show the section Tenant settings drift: '- **<SettingName>** EnabledChanged: enabled=True -> enabled=False'. Then switch the setting back on and show 'No difference from the baseline'. Needs the tenant."
     narration: >
@@ -171,6 +173,7 @@ scenes:
     type: screen
     heading: "Yesterday, in numbers"
     image: screens/activity-summary.jpg
+    video: screens/activity-summary.mp4
     bar: "Windows Terminal · lab tenant · activity of the previous UTC day"
     demo: "Terminal: 'Get-PbiActivitySummary -Event @(Get-PbiActivityEvent -Date (Get-Date).AddDays(-1))' after a day on which labadmin, alex.demo, sam.demo, jordan.demo, riley.demo and taylor.demo opened and exported a few reports (do this the day before). Show total events, events per activity, the most viewed reports with distinct users (aliases only) and the risky operations. Write down which operation names really appear. Needs the tenant."
     narration: >
@@ -182,6 +185,7 @@ scenes:
     type: screen
     heading: "Gotcha: the data is late, and so are the settings"
     image: screens/lag.jpg
+    video: screens/lag.mp4
     bar: "Windows Terminal and admin portal · lab tenant"
     demo: "Immediately after Apply on a tenant setting (and after an action by sam.demo such as exporting a report), run the audit and show that the drift or the event is not there yet. Wait, run again, show it. Write down how long it really took: Learn gives up to 15 minutes for a setting and 30 to 60 minutes for activity events. Needs the tenant."
     short: gotcha

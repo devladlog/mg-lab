@@ -58,6 +58,7 @@ scenes:
     type: screen
     heading: "Published, and stuck"
     image: screens/before.jpg
+    video: screens/before.mp4
     bar: "Power BI service · semantic model settings · Contoso Sales (Lab)"
     demo: "Desktop: new blank query with queries/sales-by-store.pq (server 10.50.0.30, database ContosoBikesDW), Close and apply, Publish to Contoso Sales (Lab). Service: workspace, the new semantic model, More options, Settings, 'Gateway and cloud connections': no gateway listed (or the source shown as not bound). Click Refresh now and show the failure in Refresh history. Record the real wording. Needs the lab and the tenant."
     narration: >
@@ -99,6 +100,7 @@ scenes:
     type: screen
     heading: "Install and register"
     image: screens/install.jpg
+    video: screens/install.mp4
     bar: "CON-SRV02 · on-premises data gateway"
     demo: "Hyper-V console of CON-SRV02 (lab Administrator desktop). Windows Terminal, PowerShell 7: ./Test-GatewayHost.ps1 (all cloud endpoints and 10.50.0.30:1433 reachable). Then the standard-mode installer: default path, sign in as labadmin (blur nothing but the tenant domain), 'Register a new gateway on this computer', name contoso-lab-gw, recovery key typed (never shown), Configure, summary page. Then the gateway app: Diagnostics, Network ports test, Start new test, 'Completed (Succeeded)'. Needs the lab and the tenant."
     narration: >
@@ -110,6 +112,7 @@ scenes:
     type: screen
     heading: "The data source"
     image: screens/datasource.jpg
+    video: screens/datasource.mp4
     bar: "Power BI service · Manage connections and gateways"
     demo: "Service, Settings, Manage connections and gateways. The cluster contoso-lab-gw shows as online. New, On-premises, gateway cluster contoso-lab-gw, connection name 'Contoso Bikes DW (lab)', type SQL Server, server 10.50.0.30, database ContosoBikesDW, authentication Basic with the pbi_gateway_reader login (password off camera), privacy level Organizational, Create. Needs the lab and the tenant."
     narration: >
@@ -157,6 +160,7 @@ scenes:
     type: screen
     heading: "Bound, refreshed, correct"
     image: screens/bind.jpg
+    video: screens/bind.mp4
     bar: "Power BI service · Settings · Refresh history · report"
     demo: "Semantic model Settings, 'Gateway and cloud connections': contoso-lab-gw selected for the SQL Server source, Apply. Refresh now. Refresh history: Completed. Then the PowerShell check ./Register-LabDataSource.ps1 output or Get-DatasetGatewayInfo: IsBound True. Open the report: Sales Amount 1,862,401.98, 4,071 order lines, five stores (tools/expected.py). Needs the lab and the tenant."
     narration: >
@@ -168,6 +172,7 @@ scenes:
     type: screen
     heading: "Gotcha: the certificate you never created"
     image: screens/cert.jpg
+    video: screens/cert.mp4
     bar: "Power BI service · Refresh history · CON-SRV02"
     demo: "If the refresh fails: Refresh history, the failed entry, Show details: the SQL Server error about a certificate chain from an authority that is not trusted (record the exact text). On CON-SRV02, elevated PowerShell: Set-GatewaySqlTrustedServer -Server 10.50.0.30 (shows the old and new value; the backup file), restart the gateway from the gateway app, refresh again: Completed. If the refresh already succeeded, show the SqlTrustedServers entry in the config file instead and say it was not needed here. Record what really happens. Needs the lab and the tenant."
     short: gotcha

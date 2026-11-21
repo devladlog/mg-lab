@@ -101,6 +101,7 @@ scenes:
     type: screen
     heading: "Fewer executions, much higher cost"
     image: screens/t02-top-queries.jpg
+    video: screens/t02-top-queries.mp4
     bar: "SSMS · CON-SQL01 · ContosoBikesPerf · t02-top-queries.sql"
     demo: "SSMS connected to CON-SQL01 (masked), database ContosoBikesPerf, right after src/sql/w01-workload.sql has run. Run src/sql/t02-top-queries.sql. Grid, two rows: scan / 3 / 1 / and a large AvgLogicalReads, then seek / 50 / 2 / and a very small AvgLogicalReads (single digits). Keep the Executions and RankByReads columns visible."
     narration: >
@@ -125,6 +126,7 @@ scenes:
     type: screen
     heading: "Gotcha: the blocker is idle, not busy"
     image: screens/t03c-diagnose.jpg
+    video: screens/t03c-diagnose.mp4
     bar: "SSMS · CON-SQL01 · ContosoBikesPerf · t03c-diagnose.sql"
     short: gotcha
     demo: "SSMS, a third query window, while window 1 has the open UPDATE and window 2 is running the report query (spinning). Run src/sql/t03c-diagnose.sql. Grid, one row: BlockedSession is the reader's session, BlockerSession is the writer's, WaitType LCK_M_S, WaitMs counting up (about a second or more), BlockerOpenTransactions 1, BlockedStatement is the report SELECT with the mglab-blocked-report comment, BlockerLastStatement shows BEGIN TRANSACTION and the UPDATE. Session numbers and wait resource are masked."
@@ -150,6 +152,7 @@ scenes:
     type: screen
     heading: "Same writer, same reader, no wait"
     image: screens/t03-rcsi-reader.jpg
+    video: screens/t03-rcsi-reader.mp4
     bar: "SSMS · CON-SQL01 · ContosoBikesPerf · t03b-reader.sql"
     short: rcsi
     demo: "SSMS, two query windows side by side after src/sql/t03e-enable-rcsi.sql has run. Left window: src/sql/t03a-blocker.sql executed, the UPDATE has run and the transaction is still open (status bar shows the open transaction). Right window: src/sql/t03b-reader.sql executed, it returns immediately with one row, Status = Shipped, execution time 00:00:00. Highlight that the value is the committed one, not Cancelled."
@@ -162,6 +165,7 @@ scenes:
     type: screen
     heading: "The waits agree with the story"
     image: screens/t04-wait-delta.jpg
+    video: screens/t04-wait-delta.mp4
     bar: "SSMS · CON-SQL01 · ContosoBikesPerf · t04-wait-delta.sql"
     demo: "SSMS, run src/sql/t04-wait-delta.sql, then src/sql/t04b-wait-delta-after-rcsi.sql. First grid: LCK_M_S at the top, WaitingTasksDelta 1, WaitTimeMsDelta in the thousands (the seconds the reader waited), followed by a few small waits such as WRITELOG. Second grid: no LCK_M_ row at all, only small waits. Keep the WaitType and WaitTimeMsDelta columns visible."
     narration: >

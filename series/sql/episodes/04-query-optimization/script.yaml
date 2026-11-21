@@ -67,6 +67,7 @@ scenes:
     type: screen
     heading: "Index Scan vs Index Seek, same index"
     image: screens/q01-plans.jpg
+    video: screens/q01-plans.mp4
     bar: "SSMS · CON-SQL01 · ContosoBikesPerf · q01a + q01b actual plans"
     demo: "SSMS, database ContosoBikesPerf, Include Actual Execution Plan on. q01a and q01b in one window, run together: Results show the same Orders and Revenue twice (4856 / 1238862.24); Execution plan tab shows query 1 with Index Scan on IX_Orders_OrderDate and query 2 with Index Seek on IX_Orders_OrderDate, with SSMS's relative cost per query visible."
     narration: >
@@ -98,6 +99,7 @@ scenes:
     type: screen
     heading: "The warning on the SELECT"
     image: screens/q02-convert-warning.jpg
+    video: screens/q02-convert-warning.mp4
     bar: "SSMS · CON-SQL01 · ContosoBikesPerf · q02a actual plan"
     demo: "SSMS actual plan of q02a-implicit-conversion.sql: the SELECT operator has the yellow warning triangle; hover it so the tooltip shows the type conversion warning with CONVERT_IMPLICIT(int, ... AccountNumber ...) and the seek plan / cardinality text exactly as SSMS prints it; the scan operator (no seek on UX_Customers_AccountNumber) visible. Optional: q02b's plan below it with Index Seek on UX_Customers_AccountNumber and no warning."
     narration: >
@@ -144,6 +146,7 @@ scenes:
     type: screen
     heading: "Whoever runs first decides"
     image: screens/runner-sniffing.jpg
+    video: screens/runner-sniffing.mp4
     bar: "Terminal · tune_lab.py --engine sqlserver"
     short: first-caller
     demo: "Terminal (dark theme, 18 pt): `py src/tune_lab.py --engine sqlserver --setup --save-plans plans`, scrolled to the sniffing table: six runs with plan, compiled/runtime, pages read, rows and check columns, all OK. Row 1 Megastore first: Clustered Index Scan, 1/1, 60000 rows. Row 2: Clustered Index Scan, 1/4242, 7 rows. Row 3 after sp_recompile: Index Seek + Key Lookup, 4242/4242. Row 4: Index Seek + Key Lookup, 4242/1, 60000 rows, the largest pages-read value in the table. Rows 5-6: RECOMPILE procedure."
@@ -223,6 +226,7 @@ scenes:
     type: screen
     heading: "The forced plan, in Query Store"
     image: screens/query-store-forced.jpg
+    video: screens/query-store-forced.mp4
     bar: "SSMS · CON-SQL01 · ContosoBikesPerf · Query Store"
     demo: "SSMS Object Explorer > ContosoBikesPerf > Query Store > Queries With Forced Plans (or Tracked Queries for the procedure's query id): the GetCustomerOrders query with its two plans, the clustered index scan plan marked as forced (check mark). Next to it, or in a second take, the terminal's query-store section: both forced runs with Clustered Index Scan and OK, and the qs-forced-plans.sql table with ForceFailureCount 0."
     narration: >

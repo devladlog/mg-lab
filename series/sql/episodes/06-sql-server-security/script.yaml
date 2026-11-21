@@ -63,6 +63,7 @@ scenes:
     type: screen
     heading: "Procedures yes, tables no"
     image: screens/s01-least-privilege.jpg
+    video: screens/s01-least-privilege.mp4
     bar: "SSMS · CON-SQL01 · ContosoBikesApp · s01-least-privilege.sql"
     demo: "SSMS, database ContosoBikesApp, right after security_lab.py --setup. Run src/sql/s01-least-privilege.sql. Results grid, three rows: sales_north / SELECT FROM Sales.Customers / denied / error 229; sales_north / EXEC Sales.usp_ListCustomers / allowed / 6 rows; sales_north / EXEC Sales.usp_SearchCustomers_Unsafe / denied / error 229. The EXECUTE AS USER line visible in the query text."
     narration: >
@@ -96,6 +97,7 @@ scenes:
     type: screen
     heading: "One customer, or all of them"
     image: screens/s02-injection.jpg
+    video: screens/s02-injection.mp4
     bar: "SSMS · CON-SQL01 · ContosoBikesApp · s02-injection-unsafe.sql"
     short: injection
     demo: "SSMS, run src/sql/s02-injection-unsafe.sql as the runner's login (db_owner member). Grid: Alex / 1 and ' OR 1 = 1 -- / 6. Second shot: select only the line EXEC Sales.usp_SearchCustomers_Unsafe @NamePrefix = N''' OR 1 = 1 --'; (without INSERT INTO @found) and run it: the grid lists all six customers."
@@ -187,6 +189,7 @@ scenes:
     type: screen
     heading: "Same procedure, different rows"
     image: screens/s05-row-level-security.jpg
+    video: screens/s05-row-level-security.mp4
     bar: "SSMS · CON-SQL01 · ContosoBikesApp · s05-row-level-security.sql"
     demo: "SSMS, run src/sql/s05-row-level-security.sql (after the runner has applied 14 and 15, or run them first). Grid, four rows: sales_north / usp_ListCustomers / 2 / North; sales_south / usp_ListCustomers / 2 / South; db_owner member / usp_ListCustomers / 6 / Centre, North, South; sales_north / usp_SearchCustomers 'Bruno' / 0 / NULL. Optional inset: s06-rls-place-order.sql grid with 'error 50001: Unknown customer.' on row 2."
     narration: >
@@ -219,6 +222,7 @@ scenes:
     type: screen
     heading: "Masked, and guessed anyway"
     image: screens/s07-s08-masking.jpg
+    video: screens/s07-s08-masking.mp4
     bar: "SSMS · CON-SQL01 · ContosoBikesApp · s07-masking.sql + s08-masking-inference.sql"
     short: masking
     demo: "SSMS, two query windows side by side (or two shots). Left: src/sql/s07-masking.sql grid: Alex Demo / aXXX@XXXX.com / alex.demo@contoso.com, Rita Sample / rXXX@XXXX.com / rita.sample@contoso.com, Bruno Test / bXXX@XXXX.com / bruno.test@contoso.com. Right: src/sql/s08-masking-inference.sql grid: c% / 1, carla.e% / 1, carla.x% / 0."

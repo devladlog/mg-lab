@@ -104,6 +104,7 @@ scenes:
     type: screen
     heading: "Policy says no: a resource with keys"
     image: screens/deny-keys.jpg
+    video: screens/deny-keys.mp4
     bar: "Terminal · az cognitiveservices account create"
     demo: "Terminal: az cognitiveservices account create -g rg-mglab-ai-07 -n <test name> -l swedencentral --kind OpenAI --sku S0 --custom-domain <test name> --yes  — the command fails with RequestDisallowedByPolicy, naming the assignment 'ai-keyless-deny' and showing the message 'Contoso AI governance: create Azure AI resources with disableLocalAuth=true'."
     narration: >
@@ -115,6 +116,7 @@ scenes:
     type: screen
     heading: "Policy says no: an unapproved model"
     image: screens/deny-model.jpg
+    video: screens/deny-model.mp4
     bar: "Terminal · az cognitiveservices account deployment create"
     demo: "Terminal: az cognitiveservices account deployment create -g rg-mglab-ai-07 -n $AOAI_NAME --deployment-name nano --model-name gpt-4.1-nano --model-version 2025-04-14 --model-format OpenAI --sku-name GlobalStandard --sku-capacity 1  — the command fails with a policy violation naming 'ai-approved-models-deny' and the non-compliance message."
     short: deny
@@ -173,6 +175,7 @@ scenes:
     type: screen
     heading: "The evidence pack, against the real subscription"
     image: screens/evidence-run.jpg
+    video: screens/evidence-run.mp4
     bar: "Terminal · python -m aigov.evidence"
     demo: "Terminal: PYTHONPATH=src python -m aigov.evidence --register governance/register.yaml --subscription $SUB --resource-group rg-mglab-ai-07 --save-snapshot reports/snapshot.json ; echo exit=$?  — the hr-bot block with 11 control lines, the UNREGISTERED line for the shadow account, the two (info) lines, 'RESULT: FAIL' and exit=1."
     narration: >
@@ -206,6 +209,7 @@ scenes:
     type: screen
     heading: "Where the compliance officer works"
     image: screens/compliance-manager.jpg
+    video: screens/compliance-manager.mp4
     bar: "Microsoft Purview · Compliance Manager"
     demo: "Purview portal (lab tenant, masked): Compliance Manager > Regulations, 'Premium AI templates' header visible with EU Artificial Intelligence Act; then the new assessment 'HR assistant: EU AI Act' > an improvement action > Evidence tab > Add evidence > Document, uploading reports/evidence-hr-bot.txt, which then appears in the evidence list."
     narration: >

@@ -69,6 +69,7 @@ scenes:
     type: screen
     heading: "The table in Dataverse"
     image: screens/table.jpg
+    video: screens/table.mp4
     bar: "Power Apps · Tables · Vendor Request · DEV"
     demo: "Terminal: after signing in with Connect-AzAccount, run Install-VendorRequestTable with -WhatIf first (the 'What if' lines for the table and six columns), then for real. Then the browser at make.powerapps.com as labadmin, environment DEV, Solutions > MGLabVendorDesk > Vendor Request > Columns: Request Number (autonumber), Vendor Name, Category, Estimated Annual Cost, Justification, Approval Tier, Status. Mask the org URL."
     narration: >
@@ -117,6 +118,7 @@ scenes:
     type: screen
     heading: "The agent flow"
     image: screens/agent-flow.jpg
+    video: screens/agent-flow.mp4
     bar: "Copilot Studio · Agent flow · Create vendor request"
     demo: "Copilot Studio as labadmin, DEV: Tools > Add tool > Agent flow (Create new). The designer with the trigger 'When an agent calls the flow' with text inputs VendorName, Category, Justification and number input EstimatedAnnualCost plus text ApprovalTier; the Microsoft Dataverse action 'Add a new row' on the Vendor Request table with the fields mapped; the 'Respond to the agent' action with outputs RequestNumber and a status text. Open the response action Settings > Networking and show Asynchronous response OFF. Publish. Mask the org URL."
     narration: >
@@ -128,6 +130,7 @@ scenes:
     type: screen
     heading: "A topic around the tool"
     image: screens/topic.jpg
+    video: screens/topic.mp4
     bar: "Copilot Studio · Topics · File a vendor request"
     demo: "Same agent (Contoso Vendor Desk) with generative orchestration on: Topics > Add a topic > From blank, named 'File a vendor request' with a trigger description for the orchestrator ('Use when the user wants to onboard or request a new vendor. Collects vendor name, category, estimated yearly cost and justification, files the request and returns the request number and the approver. Do not use for policy questions.'). Show the four topic inputs with descriptions, the Set variable value nodes using the Power Fx formulas (ValidateRequest, ApprovalTier), the Condition on the validation message, the 'Add a tool' node for the flow Create vendor request, and the output set with the ConfirmationMessage formula. Also open Code editor for one second, then close it."
     narration: >
@@ -140,6 +143,7 @@ scenes:
     type: screen
     heading: "File a request by talking"
     image: screens/chat.jpg
+    video: screens/chat.mp4
     bar: "Copilot Studio · Test your agent · labadmin"
     short: live
     demo: "Test panel: 'We need to onboard Northwind Print for contract printing, about 4,200 euros a year. We print contracts for clients.' The agent may ask for a missing value; the tool call is visible in the activity map; the answer names a request number like VR-0001 and the approver Team lead. If the real wording or tier differs, keep it and fix the narration."
@@ -152,6 +156,7 @@ scenes:
     type: screen
     heading: "The row is really there"
     image: screens/row.jpg
+    video: screens/row.mp4
     bar: "PowerShell · Get-VendorRequest · Dataverse"
     demo: "Terminal on the lab laptop: Get-VendorRequest -OrgUrl $org -AccessToken $token -Top 3 | Format-Table. Visible: RequestNumber VR-0001, Vendor Northwind Print, Category Printing, AnnualCost formatted with the currency, ApprovalTier Team lead, Status Submitted. Then the same row in the maker portal table view. Mask the org URL."
     narration: >
@@ -177,6 +182,7 @@ scenes:
     type: screen
     heading: "Reading with the Dataverse MCP server"
     image: screens/mcp.jpg
+    video: screens/mcp.mp4
     bar: "Copilot Studio · Tools · Microsoft Dataverse MCP Server"
     demo: "Add tool > Model Context Protocol > Microsoft Dataverse MCP Server (Add to agent). Test panel: 'How many vendor requests have the status Submitted?'. Record the real answer and which MCP tool the activity map shows (Learn lists read_query among the tools). If the tool is not offered or the environment blocks it, say so: Power Platform admin center > environment > Settings > Features > Dataverse Model Context Protocol."
     narration: >

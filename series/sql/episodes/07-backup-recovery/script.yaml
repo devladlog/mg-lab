@@ -42,6 +42,7 @@ scenes:
     type: screen
     heading: "Gotcha: full recovery protects nothing yet"
     image: screens/b01-log-before-full.jpg
+    video: screens/b01-log-before-full.mp4
     bar: "SSMS · CON-SQL01 · master · b01-log-before-full.sql"
     short: gotcha
     demo: "SSMS connected to CON-SQL01 (masked), right after the runner's --setup. Run src/sql/b01-log-before-full.sql. Messages tab: Msg 4214, 'BACKUP LOG cannot be performed because there is no current database backup.' followed by 'BACKUP LOG is terminating abnormally'. Keep the BACKUP LOG line visible in the query window."
@@ -79,6 +80,7 @@ scenes:
     type: screen
     heading: "msdb remembers every backup"
     image: screens/b04-backup-history.jpg
+    video: screens/b04-backup-history.mp4
     bar: "SSMS · CON-SQL01 · msdb · msdb-history.sql"
     demo: "SSMS, after the runner has run steps b01 to b04 (use --step for each, or stop the run after b04). Run src/sql/msdb-history.sql. Grid, three rows ordered by start time: type D (full), I (differential), L (log), each with first_lsn and last_lsn, is_copy_only 0 and a physical_device_name ending in MGLab_ContosoBikesBackup_Full.bak, _Diff.bak and _Log1.trn."
     narration: >
@@ -119,6 +121,7 @@ scenes:
     type: screen
     heading: "The copy: prices back, order not there"
     image: screens/b06-restore-copy.jpg
+    video: screens/b06-restore-copy.mp4
     bar: "SSMS · CON-SQL01 · master · b06-restore-copy.sql"
     short: restore
     demo: "SSMS, run src/sql/b06-restore-copy.sql after step b05 has run. Messages tab: the RESTORE progress lines for the full, differential and two log backups and 'RESTORE DATABASE successfully processed'. Grid, four rows: Recovered copy state / ONLINE; Products priced at 0 in the copy / 0; Orders in the copy / 11; Order 1012 in the copy / 0. Object Explorer refreshed so ContosoBikesRecovered is visible next to ContosoBikesBackup."
@@ -159,6 +162,7 @@ scenes:
     type: screen
     heading: "Repair the live database from the copy"
     image: screens/b07-verify-and-repair.jpg
+    video: screens/b07-verify-and-repair.mp4
     bar: "SSMS · CON-SQL01 · ContosoBikesBackup · b07-verify-and-repair.sql"
     demo: "SSMS, run src/sql/b07-verify-and-repair.sql. Messages tab: DBCC CHECKDB finished without output (NO_INFOMSGS), 'The backup set on file 1 is valid.' from RESTORE VERIFYONLY, then '(5 rows affected)' for the repair. Grid, three rows: Products priced at 0 in the live database / 0; Prices equal to the copy / 5; Orders in the live database / 12."
     narration: >

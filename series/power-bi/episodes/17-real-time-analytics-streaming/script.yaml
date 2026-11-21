@@ -81,6 +81,7 @@ scenes:
     type: screen
     heading: "Till events arriving in the eventstream"
     image: screens/eventstream-live.jpg
+    video: screens/eventstream-live.mp4
     bar: "Microsoft Fabric · Eventstream · custom endpoint to Eventhouse"
     demo: "Browser, workspace Contoso Sales (Lab), eventstream es-till-events in Live view: custom endpoint source, Eventhouse destination (direct ingestion, table TillEventsRaw). Terminal inset (lab laptop): 'python -m tillstream send --run-id demo17' started on a whole minute; the Data preview of the eventstream shows JSON rows arriving. When the ten minutes are over, show the summary the sender prints (messages, unique EventId, duplicates, late events, amount). Mask the tenant name in the URL, the endpoint namespace and the connection string; never show the keys."
     narration: >
@@ -108,6 +109,7 @@ scenes:
     type: screen
     heading: "The totals check"
     image: screens/kql-totals.jpg
+    video: screens/kql-totals.mp4
     bar: "Microsoft Fabric · KQL queryset · ContosoLive"
     demo: "Browser, KQL queryset on the database ContosoLive. Run totals-check.kql (Events, Units, Amount for RunId demo17) and show it equals the sender's summary line by line. Then duplicates.kql (ExtraRows equals the sender's duplicates) and late-arrivals.kql (P50, P95, LateOverTwoMinutes). Keep the sender summary visible beside it. Record the real numbers and the real P50 and P95 latency."
     narration: >
@@ -140,6 +142,7 @@ scenes:
     type: screen
     heading: "DirectQuery and change detection"
     image: screens/desktop-page-refresh.jpg
+    video: screens/desktop-page-refresh.mp4
     bar: "Power BI Desktop · Contoso Live · page Live tills"
     demo: "Desktop (lab laptop). ContosoLive.pbip with KqlClusterUri and KqlDatabase set to the lab values (masked), storage mode DirectQuery on 'Till Events'. Page 'Live tills': three cards (Sales Amount, Orders, Last Event Time), a line chart Orders by minute (Axis EventTime, Legend Channel), a column chart Sales Amount by Store. Format pane, Page refresh: On, type Change detection, measure Last Event Time, check every 5 seconds; show 'show details'. With the sender running, record the cards and the line moving without a click. Also show that in Import mode the Page refresh card is missing (one short cut). Record what Desktop really shows."
     narration: >
@@ -152,6 +155,7 @@ scenes:
     type: screen
     heading: "The same queries as a Real-Time Dashboard"
     image: screens/realtime-dashboard.jpg
+    video: screens/realtime-dashboard.mp4
     bar: "Microsoft Fabric · Real-Time Dashboard · Live tills"
     demo: "Browser, a Real-Time Dashboard 'Live tills' on the KQL database: three tiles from live-kpis.kql, sales-per-minute.kql and orders-per-minute-anomaly.kql. Manage, Refresh settings, Live refresh on. With the sender running, show tiles updating without a reload. Record the refresh rate limit chosen."
     narration: >
@@ -163,6 +167,7 @@ scenes:
     type: screen
     heading: "Gotcha: the service sets the interval, not you"
     image: screens/apr-minimum.jpg
+    video: screens/apr-minimum.mp4
     bar: "Power BI service · Contoso Sales (Lab) · page refresh"
     demo: "Browser, the report published from Desktop to workspace Contoso Sales (Lab) (Fabric trial capacity). Semantic model settings: credentials for the Azure Data Explorer source set. Open the report, Edit, Format, Page refresh: show the interval and the message about the minimum allowed. Then, as capacity admin (labadmin), show the capacity's automatic page refresh settings if the trial capacity exposes them (Admin portal, capacity settings, Power BI workloads). Record the exact wording and the real minimum; if the page refresh settings are not available on the trial capacity, record that instead and say so in the narration."
     short: gotcha

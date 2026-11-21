@@ -91,6 +91,7 @@ scenes:
     type: screen
     heading: "is_inlineable, straight from the catalog"
     image: screens/r01-is-inlineable.jpg
+    video: screens/r01-is-inlineable.mp4
     bar: "SSMS · CON-SQL01 · ContosoBikesApp · r01-inlining-catalog.sql"
     demo: "SSMS connected to CON-SQL01, database ContosoBikesApp. Run src/sql/r01-inlining-catalog.sql. Results grid with exactly three rows: ufn_CustomerOrderSummary / SQL_INLINE_TABLE_VALUED_FUNCTION / 1, ufn_DaysSinceOrder / SQL_SCALAR_FUNCTION / 0, ufn_LineTotal / SQL_SCALAR_FUNCTION / 1. Keep the query text visible above the grid."
     narration: >
@@ -187,6 +188,7 @@ scenes:
     type: screen
     heading: "One call, one order"
     image: screens/d01-place-order.jpg
+    video: screens/d01-place-order.mp4
     bar: "SSMS · CON-SQL01 · ContosoBikesApp · d01-place-order.sql"
     demo: "SSMS, ContosoBikesApp, right after running proc_lab.py --setup (fresh data). Open and run src/sql/d01-place-order.sql. Query text visible (DECLARE @lines Sales.OrderLineList, the INSERT of two lines, EXEC with @OrderId OUTPUT). Results grid, one row: GotNewOrderId yes, Lines 2, OrderTotal 201.85, HelmetStock 38, LockStock 119."
     narration: >
@@ -215,6 +217,7 @@ scenes:
     type: screen
     heading: "The order nobody can ship"
     image: screens/d03-naive-out-of-stock.jpg
+    video: screens/d03-naive-out-of-stock.mp4
     bar: "SSMS · CON-SQL01 · ContosoBikesApp · d03-naive-out-of-stock.sql"
     short: gotcha
     demo: "SSMS, run src/sql/d03-naive-out-of-stock.sql (after d01 and d02, as in the runner order). Messages tab: Msg 547, the UPDATE statement conflicted with the CHECK constraint CK_Products_StockQty. Then the Results tab of batch 2, one row: NewOrders 1, NewOrderLines 2, WheelsetStock 2, LockStock 119, OpenTransactions 0. Show both (split the capture or take two shots: Messages first, then Results)."
@@ -244,6 +247,7 @@ scenes:
     type: screen
     heading: "Eight steps, eight OKs"
     image: screens/runner-summary.jpg
+    video: screens/runner-summary.mp4
     bar: "Terminal · proc_lab.py --engine sqlserver --setup"
     demo: "Windows Terminal (dark theme, 18 pt) in this episode folder: py src/proc_lab.py --engine sqlserver --setup. Scroll so d03 and d04 are both visible: each shows 'error raised: ... CK_Products_StockQty', check OK, and its one-row table (d03: 1 2 2 119 0, d04: 0 0 2 119 0), then the last line '8/8 steps behaved as expected on sqlserver'."
     narration: >
