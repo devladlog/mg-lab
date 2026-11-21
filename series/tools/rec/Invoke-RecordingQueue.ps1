@@ -24,6 +24,21 @@ if ($wanted -contains 'window-recorder') {
     Write-Host "Window recorder ready. Waiting for recordings\window.go ..." -ForegroundColor Cyan
     while (-not (Test-Path (Join-Path $rd 'window-recorder.quit'))) {
         Set-Content $state 'idle'
+        # recordings\action.txt with "prepare: <episode>" or "teardown: <episode>" runs that step (for the next app episode)
+        $actFile = Join-Path $rd 'action.txt'
+        if (Test-Path $actFile) {
+            $line = (Get-Content $actFile -Raw).Trim(); Remove-Item $actFile
+            Set-Content $state 'working'
+            try {
+                if ($line -notmatch '^(prepare|teardown):\s*(.+)$') { throw "unknown action: $line" }
+                $what = $Matches[1]; $epDir = Join-Path $Root ($Matches[2].Trim().Replace('/', '\'))
+                $def = Get-Content (Join-Path $epDir 'record.json') -Raw | ConvertFrom-Json
+                Write-Host "`n=== $line ===" -ForegroundColor Cyan
+                if ($def.$what) { Invoke-HostStatements -Statements $def.$what -EpisodeRoot $epDir }
+                Set-Content (Join-Path $rd 'action.last') "ok: $line"
+            } catch { Write-Host $_ -ForegroundColor Red; Set-Content (Join-Path $rd 'action.last') "error: $($_.Exception.Message)" }
+            continue
+        }
         if (Test-Path (Join-Path $rd 'window.go')) {
             Remove-Item (Join-Path $rd 'window.go')
             Set-Content $state 'recording'
