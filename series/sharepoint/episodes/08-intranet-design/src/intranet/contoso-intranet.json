@@ -1,0 +1,72 @@
+{
+  "$comment": "Contoso intranet blueprint: a home site, the SharePoint app bar's global navigation, organization news, brand images and an accessible theme. Builds on the episode 7 hub. URLs are server-relative; local files are relative to this file.",
+  "homeSite": {
+    "url": "/sites/Intranet",
+    "title": "Contoso Intranet",
+    "template": "SITEPAGEPUBLISHING#0",
+    "isHub": false,
+    "logo": "assets/contoso-logo-64.png"
+  },
+  "hubs": ["/sites/Operations"],
+  "orgNewsSites": ["/sites/Operations"],
+  "orgAssets": {
+    "libraries": [
+      {
+        "url": "/sites/Intranet/BrandImages",
+        "title": "Brand Images",
+        "type": "ImageDocumentLibrary",
+        "thumbnail": "/sites/Intranet/BrandImages/contoso-logo-64.png",
+        "files": ["assets/contoso-logo-64.png", "assets/contoso-globalnav-20.png"]
+      }
+    ]
+  },
+  "theme": {
+    "path": "contoso-operations.theme.json",
+    "applyTo": ["/sites/Intranet", "/sites/Operations"]
+  },
+  "audiences": {
+    "Purchasing Team": ""
+  },
+  "globalNavigation": {
+    "title": "Contoso",
+    "logo": "assets/contoso-globalnav-20.png",
+    "source": "homeSiteNavigation",
+    "megaMenu": true,
+    "audienceTargeting": true,
+    "nodes": [
+      {
+        "title": "Work",
+        "children": [
+          {
+            "title": "Operations",
+            "children": [
+              { "title": "Contoso Operations", "url": "/sites/Operations" },
+              { "title": "Purchasing", "url": "/sites/Purchasing" },
+              { "title": "Facilities", "url": "/sites/Facilities" }
+            ]
+          }
+        ]
+      },
+      {
+        "title": "How do I",
+        "children": [
+          {
+            "title": "Everyday tasks",
+            "children": [
+              { "title": "Buy something", "url": "/sites/Purchasing/SitePages/how-to-buy.aspx" },
+              { "title": "Move office", "url": "/sites/Facilities/SitePages/office-moves.aspx" }
+            ]
+          },
+          {
+            "title": "Purchasing team",
+            "audiences": ["Purchasing Team"],
+            "children": [
+              { "title": "Supplier documents", "url": "/sites/Purchasing/SupplierDocuments" }
+            ]
+          }
+        ]
+      },
+      { "title": "Intranet home", "url": "/sites/Intranet" }
+    ]
+  }
+}

@@ -1,0 +1,289 @@
+# DEVLADLOG SharePoint — episode 07 (draft: screens to be captured in the lab tenant, see demo.md)
+episode: 7
+slug: hub-sites-navigation
+series_label: "SHAREPOINT"
+series_name: "DEVLADLOG SharePoint"
+file_prefix: "sharepoint"
+title: "Hub sites and navigation, as code"
+subtitle: "A hub plan, a navigation linter, audience targeting and a read-back"
+voice: am_michael
+thumbnail_text: "JOINING A HUB\nDOESN'T ADD\nA LINK"
+youtube:
+  title: "SharePoint Hub Sites, Hub Navigation and Audience Targeting as Code | DEVLADLOG SharePoint #7"
+  tags: [SharePoint, SharePoint Online, hub sites, hub navigation, mega menu, audience targeting, information architecture, PnP PowerShell, Microsoft 365]
+sources:
+  - https://www.devladlog.com/articles/sharepoint/2026-04-02-hub-sites-navigation-complete-guide-2026/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Joining a hub doesn't add a link"
+    sub: "A hub plan, a navigation linter, audience targeting and a read-back"
+    short: hook
+    narration: >
+      Associate a site with a hub, and it gets the hub's theme, its navigation bar and its search scope. What it
+      doesn't get is a link in that navigation, or any change to who can open it. In this episode we build the
+      Contoso Operations hub as code, lint its navigation, target links to the right people, and read it all back.
+      Welcome to DEVLADLOG SharePoint.
+
+  - id: why
+    type: bullets
+    heading: "Why hubs, not subsites"
+    bullets:
+      - "Hubs model relationships as links, not hierarchy"
+      - "Associated sites share navigation, theme and search scope"
+      - "A site joins one hub; hubs can join hubs, three levels deep"
+      - "Association never changes permissions"
+    narration: >
+      Subsites put the organization chart into the URL, and the chart always changes. A hub links peer sites instead:
+      shared navigation, a shared theme, news and search across the family. A site can join only one hub, but hubs
+      can be associated with other hubs, up to three levels, for search. And association never changes permissions.
+
+  - id: licensing
+    type: bullets
+    heading: "What you need"
+    bullets:
+      - "Any SharePoint plan: the lab has Microsoft 365 E5"
+      - "SharePoint Administrator to register and associate"
+      - "Hub site owner for the hub navigation"
+      - "Entra groups for audience targeting"
+    narration: >
+      Hub sites work in any SharePoint plan. Registering a hub and associating sites takes a SharePoint administrator.
+      The hub navigation belongs to the hub site owner. And audience targeting uses Microsoft Entra groups: security
+      groups or Microsoft three six five groups. No SharePoint Premium, no Advanced Management.
+
+  - id: plan
+    type: code
+    heading: "The hub plan"
+    lang: json
+    code: |
+      "hub": {
+        "url": "/sites/Operations",
+        "title": "Contoso Operations",
+        "logoUrl": "/sites/Operations/SiteAssets/operations-logo.png",
+        "hideNameInNavigation": false,
+        "requiresJoinApproval": false,
+        "canAssociate": ["Operations Site Owners"],
+        "parentHubUrl": null
+      },
+      "associations": [
+        { "url": "/sites/Purchasing", "title": "Contoso Purchasing" },
+        { "url": "/sites/Facilities", "title": "Contoso Facilities" }
+      ],
+      "audiences": { "Purchasing Team": "", "Facilities Team": "" }
+    narration: >
+      The plan is one JSON file. The hub is a new communication site, Contoso Operations. Only the Operations Site
+      Owners group may associate sites with it: leave that list empty and anyone can. Two sites join: the
+      purchasing site from episode three, and a new facilities site. And two audiences, named by group.
+
+  - id: nav
+    type: code
+    heading: "Three levels, targeted by group"
+    lang: json
+    code: |
+      { "title": "Purchasing", "children": [
+          { "title": "Buy something", "children": [
+              { "title": "Purchasing home", "url": "/sites/Purchasing" },
+              { "title": "How to buy", "url": "/sites/Purchasing/SitePages/how-to-buy.aspx" },
+              { "title": "Purchasing FAQ", "url": "/sites/Purchasing/Lists/Purchasing FAQ" } ] },
+          { "title": "Purchasing team", "audiences": ["Purchasing Team"], "children": [
+              { "title": "Supplier documents", "url": "/sites/Purchasing/SupplierDocuments" },
+              { "title": "Approval limits", "url": "/sites/Purchasing/SitePages/news-approval-limits.aspx" } ] }
+      ] },
+      { "title": "Facilities", "children": [ ... ] },
+      { "title": "Operations home", "url": "/sites/Operations" }
+    narration: >
+      The navigation is a mega menu with three levels, the most Learn allows. Labels group links: Buy something for
+      everyone, Purchasing team only for the purchasing group, with the supplier documents library from episode four.
+      Every link points to a page or a list, not to a file.
+
+  - id: lint
+    type: code
+    heading: "Lint the plan before the tenant"
+    lang: text
+    code: |
+      $ ./Invoke-HubNavigation.ps1 -PlanPath ./bad/bad.hub.json
+      ERROR   HB002  hub.hideNameInNavigation
+                     Hiding the hub name needs a logo ...
+      ERROR   HB006  /sites/hr
+                     Listed twice (also as /sites/HR): a site can be associated with only one hub, once.
+      ERROR   HN001  HR > Policies > Fourth level > Too deep
+                     Level 4: cascading and mega menus support up to 3 levels.
+      ERROR   HN005  HR > Managers
+                     Audiences set but audience targeting is off for this navigation ...
+      WARNING HB004  hub.canAssociate
+                     Empty: any user can associate their site with the hub ...
+      WARNING HN008  /sites/Legal
+                     Associated site not linked from the hub navigation ...
+      WARNING HN009  HR > HR team site
+                     Links to the private site /sites/HRTeam for everyone ...
+      10 error(s), 8 warning(s)
+    narration: >
+      A bad plan shows what the linter knows, all from Learn. Hiding the hub name without a logo. A fourth level.
+      Audiences while targeting is off, so everyone sees the link. An empty list of who may associate. An associated
+      site nobody linked. And a private site linked for everyone, which just produces access requests.
+
+  - id: register
+    type: code
+    heading: "Register, associate, build: idempotent"
+    lang: powershell
+    code: |
+      $hub = try { Get-PnPHubSite -Identity $hubUrl -ErrorAction Stop @c } catch { $null }
+      if (-not $hub) {
+          $r = @{ Site = $hubUrl }; if ($principals.Count) { $r.Principals = [string[]]$principals }
+          $null = Register-PnPHubSite @r @c
+      }
+      # ... compare title, description, logo, flags: only what differs goes into $set
+      if ($set.Count) { $null = Set-PnPHubSite -Identity $hubUrl @set @c }
+
+      $site = Get-PnPTenantSite -Identity $url @c
+      if ([bool](Get-MgProp $site 'IsHubSite' $false)) { New-MgStep 'Skip' $a.url 'is a hub site: ...'; continue }
+      if ($current -eq $hubId) { continue }
+      if ($current -and $current -ne [guid]::Empty.ToString()) {
+          if (-not $Move) { New-MgStep 'Skip' $a.url "already in another hub ($current): use -Move"; continue }
+          $null = Remove-PnPHubSiteAssociation -Site $url @c }
+      $null = Add-PnPHubSiteAssociation -Site $url -HubSite $hubUrl @c
+    narration: >
+      Provisioning uses p n p PowerShell. Register the hub only if it isn't one, with the principals allowed to
+      associate, and set only the properties that differ. Then associate each site. A site that is already in
+      another hub is moved only when you say minus move, and a hub is never associated as a plain site.
+
+  - id: provision
+    type: screen
+    heading: "Provisioning the hub"
+    image: screens/provision.jpg
+    bar: "PowerShell 7 · Invoke-HubNavigation.ps1 -Provision"
+    demo: >
+      Terminal (dark theme, font 18+), after the device-code sign-ins (done off camera):
+      ./src/Invoke-HubNavigation.ps1 -PlanPath ./src/hub/operations.hub.json @t -Provision. Visible: the plan tree,
+      "0 error(s), 0 warning(s)", then "Hub:" RegisterHub /sites/Operations (can associate: Operations Site Owners) and
+      SetHub, "Associations:" Associate /sites/Purchasing and /sites/Facilities, "Hub navigation:" SetWeb
+      NavAudienceTargetingEnabled=True, RemoveNode Home (or whatever default nodes exist), fifteen AddNode lines with
+      "[targeted: Purchasing Team]" on "Purchasing > Purchasing team". Mask tenant host and client id.
+    narration: >
+      Against the lab tenant. The linter finds nothing, the hub is registered with its owners group, both sites are
+      associated, audience targeting is turned on, and the hub navigation is built from the plan, fifteen nodes,
+      the purchasing team label targeted to its group.
+
+  - id: hubnav
+    type: screen
+    heading: "One navigation on every site in the family"
+    image: screens/hub-nav.jpg
+    bar: "Contoso Purchasing · hub navigation"
+    demo: >
+      Browser, signed in as Alex Demo (member of Purchasing Team), on the Contoso Purchasing site home: the hub bar
+      "Contoso Operations" with logo above the site header, the Purchasing mega menu open showing "Buy something"
+      (Purchasing home, How to buy, Purchasing FAQ) and "Purchasing team" (Supplier documents, Approval limits). The
+      site's own navigation from episode 3 (How to buy, FAQ) below. Hub theme visible on the site. Mask tenant URL and
+      avatar.
+    narration: >
+      Open the purchasing site. Above its own navigation sits the Contoso Operations hub bar, with the mega menu
+      from the plan. The site kept its own links from episode three. Facilities has the same hub bar.
+
+  - id: audience
+    type: screen
+    heading: "Same menu, different people"
+    image: screens/audience.jpg
+    bar: "Contoso Purchasing · Alex Demo vs Sam Demo"
+    short: audience
+    demo: >
+      Two browser windows side by side (two profiles), same page (Contoso Purchasing home), Purchasing mega menu open.
+      Left: Alex Demo (in Purchasing Team) sees "Buy something" and "Purchasing team". Right: Sam Demo (in Facilities
+      Team only) sees only "Buy something"; opening the Facilities menu shows "Facilities team". Label each window with
+      the user's display name (or crop so the account initials are visible). Wait for the targeting to apply before
+      recording. Mask tenant URL.
+    narration: >
+      Same page, two people. Alex is in the purchasing team and sees the team links. Sam is in facilities, so the
+      purchasing team label is gone, and the facilities team label appears instead. One navigation, built once,
+      filtered per person.
+
+  - id: gotcha
+    type: bullets
+    heading: "The gotcha: hidden is not protected"
+    bullets:
+      - "Audience targeting filters links; it isn't security"
+      - "Editors see every link, targeted or not"
+      - "Targeting a parent applies to all its sub-links"
+      - "Association doesn't add a link or grant access"
+    short: gotcha
+    narration: >
+      The gotcha. Audience targeting only filters what people see. Learn is explicit that it isn't a security
+      measure, and anyone editing the navigation sees every link. Target a parent and its sub-links inherit it, so a
+      child aimed at another group is seen only by people in both. And joining the hub neither adds a link nor grants
+      access. Permissions stay with each site.
+
+  - id: hierarchy
+    type: code
+    heading: "Hubs of hubs: three levels"
+    lang: text
+    code: |
+      PS> $p.hub.parentHubUrl = '/sites/Portugal'      # Global > Europe > Portugal already exist
+      PS> Test-MgHubHierarchy -Hubs (Import-MgJson ./fixtures/tenant-hubs.json) -Plan $p
+
+      Rule     : HH001
+      Severity : Error
+      Target   : Contoso Operations
+      Message  : Level 4 of hub-to-hub associations: content on sites beyond level 3 won't appear
+                 in search results.
+    narration: >
+      Hubs can join other hubs to widen search, up to three levels. The script reads every hub in the tenant with
+      get p n p hub site and walks the parents. Put Operations under Portugal, which is already level three, and it
+      would be level four: its content would fall out of search. The same check catches cycles and the two thousand
+      hub limit.
+
+  - id: check
+    type: screen
+    heading: "Read it back, catch the drift"
+    image: screens/check.jpg
+    bar: "PowerShell 7 · Invoke-HubNavigation.ps1 -Check"
+    demo: >
+      Terminal: ./src/Invoke-HubNavigation.ps1 -PlanPath ./src/hub/operations.hub.json @t -Check right after
+      provisioning: "hub: Contoso Operations  associated: 2  hubs in tenant: N", "No findings.". Then, in the browser,
+      rename the "Facilities" tab to "Facility" in the hub navigation editor and save; run -Check again: HL004 error
+      "Facilities: Title: tenant has 'Facility'." and "1 error(s)". Second capture of the terminal. Mask tenant host.
+    narration: >
+      Then we read everything back: the hub settings, the associated sites, the whole navigation tree with its
+      audience group I Ds. Right after provisioning there are no findings. Rename one tab in the browser, run the
+      check again, and the drift is reported. Run provision again and the plan wins.
+
+  - id: tests
+    type: code
+    heading: "27 Pester tests, real PnP signatures"
+    lang: text
+    code: |
+      $ Invoke-Pester ./tests -Output Detailed
+      Describing Test-MgHubPlan
+        [+] finds every mistake in the bad plan: 10 errors, 8 warnings
+      Describing Test-MgHubHierarchy (hub-to-hub, three levels)
+        [+] HH001: a parent at level 3 puts the new hub at level 4
+      Describing Tenant functions (PnP cmdlets mocked)
+        [+] associates new sites, leaves members alone, moves sites from another hub only with -Move, never a hub
+        [+] turns on audience targeting and the mega menu, replaces the navigation and targets by group ID
+        [+] leaves a navigation that already matches the plan alone
+      Tests Passed: 27, Failed: 0, Skipped: 0
+    narration: >
+      Twenty-seven Pester tests: the plan rules, the navigation limits, the hub hierarchy, the drift check, and the
+      provisioning with the real p n p cmdlets mocked, so a wrong parameter name fails the test.
+
+  - id: recap
+    type: bullets
+    heading: "Five rules"
+    bullets:
+      - "Say who may associate: empty means anyone"
+      - "Add associated sites to the navigation yourself"
+      - "Three levels, labels with links, pages not files"
+      - "Target private links; never rely on targeting for security"
+      - "Read the hub back and fix the drift"
+    narration: >
+      Five rules. Say who may associate sites, because empty means anyone. Add associated sites to the navigation
+      yourself. Keep to three levels, labels with links, and pages rather than files. Target links to private sites,
+      but never treat targeting as security. And read the hub back. Next episode: the intranet around it, with a home
+      site, global navigation and an accessible theme.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The module, the hub plan and the tests are on GitHub, and the full guide is on devladlog dot com. Links are in
+      the description. See you in the next one.

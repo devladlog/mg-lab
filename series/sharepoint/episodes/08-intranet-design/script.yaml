@@ -1,0 +1,288 @@
+# DEVLADLOG SharePoint — episode 08 (draft: screens to be captured in the lab tenant, see demo.md)
+episode: 8
+slug: intranet-design
+series_label: "SHAREPOINT"
+series_name: "DEVLADLOG SharePoint"
+file_prefix: "sharepoint"
+title: "Intranet design, as code"
+subtitle: "Home site, global navigation, brand assets and a theme that passes contrast"
+voice: am_michael
+thumbnail_text: "A THEME THAT\nFAILS\nCONTRAST"
+youtube:
+  title: "SharePoint Intranet Design: Home Site, Global Navigation, Accessible Theme | DEVLADLOG SharePoint #8"
+  tags: [SharePoint, SharePoint Online, intranet design, home site, global navigation, SharePoint app bar, organization assets library, SharePoint theme, accessibility, PnP PowerShell, Microsoft 365]
+sources:
+  - https://www.devladlog.com/articles/sharepoint/2026-04-09-intranet-design-complete-guide-2026/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "A theme that fails contrast"
+    sub: "Home site, global navigation, brand assets and an accessible theme"
+    short: hook
+    narration: >
+      The Custom Cyan theme in Microsoft's own PowerShell documentation uploads without a single error. Its main
+      colour on a white page has a contrast ratio of one point two five to one. Nobody checks that for you. In this
+      episode we design the Contoso intranet as code, and put a contrast check in front of the theme.
+      Welcome to DEVLADLOG SharePoint.
+
+  - id: why
+    type: bullets
+    heading: "Five pieces of an intranet"
+    bullets:
+      - "Home site: a communication site, the landing page"
+      - "Global navigation in the SharePoint app bar"
+      - "Organization news sites: the official source"
+      - "Organization assets library: brand images in the picker"
+      - "A tenant theme, checked before it ships"
+    narration: >
+      An intranet on top of the hub from last episode has five pieces. A home site, which must be a communication
+      site. Global navigation in the SharePoint app bar, so the links follow people everywhere. Organization news
+      sites. An organization assets library, so brand images show up in every image picker. And a theme.
+
+  - id: licensing
+    type: bullets
+    heading: "What you need"
+    bullets:
+      - "Any SharePoint plan: the lab has Microsoft 365 E5"
+      - "SharePoint Administrator: home site, news, assets"
+      - "Home site owner: global navigation"
+      - "Everyone except external users as visitors"
+    narration: >
+      No extra licence. A SharePoint administrator sets the home site, the news sites and the assets library. The
+      home site owner turns on global navigation. And the home site must be readable by everyone except external users,
+      because people need read access to see the global navigation, and the assets library requires it too.
+
+  - id: blueprint
+    type: code
+    heading: "One blueprint"
+    lang: json
+    code: |
+      "homeSite": { "url": "/sites/Intranet", "template": "SITEPAGEPUBLISHING#0",
+                    "isHub": false, "logo": "assets/contoso-logo-64.png" },
+      "hubs": ["/sites/Operations"],
+      "orgNewsSites": ["/sites/Operations"],
+      "orgAssets": { "libraries": [ {
+          "url": "/sites/Intranet/BrandImages", "type": "ImageDocumentLibrary",
+          "thumbnail": "/sites/Intranet/BrandImages/contoso-logo-64.png",
+          "files": ["assets/contoso-logo-64.png", "assets/contoso-globalnav-20.png"] } ] },
+      "theme": { "path": "contoso-operations.theme.json",
+                 "applyTo": ["/sites/Intranet", "/sites/Operations"] },
+      "globalNavigation": { "title": "Contoso", "source": "homeSiteNavigation",
+                            "megaMenu": true, "audienceTargeting": true, "nodes": [ ... ] }
+    narration: >
+      The blueprint is one JSON file. The home site is a communication site, not a hub. The Operations hub from
+      episode seven is an organization news site. Brand images live in one library with a thumbnail. The theme is
+      applied to the home site and the hub. And the global navigation is a mega menu with twelve nodes, one of them
+      targeted to the purchasing team.
+
+  - id: lint
+    type: code
+    heading: "Lint the blueprint first"
+    lang: text
+    code: |
+      $ ./Invoke-IntranetDesign.ps1 -BlueprintPath ./bad/bad-intranet.json
+      ERROR   IN001  homeSite.template
+                     'STS#3': the home site needs to be a communication site ...
+      ERROR   IN004  orgAssets
+                     Libraries on 2 sites: all organization asset libraries must be on the same site.
+      ERROR   IN009  globalNavigation.source
+                     'custom': the source is homeSiteNavigation or hubOrGlobalNavigation.
+      ERROR   TH003  Custom Cyan themePrimary on white
+                     Contrast 1.25:1 ... text needs at least 4.5:1.
+      WARNING IN005  /sites/Finance
+                     Hub not in the global navigation ...
+      WARNING IN007  homeSite.logo
+                     512x512: the site logo should be 64x64 pixels.
+      6 error(s), 6 warning(s)
+    narration: >
+      A bad blueprint shows what the linter knows. A home site that isn't a communication site. Asset libraries on two
+      different sites. A global navigation source that doesn't exist. A hub nobody linked. A five hundred twelve pixel
+      logo where Learn says sixty four. And the cyan theme. All of it before a single call to the tenant.
+
+  - id: contrast
+    type: code
+    heading: "Contrast in plain PowerShell"
+    lang: powershell
+    code: |
+      function Get-MgRelativeLuminance([string]$Hex) {
+          $h = $Hex.TrimStart('#')
+          if ($h.Length -eq 3) { $h = -join ($h.ToCharArray() | ForEach-Object { "$_$_" }) }
+          $c = 0, 2, 4 | ForEach-Object {
+              $v = [Convert]::ToInt32($h.Substring($_, 2), 16) / 255.0
+              if ($v -le 0.04045) { $v / 12.92 } else { [Math]::Pow(($v + 0.055) / 1.055, 2.4) }
+          }
+          0.2126 * $c[0] + 0.7152 * $c[1] + 0.0722 * $c[2]
+      }
+      # ratio = (lighter + 0.05) / (darker + 0.05), rounded to two decimals
+    narration: >
+      The check is the W three C formula. Convert each colour channel to linear light, weight red, green and blue,
+      and divide the lighter luminance by the darker one, each plus zero point zero five. Learn asks for at least four
+      point five to one for text. Pure PowerShell, no image library.
+
+  - id: ratios
+    type: code
+    heading: "Cyan fails, Contoso passes"
+    lang: text
+    code: |
+      $ ./Invoke-IntranetDesign.ps1 -ThemePath ./bad/custom-cyan.theme.json
+      x    Custom Cyan
+      ERROR   TH003  Custom Cyan themePrimary on white
+                     Contrast 1.25:1 ... text needs at least 4.5:1.
+
+      $ ./Invoke-IntranetDesign.ps1 -ThemePath ./fixtures/learn-default-themes.json
+      ok   Teal   ok   Blue   ok   Orange   ok   Red   ok   Purple
+      ok   Green  ok   Periwinkle   ok   Cobalt   ok   Dark Teal   ok   Dark Blue
+
+      $ ./Invoke-IntranetDesign.ps1 -BlueprintPath ./intranet/contoso-intranet.json
+        themePrimary    on white           7.38:1
+    short: contrast
+    narration: >
+      Run it on the cyan palette from Learn: one point two five, an error. Run it on the ten default themes, also
+      from Learn: every colour pair passes. And the Contoso Operations theme, a dark blue, comes out at seven point
+      three eight to one. The theme is now a gate. A palette that fails never reaches the tenant.
+
+  - id: provision-code
+    type: code
+    heading: "Idempotent provisioning"
+    lang: powershell
+    code: |
+      $current = Get-PnPHomeSite @c
+      if ((Get-MgSiteKey "$current") -eq (Get-MgSiteKey $url)) { return }
+      $null = Set-PnPHomeSite -HomeSiteUrl $url -Force @c
+
+      $p = @{ LibraryUrl = ConvertTo-MgAbs $l.url $TenantUrl; OrgAssetType = $type }
+      if (Get-MgProp $l 'thumbnail') { $p.ThumbnailUrl = ConvertTo-MgAbs $l.thumbnail $TenantUrl }
+      $null = Add-PnPOrgAssetsLibrary @p @a
+
+      # the global navigation is a navigation tree: episode 7's code builds it
+      Invoke-MgNavigationTree -Nodes $nav.nodes -TenantUrl $TenantUrl -SiteUrl $Blueprint.homeSite.url `
+          -AudienceIds $AudienceIds -Label 'global navigation' -Connection $Connection
+    narration: >
+      Provisioning uses p n p PowerShell and does only what differs. Set the home site if it isn't already the one in
+      the blueprint. Register the brand library as an organization assets library, with its thumbnail. And build the
+      global navigation with the navigation code from episode seven, so the same rules and the same drift check
+      apply.
+
+  - id: provision
+    type: screen
+    heading: "Provisioning the intranet"
+    image: screens/provision.jpg
+    bar: "PowerShell 7 · Invoke-IntranetDesign.ps1 -Provision"
+    demo: >
+      Terminal (dark theme, font 18+), after the device-code sign-ins (done off camera):
+      ./src/Invoke-IntranetDesign.ps1 -BlueprintPath ./src/intranet/contoso-intranet.json @t -Provision. Visible: the
+      three contrast ratios, "0 error(s), 0 warning(s)", then "Theme:" AddTheme and two ApplyTheme lines, "Home site
+      and news:" SetHomeSite /sites/Intranet and AddOrgNews /sites/Operations, "Organization assets:" CreateLibrary,
+      two Upload lines and AddOrgAssets, "Global navigation (home site navigation):" SetWeb, RemoveNode for any default
+      nodes, twelve AddNode lines. Record what really happens and note differences in README. Mask tenant host and
+      client id.
+    narration: >
+      Against the lab tenant. The linter finds nothing. The theme is added and applied to the home site and the hub.
+      The home site is set, the news site added, the brand library created, its two logos uploaded and registered,
+      and the global navigation built from the plan, twelve nodes.
+
+  - id: appbar
+    type: screen
+    heading: "Global navigation in the app bar"
+    image: screens/app-bar.jpg
+    bar: "Contoso Intranet · SharePoint app bar"
+    demo: >
+      Browser as Alex Demo (member of Purchasing Team), on any SharePoint page (for example Contoso Purchasing): the
+      SharePoint app bar on the left with the Contoso global navigation logo selected and its panel open, showing Work
+      (Operations > Contoso Operations, Purchasing, Facilities) and How do I (Everyday tasks, and Purchasing team >
+      Supplier documents). Before this, on the home site, Settings > Global navigation: Enable on, title "Contoso", the
+      20x20 logo, source Home site navigation, Save (capture that panel briefly, or do it off camera). Wait for the
+      navigation to appear. Mask tenant URL and avatar.
+    narration: >
+      Switch global navigation on in the home site settings: a title, a twenty by twenty pixel logo, and the home
+      site navigation as the source. Then, on any SharePoint page, the app bar shows the Contoso panel. Work leads to
+      the Operations hub and its two sites. How do I has the everyday tasks, and the purchasing team links for the
+      people in that group.
+
+  - id: picker
+    type: screen
+    heading: "Brand images in every picker"
+    image: screens/picker.jpg
+    bar: "Contoso Purchasing · image picker"
+    demo: >
+      Browser as Alex Demo, edit a page on Contoso Purchasing, add an Image web part (or change the page's title
+      image): in the file picker, left pane "Your organization": a card with the Contoso logo thumbnail; open it and
+      show the library's two logos. Capture the picker with "Your organization" selected. Mask tenant URL and avatar.
+    narration: >
+      Edit any page, add an image, and the file picker has a new place on the left: Your organization. It leads to the
+      brand library, with the thumbnail from the blueprint. Authors pick the approved logo instead of pasting an old
+      copy.
+
+  - id: gotcha
+    type: bullets
+    heading: "The gotcha: nobody checks contrast for you"
+    bullets:
+      - "The service accepts a theme with 1.25:1 text"
+      - "Global navigation can take up to 24 hours"
+      - "No read access to the home site, no global navigation"
+      - "Turning it on is a browser step, not the script"
+    short: gotcha
+    narration: >
+      The gotchas. The service happily accepts a theme with one point two five to one text, so the check has to be
+      yours. Global navigation can take up to twenty four hours to reach everyone. People without read access to the
+      home site never see it. And switching global navigation on is a step in the browser: the script builds the
+      navigation, it doesn't flip that switch.
+
+  - id: check
+    type: screen
+    heading: "Read it back, catch the drift"
+    image: screens/check.jpg
+    bar: "PowerShell 7 · Invoke-IntranetDesign.ps1 -Check"
+    demo: >
+      Terminal: ./src/Invoke-IntranetDesign.ps1 -BlueprintPath ./src/intranet/contoso-intranet.json @t -Check right
+      after provisioning: "home site: ... news sites: N  asset libraries: 1  theme: Contoso Operations", "No findings.".
+      Then in the browser edit the home site navigation: rename "How do I" to "How to"; save; run -Check again: IL006
+      error "How do I: Title: tenant has 'How to'." and "1 error(s)". Capture both runs. Then run -Provision again to
+      restore the plan. If -Check reports differences right after provisioning, record them: they are the gaps listed in
+      README "Not verified yet". Mask tenant host.
+    narration: >
+      Then we read it back: the home site, the news sites, the asset libraries, the theme palette, who can read the
+      home site, and the whole navigation tree. Right after provisioning there are no findings. Rename one label in
+      the browser, run the check again, and the drift is reported. Run provision again and the blueprint wins.
+
+  - id: tests
+    type: code
+    heading: "22 Pester tests, real PnP signatures"
+    lang: text
+    code: |
+      $ Invoke-Pester ./tests -Output Detailed
+      Describing Contrast (WCAG 2.x formula)
+        [+] all ten default themes on Learn pass 4.5:1 on every color pair
+        [+] Learn's own Add-SPOTheme 'Custom Cyan' example fails: cyan on white is 1.25:1
+      Describing Test-MgIntranet
+        [+] finds every mistake in the bad blueprint: 6 errors, 6 warnings
+      Describing Tenant functions (PnP cmdlets mocked)
+        [+] creates the brand library, uploads the logos and registers it as an image library with its thumbnail
+        [+] builds the home site navigation (the global navigation source) with the episode 7 module
+      Tests Passed: 22, Failed: 0, Skipped: 0
+    narration: >
+      Twenty-two Pester tests: the contrast formula against the default themes on Learn, the blueprint rules, the
+      drift check, and the provisioning with the real p n p cmdlets mocked, so a wrong parameter name fails the test.
+
+  - id: recap
+    type: bullets
+    heading: "Five rules"
+    bullets:
+      - "Home site: a communication site, readable by everyone"
+      - "Put every hub in the global navigation"
+      - "One assets library site, images under 300 KB"
+      - "Check theme contrast before you upload it"
+      - "Read it back and fix the drift"
+    narration: >
+      Five rules. The home site is a communication site that everyone can read. Put every hub in the global
+      navigation. Keep brand images in one library on one site, under three hundred kilobytes. Check contrast before
+      you upload the theme. And read it all back. Next episode: Teams and SharePoint together.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The module, the blueprint and the tests are on GitHub, and the full guide is on devladlog dot com. Links are in
+      the description. See you in the next one.
