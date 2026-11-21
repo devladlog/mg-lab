@@ -25,6 +25,7 @@ param(
     [string]$OutName = 'verify-results'
 )
 $ErrorActionPreference = 'Stop'
+if (Test-Path (Join-Path $Root 'verify-results\rerun-failed.flag')) { $RerunFailed = $true; Write-Host 'rerun-failed.flag found: running only the episodes that failed last time' -ForegroundColor Yellow }
 $out = Join-Path $Root $OutName
 $previous = @()
 if ($RerunFailed) {
