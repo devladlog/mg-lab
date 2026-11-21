@@ -20,8 +20,8 @@
         # SQL Server 2022 Developer edition ISO (free, non-production), ~1.1 GB. Downloaded directly: the SSEI
         # bootstrapper's quiet /ACTION=Download exited without downloading anything.
         SqlIso    = 'https://download.microsoft.com/download/3/8/d/38de7036-2433-4207-8eae-06e247e17b25/SQLServer2022-x64-ENU-Dev.iso'
-        # Windows 11 Enterprise evaluation ISO: save it as <LabRoot>\iso\Win11Ent-Eval.iso, or put a direct URL here.
-        Win11Iso  = ''
+        # Windows 11 Enterprise evaluation ISO, en-US x64 (Evaluation Center direct link, checked 21 Nov 2026).
+        Win11Iso  = 'https://go.microsoft.com/fwlink/?LinkId=2382600&clcid=0x409&culture=en-us&country=us'
     }
 
     # Image: 'Core' = Datacenter Evaluation (Server Core), 'Desktop' = Datacenter Evaluation (Desktop Experience)
