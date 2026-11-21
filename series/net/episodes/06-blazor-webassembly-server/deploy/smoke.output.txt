@@ -1,0 +1,23 @@
+# pwsh ./deploy/smoke.ps1   (API and Web started with dotnet run --launch-profile http, fresh requests.db)
+
+== 1. Two requests through the API
+#1 Laptop refresh: Standard, Submitted
+#2 Data platform: High, Submitted
+
+== 2. /requests - static SSR + streaming: no circuit, no WebAssembly
+Rendered by Static:     True
+Streamed update chunk:  True
+Contains 'Data platform': True
+
+== 3. /requests/1 - Interactive Server, prerendered
+Server component marker:  True
+Persisted state in page:  True
+Buttons disabled (prerender): True
+
+== 4. /requests/new - Interactive WebAssembly, prerendered on the server
+WebAssembly component marker: True
+Client config (public!):     RequestsApi:BaseUrl = http://localhost:5207/
+
+== 5. CORS preflight to the API, as the browser sends it
+Origin http://localhost:5180 -> 204, Access-Control-Allow-Origin: http://localhost:5180
+Origin http://localhost:5181 -> 204, Access-Control-Allow-Origin: (none)

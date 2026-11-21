@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
-"""Generate the PBIR report folder (ContosoSales.Report) from one layout spec: a 12-column grid on a
+"""(Episode 4's generator, extended in episode 5 with a Store security page and a Sales by store bar.)
+
+Generate the PBIR report folder (ContosoSales.Report) from one layout spec: a 12-column grid on a
 1280 x 720 page, every visual with a title, alt text and a tab order that follows the reading order.
 
 The spec below IS the design: change a span or a row here, regenerate, and report-lint checks the result.
@@ -75,8 +77,38 @@ VISUALS = [
      {"Values": [("Product", "Category", "c"), ("Product", "Product", "c"), ("Sales", "Sales Amount", "m"),
                  ("Sales", "Product Rank", "m"), ("Sales", "% of Category", "m")]},
      (("Sales", "Sales Amount", "m"), "Descending")),
+    # Episode 5: the cell episode 4 kept free for the custom visual now shows the store split RLS acts on.
+    ("barStore", "clusteredBarChart", cell(6, 6, ROW3, 264), "Sales amount by store",
+     "Sales amount per store, largest first. Row-level security limits the stores you see.",
+     {"Category": [("Store", "Store", "c")], "Y": [("Sales", "Sales Amount", "m")]},
+     (("Sales", "Sales Amount", "m"), "Descending")),
 ]
-# cell(6, 6, ROW3, 264) is left free for the Target bullet custom visual (added in Desktop, see demo.md)
+
+# ---- episode 5: a page that shows what row-level security leaves you ----------------------------------
+SECURITY = [
+    ("kpiWho", "card", cell(0, 6, ROW1, 112), "Signed in as",
+     "The user principal name row-level security evaluates for you.",
+     {"Values": [("Sales", "Who Am I", "m")]}, None),
+    ("kpiStores", "card", cell(6, 2, ROW1, 112), "Visible stores",
+     "Number of stores you can see after row-level security.",
+     {"Values": [("Sales", "Visible Stores", "m")]}, None),
+    ("kpiCustomers", "card", cell(8, 2, ROW1, 112), "Visible customers",
+     "Number of customers you can see after row-level security.",
+     {"Values": [("Sales", "Visible Customers", "m")]}, None),
+    ("kpiSalesSecurity", "card", cell(10, 2, ROW1, 112), "Sales amount",
+     "Total sales amount you can see.",
+     {"Values": [("Sales", "Sales Amount", "m")]}, None),
+    ("tableStores", "tableEx", cell(0, 6, ROW2, 544), "Stores you can see",
+     "Table of the stores row-level security leaves you, with country, channel, sales amount and orders.",
+     {"Values": [("Store", "Store", "c"), ("Store", "Country", "c"), ("Store", "Channel", "c"),
+                 ("Sales", "Sales Amount", "m"), ("Sales", "Orders", "m")]},
+     (("Sales", "Sales Amount", "m"), "Descending")),
+    ("slicerCustomer", "slicer", cell(6, 6, ROW2, 544), "Customers you can see",
+     "List of customer names left after row-level security. It should only show customers of your stores.",
+     {"Values": [("Customer", "Customer", "c")]}, None),
+]
+
+PAGES = [("overview", "Sales overview", VISUALS), ("security", "Store security", SECURITY)]
 
 
 def field(ref):
@@ -127,14 +159,15 @@ def files():
         },
         "definition/pages/pages.json": {
             "$schema": f"{SCHEMA}/pagesMetadata/1.1.0/schema.json",
-            "pageOrder": ["overview"], "activePageName": "overview"},
-        "definition/pages/overview/page.json": {
-            "$schema": f"{SCHEMA}/page/{VERSIONS['page']}/schema.json",
-            "name": "overview", "displayName": "Sales overview", "displayOption": "FitToPage",
-            "height": PAGE_H, "width": PAGE_W},
+            "pageOrder": [p[0] for p in PAGES], "activePageName": PAGES[0][0]},
     }
-    for i, spec in enumerate(VISUALS):
-        out[f"definition/pages/overview/visuals/{spec[0]}/visual.json"] = visual_json(i, spec)
+    for page, display, visuals in PAGES:
+        out[f"definition/pages/{page}/page.json"] = {
+            "$schema": f"{SCHEMA}/page/{VERSIONS['page']}/schema.json",
+            "name": page, "displayName": display, "displayOption": "FitToPage",
+            "height": PAGE_H, "width": PAGE_W}
+        for i, spec in enumerate(visuals):
+            out[f"definition/pages/{page}/visuals/{spec[0]}/visual.json"] = visual_json(i, spec)
     rendered = {k: json.dumps(v, indent=2, ensure_ascii=False) + "\n" for k, v in out.items()}
     rendered[f"StaticResources/RegisteredResources/{THEME.name}"] = THEME.read_text(encoding="utf-8")
     return rendered
@@ -161,7 +194,7 @@ def main():
     for k, v in wanted.items():
         (REPORT / k).parent.mkdir(parents=True, exist_ok=True)
         (REPORT / k).write_text(v, encoding="utf-8")
-    print(f"wrote {len(wanted)} files ({len(VISUALS)} visuals) to {REPORT.relative_to(SRC)}")
+    print(f"wrote {len(wanted)} files ({sum(len(p[2]) for p in PAGES)} visuals on {len(PAGES)} pages) to {REPORT.relative_to(SRC)}")
 
 
 if __name__ == "__main__":

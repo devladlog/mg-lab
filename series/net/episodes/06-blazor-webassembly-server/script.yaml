@@ -1,0 +1,325 @@
+# DEVLADLOG .NET — episode 06 (draft; screens are captured on the lab laptop, see demo.md)
+episode: 6
+slug: blazor-webassembly-server
+series_label: ".NET"
+series_name: "DEVLADLOG .NET"
+file_prefix: "net"
+title: "Blazor WebAssembly and Server"
+subtitle: "Three render modes, one app, one shared set of rules"
+voice: am_michael
+thumbnail_text: "BLAZOR\nSERVER VS\nWEBASSEMBLY"
+youtube:
+  title: "Blazor in .NET 10: Static SSR, Interactive Server and WebAssembly in One App | DEVLADLOG .NET #6"
+  tags: [Blazor, Blazor WebAssembly, Blazor Server, .NET 10, ASP.NET Core, C#, render modes, prerendering, PersistentState, stream rendering, CORS, bUnit, Razor components]
+sources:
+  - https://www.devladlog.com/articles/dotnet/2026-04-24-blazor-webassembly-server-complete-guide-2026/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Blazor WebAssembly and Server"
+    sub: "Same C#, three places it can run"
+    short: hook
+    narration: >
+      Blazor Server or Blazor WebAssembly? On dot net ten, that's the wrong question. One Blazor app can render a
+      page as plain H T M L, run the next one on the server over a live connection, and the next one in your
+      browser, on dot net compiled to WebAssembly. Today we build all three, on top of our project requests API.
+      Welcome to DEVLADLOG dot net.
+
+  - id: plan
+    type: bullets
+    heading: "What we're building"
+    bullets:
+      - "Requests list: static server rendering, streamed"
+      - "Request page: Interactive Server, approve or reject"
+      - "New request form: Interactive WebAssembly, in the browser"
+      - "One Contracts library: same DTOs and rules on API, server and browser"
+      - "19 component and host tests with bUnit, next to the API's 58"
+    narration: >
+      Three pages, three render modes. The list is static, server-rendered H T M L. The request page is Interactive
+      Server, so approve and reject run on the server. The new request form is Interactive WebAssembly: it runs in
+      the browser and calls the API directly. And the validation rules are written once, in a library that all three
+      share.
+
+  - id: program
+    type: code
+    heading: "One host, both interactive render modes"
+    lang: csharp
+    code: |
+      builder.Services.AddRazorComponents()
+          .AddInteractiveServerComponents()           // Interactive Server: UI events over a SignalR circuit
+          .AddInteractiveWebAssemblyComponents();     // Interactive WebAssembly: the .Client project, in the browser
+
+      builder.Services.AddHttpClient<IRequestsApi, RequestsApiClient>(client =>
+          client.BaseAddress = new Uri(builder.Configuration["RequestsApi:BaseUrl"]!));
+
+      app.MapRazorComponents<App>()
+          .AddInteractiveServerRenderMode()
+          .AddInteractiveWebAssemblyRenderMode()
+          .AddAdditionalAssemblies(typeof(ProjectRequests.Web.Client._Imports).Assembly);
+    narration: >
+      This is the Blazor Web App host. It enables both interactive render modes, so each page can pick its own.
+      Anything that should run in WebAssembly lives in a separate client project, and the host serves it as static
+      files. Server-side code reaches the API through a typed H T T P client.
+
+  - id: ssr
+    type: code
+    heading: "Page one: static SSR, streamed"
+    lang: razor
+    code: |
+      @page "/requests"
+      @attribute [StreamRendering]
+      @inject IRequestsApi Api
+      @* No @rendermode: static server-side rendering. HTML only, no circuit, no WebAssembly download. *@
+
+      @if (requests is null)
+      {
+          <p><em>Loading requests…</em></p>   @* streamed first; the table replaces it in the same response *@
+      }
+      else { /* table: id, title, department, budget, priority, status */ }
+
+      @code {
+          private IReadOnlyList<RequestDto>? requests;
+          protected override async Task OnInitializedAsync() => requests = await Api.ListAsync();
+      }
+    narration: >
+      No render mode at all means static server-side rendering: just H T M L, no connection, no download. Stream
+      rendering sends the loading text right away, and the table follows in the same response when the API answers.
+      For a read-only list, that's all you need.
+
+  - id: interactiveserver
+    type: code
+    heading: "Page two: Interactive Server, state persisted"
+    lang: razor
+    code: |
+      @page "/requests/{Id:int}"
+      @rendermode InteractiveServer
+      <button id="approve" @onclick="() => DecideAsync(true)" disabled="@(!RendererInfo.IsInteractive)">Approve</button>
+      @code {
+          [PersistentState]                       // .NET 10: saved during prerendering, restored on the circuit
+          public RequestDto? Request { get; set; }
+
+          protected override async Task OnInitializedAsync()
+          {
+              if (Request is null)
+              {
+                  Logger.LogInformation("Loading request {Id} from the API ({Renderer})", Id, RendererInfo.Name);
+                  Request = await Api.GetAsync(Id);
+              }
+          }
+      }
+    short: persist
+    narration: >
+      The request page is Interactive Server. It's prerendered first, so the user sees content immediately, and then
+      a circuit takes over. Learn warns that on initialized then runs twice: once for the prerender, once for the
+      interactive render. That's two API calls per page view. New in dot net ten, the persistent state attribute
+      saves the value into the page and restores it, so the API is called once. The buttons stay disabled until the
+      page is actually interactive.
+
+  - id: serverscreen
+    type: screen
+    heading: "Clicks travel over the circuit"
+    image: screens/interactive-server.jpg
+    bar: "Browser · http://localhost:5180/requests/2 · DevTools Network (WS)"
+    demo: >
+      Lab laptop, API and Web running (demo.md). Browser at http://localhost:5180/requests/2 with DevTools open,
+      Network tab filtered to WS: the _blazor?id=... WebSocket and its Messages pane. Click Approve: messages appear
+      in the WebSocket, status turns "Approved", buttons disappear. "Rendered by: Server · interactive: True" visible.
+      Web app terminal beside it showing exactly one "Loading request 2 from the API (Static)" line for the page
+      load. Nothing to mask (localhost).
+    narration: >
+      Here it is live. One WebSocket. Clicking approve sends the event to the server, the server calls the API and
+      sends back the changed H T M L. The terminal shows one API call for the page, not two.
+
+  - id: contracts
+    type: code
+    heading: "Write the rules once"
+    lang: csharp
+    code: |
+      // src/ProjectRequests.Contracts: no ASP.NET Core, no EF Core. Used by the API, the server and the browser.
+      public sealed class CreateProjectRequest : IValidatableObject
+      {
+          [Required, StringLength(100, MinimumLength = 3)] public string Title { get; set; } = "";
+          [Range(typeof(decimal), "1", "10000000")]        public decimal Budget { get; set; }
+          [Required, EmailAddress, StringLength(254)]      public string RequestedBy { get; set; } = "";
+          [Required, StringLength(8)]                      public string DepartmentCode { get; set; } = "";
+          [StringLength(2000)]                             public string? Justification { get; set; }
+
+          public IEnumerable<ValidationResult> Validate(ValidationContext validationContext) =>
+              JustificationRule.Check(Budget, Justification);   // 250k or more needs a justification
+      }
+
+      public static Priority Classify(decimal budget) =>
+          budget >= HighThreshold ? Priority.High : Priority.Standard;
+    narration: >
+      To share code with the browser, we moved the D T Os, the validation attributes and the priority rules out of
+      the API into a plain class library. No A S P dot net, no E F Core, so it can run in WebAssembly. The API still
+      validates every request. The browser just gets the same answer sooner.
+
+  - id: wasmpage
+    type: code
+    heading: "Page three: Interactive WebAssembly"
+    lang: razor
+    code: |
+      @page "/requests/new"
+      @rendermode InteractiveWebAssembly
+      @inject IRequestsApi Api
+
+      <EditForm Model="Model" OnValidSubmit="SubmitAsync">
+          <DataAnnotationsValidator />                    @* attributes + IValidatableObject, in the browser *@
+          <ValidationSummary />
+          <input id="budget" type="number" @bind="Model.Budget" @bind:event="oninput" />
+          <p id="preview">Priority: <strong>@PriorityRules.Classify(Model.Budget)</strong></p>
+          <button type="submit" disabled="@(!RendererInfo.IsInteractive || submitting)">Submit</button>
+      </EditForm>
+
+      // client Program.cs: HttpClient to the API, address from wwwroot/appsettings.json (public!)
+      builder.Services.AddScoped(_ => new HttpClient { BaseAddress = apiBase });
+    narration: >
+      The form page lives in the client project, with interactive WebAssembly. The priority preview recalculates on
+      every keystroke, with the shared rules, without a single request to the server. Validation runs in the browser
+      too, including the justification rule. The API address comes from the client's app settings file, which the
+      browser downloads, so never put a secret there.
+
+  - id: wasmscreen
+    type: screen
+    heading: "Dot net, running in the browser"
+    image: screens/webassembly.jpg
+    bar: "Browser · http://localhost:5180/requests/new · DevTools Network"
+    demo: >
+      Hard reload http://localhost:5180/requests/new with DevTools Network (Disable cache on). In frame: the
+      _framework requests (dotnet.native.*.wasm, System.Private.CoreLib.*.wasm, ProjectRequests.Contracts.*.wasm,
+      ProjectRequests.Web.Client.*.wasm); "Rendered by" switching from Static to "WebAssembly · interactive: True".
+      Clear the log, type 49999 then 50000 in Budget: the preview flips Standard to High and no request appears.
+      Fill the form (300000, no justification) and Submit: the justification message, still no request. Add a
+      justification, Submit: OPTIONS preflight then POST to localhost:5207/api/requests, 201, "Request #3 created".
+    narration: >
+      The first visit downloads the dot net runtime and our two assemblies, as WebAssembly files. Now type: forty-nine
+      thousand nine hundred ninety-nine is standard, fifty thousand is high, and the network tab stays empty. Submit a
+      big budget without justification: stopped in the browser. Fix it, and we see the preflight, then the post
+      straight to the API.
+
+  - id: cors
+    type: code
+    heading: "The browser calls the API: CORS"
+    lang: csharp
+    code: |
+      // API Program.cs: only the origins in Cors:AllowedOrigins (Development: http://localhost:5180)
+      builder.Services.AddCors(o => o.AddDefaultPolicy(policy => policy
+          .WithOrigins(builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [])
+          .WithMethods("GET", "POST", "PUT")
+          .WithHeaders("Content-Type")));
+      app.UseCors();
+
+      // CorsTests: the server doesn't refuse a DELETE preflight. It answers 204 with what it allows
+      Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+      Assert.Equal("GET,POST,PUT", Assert.Single(response.Headers.GetValues("Access-Control-Allow-Methods")));
+      // ...and the BROWSER blocks. curl and server-side callers ignore CORS entirely.
+    narration: >
+      The WebAssembly page runs on port fifty-one eighty, the API on fifty-two oh seven. Different origin, so the API
+      must opt in with CORS, for exactly that origin. One thing our tests taught us: the server doesn't refuse a
+      method it doesn't allow. It answers the preflight with the list, and the browser does the blocking. CORS
+      protects users in a browser. It's not access control for your API.
+
+  - id: corsscreen
+    type: screen
+    heading: "Remove the origin, and the browser refuses"
+    image: screens/cors-blocked.jpg
+    bar: "Browser DevTools Console · API restarted without Cors:AllowedOrigins"
+    demo: >
+      Stop the API and restart it with another allowed origin:
+      dotnet run --launch-profile http -- --Cors:AllowedOrigins:0=http://localhost:5999 Submit a valid request on
+      /requests/new: Console shows "Access to fetch at 'http://localhost:5207/api/requests' from origin
+      'http://localhost:5180' has been blocked by CORS policy", Network shows the preflight without
+      Access-Control-Allow-Origin. Then restore the setting and restart. Nothing to mask.
+    narration: >
+      Take our origin out of the API's list, restart, and submit again. The browser blocks the call, and the console
+      says exactly why. Put it back, and it works.
+
+  - id: gotcha
+    type: code
+    heading: "Gotcha: WebAssembly pages are prerendered on the server"
+    lang: csharp
+    code: |
+      // Register IRequestsApi only in the .Client project, and /requests/new fails before the browser sees it:
+      //   InvalidOperationException: Cannot provide a value for property 'Api' on type
+      //   'ProjectRequests.Web.Client.Pages.NewRequest'. There is no registered service of type
+      //   'ProjectRequests.Web.Client.Services.IRequestsApi'.
+
+      [Fact]
+      public async Task Without_a_server_registration_the_WebAssembly_page_fails_to_prerender()
+      {
+          await using var factory = new WebFactory(s => s.RemoveAll<IRequestsApi>());
+          var response = await factory.CreateClient().GetAsync("/requests/new", Ct);
+          Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
+      }
+      // Fix: register it in BOTH Program.cs files (or turn prerendering off for that page).
+    short: gotcha
+    narration: >
+      Here's the trap. A WebAssembly page is prerendered on the server first, with the server's services. Register
+      your API client only in the client project, and the page crashes before it ever reaches the browser. Learn
+      gives two fixes: register the service on the server too, or turn prerendering off for that page. We register
+      it in both, and a test makes sure nobody removes it.
+
+  - id: tests
+    type: code
+    heading: "Components tested without a browser"
+    lang: csharp
+    code: |
+      public sealed class NewRequestTests : BunitContext
+      {
+          [Fact]
+          public void Big_budget_without_justification_is_stopped_in_the_browser()
+          {
+              SetRendererInfo(new RendererInfo("WebAssembly", isInteractive: true));
+              var cut = Render<NewRequest>();
+              Fill(cut, "300000");
+
+              cut.Find("form").Submit();
+
+              Assert.Contains("A justification is required for budgets of 250,000 or more.",
+                  cut.Find(".validation-errors").TextContent);
+              Assert.Empty(_api.Created);
+          }
+      }
+    narration: >
+      The components are tested with b unit, on x unit three from last episode. We tell b unit where the component
+      thinks it runs, render it, fill the form and submit. Two small surprises: b unit and x unit both have a class
+      called test context, so the name is ambiguous. And a fake API that answers instantly never lets stream
+      rendering stream. Nineteen tests for the web app, fifty-eight for the API.
+
+  - id: testscreen
+    type: screen
+    heading: "Seventy-seven tests, one command"
+    image: screens/tests.jpg
+    bar: "VS Code terminal · dotnet test"
+    demo: >
+      VS Code integrated terminal (pwsh) in the episode folder: dotnet test. In frame: ProjectRequests.Api.Tests and
+      ProjectRequests.Web.Tests passed, total 77, succeeded 76, skipped 1 (the opt-in SQL Server test from episode 5).
+      See deploy/tests.output.txt. Optional: VS Code Testing view with NewRequestTests expanded. Nothing to mask.
+    narration: >
+      All of it in one dotnet test. Seventy-seven tests, one skipped: the SQL Server test from episode five, which only
+      runs in the lab.
+
+  - id: choose
+    type: bullets
+    heading: "So which render mode?"
+    bullets:
+      - "Static SSR: read-only pages. Fastest, nothing to keep alive"
+      - "Interactive Server: small download, code stays on the server; every click is a network hop"
+      - "Interactive WebAssembly: works on the client, no hop per click; bigger download, code is public"
+      - "Our runtime file alone: dotnet.native.wasm 3 MB, under 1 MB with Brotli"
+    narration: >
+      So which one? Static rendering for pages that only show data. Interactive Server when the code must stay on the
+      server and the download must be small, accepting a network hop for every click and a connection per user.
+      WebAssembly when work should move to the client, accepting a bigger first download and code anyone can read.
+      In our release build, the runtime file alone is three megabytes, under one with Brotli.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The Blazor app, the shared contracts and all seventy-seven tests are on GitHub, and the full guide is on
+      devladlog dot com. Next time: SignalR and real-time communication. Subscribe so you don't miss it.
+      This was DEVLADLOG dot net, by Momento Galático.

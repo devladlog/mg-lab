@@ -21,7 +21,7 @@ scenes:
     sub: "A SharePoint flow that triggered itself, and the fix"
     short: hook
     narration: >
-      The flow worked. It created the folder, set the permissions, wrote the link back to the item and emailed
+      Our first draft worked. It created the folder, set the permissions, wrote the link back to the item and emailed
       Alex. Then it ran again. And again. Every few minutes, a new run and a new email, because writing back to
       the item is a change, and the flow triggers on changes. In this episode we build a SharePoint flow that reacts
       to the right change, locks a folder down with the REST API, and stops after one quiet run.
@@ -162,10 +162,10 @@ scenes:
     lang: text
     code: |
       $ python -m spfake --first-version --max-polls 4
-      poll 1: run Succeeded folder, permissions, summary file, link on item, email requester
-      poll 2: run Succeeded folder, permissions, summary file, link on item, email requester
-      poll 3: run Succeeded folder, permissions, summary file, link on item, email requester
-      poll 4: run Succeeded folder, permissions, summary file, link on item, email requester
+      poll 1: run Succeeded folder, permissions, summary file, link on item, email requester  (13 actions)
+      poll 2: run Succeeded folder, permissions, summary file, link on item, email requester  (13 actions)
+      poll 3: run Succeeded folder, permissions, summary file, link on item, email requester  (13 actions)
+      poll 4: run Succeeded folder, permissions, summary file, link on item, email requester  (13 actions)
 
       flowkit lint: WARNING Link_folder_on_request: writes ['OrderFolder'] to 'Purchase Requests',
         the list that triggers this flow, and no trigger condition or enclosing condition checks
@@ -184,11 +184,11 @@ scenes:
       "Needs_order_folder": { "expression": "@empty(triggerBody()?['OrderFolder'])" }
 
       $ python -m spfake --amount-change
-      poll 1: run Succeeded folder, permissions, summary file, link on item, email requester
-      poll 2: run Succeeded nothing to do
+      poll 1: run Succeeded folder, permissions, summary file, link on item, email requester  (14 actions)
+      poll 2: run Succeeded nothing to do  (4 actions)
       poll 3: no changes
       Alex Demo changes the amount to 14,200
-      poll 4: run Succeeded Escalated, email purchasing
+      poll 4: run Succeeded Escalated, email purchasing  (6 actions)
       poll 5: item changed, trigger condition false: no run
     narration: >
       The fix is one condition: only create the folder when order folder is empty. Our own write still triggers one

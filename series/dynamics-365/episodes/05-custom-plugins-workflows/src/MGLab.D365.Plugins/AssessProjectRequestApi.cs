@@ -43,7 +43,7 @@ namespace MGLab.D365.Plugins
             var input = new RiskInput
             {
                 Budget = record.GetAttributeValue<Money>(ProjectRequest.Budget)?.Value,
-                DueDate = record.GetAttributeValue<DateTime?>(ProjectRequest.DueDate),
+                DueDate = ProjectRisk.NearestDate(record.GetAttributeValue<DateTime?>(ProjectRequest.DueDate)),
                 HasJustification = !string.IsNullOrWhiteSpace(record.GetAttributeValue<string>(ProjectRequest.Justification)),
                 HasCustomerAccount = account != null,
                 OtherOpenRequests = account == null ? 0 : CountOtherOpen(service, account.Id, target.Id),

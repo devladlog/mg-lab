@@ -97,6 +97,15 @@ namespace MGLab.D365.Plugins
             return new RiskResult(score, LevelFor(score), reasons);
         }
 
+        /// <summary>
+        /// Episode 1 created mgl_duedate with Format DateOnly but no behavior, so it got the default, User local:
+        /// a date the user picks is stored as THEIR midnight in UTC (Lisbon in summer: 23:00 the day before).
+        /// Learn says to avoid that combination. Until the column is switched to Date only behavior, take the
+        /// nearest UTC midnight: right for any user between UTC-12 and UTC+12, and a no-op for real date-only values.
+        /// </summary>
+        public static DateTime? NearestDate(DateTime? stored) =>
+            stored.HasValue ? stored.Value.AddHours(12).Date : (DateTime?)null;
+
         public static string LevelFor(int score) =>
             score >= HighFrom ? "High" : score >= MediumFrom ? "Medium" : "Low";
 

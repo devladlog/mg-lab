@@ -8,7 +8,6 @@ service). This module applies the same rules by hand, following the documented s
     mapped gets no Store rows (CALCULATETABLE over an empty table returns an empty set)
   * Head Office: no filters, every row
   * roles are additive: a user in several roles sees the union (Learn: RLS guidance)
-  * a user in no role sees nothing
   * filters propagate from the one side to the many side of active relationships (Store -> Sales); Sales -> Customer
     also passes the filter on because that relationship applies security filters in both directions
 
@@ -97,9 +96,8 @@ def matrix(star=None):
     star = star or load_star()
     access, members = store_access(), role_members()
     rows = [evaluate(star, alias, roles, access) for alias, roles in members.items()]
-    # Desktop-only checks (View as > Other user): a UPN that isn't in the mapping table, and nobody's role at all.
+    # Desktop-only check (View as > Other user + Store Managers): a UPN that isn't in the mapping table.
     rows.append(evaluate(star, "nobody.demo", {"Store Managers"}, access, service=False))
-    rows.append(evaluate(star, "no.role.demo", set(), access, service=False))
     return rows
 
 

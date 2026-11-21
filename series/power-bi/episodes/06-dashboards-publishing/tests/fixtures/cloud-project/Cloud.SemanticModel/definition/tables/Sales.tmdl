@@ -1,0 +1,15 @@
+table Sales
+
+	column Amount
+		dataType: decimal
+		summarizeBy: sum
+		sourceColumn: Amount
+
+	partition Sales = m
+		mode: import
+		source =
+				let
+				    Source = Sql.Database(Server, "ContosoSales"),
+				    Sales = Source{[Schema = "dbo", Item = "Sales"]}[Data]
+				in
+				    Sales

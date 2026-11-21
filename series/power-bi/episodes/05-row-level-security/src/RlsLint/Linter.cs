@@ -46,6 +46,9 @@ public static class Linter
 
     static readonly Regex Identity = new(@"\b(USERPRINCIPALNAME|USERNAME|CUSTOMDATA|USEROBJECTID)\s*\(", RegexOptions.IgnoreCase);
     static readonly Regex UserName = new(@"\bUSERNAME\s*\(", RegexOptions.IgnoreCase);
+    static readonly Regex ColumnIsIdentity = new(
+        @"\]\s*=\s*(USERPRINCIPALNAME|USERNAME)\s*\(|(USERPRINCIPALNAME|USERNAME)\s*\(\s*\)\s*=\s*(?:'[^']+'|\w+)?\s*\[",
+        RegexOptions.IgnoreCase);
     static readonly Regex TrueFallback = new(@"\bTRUE\s*\(\s*\)", RegexOptions.IgnoreCase);
     static readonly Regex QualifiedRef = new(@"(?:'((?:[^']|'')+)'|([A-Za-z_][A-Za-z0-9_]*))\s*\[([^\]]+)\]");
     static readonly Regex BareRef = new(@"(?<![\]'A-Za-z0-9_])\[([^\]]+)\]");
@@ -108,7 +111,7 @@ public static class Linter
                     dynamic = true;
                     var others = refs.Select(r => r.Table).Where(n => n != tp.Table.Name && model.Tables.Find(n) is not null).ToHashSet();
                     if (others.Count > 0) readByIdentity.UnionWith(others);
-                    else if (refs.Count > 0) readByIdentity.Add(tp.Table.Name);
+                    else if (ColumnIsIdentity.IsMatch(expr)) readByIdentity.Add(tp.Table.Name);
                 }
                 if (UserName.IsMatch(expr))
                     findings.Add(new("RLS004", Severity.Warning,

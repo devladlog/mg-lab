@@ -85,6 +85,11 @@
                 apiError = result;
             }
         }
+        catch (HttpRequestException ex)
+        {
+            // In the browser a CORS refusal or an unreachable API both surface here ("TypeError: Failed to fetch").
+            apiError = new ApiResult<RequestDto>(null, $"Could not reach the API: {ex.Message}", new Dictionary<string, string[]>());
+        }
         finally
         {
             submitting = false;

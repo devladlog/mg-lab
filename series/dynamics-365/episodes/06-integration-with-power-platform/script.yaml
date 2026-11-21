@@ -1,0 +1,254 @@
+# DEVLADLOG Dynamics 365 — episode 06. Draft: screen scenes need the lab-tenant capture described in demo.md.
+episode: 6
+slug: integration-with-power-platform
+series_label: "DYNAMICS 365"
+series_name: "DEVLADLOG Dynamics 365"
+file_prefix: "dynamics-365"
+title: "Integration with Power Platform"
+subtitle: "A Dataverse flow that calls our custom API, and the code that keeps it honest"
+voice: am_michael
+thumbnail_text: "DATAVERSE\nPOWER AUTOMATE\nTEAMS"
+youtube:
+  title: "Dynamics 365 + Power Automate: Dataverse Trigger, Custom API, Teams, ALM | DEVLADLOG Dynamics 365 #6"
+  tags: [Dynamics 365, Dataverse, Power Automate, Power Platform, custom API, Microsoft Teams, environment variables, connection references, ALM, flow run history]
+sources:
+  - https://www.devladlog.com/articles/dynamics-365/2025-11-06-integration-with-power-platform-complete-guide-2025/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "One table, the whole platform"
+    sub: "A flow, a custom API, a Teams channel, and nothing hard-coded"
+    short: hook
+    narration: >
+      A project request crosses fifty thousand euros with no justification, and the finance team should hear about
+      it in Teams, without anyone writing a line of integration code. In this episode a Power Automate flow listens
+      to Dataverse, calls the custom API from episode five, and posts to a channel. Then we pull the flow into source
+      control, lint it, and read its run history from Dataverse.
+
+  - id: platform
+    type: bullets
+    heading: "Dataverse is the integration point"
+    bullets:
+      - "Model-driven app, business rule, BPF: episodes 1 to 4"
+      - "Plugin and custom API: episode 5"
+      - "Power Automate: the Dataverse connector, today"
+      - "Flows are rows in Dataverse too: the workflow table"
+      - "Run history lands in the FlowRun table"
+    narration: >
+      Everything we've built lives in Dataverse: the table, the app, the business rule, the process flow, and last
+      time a plugin and a custom API. Power Automate plugs in through the Dataverse connector. And a solution flow is
+      itself a row in Dataverse, in the workflow table, with its run history in the flow run table. That's what makes
+      the code side of this episode possible.
+
+  - id: plan
+    type: bullets
+    heading: "The flow"
+    bullets:
+      - "Trigger: a row is modified, Select columns: risk score"
+      - "Filter rows: mgl_riskscore ge 70"
+      - "Perform a bound action: mgl_AssessProjectRequest"
+      - "Post in a Teams channel, team and channel from env vars"
+      - "Dataverse and Teams through connection references"
+    narration: >
+      The flow is short. The trigger watches one column, the risk score our async plugin writes, and only rows at
+      seventy or more, which is where the plugin calls a request high risk. It calls our custom API with perform a
+      bound action, to get the reasons. Then it posts in a Teams channel. The team and the channel are environment
+      variables, and both connectors go through connection references, so the solution can move.
+
+  - id: designer
+    type: screen
+    heading: "Built in the designer, inside the solution"
+    image: screens/flow-designer.jpg
+    bar: "Power Automate · Solutions · MGLabDataverse · Notify high-risk project requests"
+    demo: >
+      Power Automate designer, solution MGLabDataverse, flow "Notify high-risk project requests" open. Trigger card
+      expanded: Change type Added or Modified, Table Project Requests, Scope Organization, Select columns
+      mgl_riskscore, Filter rows mgl_riskscore ge 70. Below it "Perform a bound action" (Project Requests,
+      mgl_AssessProjectRequest, Row ID from the trigger) and "Post message in a chat or channel" (Flow bot, Channel,
+      Team and Channel showing the two environment variables). Mask tenant, environment and user.
+    narration: >
+      This part is no code at all. Built in the designer, inside the same solution as the table and the plugin.
+      Learn is clear that the Dataverse connector only calls actions, which is exactly why episode five made the
+      custom API an action.
+
+  - id: gotcha
+    type: bullets
+    heading: "Gotcha: Select columns fire on no change"
+    bullets:
+      - "A listed column in the update payload runs the flow"
+      - "Even when its value didn't change"
+      - "Lookup columns in Select columns never trigger"
+      - "Don't list the primary key: every update has it"
+      - "So the plugin writes the score only when it moves"
+    short: gotcha
+    narration: >
+      Here's the trap. Learn says the flow runs when any selected column is in the update, even if its value didn't
+      change. So if our plugin rewrote the same score on every save, finance would get the same message again and
+      again. That's why episode five compares with the post image first. Two more: lookup columns in select columns
+      never trigger, and never list the primary key, because every update contains it.
+
+  - id: envvars-code
+    type: code
+    heading: "Definitions in the solution, values outside"
+    lang: python
+    code: |
+      if rows:
+          ids[name] = rows[0]["environmentvariabledefinitionid"]
+      else:
+          ids[name] = api.create("environmentvariabledefinitions", definition_body(ev), in_solution=True)
+          out(f"+ definition {name} ({ev['type']}) in {cfg['solution']}")
+      if name in values:
+          ...
+          if not current:
+              api.create("environmentvariablevalues", value_body(ids[name], name, values[name]), in_solution=False)
+          elif current[0].get("value") != values[name]:
+              api.update(..., {"value": values[name]}, in_solution=False)
+              out(f"~ value {name}: changed. Flows keep the old value until saved or turned off and on")
+    narration: >
+      The environment variables come from code. The definitions go into the solution. The values don't: Learn's
+      advice is to ship the definition and give each environment its own value at deployment. Test posts to a test
+      channel, production to the real one, same flow.
+
+  - id: lint-code
+    type: code
+    heading: "Lint the flow like code"
+    lang: python
+    code: |
+      for aname, a in flow.actions():          # walks into If, Switch, Scope and Foreach
+          api, op, params = operation(a)
+          if op in UPDATE_OPS:                 # Update a row / Upsert a row
+              target = str(params.get("entityName", "")).lower()
+              written = {last_segment(k).lower() for k in params if k.startswith("item/")}
+              loop = sorted(written & set(watched))
+              if target in (entity_set, table) and loop:
+                  out.append(Finding("error", "F020", f"{aname} updates {', '.join(loop)} on {target}, "
+                                     "which the trigger watches: the flow triggers itself"))
+    narration: >
+      A flow's definition is a JSON document in the client data column. Our tool pulls it and lints it. This rule
+      catches the classic loop: an update, anywhere in the flow, of a column the trigger watches. Others catch lookup
+      columns in select columns, connections that aren't connection references, undeclared parameters, a threshold
+      that disagrees with the plugin, and team IDs typed in by hand.
+
+  - id: lint
+    type: screen
+    heading: "Pull and lint the real flow"
+    image: screens/flowkit-pull-lint.jpg
+    bar: "Terminal · python -m flowkit pull · lint"
+    demo: >
+      Terminal against lab DEV: `python3 -m flowkit pull` showing the summary lines (trigger with select columns and
+      filter rows, the two actions, the two connection references) and the saved file name, then
+      `python3 -m flowkit lint --file ../flows/notify-high-risk-project-requests.json` with "0 error(s), 0 warning(s)"
+      (or whatever it really reports: show it and explain it). Then the same lint on
+      `../tests/fixtures/bad-flow.clientdata.json` showing the F011, F020, F040 lines. Mask the environment URL.
+    narration: >
+      Against the lab, pull saves the real definition as readable JSON, ready for a pull request, and lint passes.
+      Point it at a broken copy and it reports the lookup column, the self-triggering update and the missing
+      connection reference.
+
+  - id: teams
+    type: screen
+    heading: "End to end: from a save to a Teams message"
+    image: screens/teams-alert.jpg
+    bar: "Microsoft Teams · Finance Risk channel"
+    demo: >
+      Sequence: as Alex Demo, in the Project Requests app, PR-0004 budget 42,000 -> 75,000 with Business
+      Justification empty, save. Then Microsoft Teams (signed in as Lab Admin or Sam Demo, member of the lab team)
+      showing the Flow bot post in the "Finance Risk" channel: "PR-0004 ... is High risk (NN)." plus the reasons line.
+      Capture the Teams message as the main image; the form can be a small inset. Mask tenant, avatars, team name if it
+      reveals the tenant.
+    narration: >
+      Now the whole chain. Alex saves a bigger budget. The async plugin recalculates the score. The score crosses
+      seventy, the flow fires, asks the custom API why, and the Flow bot posts in the finance channel. Four
+      components, and only the plugin is code.
+
+  - id: runs-code
+    type: code
+    heading: "Run history is just another table"
+    lang: python
+    code: |
+      return list(api.get_all(
+          "flowruns?$select=name,starttime,endtime,duration,status,triggertype,errorcode,errormessage"
+          f"&$filter=_workflow_value eq {workflow_id} and starttime ge {since}&$orderby=starttime desc"))
+
+      $ python3 -m flowkit runs --from-json ../sample/flowruns.json
+      Notify high-risk project requests: 5 run(s) in the last 7 day(s)
+        Cancelled 1  Failed 1  Success 3
+        duration avg 2.5 s, max 4.4 s
+        error NotFound x1
+    narration: >
+      Solution flows write their run history to the flow run table in Dataverse, kept twenty eight days by default.
+      So monitoring is a query: status, duration, error code. This is the offline sample; next, the lab.
+
+  - id: runs
+    type: screen
+    heading: "The lab's run history"
+    image: screens/flowkit-runs.jpg
+    bar: "Terminal · python -m flowkit runs --days 7"
+    demo: >
+      Terminal: `python3 -m flowkit runs --days 7` against lab DEV after the end-to-end test (and a few more budget
+      changes). Show the real counts. If a run failed during setup (for example a wrong channel id), keep it: it shows
+      the error code line. Mask the environment URL.
+    narration: >
+      And in the lab, the real runs from today's tests, straight from Dataverse. No portal clicking to find out
+      whether last night's alerts went out.
+
+  - id: settings
+    type: code
+    heading: "ALM: the deployment settings file"
+    lang: json
+    code: |
+      {
+        "EnvironmentVariables": [
+          { "SchemaName": "mgl_AlertTeamId", "Value": "" },
+          { "SchemaName": "mgl_AlertChannelId", "Value": "" }
+        ],
+        "ConnectionReferences": [
+          { "LogicalName": "mgl_sharedteams_00000", "ConnectionId": "",
+            "ConnectorId": "/providers/Microsoft.PowerApps/apis/shared_teams" }
+        ]
+      }
+      $ python3 -m flowkit settings --check test.json
+      ! mgl_AlertTeamId: empty Value (the import will leave it unset or ask for it)
+    short: alm
+    narration: >
+      To move the solution to test without anyone clicking through prompts, the import takes a deployment settings
+      file: environment variable values and a connection for every connection reference. P A C can generate it; our
+      check refuses to hand a file with empty values to the pipeline.
+
+  - id: envgotcha
+    type: bullets
+    heading: "Two more things Learn warns about"
+    bullets:
+      - "Changed an env var value in place? Flows keep the old one"
+      - "Until the flow is saved, or turned off and on: flowkit restart"
+      - "Dataverse connector is premium in Power Automate"
+      - "Teams Flow bot posts: 25 per connection per 5 minutes"
+      - "A bulk import can hit that: batch the alerts"
+    narration: >
+      Two more things. If you change an environment variable's value directly in an environment, flows keep using
+      the old value until they're saved or turned off and on, so our tool has a restart command. And plan for limits:
+      the Dataverse connector is premium, and the Teams connector allows twenty five Flow bot posts per connection
+      every five minutes. A bulk import could hit that.
+
+  - id: recap
+    type: bullets
+    heading: "Five rules"
+    bullets:
+      - "Integrate through Dataverse: triggers, actions, custom APIs"
+      - "Select columns on one column that really changes"
+      - "Env vars for anything that differs per environment"
+      - "Connection references, and a checked settings file"
+      - "Pull, lint and monitor flows like code"
+    narration: >
+      Five rules. Integrate through Dataverse: its triggers, its actions and your custom APIs. Watch one column that
+      really changes. Put anything that differs per environment in an environment variable. Use connection references
+      and a checked settings file. And pull, lint and monitor your flows like code.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The tool, the sample flow and all twenty three tests are on GitHub, and the complete guide to integration with
+      Power Platform is on devladlog dot com. Next episode, Dynamics 365 Sales. Subscribe so you don't miss it.

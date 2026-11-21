@@ -8,8 +8,8 @@ REGION=${2:-swedencentral}
 BUDGET=${3:-25}
 HERE=$(cd "$(dirname "$0")" && pwd)
 EP2=$(cd "$HERE/../../02-cloud-architecture/infra" && pwd)
-OUT=$(mktemp -d)
-trap 'rm -rf "$OUT"' EXIT
+OUT="$HOME/.contoso-cost"            # what-if JSON + price cache, kept outside the repo
+mkdir -p "$OUT"
 
 az group create --name "$RG" --location "$REGION" --tags workload=contoso environment=lab --output none
 status=0

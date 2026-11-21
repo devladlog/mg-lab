@@ -1,0 +1,278 @@
+# DEVLADLOG AI — episode 05. Code scenes are real excerpts from src/ and tests/.
+# Screen scenes: capture per demo.md. Their narration describes what is on screen without quoting live model output;
+# after recording, adjust the sentences marked TODO to what the real run did.
+episode: 5
+slug: ai-agents-orchestration
+series_label: "AI"
+series_name: "DEVLADLOG AI"
+file_prefix: "ai"
+title: "AI agents: tools, approvals and a workflow"
+subtitle: "Microsoft Agent Framework on Azure OpenAI, with a human and the code both in charge"
+voice: am_michael
+thumbnail_text: "AGENTS\nWITH A\nBRAKE PEDAL"
+youtube:
+  title: "AI Agents with Microsoft Agent Framework: Tools, Human Approval, Workflows | DEVLADLOG AI #5"
+  tags: [Microsoft Agent Framework, AI agents, agent orchestration, human in the loop, tool calling, function calling, Azure OpenAI, Responses API, multi-agent workflow, Python, Semantic Kernel, AutoGen]
+sources:
+  - https://www.devladlog.com/articles/ai/2026-05-02-ai-agents-orchestration-complete-guide-2026/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "An agent is a loop with your permissions"
+    sub: "So give it a brake pedal"
+    short: hook
+    narration: >
+      An AI agent is a loop. The model asks for a tool, your code runs it, and the result goes back to the model,
+      again and again, with your permissions. Today we build one that works a real queue, and we put two brakes on
+      it: a person, and the code itself. Welcome to DEVLADLOG AI.
+
+  - id: problem
+    type: bullets
+    heading: "The queue from episode four"
+    bullets:
+      - "Invoices that the intake step sent to review"
+      - "One total doesn't add up, one scan is faded"
+      - "One is over the approval limit, one is a duplicate"
+      - "Goal: an assistant that works the queue"
+      - "Rule: a person confirms every approval"
+    narration: >
+      In episode four, Contoso's invoice intake sent some invoices to review. One has totals that don't add up, one
+      is a faded scan, one is above the approval limit, and one was rejected as a duplicate. We want an assistant
+      that works through that queue, but never approves anything on its own.
+
+  - id: arch
+    type: diagram
+    heading: "One agent, four tools, two gates"
+    nodes: ["Prompt", "Agent", "Tools", "Human", "Store"]
+    labels: ["work the queue", "gpt-5-mini", "3 read, 1 write", "yes or no", "policy in code"]
+    narration: >
+      The agent runs on Microsoft Agent Framework, the successor to Semantic Kernel and AutoGen, with a G P T five
+      mini deployment on Azure OpenAI. Three tools only read. The fourth approves an invoice, and that one passes
+      two gates: a person, then the policy written in code.
+
+  - id: tools
+    type: code
+    heading: "Tools are plain functions"
+    lang: python
+    code: |
+      @tool(name="get_invoice", approval_mode="never_require")
+      def get_invoice(invoice_id: Annotated[str, "Invoice id, for example INV-2026-0142"]) -> str:
+          """Get one invoice: vendor, VAT number, date, subtotal, tax, total, status and review reasons."""
+          inv = store.get(invoice_id)
+          return json.dumps(inv if inv else {"error": "not_found", "invoice_id": invoice_id})
+
+      @tool(name="approve_invoice", approval_mode="always_require", max_invocations=5)
+      def approve_invoice(
+          invoice_id: Annotated[str, "Invoice id to approve"],
+          note: Annotated[str, "Why the approval is justified, citing the policy section"],
+      ) -> str:
+          """Approve an invoice for payment. A person must confirm every call; the policy is enforced again here."""
+          return json.dumps(store.approve(invoice_id, note, approver))
+    narration: >
+      Tools are plain Python functions. The framework builds the JSON schema from the type hints and the
+      docstring. Reading an invoice never needs approval. Approving one is marked always require, so the framework
+      stops and hands the call back to us instead of running it.
+
+  - id: limits
+    type: code
+    heading: "Bound the loop, keep the state local"
+    lang: python
+    code: |
+      LIMITS = {"max_iterations": 8, "max_function_calls": 16, "max_duration_seconds": 120.0,
+                "allow_concurrent_invocation": False}
+
+      client = OpenAIChatClient(model=deployment, azure_endpoint=endpoint, credential=credential)
+      client.function_invocation_configuration.update(LIMITS)
+
+      return Agent(
+          client=client,
+          name="ap-assistant",
+          instructions=INSTRUCTIONS,
+          tools=tools.all,
+          middleware=[audit] if audit else None,
+          default_options={"store": False},
+      )
+    narration: >
+      Two settings matter here. By default the loop may make forty model round trips, with no limit on tool calls
+      or time, so we cap all three. And store false means the service doesn't keep response objects between calls;
+      the session holds the history. The credential is Entra ID, there is no key.
+
+  - id: loop
+    type: code
+    heading: "The approval loop"
+    lang: python
+    code: |
+      session = agent.create_session()
+      response = await agent.run(prompt, session=session)
+      ...
+      while response.user_input_requests:
+          ...
+          replies = []
+          for request in response.user_input_requests:
+              call = request.function_call
+              ...
+              args = _arguments(call.arguments)
+              ok = bool(decide(call.name, args))
+              outcome.decisions.append(Decision(call.name, args, ok))
+              replies.append(request.to_function_approval_response(ok))
+          outcome.rounds += 1
+          response = await agent.run(Message(role="user", contents=replies), session=session)
+    narration: >
+      When the agent wants to approve something, the run returns user input requests instead of an answer. We show
+      the tool name and arguments to a person, turn their yes or no into an approval response, and resume in the
+      same session. A yes replayed into another session is ignored by the framework.
+
+  - id: approval
+    type: screen
+    heading: "The agent asks, a person decides"
+    image: screens/approval.jpg
+    bar: "Terminal · python -m apagent.run"
+    demo: "Terminal: PYTHONPATH=src python -m apagent.run --endpoint $AOAI --deployment chat --audit audit/run.jsonl — the run pauses on '>>> APPROVAL NEEDED  approve_invoice' with invoice_id and note shown and the cursor at 'Approve? [y/N]'. The recorder types y."
+    narration: >
+      Here is the real run against the Azure deployment. The agent read the queue and the policy on its own, and
+      now it stops: it wants to approve an invoice, with a note citing the policy. Nothing has happened yet. A
+      person reads it and types yes.
+    # TODO after recording: name the invoice the agent proposed (expected: INV-2026-0088, the faded scan).
+
+  - id: result
+    type: screen
+    heading: "Answer, audit trail, queue"
+    image: screens/result.jpg
+    bar: "Terminal · python -m apagent.run"
+    demo: "Same terminal after answering y: the '=== Agent ===' block with one line per invoice, the '=== Tool calls (audit) ===' table (tool, outcome, ms, arguments) and '=== Queue after the run ===' with statuses, plus the tokens line."
+    narration: >
+      The agent finishes with one line per invoice and the next step for each. Below, the audit trail from our
+      middleware lists every tool that actually ran, and the queue shows exactly one invoice approved. The others
+      stay in review, with a reason a person can act on.
+    # TODO after recording: if the agent tried to approve a second invoice, say whether it was declined or refused.
+
+  - id: refusal
+    type: code
+    heading: "A human yes is not enough"
+    lang: python
+    code: |
+      def _refusal(inv: dict, note: str) -> str | None:
+          kinds = _reason_kinds(inv)
+          if inv["status"] != "review":
+              return f"status is {inv['status']}; rejected invoices are not reopened from the review queue"
+          if "arithmetic" in kinds:
+              return "totals do not add up; request a corrected invoice from the supplier"
+          if Decimal(inv["total"]) > APPROVAL_LIMIT:
+              return f"total {inv['total']} is above the EUR {APPROVAL_LIMIT} limit; the finance manager approves"
+          if "new-supplier" in kinds:
+              return "first invoice from a new VAT number; procurement must verify the supplier first"
+          if not note or not note.strip():
+              return "an approval note is required"
+          return None
+    short: policy
+    narration: >
+      People click yes when they're busy. So the tool checks the policy again, in code: no approvals on totals that
+      don't add up, nothing above the five thousand euro limit, no new suppliers, no reopened rejects. The prompt
+      describes the rules. The code enforces them.
+
+  - id: when
+    type: bullets
+    heading: "Agent or workflow?"
+    bullets:
+      - "Open-ended task, tools chosen at run time: agent"
+      - "Well-defined steps, fixed order: workflow"
+      - "Several agents must coordinate: workflow"
+      - "Learn: if a function can do it, write the function"
+    narration: >
+      Not everything should be an agent. Microsoft's guidance is simple. Use an agent for open ended tasks where the
+      model picks the tools. Use a workflow when the steps are known or several agents must coordinate. And if you
+      can write a function to do it, write the function.
+
+  - id: pipeline
+    type: code
+    heading: "Two agents, least privilege each"
+    lang: python
+    code: |
+      def findings_only(messages: list[Message]) -> list[Message]:
+          for m in reversed(messages):
+              if m.role == "assistant" and m.text.strip():
+                  return [Message(role="user", contents=[f"Checker findings:\n{m.text.strip()}"])]
+          return [Message(role="user", contents=["Checker findings: none. Say that no e-mail can be drafted."])]
+
+      checker = Agent(client=client, name="checker", instructions=CHECKER, tools=read_only,
+                      default_options={"store": False})
+      writer = Agent(client=client, name="writer", instructions=WRITER, default_options={"store": False})
+      writer_step = AgentExecutor(writer, id="writer", context_mode="custom", context_filter=findings_only)
+      workflow = SequentialBuilder(participants=[checker, writer_step], intermediate_output_from=[checker]).build()
+    narration: >
+      For the Northwind invoice we use a sequential workflow. A checker agent with two read only tools finds the
+      problem and the policy. A writer agent with no tools at all drafts the e-mail to the supplier. The writer only
+      receives the checker's final text, through a context filter.
+
+  - id: gotcha
+    type: code
+    heading: "The gotcha: 'only responses' includes tool results"
+    lang: python
+    code: |
+      def test_chain_only_agent_responses_alone_would_leak_tool_results(stub, client):
+          ...
+          wf = SequentialBuilder(participants=[checker, writer], chain_only_agent_responses=True).build()
+          asyncio.run(wf.run("Check invoice INV-2026-0142."))
+          writer_input = stub.bodies()[-1]["input"]
+          assert "function_call_output" in [i.get("type") for i in writer_input]
+          assert "vendor_vat" in str(writer_input)
+    short: gotcha
+    narration: >
+      Here is the honest gotcha. The obvious setting, chain only agent responses, sounds like the writer gets just
+      the checker's answer. But the checker's response messages include its tool calls and tool results, so the raw
+      invoice data flows to the next agent. This test proves it. That's why we filter the context ourselves.
+
+  - id: pipeline-run
+    type: screen
+    heading: "Checker finds, writer drafts"
+    image: screens/pipeline.jpg
+    bar: "Terminal · python -m apagent.pipeline INV-2026-0142"
+    demo: "Terminal: PYTHONPATH=src python -m apagent.pipeline INV-2026-0142 --endpoint $AOAI --deployment chat — the '=== checker ===' block (INVOICE / ISSUE / POLICY / ACTION lines), the '=== writer ===' block starting with 'Subject:', and the 'saved outbox/INV-2026-0142-draft.md (draft, not sent)' line."
+    narration: >
+      And the real run. The checker reports the arithmetic problem with the numbers and the policy section. The
+      writer turns that into a short e-mail asking for a corrected invoice. It's saved as a draft. Sending it is
+      still a human decision.
+    # TODO after recording: confirm the checker quoted 1000.00 + 230.00 vs 1240.00; if it phrased it differently, say so.
+
+  - id: tests
+    type: code
+    heading: "27 tests, no cloud needed"
+    lang: text
+    code: |
+      $ python -m pytest tests -q
+      ...........................                         [100%]
+      27 passed
+
+      test_agent_loop.py  real Agent Framework vs a local Responses API stub:
+                          approval pauses, declined calls never run, policy refusals,
+                          runaway loop capped, replayed approval ignored
+      test_pipeline.py    checker -> writer, no tools and no tool results for the writer
+      test_store.py       every policy rule      test_bicep.py  keyless account, pinned model
+    narration: >
+      Twenty seven tests run in seconds without any cloud resource. The real Agent Framework talks to a local stub
+      of the Responses API, so we test that approvals pause the run, a declined call never executes, a runaway loop
+      is capped, and the writer never sees tool results.
+
+  - id: recap
+    type: bullets
+    heading: "Five rules for agents"
+    bullets:
+      - "Read tools free, write tools need a person"
+      - "Enforce the policy in the tool, not the prompt"
+      - "Cap iterations, calls and time"
+      - "Least privilege per agent: tools and context"
+      - "Audit every tool that runs"
+    narration: >
+      Five rules. Reading is free, writing needs a person. Enforce the policy in the tool, not in the prompt. Cap
+      iterations, tool calls and time. Give each agent only the tools and the context it needs. And audit every
+      tool that actually runs.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The agent, the workflow and the tests are on GitHub, and the complete guide with four deeper articles is on
+      devladlog dot com. Links are in the description. Next time: responsible AI, measured. This was DEVLADLOG AI,
+      by Momento Galático.

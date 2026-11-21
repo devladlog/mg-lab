@@ -68,8 +68,8 @@ scenes:
               o.Exporters = ExportTarget.AzureMonitor;
               o.AzureMonitor.ConnectionString = connectionString;
               o.AzureMonitor.Credential = credential;                 // Entra ID: local auth is off
-              o.AzureMonitor.TracesPerSecond = sampling.TracesPerSecond ?? 5;
-          });
+              o.AzureMonitor.TracesPerSecond = sampling.TracesPerSecond ?? 5; // or SamplingRatio
+          });                                       // (no connection string: ExportTarget.Console)
     narration: >
       One call wires it up: Use Microsoft Open Telemetry, from the Microsoft dot Open Telemetry package. It adds
       instrumentation for A S P dot net core, Http Client and the Azure S D K. Our own activity source and meter are
@@ -91,9 +91,10 @@ scenes:
       await store.SaveAsync(stored, ct);                     // Azure blob dependency, automatic
       telemetry.OrderCreated(stored.Channel, stored.Total);
 
-      // OrdersTelemetry: low-cardinality dimensions only, never the customer
-      created.Add(1, new("order.channel", channel));
-      value.Record((double)total, new("order.channel", channel));
+      // OrdersTelemetry.OrderCreated: one low-cardinality dimension, never the customer
+      var tag = new KeyValuePair<string, object?>("order.channel", channel);
+      created.Add(1, tag);
+      value.Record((double)total, tag);
     narration: >
       Pricing gets its own span, so it shows up inside the end-to-end transaction with the channel, the line count
       and the total. The blob call is a dependency for free. A counter and a histogram record the order with one

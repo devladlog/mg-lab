@@ -1,0 +1,9 @@
+role 'Region,Managers'
+	modelPermission: readRefresh
+
+	tablePermission Region =
+			IF(
+			    USERNAME() = "Worker",
+			    [Region] = "West" && 'Region'[Zone] = "A",
+			    TRUE()
+			)

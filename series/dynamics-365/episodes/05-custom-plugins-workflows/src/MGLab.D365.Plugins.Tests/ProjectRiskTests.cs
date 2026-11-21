@@ -94,4 +94,15 @@ public class ProjectRiskTests
     [InlineData(69, "Medium")]
     [InlineData(70, "High")]
     public void Level_boundaries(int score, string level) => Assert.Equal(level, ProjectRisk.LevelFor(score));
+
+    [Theory]
+    [InlineData("2027-07-14T23:00:00Z", "2027-07-15")]   // Lisbon summer (UTC+1) user picked 15 July
+    [InlineData("2027-01-15T00:00:00Z", "2027-01-15")]   // Lisbon winter (UTC+0), or a real Date only value
+    [InlineData("2027-01-15T08:00:00Z", "2027-01-15")]   // a UTC-8 user picked 15 January
+    public void Stored_user_local_dates_become_the_date_the_user_picked(string stored, string expected)
+    {
+        var utc = DateTime.Parse(stored, null, System.Globalization.DateTimeStyles.AdjustToUniversal);
+        Assert.Equal(DateTime.Parse(expected), ProjectRisk.NearestDate(utc));
+        Assert.Null(ProjectRisk.NearestDate(null));
+    }
 }

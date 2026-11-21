@@ -1,0 +1,225 @@
+episode: 6
+slug: dashboards-publishing
+series_label: "POWER BI"
+series_name: "DEVLADLOG Power BI"
+file_prefix: "power-bi"
+title: "Dashboards & Publishing"
+subtitle: "Check before you publish, pin a dashboard, audit and copy it with the REST API, ship an app"
+voice: am_michael
+thumbnail_text: "PUBLISH\nIS NOT\nTHE END"
+youtube:
+  title: "Power BI Dashboards and Publishing: Preflight Check, REST API Audit, Apps | DEVLADLOG Power BI #6"
+  tags: [Power BI, dashboards, publishing, Power BI service, workspace app, data alerts, REST API, PowerShell, gateway, RLS]
+sources:
+  - https://www.devladlog.com/articles/power-bi/2025-03-05-dashboards-publishing-complete-guide-2025/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Publish takes ten seconds. The surprises come later."
+    sub: "A preflight check, a dashboard, an audit, and an app"
+    short: hook
+    narration: >
+      Publishing from Power BI Desktop takes ten seconds. The surprises come later: a dashboard that never updates,
+      tiles that point to a deleted report, store managers who see every store. In this episode we check the
+      project before we publish, build a dashboard, audit the workspace with the REST A P I, copy the dashboard,
+      and hand it all to the users as an app.
+
+  - id: plan
+    type: bullets
+    heading: "What we're building"
+    bullets:
+      - "Preflight: what the project needs after Publish"
+      - "Publish the episode 5 model, with its RLS"
+      - "A dashboard: highlights, tiles, one data alert"
+      - "PbiPublishing: inventory, rules, copy a dashboard"
+      - "A workspace app for the store managers"
+    narration: >
+      We publish the Contoso Bikes project from episode five, with its row level security. A small PowerShell module,
+      p b i publishing, checks the project before publishing, audits the workspace after, and copies dashboards.
+      Then a workspace app delivers it to the store managers.
+
+  - id: preflight
+    type: code
+    heading: "Preflight, before Publish"
+    lang: text
+    code: |
+      $ ./src/Invoke-PublishingCheck.ps1 -ProjectPath ../05-row-level-security/src
+
+      Rule   Severity Message
+      PUB001 Warning  6 table(s) read local files with File.Contents (Customer, Date, Product, Sales,
+                      Store Access, Store): Desktop uploads the data when you publish, but refresh in
+                      the service needs an on-premises data gateway
+      PUB002 Info     parameter DataFolder is a local path (C:\MGLab\power-bi\star\): the gateway
+                      machine needs the same path
+      PUB003 Warning  RLS roles Head Office, Store Managers: add members on the semantic model's
+                      Security page; RLS only applies to Viewers and app users, and Publish to web
+                      isn't available
+
+      0 error(s), 2 warning(s)
+    narration: >
+      Preflight reads the project folder, the T M D L and the report files, and says what publishing will need.
+      Six tables read local C S V files: Desktop uploads the data, but refreshing it in the service needs a
+      gateway. And two R L S roles: members get added in the service, and publish to web is off the table.
+
+  - id: publishscreen
+    type: screen
+    heading: "Publish from Desktop"
+    image: screens/pub-publish-desktop.jpg
+    bar: "Power BI Desktop · Home > Publish · Contoso Sales (Lab)"
+    demo: "Power BI Desktop with the episode 5 project open. Home > Publish > select workspace 'Contoso Sales (Lab)' > Select. If the model is already published: the 'Replace this semantic model' dialog with the impact summary (reports and dashboards affected) and Replace. Then 'Success!' with the link 'Open ContosoSales.pbip in Power BI' (or the report name). Cut to the workspace list in the browser: report ContosoSales and semantic model ContosoSales."
+    narration: >
+      Home, publish, pick the workspace. The semantic model and the report go up together, data included. Publish
+      again later and Desktop asks before it replaces the model, with an impact summary: how many reports and
+      dashboards depend on it.
+
+  - id: dashvsreport
+    type: bullets
+    heading: "A dashboard is not a short report"
+    bullets:
+      - "One page, service only: not in Desktop, no file to keep in git"
+      - "Tiles from many reports and models; select one to open its report"
+      - "No slicers; title formatting and conditional formatting are dropped"
+      - "Data alerts on card, KPI and gauge tiles"
+      - "Q&A experiences retire in February 2027"
+    narration: >
+      A dashboard is a different thing. One page, built only in the service, with no file format you can keep in
+      git. Tiles can come from many reports, and each tile links back to its report. No slicers, and the tile
+      drops the visual's formatting except the title text. Alerts work on card, K P I and gauge tiles. And don't
+      build on dashboard Q and A: Microsoft is retiring it in February twenty twenty seven.
+
+  - id: dashboardscreen
+    type: screen
+    heading: "Pin the highlights, add an alert"
+    image: screens/pub-dashboard.jpg
+    bar: "Power BI service · Dashboard · Contoso Bikes - Daily"
+    demo: "Report ContosoSales in the service, page Sales overview, Year slicer cleared. Pin icon on the Sales amount card > New dashboard 'Contoso Bikes - Daily' > Pin. Then pin Orders card, the line chart, Sales amount by category and Sales amount by store to the existing dashboard. Dashboard view with the 5 tiles arranged (cards top row: Sales amount 1,862,401.98, Orders 2,440). Then Orders tile > More options > Manage alerts > Add alert rule 'Orders above 2,500', condition Above 2500, once a day, Save and close."
+    narration: >
+      From the report, pin the sales and orders cards to a new dashboard, then the trend, categories and stores.
+      Five tiles, the highlights only. On the orders card, manage alerts: tell me when orders go above two thousand
+      five hundred. Only you see your alerts, and they only fire when the data refreshes. Remember that.
+
+  - id: inventory
+    type: code
+    heading: "Audit the workspace with the REST API"
+    lang: powershell
+    code: |
+      param([Parameter(Mandatory)][string] $WorkspaceId)
+      $base = "groups/$WorkspaceId"
+      $dashboards = foreach ($d in @((Invoke-PbiApi Get "$base/dashboards").value)) {
+          [pscustomobject]@{
+              Id    = $d.id
+              Name  = $d.displayName
+              Tiles = @((Invoke-PbiApi Get "$base/dashboards/$($d.id)/tiles").value)
+          }
+      }
+      [pscustomobject]@{ Reports    = @((Invoke-PbiApi Get "$base/reports").value)
+                         Datasets   = @((Invoke-PbiApi Get "$base/datasets").value)
+                         Dashboards = @($dashboards) }
+      # WS001 tile -> report not in the workspace     WS002 tile title missing in the API
+      # WS003 isOnPremGatewayRequired                 WS004 isEffectiveIdentityRolesRequired (RLS)
+      # WS005 more tiles than the team limit          WS006 isRefreshable = false
+    narration: >
+      Dashboards have no file, so we audit them through the REST A P I. Read only: reports, semantic models,
+      dashboards and every tile. Six rules on top. A tile whose report is gone. A tile without a title, because the
+      A P I doesn't return titles you set in the report before pinning; Learn documents that. And the semantic model
+      flags: gateway required, R L S, not refreshable. Twenty Pester tests, with the REST cmdlet mocked.
+
+  - id: inventoryscreen
+    type: screen
+    heading: "The audit, against the lab workspace"
+    image: screens/pub-inventory.jpg
+    bar: "PowerShell 7 · Invoke-PublishingCheck.ps1 -WorkspaceId · lab tenant"
+    demo: "Windows Terminal, PowerShell 7, already signed in with Connect-PowerBIServiceAccount (not recorded). Command ./src/Invoke-PublishingCheck.ps1 -WorkspaceId $ws (variable set off camera). First line '1 report(s), 1 semantic model(s), 1 dashboard(s), 5 tile(s)', then the findings table and the error/warning count. Expected at least WS004 (RLS); record exactly what WS002, WS003 and WS006 report and keep the narration in line with it."
+    narration: >
+      Against the lab workspace: one report, one model, one dashboard, five tiles. The audit names what it finds by
+      name, never by I D, so the output can go straight into a ticket, or into a video.
+
+  - id: copycode
+    type: code
+    heading: "Copy a dashboard, tile by tile"
+    lang: powershell
+    code: |
+      $new = Invoke-PbiApi Post "groups/$targetWs/dashboards" @{ name = $NewName }
+      foreach ($t in $tiles) {
+          $body = @{ targetDashboardId = $new.id; positionConflictAction = 'Tail' }
+          if ($crossWorkspace) {
+              $body.targetWorkspaceId = $TargetWorkspaceId
+              if ($t.reportId)  { $body.targetReportId = $TargetReportId }   # else the tile is broken
+              if ($t.datasetId) { $body.targetModelId  = $TargetDatasetId }
+          }
+          $null = Invoke-PbiApi Post "groups/$WorkspaceId/dashboards/$DashboardId/tiles/$($t.id)/Clone" $body
+      }
+
+      # tests: same workspace keeps links, another workspace rebinds, refuses without a target report,
+      #        -WhatIf creates nothing
+    narration: >
+      Copying a dashboard is two A P I calls: add dashboard, then clone tile for every tile. In the same workspace
+      the tiles keep their links. To another workspace you must pass the target report and model, or Learn says the
+      tiles come out broken, so the function refuses to run without them. And it supports what if.
+
+  - id: copyscreen
+    type: screen
+    heading: "The copy in the service"
+    image: screens/pub-copy-dashboard.jpg
+    bar: "PowerShell 7 · Power BI service · Contoso Sales (Lab)"
+    demo: "Terminal: Copy-PbiDashboard -WorkspaceId $ws -DashboardId $daily -NewName 'Contoso Bikes - Store managers' (no -WhatIf) returning Dashboard 'Contoso Bikes - Store managers', Tiles 5, SameWorkspace True. Then the browser: workspace list refreshed with the new dashboard, opened: same 5 tiles, same values."
+    narration: >
+      Run it for real: a second dashboard, five tiles, same report links. Now we can trim it for the store
+      managers without touching the original.
+
+  - id: gotcha
+    type: code
+    heading: "Gotcha: published is not refreshed"
+    lang: text
+    code: |
+      Desktop Publish     -> data uploaded once, tiles show it
+      Scheduled refresh   -> File.Contents on C:\MGLab\...  -> needs an on-premises data gateway
+      No refresh          -> tiles never change
+                          -> data alerts never fire ("Alerts only work on refreshed data")
+
+      PUB001  6 table(s) read local files ... refresh in the service needs an on-premises data gateway
+      WS003   isOnPremGatewayRequired       WS006   isRefreshable = false
+
+      Fix: a gateway (episode 14), or move the files to OneDrive / SharePoint, or a cloud source
+    short: gotcha
+    narration: >
+      Here's the gotcha. The dashboard looks perfect, and it will look exactly the same next month. Publish uploaded
+      the data once. Our model reads C S V files from a local folder, so the service can't refresh it without an
+      on premises data gateway, and Microsoft is clear that alerts only work on refreshed data. Preflight warned us
+      before publishing. Fix it with a gateway, which is episode fourteen, or move the source to the cloud.
+
+  - id: appscreen
+    type: screen
+    heading: "One app, RLS included"
+    image: screens/pub-app-rls.jpg
+    bar: "Power BI service · Create app · Store managers audience"
+    demo: "Workspace > Create app: Setup (name 'Contoso Bikes', description), Content (report ContosoSales and dashboard 'Contoso Bikes - Store managers'), Audience 'Store managers' with Alex Demo, Sam Demo, Riley Demo, Taylor Demo, then Publish app and the 'Successfully published' link. Remove the five users' Viewer access from the workspace first (they get the app instead). Then an InPrivate window signed in as sam.demo: Apps > Contoso Bikes > report page Store security shows Contoso Madrid only (Visible stores 1, Sales amount 366,058.87); the dashboard's Sales amount tile: record what it shows (expected 366,058.87 if tiles follow RLS)."
+    short: app
+    narration: >
+      Last step: a workspace app. Name, content, and an audience for the store managers. They don't need the
+      workspace anymore, and that's the point: row level security applies to app users, so Sam opens the app and
+      sees Madrid. Note that Power BI doesn't email internal users when you publish an app: send them the link.
+
+  - id: recap
+    type: bullets
+    heading: "Five rules for publishing"
+    bullets:
+      - "Run a preflight: sources, gateway, roles"
+      - "Dashboards for highlights, reports for detail"
+      - "No refresh, no alerts: plan the gateway first"
+      - "Audit dashboards through the API, copy with Clone Tile"
+      - "Consumers get the app; creators get the workspace"
+    narration: >
+      Five rules. Run a preflight before you publish. Use dashboards for the highlights and reports for the detail.
+      No refresh means no alerts, so plan the gateway first. Audit dashboards through the A P I, and copy them with
+      clone tile. And consumers get the app, while creators get the workspace.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The p b i publishing module and its tests are on GitHub, and the complete guide to dashboards and publishing
+      is on dev lad log dot com. Links in the description. Next time: dataflows and shared semantic models. This
+      was DEVLADLOG Power BI, by Momento Galático.

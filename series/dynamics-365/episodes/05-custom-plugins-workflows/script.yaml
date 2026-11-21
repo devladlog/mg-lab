@@ -1,0 +1,281 @@
+# DEVLADLOG Dynamics 365 — episode 05. Draft: screen scenes need the lab-tenant capture described in demo.md.
+episode: 5
+slug: custom-plugins-workflows
+series_label: "DYNAMICS 365"
+series_name: "DEVLADLOG Dynamics 365"
+file_prefix: "dynamics-365"
+title: "Custom Plugins & Workflows"
+subtitle: "A custom API, an async plugin, and where classic workflows go"
+voice: am_michael
+thumbnail_text: "CUSTOM API\nASYNC PLUGIN\nBYE WORKFLOWS"
+youtube:
+  title: "Dataverse Custom API + Async Plugin, and Replacing Classic Workflows | DEVLADLOG Dynamics 365 #5"
+  tags: [Dynamics 365, Dataverse, custom API, plugin, asynchronous plugin, classic workflows, Power Automate, C#, system jobs, plug-in trace log, Power Platform]
+sources:
+  - https://www.devladlog.com/articles/dynamics-365/2025-10-23-custom-plugins-workflows-complete-guide-2025/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Plugins and workflows, in 2026"
+    sub: "One custom API, one async plugin, zero new classic workflows"
+    short: hook
+    narration: >
+      Classic workflows still run in a lot of Dynamics 365 environments, and new ones still get built. Microsoft's
+      own guidance says build flows instead. So where does the server-side logic go now? In this episode we build a
+      custom API with a plugin behind it, an asynchronous plugin that does the job a background workflow used to do,
+      and a tool that finds the classic workflows you still have.
+
+  - id: map
+    type: bullets
+    heading: "Where each kind of logic goes"
+    bullets:
+      - "Background workflow: a cloud flow, or an async plugin"
+      - "Real-time workflow: a sync plugin or a business rule"
+      - "Custom process action: a custom API"
+      - "Custom workflow activity: a custom API flows can call"
+      - "Learn: synchronous workflows hurt user performance"
+    narration: >
+      Here's the map. A background workflow becomes a cloud flow, or an asynchronous plugin when it's pure data
+      logic. A real-time workflow becomes a synchronous plugin or a business rule. A custom process action becomes a
+      custom API. And instead of a custom workflow activity, write a custom API, because flows can call it. Microsoft
+      Learn is blunt about one thing: synchronous workflows are a significant contributor to performance problems.
+
+  - id: rules
+    type: code
+    heading: "The rules, with no Dataverse in sight"
+    lang: csharp
+    code: |
+      var large = input.Budget.HasValue && input.Budget.Value >= LargeBudget;
+      if (large)
+      {
+          score += 30;
+          reasons.Add($"Budget {Money(input.Budget.Value)} is at or over {Money(LargeBudget)}");
+          if (!input.HasJustification)
+          {
+              score += 25;
+              reasons.Add("No business justification for a large budget");
+          }
+      }
+      ...
+      score = Math.Min(score, 100);
+      return new RiskResult(score, LevelFor(score), reasons);
+    narration: >
+      Our scenario is the project request table from episode one. We want a risk score from zero to a hundred, with
+      the reasons. Big budget, missing justification, a due date that's close or already gone, a customer with too
+      many open requests. The rules are a pure class: no service calls, the clock passed in, so they're trivial to test.
+
+  - id: api-plugin
+    type: code
+    heading: "The custom API's main operation"
+    lang: csharp
+    code: |
+      if (ctx.MessageName != MessageName || ctx.Stage != MainOperation) return;   // stage 30
+
+      var service = local.UserService;
+      var record = service.Retrieve(ProjectRequest.Table, target.Id, new ColumnSet(
+          ProjectRequest.Budget, ProjectRequest.DueDate, ProjectRequest.Justification, ProjectRequest.Account));
+      ...
+      var result = ProjectRisk.Assess(input, _utcNow());
+
+      ctx.OutputParameters["RiskScore"] = result.Score;
+      ctx.OutputParameters["RiskLevel"] = result.Level;
+      ctx.OutputParameters["Reasons"] = result.ReasonsText;
+    narration: >
+      The custom API, mgl assess project request, is bound to the table, which gives us a Target parameter for free.
+      The plugin behind it runs as the main operation, stage thirty. It reads only four columns, counts the
+      account's other open requests, runs the rules, and writes three output parameters. No step registration: the
+      custom API itself points at this class.
+
+  - id: api-definition
+    type: code
+    heading: "The API is data: one deep insert"
+    lang: python
+    code: |
+      return {
+          "uniquename": name, "name": name, "displayname": api["displayname"], "description": api["description"],
+          "bindingtype": api["bindingtype"], "boundentitylogicalname": api.get("boundentitylogicalname"),
+          "isfunction": api["isfunction"], "isprivate": api["isprivate"],
+          "allowedcustomprocessingsteptype": api["allowedcustomprocessingsteptype"],
+          "workflowsdkstepenabled": api.get("workflowsdkstepenabled", False),
+          "executeprivilegename": api.get("executeprivilegename"),
+          "CustomAPIRequestParameters": [_prop(name, p, request=True) for p in api["request_parameters"]],
+          "CustomAPIResponseProperties": [_prop(name, p, request=False) for p in api["response_properties"]],
+          "PluginTypeId@odata.bind": f"/plugintypes({plugintype_id})",
+      }
+    narration: >
+      A custom API is just rows in three tables. Our deploy tool builds the whole thing as one deep insert, the same
+      shape as the example on Microsoft Learn, and sends it inside our solution. Integer for the score, strings for
+      the level and the reasons.
+
+  - id: gotcha
+    type: bullets
+    heading: "Gotcha: decisions you can't undo"
+    bullets:
+      - "Binding, function or action, step type: fixed once saved"
+      - "Power Automate's Dataverse connector only calls actions"
+      - "Private messages can't be used in plugins"
+      - "Workflow-enabled: no StringArray, Entity or collections"
+      - "So: Action, public in dev, one string of reasons"
+    short: gotcha
+    narration: >
+      Here's the trap. Binding type, function or action, and whether others can add steps can't be changed after you
+      save. Learn also says the Dataverse connector in Power Automate only performs actions, so a function is
+      invisible to flows. Private messages can't be used in plugins, and our own async plugin calls this API. That's
+      why ours is a public action, and why the reasons are one string, not a string array. Our tool checks all of
+      this before it sends anything.
+
+  - id: deploy
+    type: screen
+    heading: "Deploy, then deploy again"
+    image: screens/apikit-deploy.jpg
+    bar: "Terminal · python -m apikit deploy · lab DEV"
+    demo: >
+      Terminal against the lab DEV environment: `python3 -m apikit deploy` showing the "+" lines (column
+      mgl_riskscore, assembly, two plug-in types, custom API with 3 response properties, two async steps with
+      post-images) and "9 created, 0 updated, 0 unchanged"; then the same command again showing
+      "0 created, 0 updated, 9 unchanged". Mask the environment URL.
+    narration: >
+      In the lab, one command creates the column, uploads the assembly, registers both plugin types, the custom API
+      and the two async steps, all in our solution. Run it again and nothing changes. That's what lets it live in a
+      pipeline.
+
+  - id: call
+    type: screen
+    heading: "Call it like any other message"
+    image: screens/apikit-call.jpg
+    bar: "Terminal · python -m apikit call --code PR-0004"
+    demo: >
+      Terminal: `python3 -m apikit call --code PR-0004` against lab DEV, showing the RiskScore, RiskLevel, the reasons
+      as bullet lines and "stored mgl_riskscore: (empty)" (before backfill). Use the real numbers in the narration.
+      Mask the environment URL.
+    narration: >
+      Now we call it on request P R four. It's a POST to the record with the fully qualified name, Microsoft dot
+      Dynamics dot C R M dot the API name. Back come the score, the level and the reasons. The same message works
+      from the SDK, from a client script, and from a flow, which is next episode.
+
+  - id: async
+    type: code
+    heading: "The async plugin that replaces a background workflow"
+    lang: csharp
+    code: |
+      var response = service.Execute(new OrganizationRequest(AssessProjectRequestApi.MessageName)
+      {
+          ["Target"] = new EntityReference(ProjectRequest.Table, ctx.PrimaryEntityId),
+      });
+      var score = (int)response["RiskScore"];
+
+      var current = local.PostImage(PostImageName)?.GetAttributeValue<int?>(ProjectRequest.RiskScore);
+      if (current == score) return;               // same value: no update, no flow runs for nothing
+
+      // Only the one column: mgl_riskscore is not a filtering attribute of this step, so no loop.
+      service.Update(new Entity(ProjectRequest.Table, ctx.PrimaryEntityId) { [ProjectRequest.RiskScore] = score });
+    narration: >
+      To keep a risk score column fresh, we register a second plugin: post operation, asynchronous, on create and on
+      update of budget, due date, justification and account. It calls our own custom API, compares with the post
+      image, and writes only the score, only when it changed. Async steps are always post operation and run outside
+      the user's transaction.
+
+  - id: form
+    type: screen
+    heading: "Change the budget, watch the score"
+    image: screens/form-riskscore.jpg
+    bar: "Project Requests app · PR-0004 · Risk Score"
+    demo: >
+      Model-driven app with the Project Request form (Risk Score added to the form in the designer, read-only).
+      PR-0004: change Budget from 42,000 to 75,000 with Business Justification empty, save, wait a few seconds,
+      refresh: Risk Score changes (real value). Signed in as Alex Demo. Mask tenant, environment and avatar.
+    narration: >
+      On the form, Alex raises the budget and saves. The save returns at once. A few seconds later, after a refresh,
+      the risk score has moved. That delay is the price of asynchronous, and usually worth it.
+
+  - id: jobs
+    type: screen
+    heading: "System jobs and the trace log"
+    image: screens/apikit-jobs-trace.jpg
+    bar: "Terminal · python -m apikit jobs · trace"
+    demo: >
+      Terminal: `python3 -m apikit jobs` (step registered with auto-delete OFF for the recording, see demo.md, so
+      Succeeded jobs are listed) and `python3 -m apikit trace` showing the last RiskScoreRefreshPlugin and
+      AssessProjectRequestApi rows with "Risk score 42 -> 75" style lines and the depth. Optionally the System Jobs
+      view in the app. Mask the environment URL.
+    narration: >
+      Every async run is a system job. Our tool reads them by step, and the trace log shows what the code said, the
+      depth and the duration. In production, keep the auto delete option on, as Learn recommends: successful jobs
+      disappear, failures stay. Trace log rows are deleted after twenty four hours anyway.
+
+  - id: dates
+    type: code
+    heading: "Gotcha: a date that moves"
+    lang: csharp
+    code: |
+      /// Episode 1 created mgl_duedate with Format DateOnly but no behavior, so it got the default, User local:
+      /// a date the user picks is stored as THEIR midnight in UTC (Lisbon in summer: 23:00 the day before).
+      /// Learn says to avoid that combination. Until the column is switched to Date only behavior, take the
+      /// nearest UTC midnight: right for any user between UTC-12 and UTC+12.
+      public static DateTime? NearestDate(DateTime? stored) =>
+          stored.HasValue ? stored.Value.AddHours(12).Date : (DateTime?)null;
+
+      [InlineData("2027-07-14T23:00:00Z", "2027-07-15")]   // Lisbon summer user picked 15 July
+    short: dates
+    narration: >
+      A bug we found writing tests. In episode one the due date column got date only format but the default
+      behavior, user local. A date picked in Lisbon in summer is stored as eleven p m the day before, in U T C. Learn
+      says avoid that combination. Our plugin reads the nearest midnight, and the real fix is switching the column to
+      date only behavior.
+
+  - id: tests
+    type: code
+    heading: "Tested without an environment"
+    lang: text
+    code: |
+      $ dotnet test src/MGLab.D365.Plugins.Tests
+      Passed!  - Failed: 0, Passed: 28, Skipped: 0, Total: 28
+
+      $ python3 -m pytest -q tests
+      31 passed
+
+      # same .cs files, compiled against the .NET 8 Dataverse SDK;
+      # deploy run twice against an in-memory registry: second run sends no writes
+    narration: >
+      The plugin targets dot net framework four six two, but the tests compile the same source files against the dot
+      net eight Dataverse SDK, so they run on Linux. Twenty eight x unit tests for the rules and both plugins, and
+      thirty one pytest tests for the deploy tool, including a second deploy that must send no writes at all.
+
+  - id: workflows
+    type: screen
+    heading: "What classic workflows do you still have?"
+    image: screens/apikit-workflows.jpg
+    bar: "Terminal · python -m apikit workflows"
+    demo: >
+      Terminal: `python3 -m apikit workflows` against lab DEV, listing the deactivated classic background workflow
+      created in setup ("Recalculate risk (classic)") with "-> cloud flow, Dataverse trigger on update (columns
+      mgl_budget)", then `python3 -m apikit workflows --all --table account` against the Sales trial environment to
+      show the managed processes a Dynamics 365 app ships (record what it really lists). Mask both environment URLs.
+    narration: >
+      Last, the inventory. One query on the process table lists every classic workflow and action, with a suggestion
+      for where it should go. In the lab there's one we built on purpose. On a real Dynamics 365 Sales environment,
+      the list is longer.
+
+  - id: recap
+    type: bullets
+    heading: "Five rules"
+    bullets:
+      - "No new classic workflows: flows or async plugins"
+      - "Reusable server logic: a custom API, as an Action"
+      - "Decide binding and function before the first save"
+      - "Async steps: filtering attributes, write only on change"
+      - "Keep the rules pure, and test the same source files"
+    narration: >
+      Five rules. No new classic workflows. Reusable server logic is a custom API, as an action. Decide binding and
+      function before the first save. Give async steps filtering attributes and write only when something changed.
+      And keep the rules pure, so you can test them without an environment.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The plugin, the deploy tool and all fifty nine tests are on GitHub, and the complete guide to custom plugins
+      and workflows is on devladlog dot com. Next episode, integration with Power Platform: a flow that calls this
+      custom API. Subscribe so you don't miss it.

@@ -1,0 +1,443 @@
+{
+  "properties": {
+    "connectionReferences": {
+      "shared_sharepointonline": {
+        "runtimeSource": "embedded",
+        "connection": {
+          "connectionReferenceLogicalName": "cts_sharedsharepointonline_itoncall"
+        },
+        "api": {
+          "name": "shared_sharepointonline"
+        }
+      },
+      "shared_teams": {
+        "runtimeSource": "embedded",
+        "connection": {
+          "connectionReferenceLogicalName": "cts_sharedteams_itoncall"
+        },
+        "api": {
+          "name": "shared_teams"
+        }
+      }
+    },
+    "definition": {
+      "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+      "contentVersion": "1.0.0.0",
+      "parameters": {
+        "$connections": {
+          "defaultValue": {},
+          "type": "Object"
+        },
+        "$authentication": {
+          "defaultValue": {},
+          "type": "SecureObject"
+        },
+        "IT Helpdesk site URL (cts_HelpdeskSiteUrl)": {
+          "defaultValue": "https://contoso.sharepoint.com/sites/ITHelpdesk",
+          "type": "String",
+          "metadata": {
+            "schemaName": "cts_HelpdeskSiteUrl",
+            "description": "IT Helpdesk site, no trailing slash"
+          }
+        },
+        "On-call team ID (cts_OnCallTeamId)": {
+          "defaultValue": "00000000-0000-0000-0000-000000000601",
+          "type": "String",
+          "metadata": {
+            "schemaName": "cts_OnCallTeamId",
+            "description": "Team (Microsoft 365 group) ID of IT On-call"
+          }
+        },
+        "On-call channel ID (cts_OnCallChannelId)": {
+          "defaultValue": "19:00000000000000000000000000000601@thread.tacv2",
+          "type": "String",
+          "metadata": {
+            "schemaName": "cts_OnCallChannelId",
+            "description": "Standard channel for on-call cards (not a private channel)"
+          }
+        },
+        "On-call lead (cts_OnCallLeadUpn)": {
+          "defaultValue": "taylor.demo@contoso.com",
+          "type": "String",
+          "metadata": {
+            "schemaName": "cts_OnCallLeadUpn",
+            "description": "User principal name of the on-call lead"
+          }
+        }
+      },
+      "triggers": {
+        "When_an_IT_request_is_created": {
+          "type": "OpenApiConnection",
+          "recurrence": {
+            "interval": 5,
+            "frequency": "Minute"
+          },
+          "splitOn": "@triggerOutputs()?['body/value']",
+          "conditions": [
+            {
+              "expression": "@and(equals(triggerBody()?['Priority']?['Value'], 'High'), not(startsWith(coalesce(triggerBody()?['Title'], ''), '[test]')))"
+            }
+          ],
+          "inputs": {
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+              "connectionName": "shared_sharepointonline",
+              "operationId": "GetOnNewItems"
+            },
+            "parameters": {
+              "dataset": "@parameters('IT Helpdesk site URL (cts_HelpdeskSiteUrl)')",
+              "table": "IT Requests"
+            },
+            "authentication": "@parameters('$authentication')"
+          }
+        }
+      },
+      "actions": {
+        "Initialize_dispatch": {
+          "type": "InitializeVariable",
+          "runAfter": {},
+          "inputs": {
+            "variables": [
+              {
+                "name": "dispatch",
+                "type": "string",
+                "value": "not posted"
+              }
+            ]
+          }
+        },
+        "Build_card": {
+          "type": "Compose",
+          "runAfter": {
+            "Initialize_dispatch": [
+              "Succeeded"
+            ]
+          },
+          "inputs": {
+            "type": "AdaptiveCard",
+            "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+            "version": "1.4",
+            "body": [
+              {
+                "type": "TextBlock",
+                "text": "High priority IT request #@{triggerBody()?['ID']}",
+                "weight": "Bolder",
+                "size": "Medium",
+                "wrap": true
+              },
+              {
+                "type": "TextBlock",
+                "text": "@{triggerBody()?['Title']}",
+                "wrap": true
+              },
+              {
+                "type": "FactSet",
+                "facts": [
+                  {
+                    "title": "Category",
+                    "value": "@{triggerBody()?['Category']?['Value']}"
+                  },
+                  {
+                    "title": "Raised by",
+                    "value": "@{triggerBody()?['Author']?['DisplayName']}"
+                  },
+                  {
+                    "title": "Raised at",
+                    "value": "@{formatDateTime(triggerBody()?['Created'], 'yyyy-MM-dd HH:mm')} UTC"
+                  }
+                ]
+              },
+              {
+                "type": "Input.Text",
+                "id": "note",
+                "isMultiline": true,
+                "placeholder": "Need more info? Say what you need to know"
+              }
+            ],
+            "actions": [
+              {
+                "type": "Action.Submit",
+                "title": "Take it",
+                "data": {
+                  "choice": "take"
+                }
+              },
+              {
+                "type": "Action.Submit",
+                "title": "Need more info",
+                "data": {
+                  "choice": "info"
+                }
+              },
+              {
+                "type": "Action.OpenUrl",
+                "title": "Open the request",
+                "url": "@{triggerBody()?['{Link}']}"
+              }
+            ]
+          }
+        },
+        "Ask_on_call": {
+          "type": "OpenApiConnectionWebhook",
+          "runAfter": {
+            "Build_card": [
+              "Succeeded"
+            ]
+          },
+          "inputs": {
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_teams",
+              "connectionName": "shared_teams",
+              "operationId": "PostCardAndWaitForResponse"
+            },
+            "parameters": {
+              "poster": "Flow bot",
+              "location": "Channel",
+              "body/body/recipient/groupId": "@parameters('On-call team ID (cts_OnCallTeamId)')",
+              "body/body/recipient/channelId": "@parameters('On-call channel ID (cts_OnCallChannelId)')",
+              "body/body/messageBody": "@string(outputs('Build_card'))",
+              "body/body/updateMessage": "Request #@{triggerBody()?['ID']} has been picked up. Who took it is posted in this channel.",
+              "body/body/shouldUpdateCard": true
+            },
+            "authentication": "@parameters('$authentication')"
+          },
+          "limit": {
+            "timeout": "PT30M"
+          }
+        },
+        "Route_response": {
+          "type": "Switch",
+          "runAfter": {
+            "Ask_on_call": [
+              "Succeeded"
+            ]
+          },
+          "expression": "@body('Ask_on_call')?['submitActionId']",
+          "cases": {
+            "Take_it": {
+              "case": "Take it",
+              "actions": {
+                "Assign_request": {
+                  "type": "OpenApiConnection",
+                  "runAfter": {},
+                  "inputs": {
+                    "host": {
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                      "connectionName": "shared_sharepointonline",
+                      "operationId": "PatchItem"
+                    },
+                    "parameters": {
+                      "dataset": "@parameters('IT Helpdesk site URL (cts_HelpdeskSiteUrl)')",
+                      "table": "IT Requests",
+                      "id": "@triggerBody()?['ID']",
+                      "item/Title": "@triggerBody()?['Title']",
+                      "item/AssignedTo/Claims": "i:0#.f|membership|@{body('Ask_on_call')?['responder']?['userPrincipalName']}"
+                    },
+                    "authentication": "@parameters('$authentication')"
+                  }
+                },
+                "Mention_responder": {
+                  "type": "OpenApiConnection",
+                  "runAfter": {
+                    "Assign_request": [
+                      "Succeeded"
+                    ]
+                  },
+                  "inputs": {
+                    "host": {
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_teams",
+                      "connectionName": "shared_teams",
+                      "operationId": "AtMentionUser"
+                    },
+                    "parameters": {
+                      "userId": "@body('Ask_on_call')?['responder']?['userPrincipalName']"
+                    },
+                    "authentication": "@parameters('$authentication')"
+                  }
+                },
+                "Announce_owner": {
+                  "type": "OpenApiConnection",
+                  "runAfter": {
+                    "Mention_responder": [
+                      "Succeeded"
+                    ]
+                  },
+                  "inputs": {
+                    "host": {
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_teams",
+                      "connectionName": "shared_teams",
+                      "operationId": "PostMessageToConversation"
+                    },
+                    "parameters": {
+                      "poster": "User",
+                      "location": "Channel",
+                      "body/recipient/groupId": "@parameters('On-call team ID (cts_OnCallTeamId)')",
+                      "body/recipient/channelId": "@parameters('On-call channel ID (cts_OnCallChannelId)')",
+                      "body/messageBody": "<p>@{body('Mention_responder')?['atMention']} took high priority request #@{triggerBody()?['ID']}: @{triggerBody()?['Title']}</p>"
+                    },
+                    "authentication": "@parameters('$authentication')"
+                  }
+                },
+                "Record_taken": {
+                  "type": "SetVariable",
+                  "runAfter": {
+                    "Announce_owner": [
+                      "Succeeded"
+                    ]
+                  },
+                  "inputs": {
+                    "name": "dispatch",
+                    "value": "taken by @{body('Ask_on_call')?['responder']?['displayName']}"
+                  }
+                }
+              }
+            },
+            "Need_more_info": {
+              "case": "Need more info",
+              "actions": {
+                "Ask_requester": {
+                  "type": "OpenApiConnection",
+                  "runAfter": {},
+                  "inputs": {
+                    "host": {
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_teams",
+                      "connectionName": "shared_teams",
+                      "operationId": "PostMessageToConversation"
+                    },
+                    "parameters": {
+                      "poster": "Flow bot",
+                      "location": "Chat with Flow bot",
+                      "body/recipient": "@triggerBody()?['Author']?['Email']",
+                      "body/messageBody": "<p>On-call needs more information about your IT request #@{triggerBody()?['ID']} <b>@{triggerBody()?['Title']}</b>:</p><p>@{if(empty(body('Ask_on_call')?['data']?['note']), '(no note)', body('Ask_on_call')?['data']?['note'])}</p><p>Please add it to the request or reply to @{body('Ask_on_call')?['responder']?['displayName']}.</p>"
+                    },
+                    "authentication": "@parameters('$authentication')"
+                  }
+                },
+                "Record_info_requested": {
+                  "type": "SetVariable",
+                  "runAfter": {
+                    "Ask_requester": [
+                      "Succeeded"
+                    ]
+                  },
+                  "inputs": {
+                    "name": "dispatch",
+                    "value": "more info requested by @{body('Ask_on_call')?['responder']?['displayName']}"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "actions": {
+              "Unexpected_response": {
+                "type": "Terminate",
+                "runAfter": {},
+                "inputs": {
+                  "runStatus": "Failed",
+                  "runError": {
+                    "code": "UnexpectedResponse",
+                    "message": "The card returned '@{body('Ask_on_call')?['submitActionId']}', which this flow doesn't handle"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "Escalate_to_lead": {
+          "type": "Scope",
+          "runAfter": {
+            "Ask_on_call": [
+              "TimedOut"
+            ]
+          },
+          "actions": {
+            "Mention_lead": {
+              "type": "OpenApiConnection",
+              "runAfter": {},
+              "inputs": {
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_teams",
+                  "connectionName": "shared_teams",
+                  "operationId": "AtMentionUser"
+                },
+                "parameters": {
+                  "userId": "@parameters('On-call lead (cts_OnCallLeadUpn)')"
+                },
+                "authentication": "@parameters('$authentication')"
+              }
+            },
+            "Escalate_in_channel": {
+              "type": "OpenApiConnection",
+              "runAfter": {
+                "Mention_lead": [
+                  "Succeeded"
+                ]
+              },
+              "inputs": {
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_teams",
+                  "connectionName": "shared_teams",
+                  "operationId": "PostMessageToConversation"
+                },
+                "parameters": {
+                  "poster": "User",
+                  "location": "Channel",
+                  "body/recipient/groupId": "@parameters('On-call team ID (cts_OnCallTeamId)')",
+                  "body/recipient/channelId": "@parameters('On-call channel ID (cts_OnCallChannelId)')",
+                  "body/messageBody": "<p>@{body('Mention_lead')?['atMention']} nobody has taken high priority request #@{triggerBody()?['ID']} in 30 minutes: @{triggerBody()?['Title']}</p>"
+                },
+                "authentication": "@parameters('$authentication')"
+              }
+            },
+            "Record_escalation": {
+              "type": "SetVariable",
+              "runAfter": {
+                "Escalate_in_channel": [
+                  "Succeeded"
+                ]
+              },
+              "inputs": {
+                "name": "dispatch",
+                "value": "escalated to the on-call lead"
+              }
+            }
+          }
+        },
+        "Dispatch_done": {
+          "type": "If",
+          "runAfter": {
+            "Route_response": [
+              "Succeeded",
+              "Skipped"
+            ],
+            "Escalate_to_lead": [
+              "Succeeded",
+              "Skipped"
+            ]
+          },
+          "expression": "@equals(variables('dispatch'), 'not posted')",
+          "actions": {
+            "Card_not_posted": {
+              "type": "Terminate",
+              "runAfter": {},
+              "inputs": {
+                "runStatus": "Failed",
+                "runError": {
+                  "code": "CardNotPosted",
+                  "message": "The on-call card for request #@{triggerBody()?['ID']} wasn't posted; see Ask on-call"
+                }
+              }
+            }
+          },
+          "else": {
+            "actions": {}
+          }
+        }
+      },
+      "outputs": {}
+    },
+    "templateName": ""
+  },
+  "schemaVersion": "1.0.0.0"
+}

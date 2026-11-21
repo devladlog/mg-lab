@@ -1,0 +1,20 @@
+{
+  "solution": "MGLabDataverse",
+  "flow_name": "Notify high-risk project requests",
+  "table": "mgl_projectrequest",
+  "entity_set": "mgl_projectrequests",
+  "lookup_columns": ["mgl_customeraccountid", "ownerid", "owninguser", "owningteam", "owningbusinessunit", "transactioncurrencyid"],
+  "watched_column": "mgl_riskscore",
+  "high_from": 70,
+  "custom_api": "mgl_AssessProjectRequest",
+  "connectors": {
+    "shared_commondataserviceforapps": "Microsoft Dataverse",
+    "shared_teams": "Microsoft Teams"
+  },
+  "environment_variables": [
+    {"schemaname": "mgl_AlertTeamId", "displayname": "Alert Team Id", "type": "String",
+     "description": "Microsoft Teams team (group) id that receives high-risk alerts. Different in every environment."},
+    {"schemaname": "mgl_AlertChannelId", "displayname": "Alert Channel Id", "type": "String",
+     "description": "Channel id inside that team. Different in every environment."}
+  ]
+}

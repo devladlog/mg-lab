@@ -1,0 +1,10 @@
+role Dynamic
+	modelPermission: read
+
+	tablePermission Region =
+			'Region'[RegionKey]
+			    IN CALCULATETABLE(VALUES(Users[RegionKey]), Users[Email] = USERPRINCIPALNAME())
+
+	tablePermission Channel = 'Channel'[Channel] = "Web"
+
+	tablePermission Customer = 'Customer'[Segment] = "Retail"

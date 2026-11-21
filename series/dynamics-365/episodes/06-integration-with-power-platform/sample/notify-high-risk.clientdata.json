@@ -1,0 +1,115 @@
+{
+  "properties": {
+    "connectionReferences": {
+      "shared_commondataserviceforapps": {
+        "runtimeSource": "embedded",
+        "connection": {
+          "connectionReferenceLogicalName": "mgl_sharedcommondataserviceforapps_00000"
+        },
+        "api": {
+          "name": "shared_commondataserviceforapps"
+        }
+      },
+      "shared_teams": {
+        "runtimeSource": "embedded",
+        "connection": {
+          "connectionReferenceLogicalName": "mgl_sharedteams_00000"
+        },
+        "api": {
+          "name": "shared_teams"
+        }
+      }
+    },
+    "definition": {
+      "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+      "contentVersion": "1.0.0.0",
+      "parameters": {
+        "$connections": {
+          "defaultValue": {},
+          "type": "Object"
+        },
+        "$authentication": {
+          "defaultValue": {},
+          "type": "SecureObject"
+        },
+        "Alert Team Id (mgl_AlertTeamId)": {
+          "defaultValue": "",
+          "type": "String",
+          "metadata": {
+            "schemaName": "mgl_AlertTeamId"
+          }
+        },
+        "Alert Channel Id (mgl_AlertChannelId)": {
+          "defaultValue": "",
+          "type": "String",
+          "metadata": {
+            "schemaName": "mgl_AlertChannelId"
+          }
+        }
+      },
+      "triggers": {
+        "When_a_row_is_added,_modified_or_deleted": {
+          "type": "OpenApiConnectionWebhook",
+          "inputs": {
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+              "connectionName": "shared_commondataserviceforapps",
+              "operationId": "SubscribeWebhookTrigger"
+            },
+            "parameters": {
+              "subscriptionRequest/message": 4,
+              "subscriptionRequest/entityname": "mgl_projectrequest",
+              "subscriptionRequest/scope": 4,
+              "subscriptionRequest/filteringattributes": "mgl_riskscore",
+              "subscriptionRequest/filterexpression": "mgl_riskscore ge 70"
+            },
+            "authentication": "@parameters('$authentication')"
+          }
+        }
+      },
+      "actions": {
+        "Assess_the_request": {
+          "runAfter": {},
+          "type": "OpenApiConnection",
+          "inputs": {
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+              "connectionName": "shared_commondataserviceforapps",
+              "operationId": "PerformBoundAction"
+            },
+            "parameters": {
+              "entityName": "mgl_projectrequests",
+              "actionName": "Microsoft.Dynamics.CRM.mgl_AssessProjectRequest",
+              "recordId": "@triggerOutputs()?['body/mgl_projectrequestid']"
+            },
+            "authentication": "@parameters('$authentication')"
+          }
+        },
+        "Post_to_the_risk_channel": {
+          "runAfter": {
+            "Assess_the_request": [
+              "Succeeded"
+            ]
+          },
+          "type": "OpenApiConnection",
+          "inputs": {
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_teams",
+              "connectionName": "shared_teams",
+              "operationId": "PostMessageToConversation"
+            },
+            "parameters": {
+              "poster": "Flow bot",
+              "location": "Channel",
+              "body/recipient/groupId": "@parameters('Alert Team Id (mgl_AlertTeamId)')",
+              "body/recipient/channelId": "@parameters('Alert Channel Id (mgl_AlertChannelId)')",
+              "body/messageBody": "<p><b>@{triggerOutputs()?['body/mgl_requestcode']} @{triggerOutputs()?['body/mgl_name']}</b> is @{outputs('Assess_the_request')?['body/RiskLevel']} risk (@{outputs('Assess_the_request')?['body/RiskScore']}).</p><p>@{outputs('Assess_the_request')?['body/Reasons']}</p>"
+            },
+            "authentication": "@parameters('$authentication')"
+          }
+        }
+      }
+    }
+  },
+  "schemaVersion": "1.0.0.0"
+}

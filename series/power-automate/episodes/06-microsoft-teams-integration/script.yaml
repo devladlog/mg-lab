@@ -1,0 +1,282 @@
+# DEVLADLOG Power Automate — episode 06 (draft: material built and tested locally, demo still to record)
+episode: 6
+slug: microsoft-teams-integration
+series_label: "POWER AUTOMATE"
+series_name: "DEVLADLOG Power Automate"
+file_prefix: "power-automate"
+title: "A Teams card that gets an answer"
+subtitle: "Adaptive cards that wait, time out, and don't break on a quote"
+voice: am_michael
+thumbnail_text: "TAKE IT\n30 MIN TIMEOUT\n25 PER 5 MIN"
+youtube:
+  title: "Power Automate + Teams: Adaptive Cards That Wait and Time Out Safely | DEVLADLOG Power Automate #6"
+  tags: [Power Automate, Microsoft Teams, adaptive cards, wait for a response, Flow bot, mention, throttling, SharePoint, Power Platform, cloud flows]
+sources:
+  - https://www.devladlog.com/articles/power-automate/2026-06-03-teams-integration-complete-guide-2026/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "One double quote broke the on-call card"
+    sub: "Teams cards that wait for an answer, built to survive real data"
+    short: hook
+    narration: >
+      Your on-call card works in every test. Then someone raises a request called monitor twenty-seven inch,
+      written with a double quote, and the card never reaches the channel. Nobody takes the request, because nobody
+      sees it. In this episode we post a Teams card that waits for an answer, times out properly, and survives
+      whatever people type into a title.
+
+  - id: scenario
+    type: bullets
+    heading: "From email to a card that waits"
+    bullets:
+      - "Episode 1: High priority requests email on-call"
+      - "Now: a card in the On-call channel"
+      - "Take it: assign the request, say who took it"
+      - "Need more info: message the requester"
+      - "Nobody in 30 minutes: mention the on-call lead"
+    narration: >
+      In episode one, a high priority IT request sent an email to on-call. Emails get missed. Now the request becomes
+      a card in the on-call channel. Take it assigns the request and tells the channel who took it. Need more info
+      messages the requester. And if nobody answers in thirty minutes, the on-call lead gets mentioned.
+
+  - id: card
+    type: screen
+    heading: "The card on the channel"
+    image: screens/card.jpg
+    bar: "Microsoft Teams · IT On-call · On-call"
+    demo: >
+      Teams, team "IT On-call", standard channel "On-call": the Workflows (Flow bot) card for request #NN "Laptop
+      won't boot before a client demo": title "High priority IT request #NN", the facts Category Hardware, Raised by
+      Alex Demo, Raised at, the note box, and the buttons Take it, Need more info, Open the request. Signed in as
+      Sam Demo. Mask the tenant name.
+    narration: >
+      Here's the card in Teams, posted by the workflows bot: the request, who raised it, when, a note box, and three
+      buttons. Two of them answer the card. The third just opens the request.
+
+  - id: build
+    type: code
+    heading: "Build the card as an object"
+    lang: json
+    code: |
+      "Build_card": { "type": "Compose", "inputs": {
+        "type": "AdaptiveCard", "version": "1.4",
+        "body": [
+          { "type": "TextBlock", "text": "High priority IT request #@{triggerBody()?['ID']}" },
+          { "type": "TextBlock", "text": "@{triggerBody()?['Title']}", "wrap": true },
+          { "type": "FactSet", "facts": [ ... ] },
+          { "type": "Input.Text", "id": "note", "isMultiline": true } ],
+        "actions": [
+          { "type": "Action.Submit", "title": "Take it" },
+          { "type": "Action.Submit", "title": "Need more info" },
+          { "type": "Action.OpenUrl", "title": "Open the request", "url": "@{triggerBody()?['{Link}']}" } ] } }
+
+      "body/body/messageBody": "@string(outputs('Build_card'))"
+    narration: >
+      The card is a JSON object inside a compose action, with the request's values as expressions. The post action
+      gets string of that output. Building it as an object, not as text, is the whole fix from the opening, and we'll
+      see why in a minute. And no templating with dollar signs: Power Automate doesn't support it.
+
+  - id: wait
+    type: code
+    heading: "Post, wait, and set a timeout"
+    lang: json
+    code: |
+      "Ask_on_call": {
+        "type": "OpenApiConnectionWebhook",
+        "operationId": "PostCardAndWaitForResponse",
+        "poster": "Flow bot", "location": "Channel",
+        "body/body/recipient/groupId":   "@parameters('On-call team ID (cts_OnCallTeamId)')",
+        "body/body/recipient/channelId": "@parameters('On-call channel ID (cts_OnCallChannelId)')",
+        "body/body/updateMessage": "Request #42 has been picked up. Who took it is posted in this channel.",
+        "body/body/shouldUpdateCard": true,
+        "limit": { "timeout": "PT30M" } }
+
+      "Route_response": { "type": "Switch", "expression": "@body('Ask_on_call')?['submitActionId']",
+        "cases": { "Take_it": "Take it", "Need_more_info": "Need more info" },
+        "default": "Terminate: Failed, UnexpectedResponse" }
+    narration: >
+      Post adaptive card and wait for a response, as the flow bot, to the channel from environment variables. The
+      card can be answered once, so the update message replaces it for everyone else. The timeout is thirty minutes;
+      without one, the run waits up to thirty days. Submit action ID is the title of the button pressed, so the
+      switch routes on it, and anything unexpected fails the run.
+
+  - id: take
+    type: code
+    heading: "Take it: assign, then mention"
+    lang: json
+    code: |
+      "Assign_request":    { "operationId": "PatchItem",
+        "item/AssignedTo/Claims": "i:0#.f|membership|@{body('Ask_on_call')?['responder']?['userPrincipalName']}" },
+      "Mention_responder": { "operationId": "AtMentionUser",
+        "userId": "@body('Ask_on_call')?['responder']?['userPrincipalName']" },
+      "Announce_owner":    { "operationId": "PostMessageToConversation",
+        "poster": "User", "location": "Channel",
+        "body/messageBody": "<p>@{body('Mention_responder')?['atMention']} took high priority request #42 ...</p>" }
+
+      "Ask_requester":     { "operationId": "PostMessageToConversation",
+        "poster": "Flow bot", "location": "Chat with Flow bot",
+        "body/recipient": "@triggerBody()?['Author']?['Email']" }
+    narration: >
+      Take it writes the responder into the request's assigned to column, gets an at mention token for them, and
+      posts in the channel. Notice that this message is posted as user, not as the bot. That matters later. Need more
+      info sends the requester a one to one chat from the flow bot, with the note from the card.
+
+  - id: taken
+    type: screen
+    heading: "Sam takes it"
+    image: screens/taken.jpg
+    bar: "Microsoft Teams · IT On-call · On-call"
+    demo: >
+      Same channel after Sam Demo pressed Take it: the card replaced by "Request #NN has been picked up. Who took it is
+      posted in this channel.", and below it the message "@Sam Demo took high priority request #NN: Laptop won't boot
+      before a client demo" with Sam highlighted as a mention. Insert: the IT Requests item with Assigned to = Sam
+      Demo.
+    narration: >
+      Sam presses take it. The card is replaced for everyone, the channel says Sam took it, with a real mention, and
+      the request in SharePoint is assigned to Sam.
+
+  - id: timeout
+    type: screen
+    heading: "Nobody answers"
+    image: screens/timeout.jpg
+    bar: "Power Automate · IT on-call dispatch · Run history"
+    demo: >
+      Run details of a request nobody answered (lab copy with timeout PT5M): Ask on-call shows "timed out", Route
+      response skipped, Escalate to lead green (Mention lead, Escalate in channel, Record escalation), Dispatch done
+      green, run Succeeded. Insert: the channel message "@Taylor Demo nobody has taken high priority request #NN in 30
+      minutes".
+    narration: >
+      Here nobody answered. In the lab copy the timeout is five minutes. Ask on call timed out, the switch was
+      skipped, the escalation path ran, and Taylor Demo, the on-call lead, was mentioned in the channel. The run is
+      green, because the timeout was handled.
+
+  - id: join
+    type: code
+    heading: "The join that fails loudly"
+    lang: json
+    code: |
+      "Escalate_to_lead": { "type": "Scope", "runAfter": { "Ask_on_call": ["TimedOut"] } },
+
+      "Dispatch_done": { "type": "If",
+        "runAfter": { "Route_response":   ["Succeeded", "Skipped"],
+                      "Escalate_to_lead": ["Succeeded", "Skipped"] },
+        "expression": "@equals(variables('dispatch'), 'not posted')",
+        "actions": { "Card_not_posted": { "type": "Terminate",
+                       "inputs": { "runStatus": "Failed", "runError": { "code": "CardNotPosted" } } } } }
+
+      without the join:          handled timeout -> run Failed
+      join without the check:    card never posted -> run Succeeded
+    narration: >
+      Episode two taught us to join the branches, or a handled timeout still fails the run. But a join that runs after
+      skipped also runs when the card post failed, and the run turns green with nothing posted. So each path records
+      an outcome in a variable, and the join fails the run when none did.
+
+  - id: quote
+    type: code
+    heading: "Why the card is an object"
+    lang: text
+    code: |
+      $ python -m teamsfake quote --first-version     (card pasted as JSON text)
+      #45 Monitor 27" flickers    run Failed  not posted  CardNotPosted
+          Ask_on_call: 400: Invalid adaptive card: card isn't valid JSON
+
+      $ python -m teamsfake quote                     (card built as an object)
+      #45 Monitor 27" flickers    run Succeeded  taken by Sam Demo
+          card title on screen: Monitor 27" flickers on the left side
+
+      title  Can't save to C:\temp\new  in the pasted card:  valid JSON, shows a tab and a line break
+    short: quote
+    narration: >
+      Here's the opening bug. Our first draft pasted the card as JSON text with the title inside it. A double quote in
+      the title ends the string early, the JSON is invalid, and the card is never posted. A backslash is worse: the
+      JSON stays valid and the card quietly shows a tab and a line break. Built as an object, string escapes it for you.
+
+  - id: budget
+    type: code
+    heading: "The Flow bot gets 25 posts per five minutes"
+    lang: text
+    code: |
+      Teams connector throttling, per connection:
+        Flow bot operations (post an adaptive card as Flow bot, ...)   25 per 300 seconds
+        all other non-GET operations                                  300 per 300 seconds
+
+      $ python -m teamsfake burst 20 --first-version    (card and announcement as Flow bot)
+      20 requests in 5 minutes: 12 runs succeeded, 8 failed
+      Flow bot calls: 33, throttled (429): 8
+
+      $ python -m teamsfake burst 20                    (announcement as User)
+      20 requests in 5 minutes: 20 runs succeeded, 0 failed
+    short: budget
+    narration: >
+      Now the trap nobody sees in testing. The Teams connector gives flow bot operations twenty-five calls per
+      connection every five minutes. Everything else gets three hundred. Our second draft posted the announcement as
+      the bot too, so twenty high priority requests in an outage used thirty-three bot calls and eight runs were
+      throttled. Posting follow-ups as user keeps the bot budget for the cards.
+
+  - id: honest
+    type: bullets
+    heading: "Limits worth knowing"
+    bullets:
+      - "No posting to private channels"
+      - "About 28 KB per message, 20 mentions max"
+      - "Workflows app must be allowed in Teams admin"
+      - "30 cards in five minutes still hit the bot budget"
+      - "Our fake stops at 429; the real engine retries"
+    narration: >
+      A few more limits from the connector docs. You can't post to private channels. A message is limited to about
+      twenty-eight kilobytes and twenty mentions. The workflows app must be allowed in the Teams admin center. And to
+      be honest, thirty cards in five minutes still exceed the bot budget. In the tenant, retries slow those runs down.
+
+  - id: tests
+    type: code
+    heading: "Twenty-seven tests, no Teams"
+    lang: text
+    code: |
+      $ python -m pytest
+      27 passed in 2.7s
+
+      test_take_it_assigns_the_request_and_announces_the_owner
+      test_nobody_answers_in_30_minutes_the_lead_is_mentioned
+      test_a_backslash_is_worse_it_silently_changes_the_text
+      test_flow_bot_budget_is_25_posts_per_five_minutes
+      test_the_join_without_its_check_hides_a_failed_post
+      test_renaming_a_button_breaks_the_switch
+    narration: >
+      Twenty-seven tests run the real flow against an in-memory Teams with channels, flow bot chats, scripted answers
+      and the connector's throttling budgets. One of them renames the take it button and proves the switch notices.
+
+  - id: chat
+    type: screen
+    heading: "Need more info, in a chat"
+    image: screens/chat.jpg
+    bar: "Microsoft Teams · Workflows chat · Alex Demo"
+    demo: >
+      Signed in as Alex Demo: the Workflows (Flow bot) 1:1 chat with "On-call needs more information about your IT
+      request #NN VPN drops every 10 minutes:", the note typed by Riley Demo ("Office or home network?"), and "Please
+      add it to the request or reply to Riley Demo."
+    narration: >
+      And the other path: Riley needed more information, so Alex gets a chat from the workflows bot with Riley's
+      question, and knows who to reply to.
+
+  - id: recap
+    type: bullets
+    heading: "Five rules for Teams cards"
+    bullets:
+      - "Build cards as objects, send string() of them"
+      - "Always set a timeout and handle it"
+      - "Join the paths, and fail when nothing happened"
+      - "Route on the button title, fail on surprises"
+      - "Save the Flow bot for cards, post follow-ups as User"
+    narration: >
+      Five rules. Build cards as objects and send string of them. Always set a timeout and handle it. Join the paths,
+      and fail the run when nothing happened. Route on the button title and fail on surprises. And save the flow bot
+      for cards.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The solution, the in-memory Teams and all twenty-seven tests are on GitHub, and the complete guide is on dev
+      lad log dot com. Next in the series: Excel and data operations. Subscribe so you don't miss it.

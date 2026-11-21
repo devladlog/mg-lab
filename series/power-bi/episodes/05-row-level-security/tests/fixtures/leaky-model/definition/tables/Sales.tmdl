@@ -1,0 +1,36 @@
+table Sales
+
+	measure Amount = SUM(Sales[Amount])
+
+	/// RLS is defined on Region: USERELATIONSHIP over a Region relationship errors.
+	measure 'Amount by Ship Region' = CALCULATE([Amount], USERELATIONSHIP(Sales[ShipRegionKey], Region[RegionKey]))
+
+	column RegionKey
+		dataType: int64
+		summarizeBy: none
+		sourceColumn: RegionKey
+
+	column ShipRegionKey
+		dataType: int64
+		summarizeBy: none
+		sourceColumn: ShipRegionKey
+
+	column CustomerKey
+		dataType: int64
+		summarizeBy: none
+		sourceColumn: CustomerKey
+
+	column ProductKey
+		dataType: int64
+		summarizeBy: none
+		sourceColumn: ProductKey
+
+	column ChannelKey
+		dataType: int64
+		summarizeBy: none
+		sourceColumn: ChannelKey
+
+	column Amount
+		dataType: decimal
+		summarizeBy: none
+		sourceColumn: Amount

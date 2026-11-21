@@ -1,0 +1,246 @@
+episode: 5
+slug: row-level-security
+series_label: "POWER BI"
+series_name: "DEVLADLOG Power BI"
+file_prefix: "power-bi"
+title: "Row-Level Security"
+subtitle: "One dynamic role for every store manager, linted, and tested user by user in the service"
+voice: am_michael
+thumbnail_text: "RLS\nTHAT YOU\nCAN TEST"
+youtube:
+  title: "Power BI Row-Level Security: Dynamic RLS, a Linter and an Automated Test | DEVLADLOG Power BI #5"
+  tags: [Power BI, row-level security, RLS, dynamic RLS, USERPRINCIPALNAME, TMDL, semantic model, executeQueries, PowerShell, Test as role]
+sources:
+  - https://www.devladlog.com/articles/power-bi/2025-04-05-row-level-security-complete-guide-2025/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Your RLS works. Then someone becomes a Contributor."
+    sub: "Dynamic row-level security, and a test that catches it"
+    short: hook
+    narration: >
+      You set up row level security, you test it as a role, it works. Then someone adds a store manager to the
+      workspace as a contributor, and from that moment they see every store. Row level security only applies to
+      viewers. In this episode we build one dynamic role for every store manager, lint it, and test it user by user
+      against the real service, so a change like that turns a test red.
+
+  - id: plan
+    type: bullets
+    heading: "What we're building"
+    bullets:
+      - "A hidden mapping table: user to store"
+      - "One dynamic role with USERPRINCIPALNAME()"
+      - "rls-lint: twelve rules, built on the Tabular Object Model"
+      - "Expected results per user, computed before Desktop opens"
+      - "A PowerShell test that impersonates each user in the service"
+    narration: >
+      Same Contoso Bikes model as the last four episodes. A hidden table maps each user to the stores they manage.
+      One dynamic role reads it. A linter checks the roles in the T M D L files. A Python reference computes what
+      every user should see. And a PowerShell script asks the service the same question, as each user.
+
+  - id: mapping
+    type: code
+    heading: "The mapping table: alias plus a domain parameter"
+    lang: text
+    code: |
+      store_access.csv                 Store Access (Power Query)
+      UserAlias,StoreKey               Typed = Table.TransformColumnTypes(Promoted,
+      alex.demo,1     Lisboa               {{"UserAlias", type text}, {"StoreKey", Int64.Type}}, "en-US"),
+      sam.demo,2      Madrid           WithUpn = Table.AddColumn(Typed, "UserPrincipalName",
+      riley.demo,1    Lisboa               each Text.Lower(Text.Trim([UserAlias]) & "@" & UpnDomain),
+      riley.demo,3    Online               type text)
+      riley.demo,5    Porto
+      taylor.demo,4   Paris            expression UpnDomain = "contoso.com"
+                                           meta [IsParameterQuery=true, Type="Text", ...]
+    narration: >
+      The mapping is a small C S V: one row per user and store. Riley runs Portugal, so Riley has three rows. The
+      file only holds aliases. Power Query appends the domain from a parameter, so the repo never contains a real
+      tenant name, and you set the parameter to your own domain before you publish. The table is hidden and has no
+      relationships.
+
+  - id: role
+    type: code
+    heading: "One role for every store manager"
+    lang: dax
+    code: |
+      role 'Store Managers'
+          modelPermission: read
+
+          tablePermission Store =
+                  'Store'[StoreKey]
+                      IN CALCULATETABLE(
+                          VALUES('Store Access'[StoreKey]),
+                          'Store Access'[User Principal Name] = USERPRINCIPALNAME()
+                      )
+
+          tablePermission 'Store Access' = 'Store Access'[User Principal Name] = USERPRINCIPALNAME()
+
+      role 'Head Office'
+          modelPermission: read
+    narration: >
+      This is the role, as T M D L. The filter sits on the store dimension, not on the fact table, as Microsoft's
+      guidance recommends, and it keeps the stores mapped to the signed in user. Someone who isn't in the table gets
+      an empty list, so no data, never everything. The mapping table filters itself too, so nobody can read the
+      other rows. Head office has no filters, and remember: roles are additive.
+
+  - id: desktopscreen
+    type: screen
+    heading: "View as Alex, in Desktop"
+    image: screens/rls-desktop-view-as.jpg
+    bar: "Power BI Desktop · Modeling > View as · Store security"
+    demo: "Report view, page 'Store security'. Modeling > View as dialog closed, yellow banner 'Now viewing report as: alex.demo@... (Store Managers)'. Cards: Signed in as alex.demo@<domain> (domain blurred), Visible stores 1, Visible customers 247, Sales amount 389,707.34. Table: one row Contoso Lisboa, Portugal, Store, 389,707.34, 483. Customer slicer list shows only customers of Lisboa. First a short cut of Modeling > Manage roles with the Store Managers role open in the DAX editor."
+    narration: >
+      In Desktop, modeling, view as, other user, Alex, and the store managers role. One store, Lisboa, three hundred
+      eighty nine thousand in sales. The signed in as card shows which identity the filter really sees. Try a user
+      who isn't mapped and every card goes blank.
+
+  - id: leak
+    type: code
+    heading: "What a store filter does not hide"
+    lang: text
+    code: |
+      # Sales to Customer, single direction:
+      $ rls-lint .../definition --sensitive Customer
+        role Store Managers   dynamic  filters: Store, Store Access  ->  reaches: Sales
+        WARNING RLS010  role 'Store Managers' doesn't reach Customer: its rows stay visible ...
+
+      # the fix, on one relationship only:
+      relationship 'Sales to Customer'
+          crossFilteringBehavior: bothDirections
+          securityFilteringBehavior: bothDirections
+
+        role Store Managers   dynamic  filters: Store, Store Access  ->  reaches: Customer, Sales
+      Alex: visible customers 301 -> 247
+    short: leak
+    narration: >
+      Filters flow from the one side to the many side. The store filter reaches sales, but not customers, so every
+      store manager could still scroll through all three hundred and one customer names. The documented fix is
+      apply security filter in both directions, on that one relationship. Microsoft warns it can cost performance,
+      so we use it once, on purpose. Alex now sees two hundred forty seven customers: the ones who bought in Lisboa.
+
+  - id: lint
+    type: code
+    heading: "rls-lint on the episode model"
+    lang: text
+    code: |
+      $ rls-lint src/ContosoSales.SemanticModel/definition --sensitive Customer
+      RLS lint: src/ContosoSales.SemanticModel/definition
+        role Store Managers   dynamic  filters: Store, Store Access  ->  reaches: Customer, Sales
+        role Head Office      static   filters: (none: every row)  ->  reaches: -
+
+        PASS    RLS001  roles only grant read (modelPermission: read)
+        PASS    RLS004  dynamic filters use USERPRINCIPALNAME(), not USERNAME()
+        PASS    RLS005  no filter falls back to TRUE() (unexpected identities would see every row)
+        PASS    RLS008  security mapping tables are filtered in the roles that read them
+        ...
+        WARNING RLS009  Sales[Sales by Ship Date] uses USERELATIONSHIP in a model with RLS: test it ...
+        INFO    RLS006  role 'Head Office' has no filters: its members see every row
+      0 error(s), 1 warning(s)
+    narration: >
+      R L S lint reads the T M D L folder with the Tabular Object Model. Twelve rules, each from a Microsoft Learn
+      page. Use user principal name, because user name returns domain backslash user in Desktop. Never fall back to
+      true. And one warning we keep on purpose: Microsoft documents that USERELATIONSHIP can fail next to row level
+      security, so that measure gets tested under the role.
+
+  - id: matrix
+    type: code
+    heading: "Expected results, before anything is published"
+    lang: text
+    code: |
+      $ python src/reference/rls_reference.py
+      UserAlias,Roles,Visible Stores,Visible Customers,...,Sales Amount,Orders,Stores,Service
+      alex.demo,Store Managers,1,247,301,389707.34,483,Contoso Lisboa,yes
+      sam.demo,Store Managers,1,243,301,366058.87,484,Contoso Madrid,yes
+      riley.demo,Store Managers,3,300,301,1111159.04,1446,Contoso Lisboa; Contoso Online; Contoso Porto,yes
+      taylor.demo,Store Managers,1,242,301,385184.07,510,Contoso Paris,yes
+      jordan.demo,Head Office,5,301,301,1862401.98,2440,...,yes
+      nobody.demo,Store Managers,0,0,301,0.00,0,,no
+
+      $ python -m pytest tests -q        42 passed
+    narration: >
+      DAX only runs inside the engine, so a small Python reference applies the same rules to the same generated
+      data. That gives us the expected matrix: stores, customers, sales and orders for every lab user, plus a user
+      who isn't mapped. Head office matches episode one: one point eight six million.
+
+  - id: securityscreen
+    type: screen
+    heading: "Members are added in the service"
+    image: screens/rls-service-security.jpg
+    bar: "Power BI service · Semantic model · Security"
+    demo: "Workspace 'Contoso Sales (Lab)' on the trial capacity. Semantic model ContosoSales > More options > Security. Row-Level Security page: role 'Store Managers (4)' selected, members Alex Demo, Sam Demo, Riley Demo, Taylor Demo; role 'Head Office (1)' with Jordan Demo. Then More options next to Store Managers > Test as role, Now viewing as Riley Demo: Store security page with the Signed in as card visible (domain blurred). Expected Visible stores 3 and the three Portuguese stores if the test uses Riley's identity; record whatever it really shows and report it."
+    narration: >
+      Publish, then open the semantic model's security page. You can't assign members in Desktop: four store
+      managers in one role, Jordan in head office. In real life, use a security group. Test as role lets you pick
+      a person, here Riley. Watch the signed in as card: it tells you whose identity the dynamic filter really
+      sees. That's one more reason for a scripted test.
+
+  - id: testcode
+    type: code
+    heading: "Ask the service, as each user"
+    lang: powershell
+    code: |
+      function New-RlsQueryBody([string] $UserPrincipalName) {
+          @{
+              queries              = @(@{ query = $script:RlsQuery })   # EVALUATE ROW("Stores", [Visible Stores], ...)
+              serializerSettings   = @{ includeNulls = $true }
+              impersonatedUserName = $UserPrincipalName
+          } | ConvertTo-Json -Depth 5 -Compress
+      }
+
+      $json = Invoke-PowerBIRestMethod -Method Post `
+          -Url "groups/$WorkspaceId/datasets/$DatasetId/executeQueries" `
+          -Body (New-RlsQueryBody -UserPrincipalName $upn)
+
+      $ Invoke-Pester ./tests/RlsMatrix.Tests.ps1      Tests Passed: 11, Failed: 0
+    narration: >
+      The execute queries REST A P I takes an impersonated user name. So the test sends one DAX query per user and
+      compares the answer with the matrix. Learn lists the requirements: a tenant setting, read and build on the
+      model, and a user, because service principals aren't supported with R L S. Eleven Pester tests cover it with
+      the cmdlet mocked.
+
+  - id: runscreen
+    type: screen
+    heading: "Five users, five passes"
+    image: screens/rls-matrix-pass.jpg
+    bar: "PowerShell 7 · Test-RlsMatrix.ps1 · lab tenant"
+    demo: "Windows Terminal, PowerShell 7, after Connect-PowerBIServiceAccount as labadmin (sign-in not recorded). Command: ./Test-RlsMatrix.ps1 -WorkspaceId <masked> -DatasetId <masked> -UpnDomain <masked>. Table with alex.demo, sam.demo, riley.demo, taylor.demo, jordan.demo: Stores 1/1/3/1/5, Customers 247/243/300/242/301, Sales matching the matrix, Result PASS. Last line: '5 user(s), 5 passed, 0 failed'."
+    narration: >
+      Against the real service: five users, the same numbers as the matrix, five passes. The output only shows
+      aliases, never the domain.
+
+  - id: gotcha
+    type: screen
+    heading: "Gotcha: Contributors don't get RLS"
+    image: screens/rls-gotcha-contributor.jpg
+    bar: "Power BI service · Manage access · Test-RlsMatrix.ps1"
+    demo: "Left: workspace Manage access panel with Sam Demo changed from Viewer to Contributor. Right: terminal rerun of Test-RlsMatrix.ps1: sam.demo row FAIL with 'stores 5, expected 1; customers 301, expected 243; ...', others PASS, last line '5 user(s), 4 passed, 1 failed'. If impersonation does not reflect the workspace role, capture instead Sam's own browser session (InPrivate, signed in as sam.demo) showing Store security with Visible stores 5."
+    short: gotcha
+    narration: >
+      Now the gotcha. Make Sam a contributor in the workspace. Microsoft is explicit: row level security only
+      applies to viewers. Admins, members and contributors can edit the model, so they see everything. Sam's row
+      turns red: five stores instead of one. Keep store managers as viewers, or give them the app instead of the
+      workspace.
+
+  - id: recap
+    type: bullets
+    heading: "Five rules for RLS"
+    bullets:
+      - "Filter dimensions, map users in a hidden, self-filtered table"
+      - "USERPRINCIPALNAME(), and unknown users see nothing"
+      - "Check what the filter doesn't reach"
+      - "Consumers are Viewers or app users, never Contributors"
+      - "Test every user in the service, not just one role"
+    narration: >
+      Five rules. Filter dimensions, and map users in a hidden table that filters itself. Use user principal name,
+      and make sure an unknown user sees nothing. Check what your filter doesn't reach. Keep consumers as viewers
+      or app users. And test every user against the service, not one role by hand.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The model, R L S lint, the reference and the PowerShell test are on GitHub, and the complete guide to row
+      level security is on dev lad log dot com. Links in the description. Next time: dashboards and publishing.
+      This was DEVLADLOG Power BI, by Momento Galático.

@@ -1,0 +1,63 @@
+{
+  "solution": "MGLabDataverse",
+  "table": "mgl_projectrequest",
+  "entity_set": "mgl_projectrequests",
+  "key": "mgl_requestcode",
+  "assembly": {
+    "name": "MGLab.D365.Plugins",
+    "dll": "src/MGLab.D365.Plugins/bin/Release/net462/MGLab.D365.Plugins.dll",
+    "version": "1.0.0.0"
+  },
+  "plugin_types": [
+    {"typename": "MGLab.D365.Plugins.AssessProjectRequestApi", "friendlyname": "Assess project request (custom API main operation)"},
+    {"typename": "MGLab.D365.Plugins.RiskScoreRefreshPlugin", "friendlyname": "Refresh risk score (async)"}
+  ],
+  "custom_api": {
+    "uniquename": "mgl_AssessProjectRequest",
+    "displayname": "Assess Project Request",
+    "description": "Scores a project request (0-100) and explains why.",
+    "bindingtype": 1,
+    "boundentitylogicalname": "mgl_projectrequest",
+    "isfunction": false,
+    "isprivate": false,
+    "allowedcustomprocessingsteptype": 0,
+    "workflowsdkstepenabled": false,
+    "used_from_power_automate": true,
+    "executeprivilegename": null,
+    "plugintype": "MGLab.D365.Plugins.AssessProjectRequestApi",
+    "request_parameters": [],
+    "response_properties": [
+      {"uniquename": "RiskScore", "type": "Integer", "displayname": "Risk Score", "description": "0 to 100"},
+      {"uniquename": "RiskLevel", "type": "String", "displayname": "Risk Level", "description": "Low, Medium or High"},
+      {"uniquename": "Reasons", "type": "String", "displayname": "Reasons", "description": "Risk factors, separated by '; '"}
+    ]
+  },
+  "column": {
+    "schema": "mgl_RiskScore",
+    "display": "Risk Score",
+    "description": "Set by the RiskScoreRefreshPlugin (async). 0 to 100.",
+    "min": 0,
+    "max": 100
+  },
+  "steps": [
+    {
+      "plugintype": "MGLab.D365.Plugins.RiskScoreRefreshPlugin",
+      "message": "Create",
+      "stage": 40,
+      "mode": 1,
+      "rank": 1,
+      "asyncautodelete": true,
+      "post_image": ["mgl_riskscore"]
+    },
+    {
+      "plugintype": "MGLab.D365.Plugins.RiskScoreRefreshPlugin",
+      "message": "Update",
+      "stage": 40,
+      "mode": 1,
+      "rank": 1,
+      "asyncautodelete": true,
+      "filteringattributes": ["mgl_budget", "mgl_duedate", "mgl_justification", "mgl_customeraccountid"],
+      "post_image": ["mgl_riskscore"]
+    }
+  ]
+}
