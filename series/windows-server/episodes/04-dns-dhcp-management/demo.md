@@ -12,7 +12,7 @@ plus **one extra VM** and **one isolated Private switch**:
 
 | Item | Spec | Role in this episode |
 |---|---|---|
-| CON-DC01 (existing) | 10.50.0.10, Server Core | DNS server for `lab.contoso.com`; gets the reverse zone `0.20.10.in-addr.arpa`, aging and scavenging |
+| CON-DC01 (existing) | 10.50.0.10, Server Core | DNS server for `lab.contoso.com`; gets the reverse zone `0.50.10.in-addr.arpa`, aging and scavenging |
 | CON-SRV01 (existing) | 10.50.0.21, Server Core | DHCP server (primary). Second NIC `DHCPTest` on the Private switch, 172.16.50.2/24, MAC 00-15-5D-14-00-02 |
 | CON-SRV02 (existing) | 10.50.0.22, Desktop Experience | DHCP failover partner + admin box (RSAT DNS/DHCP, recording). `DHCPTest` NIC 172.16.50.3/24, MAC 00-15-5D-14-00-03 |
 | **CON-CLI01 (new)** | Windows Server 2025 Datacenter **Evaluation, Server Core**, 1 vCPU, 1 GB startup / 1.5 GB max dynamic RAM, 40 GB disk, Generation 2. NIC 1 on `MGLab-NAT` with **10.50.0.41** (static, like the other lab VMs), domain-joined to `lab.contoso.com`. No extra software | DHCP client. Second NIC `DHCPTest` on the Private switch, DHCP, fixed MAC **00-15-5D-14-00-41** (matches the reservation) |
@@ -66,7 +66,7 @@ Resolve-DnsName printer01.lab.contoso.com -Server CON-DC01; Resolve-DnsName 10.5
 ```
 Expected run 1: ReverseZone, ZoneAging ×2, Scavenging, A ×2, PTR ×2, CNAME ×2 = Done; run 2: 10 × NoChange.
 - **Verify and note in README:** the zone name `Add-DnsServerPrimaryZone -NetworkId 10.50.0.0/24` really creates
-  (Learn's example text and output disagree; we expect `0.20.10.in-addr.arpa`); that CON-SRV01 registers its PTR after
+  (Learn's example text and output disagree; we expect `0.50.10.in-addr.arpa`); that CON-SRV01 registers its PTR after
   `ipconfig /registerdns`; the property names `RecordData.IPv4Address` / `PtrDomainName` / `HostNameAlias`.
 
 ### 2. `screens/dhcp.jpg` — "Two servers, one scope" (**needs lab**)

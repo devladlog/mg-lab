@@ -372,7 +372,8 @@ Describe 'Report and entry scripts' {
         $out = Join-Path ([IO.Path]::GetTempPath()) ('core-' + [guid]::NewGuid().ToString('N') + '.md')
         foreach ($n in 'before', 'after', 'bad') {
             $null = & pwsh -NoProfile -File (Join-Path $script:Src 'Invoke-CoreCheck.ps1') -FromFacts (Join-Path $script:Fixtures "facts-$n.json") -OutFile $out
-            (Get-Content -Raw $out) | Should -Be (Get-Content -Raw (Join-Path $script:Sample "check-$n.md"))
+            # Compare text, not line endings (Windows writes CRLF, the committed samples are LF).
+            ((Get-Content -Raw $out) -replace "`r`n", "`n") | Should -Be ((Get-Content -Raw (Join-Path $script:Sample "check-$n.md")) -replace "`r`n", "`n")
         }
     }
     It 'exits 1 with -FailOnHigh when there is a high finding, 0 when there is none' {

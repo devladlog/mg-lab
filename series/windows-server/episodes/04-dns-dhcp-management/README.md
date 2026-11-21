@@ -10,7 +10,7 @@ checks both against each other:
    **`setup/Install-DhcpRole.ps1`** installs the DHCP role, creates the DHCP security groups, restarts the service and
    clears the Server Manager post-install alert (the steps from Learn's DHCP PowerShell deployment guide).
 2. **`Invoke-NetLabDnsDeployment`** on CON-DC01: computes the reverse zone name (`10.50.0.0/24` →
-   `0.20.10.in-addr.arpa`) and creates it AD-integrated with secure updates, sets aging on the managed zones,
+   `0.50.10.in-addr.arpa`) and creates it AD-integrated with secure updates, sets aging on the managed zones,
    enables server scavenging, and adds the static A + PTR records and CNAMEs from the file; repairs drift.
 3. **`Invoke-NetLabDhcpDeployment`**: authorizes both servers in AD, binds the DHCP service only to the `DHCPTest`
    NIC, builds the scope on the primary (exclusion range, options 6 and 15, a reservation for the client's MAC),

@@ -22,7 +22,7 @@ The GUID and the exact runtime build numbers on screen will differ from `deploy/
 | What | Notes | Cost |
 |---|---|---|
 | `dotnet --version` is 10.0.1xx | `global.json` pins the SDK with roll-forward and selects the Microsoft.Testing.Platform runner | free |
-| .NET 8 runtime installed | without it the net8.0 tour and test run fail with "You must install or update .NET" | free |
+| .NET 8 runtime installed | without it the net8.0 tour and test run fail with "You must install or update .NET" (the lab laptop has only .NET 10 as of 21 Nov 2026; .NET 8 support ended on 10 Nov 2026, so say so on screen and install the runtime only for this recording) | free |
 | Terminal font 18-20 pt, dark theme | | — |
 | Masking | the prompt shows the Windows user name: use `function prompt { "PS> " }`. No tenant names or URLs besides public Learn | — |
 

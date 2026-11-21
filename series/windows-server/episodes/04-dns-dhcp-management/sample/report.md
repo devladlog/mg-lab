@@ -24,6 +24,6 @@ Snapshot: 2026-11-20 09:00 UTC - DNS server CON-DC01, 4 zone(s), 22 record(s); D
 | Medium | ScopeUtilization | CON-SRV01/172.16.50.0 | 85% of the pool in use. |
 | Medium | ScopeUtilization | CON-SRV02/172.16.50.0 | 85% of the pool in use. |
 | Medium | ZoneAgingDisabled | oldapps.lab.contoso.com | Dynamic zone without aging: scavenging skips it. |
-| Low | MissingPtr | nas01.lab.contoso.com | 10.50.0.61 has no PTR in 0.20.10.in-addr.arpa. |
+| Low | MissingPtr | nas01.lab.contoso.com | 10.50.0.61 has no PTR in 0.50.10.in-addr.arpa. |
 | Low | StaleRecord | con-old01.lab.contoso.com | Dynamic record last refreshed 2026-09-01: no refresh within no-refresh + refresh. The host is probably gone. |
 

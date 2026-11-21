@@ -201,7 +201,8 @@ Describe 'Install-OpsEndpoint (Windows cmdlets mocked)' {
         Mock -ModuleName OpsLab icacls.exe { $global:LASTEXITCODE = 0 }
         # The transcript folder is C:\ProgramData\...: no C: on Linux. Pester 6 has no fall-through, so pass the rest on.
         Mock -ModuleName OpsLab New-Item { Microsoft.PowerShell.Management\New-Item @PesterBoundParameters }
-        Mock -ModuleName OpsLab New-Item -ParameterFilter { $Path -like 'C:\*' } { }
+        # Only the transcript folder: on Windows TestDrive is also on C:, so match C:\ProgramData, not all of C:.
+        Mock -ModuleName OpsLab New-Item -ParameterFilter { $Path -like 'C:\ProgramData\*' } { }
     }
     It 'refuses to register a definition with High findings' {
         $risky = Join-Path $script:Fixtures 'risky-definition.json'

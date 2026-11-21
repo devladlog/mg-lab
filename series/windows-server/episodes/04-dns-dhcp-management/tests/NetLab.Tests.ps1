@@ -41,15 +41,15 @@ BeforeAll {
 
 Describe 'IPv4 and reverse zone helpers' {
     It '<Net> -> <Zone>' -ForEach @(
-        @{ Net = '10.50.0.0/24'; Zone = '0.20.10.in-addr.arpa' }
+        @{ Net = '10.50.0.0/24'; Zone = '0.50.10.in-addr.arpa' }
         @{ Net = '172.16.0.0/16'; Zone = '16.172.in-addr.arpa' }
         @{ Net = '10.0.0.0/8'; Zone = '10.in-addr.arpa' }
     ) { ConvertTo-NetLabReverseZoneName $Net | Should -Be $Zone }
     It 'refuses prefixes that are not on an octet boundary' { { ConvertTo-NetLabReverseZoneName '10.50.0.0/20' } | Should -Throw '*octet boundary*' }
     It 'finds the PTR owner name inside a zone, and nothing outside it' {
-        Get-NetLabPtrName -IPAddress '10.50.0.60' -ReverseZone '0.20.10.in-addr.arpa' | Should -Be '60'
+        Get-NetLabPtrName -IPAddress '10.50.0.60' -ReverseZone '0.50.10.in-addr.arpa' | Should -Be '60'
         Get-NetLabPtrName -IPAddress '172.16.50.41' -ReverseZone '16.172.in-addr.arpa' | Should -Be '41.50'
-        Get-NetLabPtrName -IPAddress '10.30.0.5' -ReverseZone '0.20.10.in-addr.arpa' | Should -BeNullOrEmpty
+        Get-NetLabPtrName -IPAddress '10.30.0.5' -ReverseZone '0.50.10.in-addr.arpa' | Should -BeNullOrEmpty
     }
     It 'compares addresses numerically, not as text' {
         Test-NetLabIpInRange '172.16.50.100' '172.16.50.21' '172.16.50.254' | Should -BeTrue
@@ -152,7 +152,7 @@ Describe 'Invoke-NetLabDnsDeployment (DnsServer cmdlets mocked)' {
         Should -Invoke Set-DnsServerScavenging -ModuleName NetLab -Times 1 -Exactly -ParameterFilter { $ScavengingState -eq $true }
         Should -Invoke Add-DnsServerResourceRecordA -ModuleName NetLab -Times 2 -Exactly
         Should -Invoke Add-DnsServerResourceRecordPtr -ModuleName NetLab -Times 1 -Exactly -ParameterFilter {
-            $ZoneName -eq '0.20.10.in-addr.arpa' -and $Name -eq '60' -and $PtrDomainName -eq 'printer01.lab.contoso.com'
+            $ZoneName -eq '0.50.10.in-addr.arpa' -and $Name -eq '60' -and $PtrDomainName -eq 'printer01.lab.contoso.com'
         }
         Should -Invoke Add-DnsServerResourceRecordCName -ModuleName NetLab -Times 2 -Exactly
     }
@@ -270,7 +270,7 @@ Describe 'Export-NetLabSnapshot (cmdlets mocked)' {
     It 'writes a snapshot the checks can read' {
         Mock Get-DnsServerZone -ModuleName NetLab {
             @([pscustomobject]@{ ZoneName = 'lab.contoso.com'; ZoneType = 'Primary'; IsDsIntegrated = $true; IsReverseLookupZone = $false; DynamicUpdate = 'Secure'; ReplicationScope = 'Domain'; IsAutoCreated = $false },
-                [pscustomobject]@{ ZoneName = '0.20.10.in-addr.arpa'; ZoneType = 'Primary'; IsDsIntegrated = $true; IsReverseLookupZone = $true; DynamicUpdate = 'Secure'; ReplicationScope = 'Domain'; IsAutoCreated = $false },
+                [pscustomobject]@{ ZoneName = '0.50.10.in-addr.arpa'; ZoneType = 'Primary'; IsDsIntegrated = $true; IsReverseLookupZone = $true; DynamicUpdate = 'Secure'; ReplicationScope = 'Domain'; IsAutoCreated = $false },
                 [pscustomobject]@{ ZoneName = '0.in-addr.arpa'; ZoneType = 'Primary'; IsDsIntegrated = $false; IsReverseLookupZone = $true; DynamicUpdate = 'None'; ReplicationScope = 'None'; IsAutoCreated = $true })
         }
         Mock Get-DnsServerZoneAging -ModuleName NetLab { [pscustomobject]@{ AgingEnabled = $true; NoRefreshInterval = $script:Week; RefreshInterval = $script:Week } }
