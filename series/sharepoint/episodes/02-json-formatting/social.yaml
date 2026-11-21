@@ -1,0 +1,69 @@
+episode: 2
+series: "DEVLADLOG SharePoint"
+status: draft-hold-for-review
+ai_label: true
+youtube_url: "{YOUTUBE_URL}"
+linkedin_company:
+  text: |
+    Column formatting usually lives in one place: a text box in the browser, edited by whoever got there last.
+
+    In episode 2 of DEVLADLOG SharePoint the JSON lives in git instead, for a fictional Contoso purchase requests list:
+    - A formatlint tool parses every Excel-style expression, because the JSON schema sees them only as strings
+    - Four column formats and one view format, checked against sample rows
+    - 62 tests, including Learn's own documented examples
+    - A short PnP PowerShell script that lints first, stops on any error, then sets the custom formatter on each field and view
+
+    It also covers two traps the schema will never catch: a date-only column that flags a request due today as overdue, and formats that read another column which is missing from the view.
+
+    Watch the episode: {YOUTUBE_URL}
+    Written guide: {BLOG_URL}
+    Narration uses an AI voice.
+    #SharePoint #JSONFormatting #MicrosoftLists #PnPPowerShell
+linkedin_personal:
+  text: |
+    Here is a SharePoint formatting bug I would not have found by clicking around. A date-only column is stored as midnight. So at 09:00 on the due date, the simple check "due date is before now" is already true, and a request due today shows as overdue.
+
+    The fix is to add one day, 86,400,000 milliseconds, before comparing. I put that in a test so it cannot quietly come back.
+
+    Episode 2 of DEVLADLOG SharePoint covers it, with the formats in git: {YOUTUBE_URL}
+
+    #SharePoint #JSONFormatting
+    Narration uses an AI voice.
+facebook:
+  text: |
+    Why does a SharePoint request that is due today show up as overdue? A date-only column is midnight, so by 09:00 the simple comparison with now is already true.
+
+    Episode 2 of DEVLADLOG SharePoint keeps column and view formatting in git, lints it, tests it and applies it with PnP PowerShell. The date trap gets its own test.
+
+    Watch it here: {YOUTUBE_URL}
+
+    #SharePoint #JSONFormatting
+    Narration uses an AI voice.
+shorts:
+  - id: hook
+    youtube_short_title: "SharePoint JSON formatting, tested like code #Shorts"
+    instagram_reel:
+      caption: |
+        Column formatting usually lives in a text box in the browser, edited by whoever got there last. Here the JSON lives in git. We lint it, preview it against sample rows, test it, and apply it with PnP PowerShell, including two traps the JSON schema will never catch. Full episode: link in bio.
+        #SharePoint #JSONFormatting #MicrosoftLists #PnPPowerShell
+      cover_text: "JSON formatting, tested"
+    tiktok:
+      caption: "SharePoint column formatting usually lives in a browser text box. Here it lives in git, linted and tested, applied with PnP PowerShell. #SharePoint #JSONFormatting #MicrosoftLists"
+  - id: dates
+    youtube_short_title: "Why SharePoint shows a request due today as overdue #Shorts"
+    instagram_reel:
+      caption: |
+        The simplest overdue check compares the due date with now. But a date-only column has no time of day, so it is midnight. At nine in the morning on the due date, that comparison is already true and the request shows as overdue. Add one day, 86,400,000 milliseconds, and it shows due soon instead. A test proves it. Full episode: link in bio.
+        #SharePoint #JSONFormatting #MicrosoftLists
+      cover_text: "Due today is not overdue"
+    tiktok:
+      caption: "A date-only column is midnight, so at 09:00 on the due date 'due date <= now' is already true. Add a day before comparing. #SharePoint #JSONFormatting #MicrosoftLists"
+  - id: inview
+    youtube_short_title: "SharePoint formatting gotcha: the field must be in the view #Shorts"
+    instagram_reel:
+      caption: |
+        Learn says references to other fields only work when those fields are in the same view. A due date format that reads the status column can only tell a closed request from an open one if status is in the view. The format did not change; the view did. A linter can flag that before it ships. Full episode: link in bio.
+        #SharePoint #JSONFormatting #MicrosoftLists
+      cover_text: "Fields must be in the view"
+    tiktok:
+      caption: "A column format that reads another column only works if that column is in the same view. Learn documents it; a linter can catch it. #SharePoint #JSONFormatting"
