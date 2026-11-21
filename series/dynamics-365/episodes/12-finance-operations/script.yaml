@@ -1,0 +1,218 @@
+# DEVLADLOG Dynamics 365 — episode 12. Draft: screen scenes need the lab-tenant capture described in demo.md.
+episode: 12
+slug: finance-operations
+series_label: "DYNAMICS 365"
+series_name: "DEVLADLOG Dynamics 365"
+file_prefix: "dynamics-365"
+title: "Finance & Operations"
+subtitle: "OData, dual-write, and a check that the customer is the same on both sides"
+voice: am_michael
+thumbnail_text: "DYNAMICS 365\nFINANCE & OPERATIONS\nODATA + DUAL-WRITE"
+youtube:
+  title: "Dynamics 365 Finance and Operations: OData, Throttling, Dual-write and a Customer Reconciliation | DEVLADLOG Dynamics 365 #12"
+  tags: [Dynamics 365, Dynamics 365 Finance, finance and operations, OData, data entities, dual-write, Dataverse, throttling, Customers V3, Python]
+sources:
+  - https://www.devladlog.com/articles/dynamics-365/2025-10-16-dynamics-365-finance-operations-complete-guide-2025/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Same customer, two systems"
+    sub: "Finance and Operations meets Dataverse"
+    short: hook
+    narration: >
+      Contoso Retail is a customer in our sales and service apps. Finance has them too, with an invoice account in
+      Dynamics 365 Finance. Are those the same customer, or two rows that happen to share a name? In this episode
+      we read Finance and Operations over the real O Data endpoint, handle its throttling, and check
+      customers against Dataverse with code.
+
+  - id: ways
+    type: bullets
+    heading: "Four ways to connect"
+    bullets:
+      - "OData: synchronous reads and writes on data entities"
+      - "Data management: bulk import and export"
+      - "Dual-write: near real time, both directions, with Dataverse"
+      - "Virtual tables: Dataverse looks at the data, no copy"
+    narration: >
+      Learn lists several integration tools. O Data on data entities for synchronous reads and writes. The data
+      management framework for bulk import and export. Dual write, which keeps Finance and Dataverse in near real time
+      sync in both directions. And virtual tables, where Dataverse queries Finance and Operations without copying the
+      data. This episode is the first and the third.
+
+  - id: environment
+    type: screen
+    heading: "A real Finance environment"
+    image: screens/fo-environment.jpg
+    bar: "Power Platform admin center · Environments · Finance trial"
+    demo: >
+      Power Platform admin center, Manage, Environments: the Finance trial environment (type Trial, subscription-based,
+      with the Finance template) next to the Sales trial environment. Then the Finance environment in the browser: Accounts
+      receivable, All customers, with the company selector visible. Mask tenant, org URLs and user.
+    narration: >
+      Finance and Operations apps can now be tried from the Power Platform admin center, as a subscription based trial
+      with the Finance template. That's what we use here: a real Finance environment, not a mock. It has companies,
+      called legal entities, and customers inside each of them.
+
+  - id: auth
+    type: bullets
+    heading: "Two registrations, not one"
+    bullets:
+      - "Register an app in Microsoft Entra ID"
+      - "Register its client id in Finance and Operations"
+      - "Give it a service user, ideally a dedicated one"
+      - "Token resource: the environment URL, no trailing slash"
+    narration: >
+      Authentication takes two registrations. An application in Microsoft Entra ID, and then that same client id
+      registered inside Finance and Operations, under system administration, setup, Microsoft Entra applications, with
+      a service user. Learn suggests a dedicated service account instead of the admin. The token is requested for the
+      environment URL, without a trailing slash.
+
+  - id: odata-code
+    type: code
+    heading: "Read customers over OData"
+    lang: python
+    code: |
+      def fo_url(api, cfg, company=None, top=None) -> str:
+          flt = f"dataAreaId eq {odata_string(company)}" if company else None
+          return api.url(cfg["entity"], select=cfg["select"], filter=flt, top=top, cross_company=True)
+
+      def get_all(self, url):
+          nxt = url
+          while nxt:
+              page = self.request(nxt)
+              yield from page.get("value", [])
+              nxt = page.get("@odata.nextLink")
+    narration: >
+      The endpoint is the environment URL plus slash data, and the customers entity is Customers V3. By default O Data
+      returns only your default company. Add cross company equals true to see every company you can access, or
+      filter one with data area id. Results come in server driven pages, up to ten thousand rows, so we follow the next
+      link until it's gone.
+
+  - id: throttle-code
+    type: code
+    heading: "When the server says slow down"
+    lang: python
+    code: |
+      for attempt in range(self.max_retries + 1):
+          r = self.session.request("GET", url, headers=...)
+          if r.status_code != 429 or attempt == self.max_retries:
+              break
+          self._sleep(float(r.headers.get("Retry-After") or 2 ** attempt))
+    narration: >
+      Finance and Operations protects itself with throttling. A throttled request gets a four twenty nine and a
+      Retry After value in seconds, and Learn says a retry gets no priority over new requests. So the client waits as
+      told and tries again. And if you have several integrations, an admin can give each one a priority in the throttling
+      priority mapping.
+
+  - id: doctor
+    type: screen
+    heading: "The first real call"
+    image: screens/fokit-customers.jpg
+    bar: "Terminal · fokit doctor · customers"
+    demo: >
+      Terminal against the Finance trial environment: fokit doctor (the URL it calls without the host, then the ok line
+      with the columns), then fokit customers (count by company and the first rows). If the first run fails, show the
+      real error and what fixed it. Blur org URL, keep company ids and customer names.
+    narration: >
+      First call, with a real token. The doctor command makes one small request and says whether the app registration,
+      the endpoint and the entity are all reachable. Then the customers command, with counts per company. If the
+      authentication isn't set up, you see the real error here, before anything else can go wrong.
+
+  - id: reconcile-code
+    type: code
+    heading: "Is it the same customer?"
+    lang: python
+    code: |
+      def norm(s: str) -> str:
+          return " ".join(s.casefold().split())
+
+      match = dv_by_number.get(number)
+      if not match:
+          out.append(Finding("error", "R001", number, ...))      # in Finance, not in Dataverse
+      elif all(norm(a.name) != norm(first.name) for a in match):
+          out.append(Finding("warning", "R003", number, ...))    # same number, different name
+    narration: >
+      Dual write maps the customer account in Finance to the account number in Dataverse, and the key has to match on
+      both sides. So that's what we compare. A customer organization in Finance with no Dataverse account carrying the
+      same account number is an error. Same number but a different name is a warning. Also flagged: an account number in
+      more than one company, and people, which belong to the contacts map and not to accounts.
+
+  - id: reconcile
+    type: screen
+    heading: "Two systems, one answer"
+    image: screens/fokit-reconcile.jpg
+    bar: "Terminal · fokit reconcile · Finance customer · Dataverse account"
+    demo: >
+      Terminal: fokit reconcile against the Finance trial environment and the Dataverse environment chosen in demo.md,
+      with its summary and findings and the exit code. Then the Finance All customers page and the Dataverse Accounts view
+      for one customer, side by side. Keep what it really prints; if all is clean, say so and show the offline sample
+      labelled as the sample. Mask URLs and ids.
+    narration: >
+      The result for our lab, from the real services. Counts on both sides, then a finding per mismatch, and a failing
+      exit code when something is missing. Run it before the first initial sync to see what would collide, and later as
+      a drift check.
+    short: reconcile
+
+  - id: dualwrite
+    type: screen
+    heading: "The map behind it"
+    image: screens/fo-dual-write.jpg
+    bar: "Finance · Data management · Dual-write · Customers V3 (accounts)"
+    demo: >
+      Finance, Data management workspace, Dual-write: the table maps list, opening Customers V3 (accounts) to show
+      CustomerAccount mapped to accountnumber and its status. Show whatever the environment really has, running or not.
+      Mask tenant and user.
+    narration: >
+      And this is the dual write map in Finance. Customer account on one side, account number on the other. Whether
+      it's running in this environment is exactly what the reconcile command tells you.
+
+  - id: gotcha
+    type: bullets
+    heading: "Gotchas Learn documents"
+    bullets:
+      - "Default company only, unless cross-company=true"
+      - "Customers V3 is slow: it is not for high volume"
+      - "Server pages up to 10,000 rows: follow nextLink"
+      - "429: honour Retry-After. Not for Power BI reports"
+      - "Dual-write needs a matching key on both sides"
+    short: gotcha
+    narration: >
+      The gotchas, all from Learn. O Data returns only your default company unless you ask for cross company. Customers
+      V3 covers every customer scenario, about eighty extra fields, and Learn says that costs performance, so don't use it for high volume.
+      Pages come back in chunks of up to ten thousand rows. Throttled requests answer four twenty nine with a retry
+      value. Don't use O Data for Power BI reports, use the entity store. And dual write needs a matching alternate
+      key on both sides.
+
+  - id: decision
+    type: bullets
+    heading: "Which way in?"
+    bullets:
+      - "A few records, now: OData"
+      - "Many records, scheduled: data management"
+      - "Customers shared with Sales or Service: dual-write"
+      - "Look, don't copy: virtual tables"
+    narration: >
+      So which way in? A few records right now, O Data. Many records on a schedule, data management. Customers and
+      products shared with the sales and service apps, dual write. And when you want to look at Finance data from
+      Power Platform without copying it, virtual tables.
+
+  - id: recap
+    type: bullets
+    heading: "Four rules"
+    bullets:
+      - "Say which company: cross-company or a filter"
+      - "Follow nextLink, honour Retry-After"
+      - "Match keys before you switch dual-write on"
+      - "Check drift with code, not by eye"
+    narration: >
+      Four rules. Say which company you mean. Follow the next link and honour retry after. Match the keys on both
+      sides before you switch dual write on. And check for drift with code, not by eye.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The tool, the sample data and all seventeen tests are on GitHub, and the complete guide to Finance and Operations
+      is on devladlog dot com. Thanks for following the series.

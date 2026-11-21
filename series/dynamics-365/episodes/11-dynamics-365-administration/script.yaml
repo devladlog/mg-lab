@@ -1,0 +1,232 @@
+# DEVLADLOG Dynamics 365 — episode 11. Draft: screen scenes need the lab-tenant capture described in demo.md.
+episode: 11
+slug: dynamics-365-administration
+series_label: "DYNAMICS 365"
+series_name: "DEVLADLOG Dynamics 365"
+file_prefix: "dynamics-365"
+title: "Dynamics 365 Administration"
+subtitle: "Audit, system jobs and admin roles: the weekly check, as code"
+voice: am_michael
+thumbnail_text: "DYNAMICS 365\nADMINISTRATION\nAUDIT + JOBS + ADMINS"
+youtube:
+  title: "Dynamics 365 Administration: Audit Settings, Failed System Jobs and System Administrator Review | DEVLADLOG Dynamics 365 #11"
+  tags: [Dynamics 365, Dynamics 365 administration, Power Platform admin center, Dataverse, auditing, system jobs, security roles, pac CLI, Web API, Python]
+sources:
+  - https://www.devladlog.com/articles/dynamics-365/2025-11-10-dynamics-365-administration-complete-guide-2025/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Is the environment healthy?"
+    sub: "Audit, system jobs and admin roles, checked by code"
+    short: hook
+    narration: >
+      Three questions every Dynamics 365 admin gets asked. Is auditing actually on? Did anything fail in the
+      background last night? And who can do anything in this environment? In this episode we answer all three from
+      the admin center, then write them down as rules a schedule can run, on the same environment our Contoso
+      scenario lives in.
+
+  - id: kinds
+    type: bullets
+    heading: "Three places a person can be admin"
+    bullets:
+      - "Tenant: Power Platform and Dynamics 365 administrator"
+      - "Environment: the Power Platform admin center"
+      - "Dataverse: the System Administrator security role"
+      - "Tenant admin does not mean Dataverse admin"
+    narration: >
+      Administration lives in three places. The tenant, where the Power Platform and Dynamics 365 administrator roles
+      are assigned. The environment, which you manage in the Power Platform admin center. And Dataverse itself, where
+      the System Administrator security role decides who can change what. Learn is explicit that the first doesn't
+      give you the third: a tenant admin has to elevate themselves in each environment, and that elevation is logged
+      to Purview.
+
+  - id: environments
+    type: screen
+    heading: "The environments we run"
+    image: screens/admin-environments.jpg
+    bar: "Power Platform admin center · Manage · Environments"
+    demo: >
+      Power Platform admin center, Manage, Environments: the list with the Sales trial environment and DEV, showing
+      type, state and region. Then open the Sales trial environment: Details, and Settings, Audit and logs. Mask tenant,
+      org URL and user.
+    narration: >
+      This is the admin center view of our lab. Each environment has a type, and the type decides what you can do
+      with it. Our Dynamics 365 trial environment is a trial type, and that matters later, for backups.
+
+  - id: settings-code
+    type: code
+    heading: "One row tells you the settings"
+    lang: python
+    code: |
+      SELECT = ("organizationid,name,isauditenabled,isuseraccessauditenabled,isreadauditenabled,auditretentionperiodv2,"
+                "plugintracelogsetting,sessiontimeoutenabled,sessiontimeoutinmins,inactivitytimeoutenabled,"
+                "inactivitytimeoutinmins")
+
+      rows = api.get(f"organizations?$select={SELECT}")["value"]
+      if len(rows) != 1:  # Learn: the organization table contains a single row
+          raise ValueError(f"expected one organization row, got {len(rows)}")
+      return rows[0]
+
+      $ python3 -m adminkit settings
+      ERROR   S001  auditing is off for the environment
+    narration: >
+      The environment's settings are one row in the organization table. Auditing on or off, how many days the logs are
+      kept, whether the plug in trace log is left on, and the session timeouts. Our tool reads that row and compares
+      it with a small team policy file. The numbers in the file are our choices, not Microsoft limits. Auditing off is
+      an error, because table and column auditing do nothing until the environment switch is on.
+
+  - id: audit-code
+    type: code
+    heading: "Turn auditing on, safely"
+    lang: python
+    code: |
+      def validate_retention(days: int) -> int:
+          if days != FOREVER and not (1 <= days <= MAX_RETENTION_DAYS):
+              raise ValueError(f"retention must be -1 (forever) or 1..{MAX_RETENTION_DAYS} days, got {days}")
+          return days
+
+      def audit_body(days: int) -> Dict[str, Any]:
+          return {"isauditenabled": True, "auditretentionperiodv2": validate_retention(days)}
+
+      api.update(f"organizations({org['organizationid']})", body)
+      after = fetch(api)        # read back, compare, fail loudly if different
+    narration: >
+      Turning it on is a single update to that row. Learn gives the valid range for the retention: one to three
+      hundred sixty five thousand days, or minus one for forever. The wrapper checks the range first, is a dry run
+      unless you say apply, only updates the row that already exists, and reads the values back afterwards.
+
+  - id: settings
+    type: screen
+    heading: "Before and after"
+    image: screens/adminkit-settings.jpg
+    bar: "Terminal · adminkit settings · audit-on · Audit settings"
+    demo: >
+      Terminal against the lab: adminkit settings (the report and its findings), adminkit audit-on --days 365 as a dry
+      run, then with --apply and its before and after lines, then adminkit settings again. Then the admin center, Settings,
+      Audit and logs, Audit settings page, showing auditing on. Keep what it really prints. Blur ids and mask org URL.
+    narration: >
+      The report first, with whatever the environment really says. Then audit on, dry run, then apply, with the
+      before and after read back. And the same setting in the admin center, so you can see it's the same switch. Note
+      that this only sets the environment level. Tables and columns still need their own audit option.
+
+  - id: jobs-code
+    type: code
+    heading: "What failed in the background?"
+    lang: python
+    code: |
+      def query(now, window_days, stuck_hours) -> str:
+          since = iso(now - dt.timedelta(days=window_days))
+          cutoff = iso(now - dt.timedelta(hours=stuck_hours))
+          opens = " or ".join(f"statuscode eq {s}" for s in OPEN_STATUSES)
+          return (f"asyncoperations?$select={SELECT}&$filter=(statuscode eq {FAILED} and completedon ge {since}) "
+                  f"or (({opens}) and createdon le {cutoff})&$orderby=createdon desc")
+    narration: >
+      Background work, workflows, imports, bulk deletes, shows up as system jobs. Status thirty one is failed. We
+      ask for failures in the last seven days, and for jobs still open after twenty four hours, in a single query.
+      Failures are grouped by operation type and message, so a workflow failing three times is one line, not three.
+      Jobs that were postponed on purpose are skipped, otherwise every recurring job would look stuck.
+
+  - id: jobs
+    type: screen
+    heading: "System jobs, from code and from the app"
+    image: screens/adminkit-jobs.jpg
+    bar: "Terminal · adminkit jobs · Settings · System Jobs"
+    demo: >
+      Terminal: adminkit jobs against the lab, with its summary and findings. If the lab has no failed jobs, say so on
+      screen, then run it on the offline sample with --from-json sample/system-jobs.json --now 2027-01-15T12:00:00Z and label
+      it as the sample. Then the app: Advanced settings, System Jobs, filtered to Failed, with one job open to show its
+      message. Mask tenant and user.
+    narration: >
+      The same question from code and from the app. If this environment has nothing failed, the tool says so, and we
+      show the offline sample, clearly labelled, to see what a bad week looks like.
+
+  - id: admins-code
+    type: code
+    heading: "Who holds System Administrator?"
+    lang: python
+    code: |
+      def query(role_name: str) -> str:
+          return (f"roles?$select=name,roleid&$filter=name eq {odata_string(role_name)}"
+                  f"&$expand=systemuserroles_association($select={USER_SELECT}),"
+                  "teamroles_association($select=teamid,name,teamtype)")
+
+      app = bool(u.get("applicationid")) or u.get("accessmode") in NON_HUMAN_ACCESS
+      people = [u for u in users if u.kind == "person" and not u.disabled]
+      if len(people) > limit:
+          out.append(Finding("error", "A001", role, ...))
+    narration: >
+      Learn says to minimize the number of people with the System Administrator role. Role assignments are many to
+      many relationships on the role table, for users and for teams, so one query gets both. Then we split people from
+      application users, because Microsoft's own services and your service principals hold the role too. More than the
+      team's limit of enabled people is an error. A disabled user who still holds it, or a team that holds it, is a
+      warning.
+
+  - id: admins
+    type: screen
+    heading: "The admin list, and the admin center"
+    image: screens/adminkit-admins.jpg
+    bar: "Terminal · adminkit admins · Security roles · System Administrator"
+    demo: >
+      Terminal: adminkit admins against the lab, showing the table (people, application users, teams) and the findings.
+      Then the admin center: Environment, Settings, Users and permissions, Security roles, System Administrator, Members,
+      to compare the same list. Mask tenant, user principal names and app ids; lab users only.
+    narration: >
+      Here's the list for our lab: the lab admin, some application users, and whatever else the environment has. Same
+      list in the admin center under the role's members. If your count is over the limit, the command exits with a
+      failure, so a scheduled run can tell you before an audit does.
+    short: admins
+
+  - id: gotcha
+    type: bullets
+    heading: "Gotchas Learn documents"
+    bullets:
+      - "Auditing is off by default, at three levels"
+      - "A new retention applies only to new audit records"
+      - "Tenant admins must elevate to System Administrator"
+      - "Trial environments have no backups"
+      - "Trace log All uses storage: turn it off"
+    short: gotcha
+    narration: >
+      The gotchas, all from Learn. Auditing is off by default, and has three levels. A new retention period only
+      applies to records written afterwards. Tenant admins have to elevate themselves to System Administrator. Trial
+      environments aren't backed up at all, and manual backups aren't supported there. And the plug in trace log
+      takes up storage, so turn it off when you're done debugging.
+
+  - id: pac-code
+    type: code
+    heading: "The tenant side: pac admin"
+    lang: powershell
+    code: |
+      pac admin list --type Trial
+      pac admin list-roles --environment <id or url>
+      pac admin self-elevate --environment <id>
+
+      # usage lines, checked with pac 2.16.1:
+      # Usage: pac admin list [--environment] [--type] [--name] [--application]
+      # Usage: pac admin list-roles [--environment] [--business-unit] [--include-child-roles]
+      # Usage: pac admin self-elevate [--environment]
+    narration: >
+      For the tenant side there's the Power Platform command line. List the environments by type, list an
+      environment's security roles, and, if you're a tenant admin, elevate yourself. The usage lines on screen are
+      from the installed version, not from memory.
+
+  - id: recap
+    type: bullets
+    heading: "Four rules"
+    bullets:
+      - "Turn auditing on, then pick tables and columns"
+      - "Look at failed system jobs weekly"
+      - "Keep System Administrator to a short list"
+      - "Write the checks down so a schedule runs them"
+    narration: >
+      Four rules. Turn auditing on, then choose tables and columns. Look at failed system jobs every week. Keep System
+      Administrator to a short list. And write the checks down, so a schedule runs them and not your memory.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The tool, the sample data and all twenty eight tests are on GitHub, and the complete guide to Dynamics 365
+      administration is on devladlog dot com. Next episode, Finance and Operations. Subscribe so you don't miss it.
