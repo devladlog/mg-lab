@@ -1,0 +1,23 @@
+# Formulas that episode 13 adds to the field app's App.Formulas (episode 11). Paste them after the existing ones; this file is also valid on
+# its own, so the tests compile it and check that no name clashes with episode 11. All pure functions: the one call to the agent is in AgentScreen.
+# The agent only ever receives the inspection number, the site code and the question. Never the reviewer notes, never a photo.
+App:
+  Properties:
+    Formulas: |-
+      =AgentName = "cin_InspectionAssistant";
+      AgentMaxQuestion = 500;
+      AgentMaxReply = 1500;
+      AgentContext(inspectionNumber: Text, siteCode: Text): Text =
+          If(
+              IsBlank(inspectionNumber), "",
+              "About inspection " & inspectionNumber & If(IsBlank(siteCode), "", " at site " & siteCode) & ". "
+          );
+      CanAskAgent(question: Text, busy: Boolean): Boolean = !busy && Len(Trim(question)) >= 3;
+      BuildAgentMessage(inspectionNumber: Text, siteCode: Text, question: Text): Text =
+          With(
+              { context: AgentContext(inspectionNumber, siteCode) },
+              context & Left(Trim(question), AgentMaxQuestion - Len(context))
+          );
+      CleanAgentReply(raw: Text): Text =
+          If(IsBlank(Trim(raw)), "The agent did not answer. Try again, or carry on by hand.", Left(Trim(raw), AgentMaxReply));
+      AgentCreatedFinding(reply: Text): Boolean = StartsWith(Trim(reply), "Finding created");

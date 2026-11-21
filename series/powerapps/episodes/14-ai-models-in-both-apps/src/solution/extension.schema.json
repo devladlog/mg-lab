@@ -1,0 +1,17 @@
+{
+  "_comment": "Extension to the canonical ContosoInspections schema (episode 12). Only NEW columns live here; the base tables are never redefined.",
+  "solution": {"uniqueName": "ContosoInspectionsAI", "displayName": "Contoso Inspections AI", "description": "AI triage columns for inspection items. Depends on ContosoInspections.", "version": "1.0.0.0"},
+  "dependsOn": "ContosoInspections",
+  "tables": [
+    {
+      "logicalName": "cin_inspectionitem",
+      "columns": [
+        {"logicalName": "cin_aiseverity", "displayName": "AI severity", "type": "choice", "choice": "cin_aiseverity", "options": [["Info", 0], ["Minor", 1], ["Major", 2], ["Critical", 3]], "default": 0, "description": "Severity suggested by the model. A person decides; this never replaces Severity."},
+        {"logicalName": "cin_aiprovider", "displayName": "AI provider", "type": "string", "maxLength": 100, "description": "Which route produced the suggestion: aibuilder, foundry or claude."},
+        {"logicalName": "cin_aiconfidence", "displayName": "AI confidence", "type": "whole", "min": 0, "max": 100, "description": "The model's own 0 to 100 confidence. Not a calibrated probability."},
+        {"logicalName": "cin_aisummary", "displayName": "AI summary", "type": "memo", "maxLength": 2000, "description": "Model-written summary of the item, at most 240 characters in practice."},
+        {"logicalName": "cin_aiaccepted", "displayName": "AI suggestion accepted", "type": "bool", "default": false, "description": "True once a person accepted the suggestion."}
+      ]
+    }
+  ]
+}

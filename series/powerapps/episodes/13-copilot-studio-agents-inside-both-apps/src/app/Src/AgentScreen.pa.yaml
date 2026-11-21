@@ -1,0 +1,80 @@
+# Ask the Inspection Assistant, inside the field app (episode 11's app, a new screen). Learn lists the documented ways to put a Copilot Studio agent in a
+# canvas app: the custom Copilot (App Copilot) is discontinued for new apps from 2 February 2026; the Copilot control only takes Dataverse tables and cannot
+# take an existing agent; Microsoft Copilot in canvas apps needs a Microsoft 365 Copilot licence. This screen uses the Microsoft Copilot Studio connector's
+# "Execute Agent and wait" action (operation ExecuteCopilotAsyncV2, returns lastResponse), so the app controls the context it sends.
+# The signed-in inspector's own Entra identity is used (the agent uses Authenticate with Microsoft); the connection is per user (Learn: not shareable).
+Screens:
+  AgentScreen:
+    Properties:
+      Fill: =RGBA(245, 246, 250, 1)
+      OnVisible: =Set(agentReply, ""); Set(agentBusy, false)
+    Children:
+      - lblAgentTitle:
+          Control: Label
+          Properties:
+            Text: ="Ask the assistant"
+            Role: =TextRole.Heading1
+            Size: =24
+            Color: =RGBA(255, 255, 255, 1)
+            Fill: =RGBA(0, 90, 158, 1)
+            X: =0
+            Y: =0
+            Width: =Parent.Width - 88
+            Height: =88
+      - btnBackAgent:
+          Control: Classic/Button
+          Properties:
+            Text: ="‹"
+            OnSelect: =Back()
+            AccessibleLabel: ="Back to the inspection"
+            TabIndex: =0
+            X: =Parent.Width - 88
+            Y: =0
+            Width: =88
+            Height: =88
+      - txtAsk:
+          Control: Classic/TextInput
+          Properties:
+            Default: =""
+            Mode: =TextMode.MultiLine
+            HintText: ="Ask about this inspection, or say log a finding"
+            AccessibleLabel: ="Your question for the assistant"
+            TabIndex: =0
+            X: =16
+            Y: =104
+            Width: =Parent.Width - 32
+            Height: =160
+      - btnAsk:
+          Control: Classic/Button
+          Properties:
+            Text: =If(agentBusy, "Asking...", "Ask")
+            DisplayMode: =If(CanAskAgent(txtAsk.Text, agentBusy), DisplayMode.Edit, DisplayMode.Disabled)
+            OnSelect: |-
+              =Set(agentBusy, true);
+              With(
+                  {
+                      answer: IfError(
+                          MicrosoftCopilotStudio.ExecuteCopilotAsyncV2(AgentName, { message: BuildAgentMessage(selectedInspection.'Inspection number', selectedInspection.Site.'Site code', txtAsk.Text) }).lastResponse,
+                          Notify("The assistant could not answer: " & FirstError.Message, NotificationType.Error); ""
+                      )
+                  },
+                  Set(agentReply, CleanAgentReply(answer));
+                  If(AgentCreatedFinding(answer), Refresh('Inspection items'))
+              );
+              Set(agentBusy, false)
+            AccessibleLabel: ="Send the question to the assistant"
+            TabIndex: =0
+            X: =16
+            Y: =280
+            Width: =Parent.Width - 32
+            Height: =88
+      - lblAgentReply:
+          Control: Label
+          Properties:
+            Text: =agentReply
+            Live: =Live.Polite
+            AccessibleLabel: ="The assistant's answer"
+            X: =16
+            Y: =384
+            Width: =Parent.Width - 32
+            Height: =Parent.Height - 400

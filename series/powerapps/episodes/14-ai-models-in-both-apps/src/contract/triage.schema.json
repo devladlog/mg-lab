@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/contoso/triage.schema.json",
+  "title": "Inspection triage result",
+  "description": "What every model route must return, whichever provider is behind it. Severity and category use the labels of the base ContosoInspections choices.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["summary", "category", "severity", "confidence"],
+  "properties": {
+    "summary": {"type": "string", "minLength": 1, "maxLength": 240},
+    "category": {"enum": ["Safety", "Electrical", "Fire", "Structural", "Housekeeping"]},
+    "severity": {"enum": ["Info", "Minor", "Major", "Critical"]},
+    "confidence": {"type": "integer", "minimum": 0, "maximum": 100}
+  }
+}

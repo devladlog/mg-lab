@@ -1,0 +1,129 @@
+{
+  "swagger": "2.0",
+  "info": {
+    "title": "Contoso Claude Triage",
+    "description": "Anthropic Messages API. The API key is a parameter so that a cloud flow can pass it in from a secret environment variable.",
+    "version": "1.0"
+  },
+  "host": "api.anthropic.com",
+  "basePath": "/",
+  "schemes": [
+    "https"
+  ],
+  "consumes": [
+    "application/json"
+  ],
+  "produces": [
+    "application/json"
+  ],
+  "paths": {
+    "/v1/messages": {
+      "post": {
+        "operationId": "TriageFinding",
+        "summary": "Triage a finding",
+        "description": "Sends the notes to the Messages API.",
+        "parameters": [
+          {
+            "name": "x-api-key",
+            "in": "header",
+            "required": true,
+            "type": "string",
+            "x-ms-visibility": "internal",
+            "description": "Passed by the flow, read from a secret environment variable.",
+            "x-ms-summary": "API key"
+          },
+          {
+            "name": "anthropic-version",
+            "in": "header",
+            "required": true,
+            "type": "string",
+            "default": "2026-10-21",
+            "x-ms-visibility": "advanced",
+            "x-ms-summary": "API version"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "type": "object",
+              "required": [
+                "model",
+                "max_tokens",
+                "messages"
+              ],
+              "properties": {
+                "model": {
+                  "type": "string",
+                  "title": "Model id",
+                  "x-ms-visibility": "important"
+                },
+                "max_tokens": {
+                  "type": "integer",
+                  "default": 300,
+                  "x-ms-visibility": "advanced"
+                },
+                "system": {
+                  "type": "string",
+                  "title": "System prompt"
+                },
+                "messages": {
+                  "type": "array",
+                  "title": "Messages",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "role": {
+                        "type": "string"
+                      },
+                      "content": {
+                        "description": "A string, or an array of parts: text, and image (Anthropic) or image_url (Azure OpenAI) for a photo."
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "content": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "type": "string"
+                      },
+                      "text": {
+                        "type": "string",
+                        "title": "Model text"
+                      }
+                    }
+                  }
+                },
+                "usage": {
+                  "type": "object",
+                  "properties": {
+                    "input_tokens": {
+                      "type": "integer"
+                    },
+                    "output_tokens": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "securityDefinitions": {}
+}

@@ -1,0 +1,141 @@
+{
+  "swagger": "2.0",
+  "info": {
+    "title": "Contoso Foundry Triage",
+    "description": "Azure OpenAI chat completions (v1 API) with Entra ID sign-in. The host is the lab resource's custom subdomain.",
+    "version": "1.0"
+  },
+  "host": "REPLACE-WITH-YOUR-RESOURCE.openai.azure.com",
+  "basePath": "/",
+  "schemes": [
+    "https"
+  ],
+  "consumes": [
+    "application/json"
+  ],
+  "produces": [
+    "application/json"
+  ],
+  "paths": {
+    "/openai/v1/chat/completions": {
+      "post": {
+        "operationId": "TriageFinding",
+        "summary": "Triage a finding",
+        "description": "Sends the finding notes (and optionally a photo as a data URL) to the deployment and returns the model's JSON text.",
+        "x-ms-visibility": "important",
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "type": "object",
+              "required": [
+                "model",
+                "messages"
+              ],
+              "properties": {
+                "model": {
+                  "type": "string",
+                  "title": "Deployment name",
+                  "description": "The deployment name from the Foundry resource.",
+                  "x-ms-visibility": "important"
+                },
+                "temperature": {
+                  "type": "number",
+                  "default": 0,
+                  "x-ms-visibility": "advanced"
+                },
+                "max_tokens": {
+                  "type": "integer",
+                  "default": 300,
+                  "x-ms-visibility": "advanced"
+                },
+                "response_format": {
+                  "type": "object",
+                  "x-ms-visibility": "advanced",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "default": "json_object"
+                    }
+                  }
+                },
+                "messages": {
+                  "type": "array",
+                  "title": "Messages",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "role": {
+                        "type": "string"
+                      },
+                      "content": {
+                        "description": "A string, or an array of parts: text, and image (Anthropic) or image_url (Azure OpenAI) for a photo."
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "choices": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "message": {
+                        "type": "object",
+                        "properties": {
+                          "role": {
+                            "type": "string"
+                          },
+                          "content": {
+                            "type": "string",
+                            "title": "Model text"
+                          }
+                        }
+                      }
+                    }
+                  }
+                },
+                "usage": {
+                  "type": "object",
+                  "properties": {
+                    "prompt_tokens": {
+                      "type": "integer"
+                    },
+                    "completion_tokens": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "securityDefinitions": {
+    "oauth2-auth": {
+      "type": "oauth2",
+      "flow": "accessCode",
+      "authorizationUrl": "https://login.microsoftonline.com/common/oauth2/authorize",
+      "tokenUrl": "https://login.windows.net/common/oauth2/authorize",
+      "scopes": {}
+    }
+  },
+  "security": [
+    {
+      "oauth2-auth": []
+    }
+  ]
+}

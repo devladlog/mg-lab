@@ -1,0 +1,237 @@
+# DEVLADLOG Power Apps — episode 13 (integration). Draft: code scenes are real excerpts from src/ and tests/, screen scenes need the lab recording.
+# Honest scope: with the lab's Copilot Studio trial the agent can be built and tested in the test panel, but not published. Embedding in the two apps needs a published agent: see demo.md Part B.
+episode: 13
+slug: copilot-studio-agents-inside-both-apps
+series_label: "POWER APPS"
+series_name: "DEVLADLOG Power Apps"
+file_prefix: "powerapps"
+title: "Copilot Studio agents inside both apps"
+subtitle: "One agent, grounded on Dataverse and SharePoint, inside the canvas app and the model-driven app"
+voice: am_michael
+thumbnail_text: "AGENT\nINSIDE BOTH\nAPPS"
+youtube:
+  title: "Copilot Studio Agent in Canvas and Model-Driven Apps | DEVLADLOG Power Apps #13"
+  tags: [Copilot Studio, agents, Power Apps, canvas app, model-driven app, Dataverse, SharePoint knowledge, agent flow, Entra authentication, Copilot Credits, Power Platform]
+sources:
+  - https://www.devladlog.com/articles/powerapps/2026-02-10-model-driven-apps-complete-guide-2026/
+  - https://learn.microsoft.com/microsoft-copilot-studio/requirements-messages-management
+  - https://learn.microsoft.com/microsoft-copilot-studio/billing-licensing
+  - https://learn.microsoft.com/microsoft-copilot-studio/knowledge-add-dataverse
+  - https://learn.microsoft.com/microsoft-copilot-studio/advanced-flow-create
+  - https://learn.microsoft.com/power-apps/developer/model-driven-apps/clientapi/bring-intelligence-using-agent-apis
+
+scenes:
+  - id: hook
+    type: title
+    heading: "One agent, two apps"
+    sub: "Copilot Studio inside the canvas app and the model-driven app"
+    short: hook
+    narration: >
+      Inspectors ask the same questions all day. Which items are still open? How do I check a fire door? In this episode one
+      Copilot Studio agent answers from our Dataverse data and our checklists, logs a finding after a yes, and sits inside both
+      apps. I will also tell you exactly what it costs, and what our lab licence can and cannot do. Welcome to DEVLADLOG Power Apps.
+
+  - id: plan
+    type: bullets
+    heading: "The plan"
+    bullets:
+      - "Ground the agent on Dataverse and a SharePoint library"
+      - "One topic and one agent flow that creates a finding"
+      - "Canvas app: the Copilot Studio connector"
+      - "Model-driven app: the app assistant agent"
+    narration: >
+      The agent is called Inspection Assistant. Its knowledge is three Dataverse tables and a SharePoint library with three
+      checklists. It has one topic, log a finding, and one agent flow behind it. Then we put it in the field app with the
+      Copilot Studio connector, and in the back office app as the app assistant agent.
+
+  - id: licence
+    type: bullets
+    heading: "What it costs, and our trial"
+    bullets:
+      - "Generative answer: 2 Copilot Credits"
+      - "Agent action: 5 Copilot Credits"
+      - "Agent flow actions: 13 credits per 100"
+      - "A trial licence can test, but not publish"
+    narration: >
+      Money first. Learn lists the rates: a generative answer is two Copilot Credits, an agent action is five, and agent flow
+      actions are thirteen credits per hundred. Our lab has a Copilot Studio trial only, no credits and no pay as you go plan.
+      The Learn page on licensing is clear that a trial can build and test an agent in the test panel, but cannot publish it.
+      We keep that in mind for everything that follows.
+
+  - id: knowledge
+    type: code
+    heading: "Knowledge, and what stays out"
+    lang: json
+    code: |
+      "excludedOnPurpose": [
+        "cin_inspector"
+      ],
+      "excludedColumns": [
+        "cin_inspection.cin_reviewernotes"
+      ],
+      "authentication": "Authenticate with Microsoft"
+    narration: >
+      Dataverse knowledge needs the agent to authenticate with Microsoft, so every answer runs as the signed in person and
+      the secured reviewer notes stay secured. I leave the inspector table out on purpose, and I wrote column descriptions
+      for the rest, because Learn says the agent uses them to find the right rows. The checklists come from a SharePoint library.
+
+  - id: testpanel
+    type: screen
+    heading: "Test panel: grounded answers"
+    image: screens/agent-test-panel.jpg
+    bar: "Copilot Studio · Inspection Assistant · Test your agent"
+    demo: >
+      copilotstudio.microsoft.com in the lab DEV environment, as labadmin. Agent Inspection Assistant, Knowledge page showing the
+      Dataverse source and the Inspection checklists source. In the test panel ask "Which items are still open on INS-01003?" then
+      "How do I check a fire door?" Show the citations. Mask the environment name and the avatar.
+    narration: >
+      Here is the agent in the test panel. Ask which items are still open, and it answers from Dataverse and cites the table.
+      Ask how to check a fire door, and it answers from the checklist file and says which one it used. Ask for the reviewer
+      notes and it refuses. These answers come from the real service, and in the trial the test panel is where this happens.
+
+  - id: topic
+    type: code
+    heading: "A topic with a yes before the write"
+    lang: yaml
+    code: |
+      kind: AdaptiveDialog
+      beginDialog:
+        kind: OnRecognizedIntent
+        id: main
+        intent:
+          displayName: Log a finding
+          triggerQueries:
+            - log a finding
+            - add a finding to an inspection
+            - record a problem I found
+    narration: >
+      Writing is different from reading. The log a finding topic has five trigger phrases, asks for the inspection, title,
+      category, severity and notes, reads them back, and only after a yes calls the flow. If the answer is no, nothing is written.
+      A test checks that the flow call sits behind that yes.
+
+  - id: flow
+    type: code
+    heading: "The agent flow guards the data"
+    lang: python
+    code: |
+      def guard(expression, then_actions, else_actions, run_after=None):
+          a = {"type": "If", "expression": expression, "actions": then_actions, "else": {"actions": else_actions}}
+          if run_after:
+              a["runAfter"] = run_after
+          return a
+    narration: >
+      The flow is the only thing that writes. Learn requires the agent trigger, a respond to the agent action, a synchronous
+      response and under one hundred seconds. Inside, it refuses a bad severity, notes under ten characters for Major and
+      Critical, an unknown inspection, and an inspection that is already approved or rejected. A Python script generates the file,
+      reading option values from the shared schema, so they cannot drift.
+
+  - id: options
+    type: bullets
+    heading: "Getting it into a canvas app"
+    bullets:
+      - "Copilot control: Dataverse only, no existing agent"
+      - "App Copilot: discontinued for new apps"
+      - "Microsoft Copilot: needs a 365 Copilot licence"
+      - "Our pick: the Copilot Studio connector"
+    narration: >
+      Learn lists several ways into a canvas app and most do not fit. The Copilot control takes only Dataverse tables and no existing
+      agent. The App Copilot is discontinued for new apps. Microsoft Copilot needs a Microsoft three six five Copilot licence. So we
+      use the Copilot Studio connector, which calls our own published agent.
+
+  - id: canvas
+    type: code
+    heading: "The Ask button in the field app"
+    lang: powerfx
+    short: canvas
+    code: |
+      With(
+          {
+              answer: IfError(
+                  MicrosoftCopilotStudio.ExecuteCopilotAsyncV2(AgentName, { message: BuildAgentMessage(selectedInspection.'Inspection number', selectedInspection.Site.'Site code', txtAsk.Text) }).lastResponse,
+                  Notify("The assistant could not answer: " & FirstError.Message, NotificationType.Error); ""
+              )
+          },
+          Set(agentReply, CleanAgentReply(answer));
+          If(AgentCreatedFinding(answer), Refresh('Inspection items'))
+      );
+    narration: >
+      The Ask button calls the Execute Agent and wait action. The app sends only the inspection number, the site code and the
+      question, never a photo and never reviewer notes. A failed call becomes a message, not a crash, and a created finding
+      refreshes the items list. The connection is per user, so each inspector signs in as themselves.
+
+  - id: canvasscreen
+    type: screen
+    heading: "The field app asks the agent"
+    image: screens/canvas-agent.jpg
+    bar: "Canvas app · Contoso Inspections · Ask the assistant"
+    demo: >
+      Part B only, needs a published agent and the Copilot Studio connector added to the field app. Play the app as alex.demo, open
+      INS-01003, Ask the assistant, type "Which items are still open?", press Ask. Then say "log a finding" and walk through the
+      topic to a yes. Mask the environment name and the avatar.
+    narration: >
+      In the field app there is a new screen. Alex asks which items are still open and gets an answer in plain words. Then Alex
+      says log a finding, answers the questions, confirms, and the new item appears in the list, flagged as written by the agent.
+
+  - id: modeldriven
+    type: code
+    heading: "The back office: the app assistant agent"
+    lang: javascript
+    code: |
+      if (!Xrm.Copilot || typeof Xrm.Copilot.executeEvent !== "function") {
+        return Xrm.Navigation.openAlertDialog({ title: "Inspection Assistant", text: "The agent is not available in this app. Ask an admin to add the app assistant agent." });
+      }
+      return Xrm.Copilot.executeEvent(EVENT_NAME, { question: q }).then(
+    narration: >
+      In the model-driven app, the documented route is the app assistant agent, which is still in preview. Client scripts call
+      Xrm dot Copilot dot execute event with an event name that a topic listens for. Our command checks the function exists first,
+      and tells the user how to fix it if not. Copilot chat in the app is a separate switch, and it is off by default.
+
+  - id: mdscreen
+    type: screen
+    heading: "The back office asks the agent"
+    image: screens/model-driven-agent.jpg
+    bar: "Model-driven app · Inspection Back Office · Ask the assistant"
+    demo: >
+      Part B only, needs a published agent set as the app assistant agent in the app designer, and the Ask the assistant command
+      from src/webresource. Open INS-01003 as sam.demo, press Ask the assistant, ask "What is still open here?", show the reply
+      dialog. Mask the environment name and the avatar.
+    narration: >
+      In the back office, Sam opens an inspection and presses Ask the assistant. The reply comes back in a dialog. Sam gets the
+      same answers as Alex, from the same agent, and still cannot see anything a Sam sized security role would hide.
+
+  - id: tests
+    type: code
+    heading: "What the tests check"
+    lang: csharp
+    code: |
+      h.AgentError = "no Copilot Credits";
+      h.Run("btnAsk", "OnSelect");
+      Assert.Contains(h.Calls, c => c.StartsWith("Notify(Error): The assistant could not answer: no Copilot Credits"));
+      Assert.Equal("The agent did not answer. Try again, or carry on by hand.", h.Text("agentReply"));
+      Assert.False(h.Bool("agentBusy"));
+    narration: >
+      Thirty Power Fx tests, twenty three Python tests and six JavaScript tests run offline. The agent is a test double there, so they
+      prove our own logic: the message the app builds, the flow guards, the failure path. They say nothing about how good the
+      answers are. The test panel is for that.
+
+  - id: gotcha
+    type: bullets
+    heading: "Gotcha: the trial cannot publish"
+    short: gotcha
+    bullets:
+      - "Trial: build and test panel only"
+      - "Both apps call a published agent"
+      - "So embedding needs credits or a plan"
+      - "That is an owner decision, not a workaround"
+    narration: >
+      The honest gotcha. Both embedding routes call a published agent, and a trial cannot publish. So in our lab the build and
+      the test panel are real, and the embedding is written, tested offline, and waiting for a licence decision. I will not fake
+      that screen. When you have credits, the demo notes have the exact click path.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The agent files, the flow generator, the canvas screen, the command script and every test are on GitHub, and the model-driven
+      apps guide is on devladlog dot com. Links are in the description. Next time, AI models in both apps.

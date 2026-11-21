@@ -1,0 +1,74 @@
+# Log a finding: collects the five values, reads them back, writes only after a yes (agent flow CreateFinding).
+# Shape follows the Copilot Studio extension for VS Code (AdaptiveDialog, Question, ConditionGroup, SendActivity; see Learn
+# "Edit your Microsoft Copilot Studio agent in Visual Studio Code"). The InvokeFlowAction node and its flowId are written by
+# Copilot Studio when the flow is attached as a tool; the zero GUID below is a placeholder, not a real id.
+kind: AdaptiveDialog
+beginDialog:
+  kind: OnRecognizedIntent
+  id: main
+  intent:
+    displayName: Log a finding
+    triggerQueries:
+      - log a finding
+      - add a finding to an inspection
+      - record a problem I found
+      - create a finding
+      - log a new finding
+  actions:
+    - kind: Question
+      id: askInspection
+      variable: init:Topic.InspectionNumber
+      prompt: Which inspection? Give the number, for example INS-00003.
+      entity: StringPrebuiltEntity
+    - kind: Question
+      id: askTitle
+      variable: init:Topic.FindingTitle
+      prompt: What is the finding, in a few words?
+      entity: StringPrebuiltEntity
+    - kind: Question
+      id: askCategory
+      variable: init:Topic.Category
+      prompt: Category? Safety, Electrical, Fire, Structural or Housekeeping.
+      entity: StringPrebuiltEntity
+    - kind: Question
+      id: askSeverity
+      variable: init:Topic.Severity
+      prompt: Severity? Info, Minor, Major or Critical.
+      entity: StringPrebuiltEntity
+    - kind: Question
+      id: askNotes
+      variable: init:Topic.Notes
+      prompt: Add notes (at least 10 characters for a Major or Critical finding).
+      entity: StringPrebuiltEntity
+    - kind: Question
+      id: confirm
+      alwaysPrompt: true
+      variable: init:Topic.Confirmed
+      prompt: =Concatenate("Create ", Topic.Severity, " ", Topic.Category, " finding '", Topic.FindingTitle, "' on ", Topic.InspectionNumber, "?")
+      entity: BooleanPrebuiltEntity
+    - kind: ConditionGroup
+      id: confirmedOrNot
+      conditions:
+        - id: confirmedYes
+          condition: =Topic.Confirmed = true
+          actions:
+            - kind: InvokeFlowAction
+              id: invokeCreateFinding
+              input:
+                binding:
+                  text: =Topic.InspectionNumber
+                  text_1: =Topic.FindingTitle
+                  text_2: =Topic.Category
+                  text_3: =Topic.Severity
+                  text_4: =Topic.Notes
+              output:
+                binding:
+                  result: Topic.Result
+              flowId: 00000000-0000-0000-0000-000000000000
+            - kind: SendActivity
+              id: sendResult
+              activity: "{Topic.Result}"
+      elseActions:
+        - kind: SendActivity
+          id: sendCancelled
+          activity: Nothing was written.

@@ -1,0 +1,31 @@
+{
+  "_about": "What the agent is grounded on. Our own summary format (not a Copilot Studio file): the Dataverse and SharePoint sources are added in the Knowledge page, see demo.md. Tested against the shared schema.",
+  "dataverse": {
+    "name": "Contoso Inspections data",
+    "description": "Inspections (status, score, summary, follow-up), sites (risk level, last inspected), inspection items (category, severity, passed, notes, resolved on) and inspectors. Use it to answer questions about open work, overdue findings and site history.",
+    "tables": [
+      "cin_inspection",
+      "cin_inspectionitem",
+      "cin_site"
+    ],
+    "excludedOnPurpose": [
+      "cin_inspector"
+    ],
+    "excludedColumns": [
+      "cin_inspection.cin_reviewernotes"
+    ],
+    "authentication": "Authenticate with Microsoft"
+  },
+  "sharepoint": {
+    "name": "Inspection checklists",
+    "description": "Contoso inspection checklists: fire doors, electrical rooms, housekeeping. Use for how-to-inspect questions.",
+    "siteUrl": "https://contoso.sharepoint.example/sites/mglab-inspections",
+    "library": "Inspection checklists",
+    "files": [
+      "checklist-fire-doors.docx",
+      "checklist-electrical-room.docx",
+      "checklist-housekeeping.docx"
+    ],
+    "authentication": "Authenticate with Microsoft (SharePoint uses the signed-in user's access)"
+  }
+}

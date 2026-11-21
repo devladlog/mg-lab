@@ -1,0 +1,45 @@
+# Formulas that episode 14 adds to the field app's App.Formulas (episode 11). Pure functions: the model calls are in TriageScreen only.
+# What goes to a model: the item's Notes and, on the Claude and Foundry routes only, the item's Photo. Never reviewer notes, names or ids.
+# The model suggests, a person decides: nothing here writes the base Severity column.
+App:
+  Properties:
+    Formulas: |-
+      =RouteAIBuilder = "aibuilder";
+      RouteFoundry = "foundry";
+      RouteClaude = "claude";
+      FoundryDeployment = "triage";
+      ClaudeModel = "claude-haiku-5-5";
+      MaxTriageNotes = 1500;
+      SeverityLabels = ["Info", "Minor", "Major", "Critical"];
+      CategoryLabels = ["Safety", "Electrical", "Fire", "Structural", "Housekeeping"];
+      RouteLabel(route: Text): Text =
+          Switch(route, RouteAIBuilder, "AI Builder prompt", RouteFoundry, "Azure OpenAI", RouteClaude, "Claude", "Unknown route");
+      CanTriage(notes: Text, busy: Boolean): Boolean = !busy && Len(Trim(notes)) >= 8;
+      BuildTriageNotes(notes: Text): Text = Left(Trim(notes), MaxTriageNotes);
+      PhotoBase64(photoJson: Text): Text =
+          With(
+              { clean: Substitute(photoJson, """", "") },
+              If(StartsWith(clean, "data:"), Last(Split(clean, ",")).Value, "")
+          );
+      StripFence(raw: Text): Text = Trim(Substitute(Substitute(raw, "```json", ""), "```", ""));
+      TriageValid(raw: Text): Boolean =
+          IfError(
+              With(
+                  { o: ParseJSON(StripFence(raw)) },
+                  Text(o.severity) in SeverityLabels && Text(o.category) in CategoryLabels
+                      && Value(o.confidence) >= 0 && Value(o.confidence) <= 100 && Value(o.confidence) = Int(Value(o.confidence))
+                      && Len(Trim(Text(o.summary))) > 0 && Len(Text(o.summary)) <= 240
+              ),
+              false
+          );
+      TriageSeverity(raw: Text): Text = If(TriageValid(raw), Text(ParseJSON(StripFence(raw)).severity), "");
+      TriageCategory(raw: Text): Text = If(TriageValid(raw), Text(ParseJSON(StripFence(raw)).category), "");
+      TriageSummary(raw: Text): Text = If(TriageValid(raw), Text(ParseJSON(StripFence(raw)).summary), "");
+      TriageConfidence(raw: Text): Number = If(TriageValid(raw), Value(ParseJSON(StripFence(raw)).confidence), 0);
+      SuggestionNeedsPhoto(raw: Text, hasPhoto: Boolean): Boolean = TriageValid(raw) && !hasPhoto && TriageSeverity(raw) in ["Major", "Critical"];
+      TriageBanner(raw: Text, route: Text): Text =
+          If(
+              TriageValid(raw),
+              RouteLabel(route) & " suggests " & TriageSeverity(raw) & ", " & TriageCategory(raw) & " (" & TriageConfidence(raw) & " of 100). You decide.",
+              "The answer did not match the contract, so nothing was saved. Fill the item in by hand."
+          );

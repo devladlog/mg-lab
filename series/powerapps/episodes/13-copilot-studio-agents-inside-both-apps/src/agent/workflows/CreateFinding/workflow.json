@@ -1,0 +1,282 @@
+{
+  "properties": {
+    "connectionReferences": {
+      "shared_commondataserviceforapps": {
+        "api": {
+          "name": "shared_commondataserviceforapps"
+        },
+        "connection": {
+          "connectionReferenceLogicalName": "cin_sharedcommondataserviceforapps_agent"
+        },
+        "runtimeSource": "embedded"
+      }
+    },
+    "definition": {
+      "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+      "contentVersion": "1.0.0.0",
+      "parameters": {
+        "$connections": {
+          "defaultValue": {},
+          "type": "Object"
+        },
+        "$authentication": {
+          "defaultValue": {},
+          "type": "SecureObject"
+        }
+      },
+      "triggers": {
+        "manual": {
+          "type": "Request",
+          "kind": "Skills",
+          "inputs": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "text": {
+                  "title": "Inspection number",
+                  "type": "string",
+                  "x-ms-dynamically-added": true,
+                  "description": "Inspection number such as INS-00003",
+                  "x-ms-content-hint": "TEXT"
+                },
+                "text_1": {
+                  "title": "Finding title",
+                  "type": "string",
+                  "x-ms-dynamically-added": true,
+                  "description": "Short name of the finding",
+                  "x-ms-content-hint": "TEXT"
+                },
+                "text_2": {
+                  "title": "Category",
+                  "type": "string",
+                  "x-ms-dynamically-added": true,
+                  "description": "Safety, Electrical, Fire, Structural or Housekeeping",
+                  "x-ms-content-hint": "TEXT"
+                },
+                "text_3": {
+                  "title": "Severity",
+                  "type": "string",
+                  "x-ms-dynamically-added": true,
+                  "description": "Info, Minor, Major or Critical",
+                  "x-ms-content-hint": "TEXT"
+                },
+                "text_4": {
+                  "title": "Notes",
+                  "type": "string",
+                  "x-ms-dynamically-added": true,
+                  "description": "Notes, at least 10 characters for Major or Critical",
+                  "x-ms-content-hint": "TEXT"
+                }
+              },
+              "required": [
+                "text",
+                "text_1",
+                "text_2",
+                "text_3",
+                "text_4"
+              ]
+            }
+          }
+        }
+      },
+      "actions": {
+        "Find_inspection": {
+          "type": "OpenApiConnection",
+          "inputs": {
+            "host": {
+              "connectionName": "shared_commondataserviceforapps",
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+              "operationId": "ListRecords"
+            },
+            "parameters": {
+              "entityName": "cin_inspections",
+              "$select": "cin_inspectionid,cin_name,cin_status",
+              "$filter": "cin_name eq '@{replace(triggerBody()?['text'],'''','''''')}'",
+              "$top": 1
+            },
+            "authentication": "@parameters('$authentication')"
+          },
+          "runAfter": {}
+        },
+        "Check_input": {
+          "type": "If",
+          "expression": "@or(empty(json('{\"Safety\":455320000,\"Electrical\":455320001,\"Fire\":455320002,\"Structural\":455320003,\"Housekeeping\":455320004}')?[triggerBody()?['text_2']]),empty(json('{\"Info\":455320000,\"Minor\":455320001,\"Major\":455320002,\"Critical\":455320003}')?[triggerBody()?['text_3']]))",
+          "actions": {
+            "Respond_bad_input": {
+              "type": "Response",
+              "kind": "Skills",
+              "inputs": {
+                "statusCode": 200,
+                "body": {
+                  "result": "Category or severity is not one of the allowed values. Nothing was written."
+                },
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "result": {
+                      "title": "result",
+                      "type": "string",
+                      "x-ms-content-hint": "TEXT",
+                      "x-ms-dynamically-added": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "else": {
+            "actions": {
+              "Check_notes": {
+                "type": "If",
+                "expression": "@and(contains(createArray('Major','Critical'),triggerBody()?['text_3']),less(length(trim(triggerBody()?['text_4'])),10))",
+                "actions": {
+                  "Respond_notes": {
+                    "type": "Response",
+                    "kind": "Skills",
+                    "inputs": {
+                      "statusCode": 200,
+                      "body": {
+                        "result": "A Major or Critical finding needs notes of at least 10 characters. Nothing was written."
+                      },
+                      "schema": {
+                        "type": "object",
+                        "properties": {
+                          "result": {
+                            "title": "result",
+                            "type": "string",
+                            "x-ms-content-hint": "TEXT",
+                            "x-ms-dynamically-added": true
+                          }
+                        }
+                      }
+                    }
+                  }
+                },
+                "else": {
+                  "actions": {
+                    "Check_found": {
+                      "type": "If",
+                      "expression": "@equals(length(outputs('Find_inspection')?['body/value']),0)",
+                      "actions": {
+                        "Respond_not_found": {
+                          "type": "Response",
+                          "kind": "Skills",
+                          "inputs": {
+                            "statusCode": 200,
+                            "body": {
+                              "result": "No inspection with that number. Nothing was written."
+                            },
+                            "schema": {
+                              "type": "object",
+                              "properties": {
+                                "result": {
+                                  "title": "result",
+                                  "type": "string",
+                                  "x-ms-content-hint": "TEXT",
+                                  "x-ms-dynamically-added": true
+                                }
+                              }
+                            }
+                          }
+                        }
+                      },
+                      "else": {
+                        "actions": {
+                          "Check_open": {
+                            "type": "If",
+                            "expression": "@contains(createArray(455320003,455320004),first(outputs('Find_inspection')?['body/value'])?['cin_status'])",
+                            "actions": {
+                              "Respond_closed": {
+                                "type": "Response",
+                                "kind": "Skills",
+                                "inputs": {
+                                  "statusCode": 200,
+                                  "body": {
+                                    "result": "That inspection is already approved or rejected. A reviewer must reopen it. Nothing was written."
+                                  },
+                                  "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                      "result": {
+                                        "title": "result",
+                                        "type": "string",
+                                        "x-ms-content-hint": "TEXT",
+                                        "x-ms-dynamically-added": true
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            },
+                            "else": {
+                              "actions": {
+                                "Create_finding": {
+                                  "type": "OpenApiConnection",
+                                  "inputs": {
+                                    "host": {
+                                      "connectionName": "shared_commondataserviceforapps",
+                                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+                                      "operationId": "CreateRecord"
+                                    },
+                                    "parameters": {
+                                      "entityName": "cin_inspectionitems",
+                                      "item/cin_name": "@{triggerBody()?['text_1']}",
+                                      "item/cin_inspectionid@odata.bind": "/cin_inspections(@{first(outputs('Find_inspection')?['body/value'])?['cin_inspectionid']})",
+                                      "item/cin_category": "@json('{\"Safety\":455320000,\"Electrical\":455320001,\"Fire\":455320002,\"Structural\":455320003,\"Housekeeping\":455320004}')?[triggerBody()?['text_2']]",
+                                      "item/cin_severity": "@json('{\"Info\":455320000,\"Minor\":455320001,\"Major\":455320002,\"Critical\":455320003}')?[triggerBody()?['text_3']]",
+                                      "item/cin_passed": false,
+                                      "item/cin_notes": "@concat('[Agent] ', triggerBody()?['text_4'])"
+                                    },
+                                    "authentication": "@parameters('$authentication')"
+                                  },
+                                  "runAfter": {}
+                                },
+                                "Respond_created": {
+                                  "type": "Response",
+                                  "kind": "Skills",
+                                  "inputs": {
+                                    "statusCode": 200,
+                                    "body": {
+                                      "result": "Finding created: @{triggerBody()?['text_1']} on @{triggerBody()?['text']}. Add a photo in the field app for a Major or Critical finding."
+                                    },
+                                    "schema": {
+                                      "type": "object",
+                                      "properties": {
+                                        "result": {
+                                          "title": "result",
+                                          "type": "string",
+                                          "x-ms-content-hint": "TEXT",
+                                          "x-ms-dynamically-added": true
+                                        }
+                                      }
+                                    }
+                                  },
+                                  "runAfter": {
+                                    "Create_finding": [
+                                      "Succeeded"
+                                    ]
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "runAfter": {
+            "Find_inspection": [
+              "Succeeded"
+            ]
+          }
+        }
+      }
+    },
+    "templateName": ""
+  },
+  "schemaVersion": "1.0.0.0"
+}
