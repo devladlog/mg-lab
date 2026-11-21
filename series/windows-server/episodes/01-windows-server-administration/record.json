@@ -1,0 +1,69 @@
+{
+  "note": "Live-session recording of the screen scenes (series/tools/rec). prepare/teardown run on the laptop, not recorded; commands are typed and run for real.",
+  "prepare": [
+    "$cli = New-PSSession -VMName CON-CLI01 -Credential $cred",
+    "Invoke-Command -Session $cli { New-Item -ItemType Directory -Force C:\\lab | Out-Null; Remove-Item C:\\lab\\ep01 -Recurse -Force -ErrorAction SilentlyContinue }",
+    "Copy-Item -ToSession $cli -Path (Get-Location).Path -Destination C:\\lab\\ep01 -Recurse -Force",
+    "$v = $PSVersionTable.PSVersion.ToString(); $msi = Join-Path $env:TEMP \"PowerShell-$v-win-x64.msi\"",
+    "if (-not (Invoke-Command -Session $cli { Test-Path 'C:\\Program Files\\PowerShell\\7\\pwsh.exe' })) { if (-not (Test-Path $msi)) { Invoke-WebRequest \"https://github.com/PowerShell/PowerShell/releases/download/v$v/PowerShell-$v-win-x64.msi\" -OutFile $msi }; Copy-Item -ToSession $cli -Path $msi -Destination C:\\lab\\pwsh.msi -Force; Invoke-Command -Session $cli { Start-Process msiexec.exe '/i C:\\lab\\pwsh.msi /quiet ADD_PATH=1 ENABLE_PSREMOTING=1' -Wait } }",
+    "Invoke-Command -VMName CON-SRV01 -Credential $cred { if (-not (Get-WindowsFeature Web-Server).Installed) { Install-WindowsFeature Web-Server | Out-Null } }",
+    "Invoke-Command -VMName CON-DC01 -Credential $cred { if (-not (Get-ADUser -Filter \"SamAccountName -eq 'alex.demo'\")) { New-ADUser -Name 'Alex Demo' -SamAccountName alex.demo -UserPrincipalName alex.demo@lab.contoso.com -Enabled $false } }",
+    "$r = Invoke-Command -VMName CON-SRV02 -Credential $cred { $x = Install-WindowsFeature FS-FileServer, FS-SMB1; Set-NetFirewallProfile -Profile Public -Enabled False; Set-ItemProperty 'HKLM:\\SYSTEM\\CurrentControlSet\\Control\\Terminal Server' -Name fDenyTSConnections -Value 0; if (-not (Get-LocalGroupMember -SID 'S-1-5-32-544' | Where-Object Name -eq 'CONTOSO\\alex.demo')) { Add-LocalGroupMember -SID 'S-1-5-32-544' -Member 'CONTOSO\\alex.demo' }; \"$($x.RestartNeeded)\" }",
+    "if (\"$r\" -eq 'Yes') { Restart-VM -Name CON-SRV02 -Force -Wait -For Heartbeat; Start-Sleep -Seconds 45 }",
+    "Remove-PSSession $cli"
+  ],
+  "screens": [
+    {
+      "name": "live-run",
+      "target": "CON-CLI01",
+      "configurationName": "PowerShell.7",
+      "workdir": "C:\\lab\\ep01\\src",
+      "prompt": "PS C:\\lab\\ep01\\src> ",
+      "commands": [
+        "./Invoke-ServerBaseline.ps1 -ComputerName CON-DC01, CON-SRV01, CON-SRV02 -SnapshotDir ./snapshots -OutFile ./report.md",
+        "#pause 3"
+      ]
+    },
+    {
+      "name": "report",
+      "target": "CON-CLI01",
+      "configurationName": "PowerShell.7",
+      "workdir": "C:\\lab\\ep01\\src",
+      "prompt": "PS C:\\lab\\ep01\\src> ",
+      "commands": [
+        "Get-Content ./report.md",
+        "#pause 4"
+      ]
+    },
+    {
+      "name": "fixed",
+      "target": "CON-CLI01",
+      "configurationName": "PowerShell.7",
+      "workdir": "C:\\lab\\ep01\\src",
+      "prompt": "PS C:\\lab\\ep01\\src> ",
+      "commands": [
+        "Invoke-Command -ComputerName CON-SRV02 { Uninstall-WindowsFeature FS-SMB1; Set-NetFirewallProfile -Profile Public -Enabled True }",
+        "./Invoke-ServerBaseline.ps1 -ComputerName CON-DC01, CON-SRV01, CON-SRV02 -OutFile ./report.md",
+        "#pause 3"
+      ]
+    },
+    {
+      "name": "hotfix",
+      "target": "CON-SRV02",
+      "workdir": "C:\\",
+      "prompt": "PS CON-SRV02> ",
+      "commands": [
+        "Get-HotFix | Sort-Object InstalledOn -Descending | Select-Object -First 5",
+        "# Windows Update history (what Settings > Update history shows):",
+        "$s = (New-Object -ComObject Microsoft.Update.Session).CreateUpdateSearcher(); $s.QueryHistory(0, $s.GetTotalHistoryCount()) | Select-Object -First 8 Date, Title | Format-Table -AutoSize -Wrap",
+        "#pause 4"
+      ]
+    }
+  ],
+  "teardown": [
+    "Invoke-Command -VMName CON-SRV02 -Credential $cred { Remove-LocalGroupMember -SID 'S-1-5-32-544' -Member 'CONTOSO\\alex.demo' -ErrorAction SilentlyContinue; Set-ItemProperty 'HKLM:\\SYSTEM\\CurrentControlSet\\Control\\Terminal Server' -Name fDenyTSConnections -Value 1; Uninstall-WindowsFeature FS-SMB1, FS-FileServer | Out-Null; Set-NetFirewallProfile -Profile Public -Enabled True }",
+    "Invoke-Command -VMName CON-SRV01 -Credential $cred { Uninstall-WindowsFeature Web-Server | Out-Null }",
+    "Invoke-Command -VMName CON-DC01 -Credential $cred { Remove-ADUser alex.demo -Confirm:$false -ErrorAction SilentlyContinue }",
+    "Invoke-Command -VMName CON-CLI01 -Credential $cred { Remove-Item C:\\lab\\ep01 -Recurse -Force -ErrorAction SilentlyContinue }"
+  ]
+}
