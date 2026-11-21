@@ -5,10 +5,8 @@ on top of it: app designer, site map, main and quick create forms, views, busine
 dashboard and charts, a command bar with Power Fx, security roles and column security, a custom page, and solution
 packaging. The finished app is tested as the back-office user **Sam Demo**.
 
-> **Schema note (read first).** When this episode was started the canvas special (episode 11) had no schema yet, so the
-> ContosoInspections data model is **defined here**, in `src/schema/contosoinspections.schema.json`. Episode 11 has since
-> written its own schema file and the two **do not match** (differences listed under "Reconcile with episode 11" below).
-> One of them has to change before both episodes ship against the same tables.
+> **Schema note.** This episode's `src/schema/contosoinspections.schema.json` is the **canonical** ContosoInspections data
+> model shared by all Power Apps build specials. Episode 11 (canvas) uses an exact copy, checked byte for byte by a test there.
 
 ## What is built
 
@@ -123,24 +121,12 @@ stubs written for the harness (and `Self` is renamed `SelfHost` before evaluatio
 - **Local choices are named `'Column (Table plural)'`.** For example `'Status (Inspections)'.Submitted`; our first draft
   used the logical name and failed to bind.
 
-## Reconcile with episode 11 (the canvas special)
+## Shared with episode 11 (the canvas special)
 
-Episode 11 wrote `src/schema/contosoinspections.schema.json` in its folder while this episode was being built. The data
-models differ, so they are **not** one shared schema yet:
-
-| | This episode (12) | Episode 11 |
-|---|---|---|
-| Tables | Inspector, Site, Inspection, **Inspection item** | Site, Inspector, Inspection, **Finding** |
-| Inspection status | Draft, In progress, Submitted, Approved, Rejected | Draft, Submitted, Reviewed, Closed |
-| Extra Inspection columns | Score (0-100), Requires follow-up, Follow-up date, Reviewer notes (secured), autonumber name | Result (Pass / Needs follow-up / Fail), Summary |
-| Child table columns | Category, Severity (Info/Minor/Major/Critical), Passed, Notes, Resolved on | Severity (Observation/Minor/Major/Critical), Category, Details, Photo (image), Resolved, Resolve by |
-| Site / Inspector | `cin_risklevel`, last inspected on, alternate key; phone, certified | Risk rating; Region, Work email, Certified |
-| Schema format | `logicalName`, `[label, value]` options, `ui` and `security` sections | `schemaName`, label-only options, `securityRole`, `sampleData` |
-
-Decision needed from the series owner: pick one model. The cheapest path is to adopt this episode's schema in episode 11
-(it already covers the back-office needs: score, follow-up and reviewer notes), or to rename the child table and statuses
-here. Do not ship both episodes against `ContosoInspections` until this is settled, because importing one solution over the
-other would fail or merge columns.
+Both build specials ship against this one schema. Episode 11's canvas app is the inspector's phone app on the same tables:
+the inspector moves an inspection Draft -> In progress -> Submitted and adds Inspection items with a photo (`cin_photo`, an
+image column added here for the canvas app); the back office in this app sets Approved or Rejected. Episode 11 keeps an exact
+copy of the schema file and a test fails if the two ever differ. Change the schema here, regenerate the solution, then copy it.
 
 ## Not verified / needs the tenant
 

@@ -54,19 +54,22 @@ public class OfflineResponsiveTests
     {
         var h = NewHarness();
         h.SetConnection(false, "NotConnected");
-        h.SetControl("drpSite", ("Selected", h.SiteRow("CWN-01")));
+        h.SetControl("drpSite", ("Selected", h.SiteRow("HW-01")));
         h.Run("btnStart", "OnSelect");
-        Assert.Equal("CWN-01-20261130-AD-001", h.Text("selectedInspection.Reference"));
+        // Offline there is no auto number yet: the screen says "New inspection" until the row syncs and Dataverse numbers it.
+        Assert.Equal("New inspection", h.Text(App.Formula("lblInspectionTitle", "Text")));
         h.PickText("drpSeverity", "Minor");
-        h.SetControl("txtFindingTitle", ("Text", Microsoft.PowerFx.Types.FormulaValue.New("Wet floor")));
+        h.SetControl("tglPassed", ("Value", Microsoft.PowerFx.Types.FormulaValue.New(false)));
+        h.SetControl("txtItemName", ("Text", Microsoft.PowerFx.Types.FormulaValue.New("Wet floor")));
         h.Run("btnSave", "OnSelect");
-        Assert.Equal("Wet floor", Harness.Field(h.FindingRow("Wet floor"), "cin_title"));
+        Assert.Equal("Minor", Harness.Field(h.ItemRow("Wet floor"), "cin_severity"));
+        Assert.Equal("In progress", h.Text("Text(selectedInspection.cin_status)"));
     }
 
     [Fact]
     public void No_write_button_depends_on_the_connection()
     {
-        foreach (var name in new[] { "btnStart", "btnSave", "btnSubmit", "btnAddFinding", "btnResolve" })
+        foreach (var name in new[] { "btnStart", "btnSave", "btnSubmit", "btnAddItem", "btnResolve" })
             foreach (var (_, f) in App.Controls[name].Properties)
                 Assert.DoesNotContain("Connection", f);
         foreach (var d in App.Definitions()) Assert.DoesNotContain("Connection", d.Text);
@@ -84,7 +87,7 @@ public class OfflineResponsiveTests
     [Fact]
     public void Galleries_are_sorted_because_rows_can_come_in_another_order_offline()
     {
-        foreach (var g in new[] { "galInspections", "galFindings" })
+        foreach (var g in new[] { "galInspections", "galItems" })
             Assert.StartsWith("=Sort(", App.Controls[g].Properties["Items"].TrimStart());
     }
 

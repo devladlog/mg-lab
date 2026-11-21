@@ -1,19 +1,20 @@
-# Add a finding: title, severity, category, details and a photo. Validation is ValidateFinding (App.Formulas) and shows in a
-# polite live region next to the Save button, so it is announced by screen readers and written out, not only coloured.
+# Add an inspection item: name, category, severity, passed or not, notes and a photo. Validation is ValidateItem (App.Formulas)
+# and shows in a polite live region next to the Save button, so it is announced by screen readers and written out, not only coloured.
 #   Camera   Learn: the Camera control works in the player on the phone; offline it still takes the picture, and the row syncs later.
-#   Photo    stored in the Finding.Photo image column (max size MaxPhotoKB); a Major or Critical finding must have one.
+#   Photo    stored in the Inspection item's Photo image column (max size MaxPhotoKB); a failed Major or Critical item must have one.
+#   Rules    a critical item cannot be passed: the same rule runs server side as a table-scope business rule (episode 12).
 Screens:
-  FindingScreen:
+  ItemScreen:
     Properties:
       Fill: =RGBA(245, 246, 250, 1)
-      OnVisible: =Set(findingPhoto, Blank())
+      OnVisible: =Set(itemPhoto, Blank())
       Width: =Max(App.Width, If(App.Width < App.Height, App.DesignWidth, App.DesignHeight))
       Height: =Max(App.Height, If(App.Width < App.Height, App.DesignHeight, App.DesignWidth))
     Children:
-      - lblFindingScreenTitle:
+      - lblItemScreenTitle:
           Control: Label
           Properties:
-            Text: ="Add finding"
+            Text: ="Add item"
             Role: =TextRole.Heading1
             Size: =24
             FontWeight: =FontWeight.Semibold
@@ -23,7 +24,7 @@ Screens:
             Y: =0
             Width: =Parent.Width - TapTarget
             Height: =TapTarget
-      - btnBackFinding:
+      - btnBackItem:
           Control: Classic/Button
           Properties:
             Text: ="‹"
@@ -34,7 +35,7 @@ Screens:
             Y: =0
             Width: =TapTarget
             Height: =TapTarget
-      - conFindingForm:
+      - conItemForm:
           Control: GroupContainer
           Variant: AutoLayout
           Properties:
@@ -48,62 +49,71 @@ Screens:
             Width: =Parent.Width
             Height: =Parent.Height - Self.Y
           Children:
-            - txtFindingTitle:
+            - txtItemName:
                 Control: Classic/TextInput
                 Properties:
                   Default: =""
-                  HintText: ="Title, e.g. Fire door wedged open"
-                  AccessibleLabel: ="Finding title"
+                  HintText: ="Item, e.g. Fire door"
+                  AccessibleLabel: ="Item name"
                   TabIndex: =0
                   Height: =TapTarget
             - drpSeverity:
                 Control: Classic/Dropdown
                 Properties:
-                  Items: =["Observation", "Minor", "Major", "Critical"]
+                  Items: =["Info", "Minor", "Major", "Critical"]
                   AccessibleLabel: ="Severity"
                   TabIndex: =0
                   Height: =TapTarget
             - drpCategory:
                 Control: Classic/Dropdown
                 Properties:
-                  Items: =["Safety", "Housekeeping", "Equipment", "Documentation"]
+                  Items: =["Safety", "Electrical", "Fire", "Structural", "Housekeeping"]
                   AccessibleLabel: ="Category"
                   TabIndex: =0
                   Height: =TapTarget
-            - txtFindingDetails:
+            - tglPassed:
+                Control: Classic/Toggle
+                Properties:
+                  Default: =true
+                  TrueText: ="Passed"
+                  FalseText: ="Failed"
+                  AccessibleLabel: ="Passed. Switch off when the check failed."
+                  TabIndex: =0
+                  Height: =TapTarget
+            - txtItemNotes:
                 Control: Classic/TextInput
                 Properties:
                   Default: =""
                   Mode: =TextMode.MultiLine
-                  HintText: ="Details (required for Major and Critical)"
-                  AccessibleLabel: ="Finding details"
+                  HintText: ="Notes (required for a failed Major or Critical item)"
+                  AccessibleLabel: ="Item notes"
                   TabIndex: =0
                   Height: =128
-            - camFinding:
+            - camItem:
                 Control: Camera
                 Properties:
-                  OnSelect: =Set(findingPhoto, Self.Photo)
-                  AccessibleLabel: ="Take a photo of the finding. Tap the camera to capture."
+                  OnSelect: =Set(itemPhoto, Self.Photo)
+                  AccessibleLabel: ="Take a photo of the item. Tap the camera to capture."
                   TabIndex: =0
                   Height: =320
             - lblProblem:
                 Control: Label
                 Properties:
                   # Live region: the message is announced when it changes, and it is text, not only a red border.
-                  Text: =ValidateFinding(txtFindingTitle.Text, txtFindingDetails.Text, drpSeverity.Selected.Value, !IsBlank(findingPhoto))
+                  Text: =ValidateItem(txtItemName.Text, txtItemNotes.Text, drpSeverity.Selected.Value, tglPassed.Value, !IsBlank(itemPhoto))
                   Live: =Live.Polite
                   Color: =RGBA(164, 38, 44, 1)
                   Height: =If(Self.Text = "", 0, 64)
             - lblPhotoState:
                 Control: Label
                 Properties:
-                  Text: =If(IsBlank(findingPhoto), "No photo yet", "Photo attached")
+                  Text: =If(IsBlank(itemPhoto), "No photo yet", "Photo attached")
                   Height: =40
             - btnSave:
                 Control: Classic/Button
                 Properties:
-                  Text: ="Save finding"
-                  OnSelect: =If(AddFinding(txtFindingTitle.Text, txtFindingDetails.Text, drpSeverity.Selected.Value, drpCategory.Selected.Value), Back())
-                  AccessibleLabel: ="Save finding"
+                  Text: ="Save item"
+                  OnSelect: =If(AddItem(txtItemName.Text, txtItemNotes.Text, drpSeverity.Selected.Value, drpCategory.Selected.Value, tglPassed.Value), Back())
+                  AccessibleLabel: ="Save item"
                   TabIndex: =0
                   Height: =TapTarget

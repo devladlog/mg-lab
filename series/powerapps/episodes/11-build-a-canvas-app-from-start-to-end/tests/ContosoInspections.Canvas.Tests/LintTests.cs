@@ -35,7 +35,7 @@ public class LintTests
     [Fact]
     public void Queries_inside_UDFs_use_only_delegable_functions_in_their_Filter_calls()
     {
-        // Only the data-source expressions: the UDFs also do text work (Trim, Initials) on values, which is fine.
+        // Only the data-source expressions: the UDFs also do text work (Trim, Len) on values, which is fine.
         foreach (var d in App.Definitions().Where(d => d.Kind != CanvasSource.DefinitionKind.NamedFormula))
             foreach (Match m in Regex.Matches(d.Text, @"\bFilter\(\s*\w+\s*,([^;]*?)\)\s*\)"))
                 Assert.DoesNotMatch(@"\b(Search|Len|Trim|Lower|Upper|Mid|Left|Right|Text|Value)\s*\(", m.Groups[1].Value);
@@ -50,7 +50,7 @@ public class LintTests
 
     // ---- touch and accessibility ---------------------------------------------------------------------------------------
 
-    private static readonly string[] Interactive = ["Classic/Button", "Classic/TextInput", "Classic/Dropdown", "Classic/DatePicker", "Camera", "Gallery"];
+    private static readonly string[] Interactive = ["Classic/Button", "Classic/TextInput", "Classic/Dropdown", "Classic/DatePicker", "Classic/Toggle", "Camera", "Gallery"];
 
     private static decimal HeightOf(CanvasSource.ControlInfo c)
     {
@@ -90,17 +90,18 @@ public class LintTests
     [Fact]
     public void Errors_and_banners_are_live_regions_and_text_not_only_colour()
     {
-        foreach (var name in new[] { "lblOffline", "lblProblem", "lblWho" })
+        foreach (var name in new[] { "lblOffline", "lblProblem", "lblWho", "lblDecision" })
             Assert.Equal("=Live.Polite", App.Controls[name].Properties["Live"]);
         // Status is written out with a leading mark, severity and open/resolved are words.
         Assert.Contains("\"● \"", App.Controls["lblMeta"].Properties["Text"]);
-        Assert.Contains("Resolved", App.Controls["lblFindingMeta"].Properties["Text"]);
+        Assert.Contains("resolved", App.Controls["lblItemMeta"].Properties["Text"]);
+        Assert.Contains("\"✕ \"", App.Controls["lblMeta"].Properties["Text"]);
     }
 
     [Fact]
     public void The_screen_title_is_a_heading_and_decorative_icons_have_no_label()
     {
-        foreach (var title in new[] { "lblListTitle", "lblNewTitle", "lblInspectionTitle", "lblFindingScreenTitle" })
+        foreach (var title in new[] { "lblListTitle", "lblNewTitle", "lblInspectionTitle", "lblItemScreenTitle" })
             Assert.Equal("=TextRole.Heading1", App.Controls[title].Properties["Role"]);
         Assert.False(App.Controls["icoOpen"].Properties.ContainsKey("AccessibleLabel")); // the row is the target
     }
@@ -173,10 +174,10 @@ public class LintTests
     [Fact]
     public void Behavior_UDFs_report_success_as_a_boolean_and_screens_navigate_on_true()
     {
-        foreach (var name in new[] { "StartInspection", "AddFinding", "ResolveFinding", "SubmitInspection" })
+        foreach (var name in new[] { "StartInspection", "AddItem", "ResolveItem", "SubmitInspection" })
             Assert.Matches($@"{name}\([^)]*\): Boolean = \{{", App.Definitions().First(d => d.Name == name).Text);
         Assert.StartsWith("=If(StartInspection(", App.Controls["btnStart"].Properties["OnSelect"]);
-        Assert.StartsWith("=If(AddFinding(", App.Controls["btnSave"].Properties["OnSelect"]);
+        Assert.StartsWith("=If(AddItem(", App.Controls["btnSave"].Properties["OnSelect"]);
         Assert.StartsWith("=If(SubmitInspection(", App.Controls["btnSubmit"].Properties["OnSelect"]);
     }
 }

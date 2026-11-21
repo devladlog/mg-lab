@@ -11,8 +11,9 @@ namespace ContosoInspections.Canvas.Tests;
 /// <summary>
 /// Runs the Contoso Inspections app formulas (App.Formulas named formulas and UDFs, and every control property) on Microsoft's
 /// open-source Power Fx interpreter (1.8.1). The Dataverse tables are NOT hand-written here: their record types, choice sets and
-/// lookups are built from src/schema/contosoinspections.schema.json, the same file the provisioning script uses, so the app can't
-/// compile against a column the schema doesn't have. Rows live in mutable in-memory tables (Collect and Patch work); a new row
+/// lookups are built from src/schema/contosoinspections.schema.json, the same file the provisioning script uses (and an exact copy
+/// of episode 12's), so the app can't compile against a column the schema doesn't have. The system Status (statecode) column is
+/// not modelled: see the README gotcha about the two columns called Status. Rows live in mutable in-memory tables (Collect and Patch work); a new row
 /// gets a GUID the way Dataverse assigns one. The clock is fixed: Today() = Monday 30 November 2026.
 ///
 /// What is stubbed (the interpreter has none of these): Notify, Back, Navigate, ShowHostInfo, User(). Calls are recorded in Calls.
@@ -25,7 +26,7 @@ public sealed class Harness
     /// <summary>What a screen name evaluates to here: Name (what Navigate receives) plus the Width, Height and Size formulas read.</summary>
     public static readonly RecordType ScreenType = RecordType.Empty().Add("Name", FormulaType.String).Add("Width", FormulaType.Number)
         .Add("Height", FormulaType.Number).Add("Size", FormulaType.Number);
-    public static readonly string[] ScreenNames = ["InspectionsScreen", "InspectionScreen", "NewInspectionScreen", "FindingScreen"];
+    public static readonly string[] ScreenNames = ["InspectionsScreen", "InspectionScreen", "NewInspectionScreen", "ItemScreen"];
 
     public CanvasSource App { get; }
     public JsonElement Schema { get; }
@@ -39,7 +40,7 @@ public sealed class Harness
     public TableValue Sites => Table("cin_site");
     public TableValue Inspectors => Table("cin_inspector");
     public TableValue Inspections => Table("cin_inspection");
-    public TableValue Findings => Table("cin_finding");
+    public TableValue Items => Table("cin_inspectionitem");
 
     private readonly SymbolTable dataSymbols = new();
     private readonly ReadOnlySymbolValues dataValues;
@@ -74,7 +75,7 @@ public sealed class Harness
         var mutable = new SymbolProperties { CanMutate = true };
         foreach (var t in Schema.GetProperty("tables").EnumerateArray())
         {
-            var logical = Logical(t.GetProperty("schemaName").GetString()!);
+            var logical = t.GetProperty("logicalName").GetString()!;
             slots[logical] = dataSymbols.AddVariable(t.GetProperty("pluralName").GetString()!, Types[logical].ToTable(), mutable);
         }
         dataValues = dataSymbols.CreateValues();
@@ -97,6 +98,7 @@ public sealed class Harness
             "NotConnected", "NotConnectedWithWarning", "NotConnectedPendingUpsync", "NotConnectedSyncError");
         Enum("HostInfo", "OfflineSync");
         Enum("Live", "Off", "Polite", "Assertive");
+        Enum("TextFormat", "Text", "Number");
         Enum("LayoutDirection", "Horizontal", "Vertical");
         // Learn (create responsive layouts): Small = 1 (phone), Medium = 2, Large = 3, ExtraLarge = 4.
         Engine.UpdateVariable("ScreenSize", FormulaValue.NewRecordFromFields(
@@ -108,8 +110,8 @@ public sealed class Harness
 
         Engine.UpdateVariable("statusFilter", FormulaValue.NewBlank(OptionSets["cin_inspection.cin_status"].FormulaType));
         Engine.UpdateVariable("selectedInspection", FormulaValue.NewBlank(Types["cin_inspection"]));
-        Engine.UpdateVariable("selectedFinding", FormulaValue.NewBlank(Types["cin_finding"]));
-        Engine.UpdateVariable("findingPhoto", FormulaValue.NewBlank(FormulaType.String));
+        Engine.UpdateVariable("selectedItem", FormulaValue.NewBlank(Types["cin_inspectionitem"]));
+        Engine.UpdateVariable("itemPhoto", FormulaValue.NewBlank(FormulaType.String));
 
         SetConnection(true, "Connected");
         SetHost(offlineEnabled: true);
@@ -121,34 +123,37 @@ public sealed class Harness
 
     // ---- schema -> types ------------------------------------------------------------------------------------------------
 
-    public static string Logical(string schemaName) => schemaName.ToLowerInvariant();
+    public static string Logical(string name) => name.ToLowerInvariant();
 
     private static string Identifier(string label) => new string(label.Where(char.IsLetterOrDigit).ToArray());
 
     private void BuildTypes(PowerFxConfig config)
     {
-        var rels = Schema.GetProperty("relationships").EnumerateArray().ToList();
         foreach (var t in Schema.GetProperty("tables").EnumerateArray())
         {
-            var logical = Logical(t.GetProperty("schemaName").GetString()!);
+            var logical = t.GetProperty("logicalName").GetString()!;
             var plural = t.GetProperty("pluralName").GetString()!;
-            var rt = RecordType.Empty().Add($"{logical}id", FormulaType.Guid, t.GetProperty("displayName").GetString()!);
             var primary = t.GetProperty("primaryName");
-            rt = rt.Add(Logical(primary.GetProperty("schemaName").GetString()!), FormulaType.String, primary.GetProperty("displayName").GetString()!);
+            // The primary key column is displayed with the table's name; the primary name column with its own.
+            var rt = RecordType.Empty().Add($"{logical}id", FormulaType.Guid, t.GetProperty("displayName").GetString()!);
+            rt = rt.Add(primary.GetProperty("logicalName").GetString()!, FormulaType.String, primary.GetProperty("displayName").GetString()!);
             foreach (var c in t.GetProperty("columns").EnumerateArray())
             {
-                var colLogical = Logical(c.GetProperty("schemaName").GetString()!);
+                var colLogical = c.GetProperty("logicalName").GetString()!;
                 var display = c.GetProperty("displayName").GetString()!;
                 FormulaType ft;
                 switch (c.GetProperty("type").GetString())
                 {
-                    case "string" or "memo": ft = FormulaType.String; break;
+                    case "string" or "email" or "phone" or "memo": ft = FormulaType.String; break;
                     case "date": ft = FormulaType.Date; break;
-                    case "boolean": ft = FormulaType.Boolean; break;
+                    case "bool": ft = FormulaType.Boolean; break;
+                    case "whole": ft = FormulaType.Number; break;
+                    case "lookup": ft = Types[c.GetProperty("target").GetString()!]; break;
                     case "image": ft = RecordType.Empty().Add("Full", FormulaType.String).Add("Value", FormulaType.String); break;
                     case "choice":
-                        var names = c.GetProperty("options").EnumerateArray().Select(o => o.GetString()!).ToList();
-                        var os = new OptionSet($"{display} ({plural})", DisplayNameUtility.MakeUnique(names.ToDictionary(Identifier, n => n)));
+                        // Dataverse local choices appear as 'Column (Table plural)', e.g. 'Status (Inspections)'.
+                        var labels = c.GetProperty("options").EnumerateArray().Select(o => o[0].GetString()!).ToList();
+                        var os = new OptionSet($"{display} ({plural})", DisplayNameUtility.MakeUnique(labels.ToDictionary(Identifier, n => n)));
                         config.AddOptionSet(os);
                         OptionSets[$"{logical}.{colLogical}"] = os;
                         ft = os.FormulaType;
@@ -156,12 +161,6 @@ public sealed class Harness
                     default: throw new NotSupportedException(c.GetProperty("type").GetString());
                 }
                 rt = rt.Add(colLogical, ft, display);
-            }
-            foreach (var r in rels.Where(r => r.GetProperty("referencing").GetString() == t.GetProperty("schemaName").GetString()))
-            {
-                var look = r.GetProperty("lookup");
-                rt = rt.Add(Logical(look.GetProperty("schemaName").GetString()!), Types[Logical(r.GetProperty("referenced").GetString()!)],
-                    look.GetProperty("displayName").GetString()!);
             }
             Types[logical] = rt;
         }
@@ -188,49 +187,58 @@ public sealed class Harness
     private static FormulaValue S(string s) => FormulaValue.New(s);
     private static FormulaValue D(int y, int m, int d) => FormulaValue.NewDateOnly(new DateTime(y, m, d));
 
+    /// <summary>Episode 11's sample sites and inspectors come from src/data/seed.json, the file the provisioning script seeds from.</summary>
+    public static JsonElement LoadSeed() =>
+        JsonDocument.Parse(File.ReadAllText(Path.Combine(CanvasSource.EpisodeDir, "src", "data", "seed.json"))).RootElement;
+
     private void SeedData()
     {
-        var sampleSites = Schema.GetProperty("sampleData").GetProperty("sites").EnumerateArray().ToList();
-        var siteRows = sampleSites.Select((s, i) => Row("cin_site",
+        var seed = LoadSeed();
+        var siteRows = seed.GetProperty("sites").EnumerateArray().Select((s, i) => Row("cin_site",
             ("cin_siteid", FormulaValue.New(Id(100 + i))), ("cin_name", S(s.GetProperty("name").GetString()!)),
-            ("cin_sitecode", S(s.GetProperty("code").GetString()!)), ("cin_city", S(s.GetProperty("city").GetString()!)),
-            ("cin_riskrating", Option("cin_site.cin_riskrating", s.GetProperty("risk").GetString()!)))).ToList();
-        var inspectorRows = Schema.GetProperty("sampleData").GetProperty("inspectors").EnumerateArray().Select((s, i) => Row("cin_inspector",
+            ("cin_sitecode", S(s.GetProperty("code").GetString()!)), ("cin_address", S(s.GetProperty("address").GetString()!)),
+            ("cin_city", S(s.GetProperty("city").GetString()!)),
+            ("cin_risklevel", Option("cin_site.cin_risklevel", s.GetProperty("risk").GetString()!)))).ToList();
+        var inspectorRows = seed.GetProperty("inspectors").EnumerateArray().Select((s, i) => Row("cin_inspector",
             ("cin_inspectorid", FormulaValue.New(Id(200 + i))), ("cin_name", S(s.GetProperty("name").GetString()!)),
-            ("cin_workemail", S(s.GetProperty("defaultEmail").GetString()!)), ("cin_region", S(s.GetProperty("region").GetString()!)),
+            ("cin_email", S(s.GetProperty("defaultEmail").GetString()!)), ("cin_phone", S(s.GetProperty("phone").GetString()!)),
             ("cin_certified", FormulaValue.New(s.GetProperty("certified").GetBoolean())))).ToList();
 
         var alex = inspectorRows[0];
         // Alex's own rows only: the role gives Basic scope, so Dataverse (here: the seed) never returns anyone else's.
-        var i1 = Row("cin_inspection", ("cin_inspectionid", FormulaValue.New(Id(301))), ("cin_reference", S("CWN-01-20261125-AD-001")),
-            ("cin_siteid", siteRows[0]), ("cin_inspectorid", alex), ("cin_inspectiondate", D(2026, 11, 25)),
-            ("cin_status", Option("cin_inspection.cin_status", "Submitted")), ("cin_result", Option("cin_inspection.cin_result", "Pass")),
-            ("cin_summary", S("All clear.")));
-        var i2 = Row("cin_inspection", ("cin_inspectionid", FormulaValue.New(Id(302))), ("cin_reference", S("CPE-02-20261127-AD-001")),
-            ("cin_siteid", siteRows[1]), ("cin_inspectorid", alex), ("cin_inspectiondate", D(2026, 11, 27)),
-            ("cin_status", Option("cin_inspection.cin_status", "Draft")));
-        var i3 = Row("cin_inspection", ("cin_inspectionid", FormulaValue.New(Id(303))), ("cin_reference", S("CDS-03-20261130-AD-001")),
-            ("cin_siteid", siteRows[2]), ("cin_inspectorid", alex), ("cin_inspectiondate", D(2026, 11, 30)),
-            ("cin_status", Option("cin_inspection.cin_status", "Draft")));
+        RecordValue Inspection(int n, string number, RecordValue site, DateTime date, string status, double? score = null, string summary = "",
+            bool followUp = false, DateTime? followUpDate = null) =>
+            Row("cin_inspection", ("cin_inspectionid", FormulaValue.New(Id(n))), ("cin_name", S(number)), ("cin_siteid", site), ("cin_inspectorid", alex),
+                ("cin_inspectiondate", FormulaValue.NewDateOnly(date)), ("cin_status", Option("cin_inspection.cin_status", status)),
+                ("cin_score", score is { } sc ? FormulaValue.New(sc) : FormulaValue.NewBlank(FormulaType.Number)), ("cin_summary", S(summary)),
+                ("cin_requiresfollowup", FormulaValue.New(followUp)),
+                ("cin_followupdate", followUpDate is { } f ? FormulaValue.NewDateOnly(f) : FormulaValue.NewBlank(FormulaType.Date)));
 
-        RecordValue Finding(int n, string title, RecordValue inspection, string severity, string category, DateTime? resolveBy, bool resolved) =>
-            Row("cin_finding", ("cin_findingid", FormulaValue.New(Id(n))), ("cin_title", S(title)), ("cin_inspectionid", inspection),
-                ("cin_severity", Option("cin_finding.cin_severity", severity)), ("cin_category", Option("cin_finding.cin_category", category)),
-                ("cin_resolved", FormulaValue.New(resolved)),
-                ("cin_resolveby", resolveBy is { } r ? FormulaValue.NewDateOnly(r) : FormulaValue.NewBlank(FormulaType.Date)));
+        // The four statuses an inspector can meet: the back office already approved one, one is waiting for review.
+        var i1 = Inspection(301, "INS-00001", siteRows[0], new(2026, 11, 20), "Approved", 90, "Clean inspection.");
+        var i2 = Inspection(302, "INS-00002", siteRows[1], new(2026, 11, 25), "Submitted", 64, "Cable crosses the walkway at door 4.", true, new(2026, 12, 7));
+        var i3 = Inspection(303, "INS-00003", siteRows[2], new(2026, 11, 27), "In progress");
+        var i4 = Inspection(304, "INS-00004", siteRows[0], new(2026, 11, 30), "Draft");
 
-        var findings = new[]
+        RecordValue Item(int n, string name, RecordValue inspection, string severity, string category, bool passed, DateTime? resolvedOn) =>
+            Row("cin_inspectionitem", ("cin_inspectionitemid", FormulaValue.New(Id(n))), ("cin_name", S(name)), ("cin_inspectionid", inspection),
+                ("cin_severity", Option("cin_inspectionitem.cin_severity", severity)), ("cin_category", Option("cin_inspectionitem.cin_category", category)),
+                ("cin_passed", FormulaValue.New(passed)),
+                ("cin_resolvedon", resolvedOn is { } r ? FormulaValue.NewDateOnly(r) : FormulaValue.NewBlank(FormulaType.Date)));
+
+        var items = new[]
         {
-            Finding(401, "Loose handrail", i1, "Minor", "Safety", new(2026, 12, 25), true),
-            Finding(402, "Fire door wedged open", i2, "Major", "Safety", new(2026, 12, 7), false),
-            Finding(403, "Extinguisher tag out of date", i2, "Minor", "Documentation", new(2026, 11, 28), false), // overdue
-            Finding(404, "Pallets blocking an aisle", i2, "Observation", "Housekeeping", null, true),
+            Item(401, "Loose handrail", i1, "Minor", "Safety", false, new(2026, 11, 24)),
+            Item(402, "Fire door", i3, "Major", "Fire", false, null),
+            Item(403, "Extinguisher tag", i3, "Minor", "Fire", false, null),
+            Item(404, "Aisle clear", i3, "Info", "Housekeeping", true, null),
+            Item(405, "Cable across walkway", i2, "Critical", "Electrical", false, null),
         };
 
         Set("cin_site", siteRows, "cin_siteid");
         Set("cin_inspector", inspectorRows, "cin_inspectorid");
-        Set("cin_inspection", new[] { i1, i2, i3 }, "cin_inspectionid");
-        Set("cin_finding", findings, "cin_findingid");
+        Set("cin_inspection", new[] { i1, i2, i3, i4 }, "cin_inspectionid");
+        Set("cin_inspectionitem", items, "cin_inspectionitemid");
     }
 
     private void Set(string logical, IEnumerable<RecordValue> rows, string key) =>
@@ -310,12 +318,15 @@ public sealed class Harness
     {
         SetControl("txtSearch", ("Text", S("")));
         SetControl("txtSummary", ("Text", S("")));
-        SetControl("txtFindingTitle", ("Text", S("")));
-        SetControl("txtFindingDetails", ("Text", S("")));
-        SetControl("camFinding", ("Photo", S("")));
+        SetControl("txtScore", ("Text", S("")));
+        SetControl("txtItemName", ("Text", S("")));
+        SetControl("txtItemNotes", ("Text", S("")));
+        SetControl("camItem", ("Photo", S("")));
         SetControl("lblOffline", ("Visible", FormulaValue.New(false)), ("Height", FormulaValue.New(0m)));
-        PickText("drpResult", "Pass");
-        PickText("drpSeverity", "Observation");
+        SetControl("tglPassed", ("Value", FormulaValue.New(true)));
+        SetControl("tglFollowUp", ("Value", FormulaValue.New(false)));
+        SetControl("dpFollowUp", ("SelectedDate", D(2026, 12, 7)));
+        PickText("drpSeverity", "Info");
         PickText("drpCategory", "Safety");
         SetControl("drpSite", ("Selected", Sites.Rows.First().Value));
         SetControl("dpInspectionDate", ("SelectedDate", D(2026, 11, 30)));
@@ -331,16 +342,16 @@ public sealed class Harness
     public void SetVariable(string name, FormulaValue value) => Engine.UpdateVariable(name, value);
     public void SetThisItem(RecordValue row) => Engine.UpdateVariable("ThisItem", row);
 
-    public RecordValue InspectionRow(string reference) =>
-        Inspections.Rows.Select(r => r.Value).First(r => Field(r, "cin_reference") == reference);
+    public RecordValue InspectionRow(string number) =>
+        Inspections.Rows.Select(r => r.Value).First(r => Field(r, "cin_name") == number);
 
-    public RecordValue FindingRow(string title) =>
-        Findings.Rows.Select(r => r.Value).First(r => Field(r, "cin_title") == title);
+    public RecordValue ItemRow(string name) =>
+        Items.Rows.Select(r => r.Value).First(r => Field(r, "cin_name") == name);
 
     public RecordValue SiteRow(string code) => Sites.Rows.Select(r => r.Value).First(r => Field(r, "cin_sitecode") == code);
 
-    public void Select(string reference) => Eval($"Set(selectedInspection, LookUp(Inspections, Reference = \"{reference}\"))");
-    public void SelectFinding(string title) => Eval($"Set(selectedFinding, LookUp(Findings, Title = \"{title}\"))");
+    public void Select(string number) => Eval($"Set(selectedInspection, LookUp(Inspections, 'Inspection number' = \"{number}\"))");
+    public void SelectItem(string name) => Eval($"Set(selectedItem, LookUp('Inspection items', Item = \"{name}\"))");
 
     public void MakeReadOnly(string logical, string message) =>
         dataValues.Set(slots[logical], new ReadOnlyTable(Table(logical), message));
@@ -410,7 +421,7 @@ public sealed class Harness
     {
         StringValue s => s.Value,
         BlankValue => "",
-        OptionSetValue o => o.Option,
+        OptionSetValue o => o.DisplayName,
         DateValue d => d.GetConvertedValue(TimeZoneInfo.Utc).ToString("yyyy-MM-dd"),
         BooleanValue b => b.Value ? "true" : "false",
         var v => v.ToObject()?.ToString() ?? "",

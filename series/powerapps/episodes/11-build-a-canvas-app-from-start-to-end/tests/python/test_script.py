@@ -55,21 +55,77 @@ def test_screen_scenes_have_image_bar_demo(script):
             assert s["bar"] and s["demo"]
 
 
-def test_code_scenes_are_short_and_use_real_names(script):
-    corpus = ""
-    for p in (EPISODE / "src").rglob("*"):
-        if p.is_file() and p.suffix in {".yaml", ".json", ".ps1", ".xml"}:
-            corpus += p.read_text(encoding="utf-8-sig")
-    for p in (EPISODE / "tests").rglob("*"):
-        if p.is_file() and p.suffix in {".cs", ".py", ".ps1"}:
-            corpus += p.read_text(encoding="utf-8")
+def _corpus_lines():
+    """Every stripped, non-blank line of the episode's own source and tests."""
+    lines = set()
+    for root, suffixes in ((EPISODE / "src", {".yaml", ".json", ".ps1", ".xml"}), (EPISODE / "tests", {".cs", ".py", ".ps1"})):
+        for p in root.rglob("*"):
+            if p.is_file() and p.suffix in suffixes and not {"bin", "obj", "__pycache__"} & set(p.parts):
+                lines.update(line.strip() for line in p.read_text(encoding="utf-8-sig").splitlines() if line.strip())
+    return lines
+
+
+# Scenes that show a terminal, not a file: the plan output is checked against a real -PlanOnly run, the solution scene is the real
+# pac commands plus the names of tests that exist.
+TERMINAL_SCENES = {"provision", "solution"}
+
+
+def test_code_scenes_are_short_real_lines_of_the_source(script):
+    corpus = _corpus_lines()
+    for s in script["scenes"]:
+        if s["type"] != "code" or s["id"] in TERMINAL_SCENES:
+            continue
+        lines = [line.strip() for line in s["code"].rstrip().splitlines() if line.strip()]
+        assert len(s["code"].rstrip().splitlines()) <= 9, s["id"]
+        for line in lines:
+            assert line in corpus, f"{s['id']}: not a line of src or tests: {line}"
+
+
+def test_the_plan_scene_is_real_plan_output(script):
+    from conftest import SCRIPTS, run
+    scene = next(s for s in script["scenes"] if s["id"] == "provision")
+    shown = scene["code"].rstrip().splitlines()
+    assert len(shown) <= 9
+    out = run("pwsh", "-NoProfile", "-NonInteractive", "-File", SCRIPTS / "Provision-ContosoInspections.ps1",
+              "-EnvironmentUrl", "https://contoso-dev.crm4.dynamics.com", "-PlanOnly")
+    assert out.code == 0, out
+    real = {line.rstrip() for line in out.out.splitlines()}
+    assert shown[0].startswith("> Provision-ContosoInspections.ps1 -EnvironmentUrl") and shown[0].endswith("-PlanOnly")
+    for line in shown[1:]:
+        assert line.rstrip() in real, f"not in the real plan output: {line}"
+
+
+def test_the_solution_scene_names_real_tests_and_commands(script):
+    corpus = _corpus_lines()
+    scene = next(s for s in script["scenes"] if s["id"] == "solution")
+    assert len(scene["code"].rstrip().splitlines()) <= 9
+    for line in scene["code"].splitlines():
+        line = line.strip()
+        if line.startswith("Passed"):
+            assert any(f"def {line.split()[-1]}(" in c for c in corpus), line
+        elif line:
+            assert line.startswith("pac solution "), line
+
+
+def test_code_scenes_use_real_names(script):
+    corpus = "\n".join(_corpus_lines())
     for s in script["scenes"]:
         if s["type"] != "code":
             continue
-        assert len(s["code"].rstrip().splitlines()) <= 16, s["id"]
-        for ident in re.findall(r"\b(?:Validate\w+|ResolveFinding|InspectionRef|icoSync|galInspections|camFinding|conInspectionBody|"
-                                r"test_\w+|[A-Z][a-z]+_[A-Za-z_]+)\b", s["code"]):
+        for ident in re.findall(r"\b(?:Validate\w+|ResolveItem|icoSync|galInspections|conInspectionBody|test_\w+)\b", s["code"]):
             assert ident in corpus, f"{s['id']}: {ident} is not in src or tests"
+
+
+def test_the_story_is_the_shared_one(script):
+    text = (EPISODE / "script.yaml").read_text(encoding="utf-8")
+    # Words from the old, unreconciled model: Finding, the Reviewed and Closed statuses, the old role, the typed reference number.
+    for old in (r"\bfindings?\b", r"\bReviewed\b", r"\bClosed\b", r"Contoso Inspector", r"\breference number\b"):
+        assert not re.search(old, text, re.I), old
+    narration = " ".join(s["narration"] for s in script["scenes"])
+    assert "model-driven" in narration and "back office" in narration
+    assert "approved" in narration.lower() and "rejected" in narration.lower()
+    ids = [s["id"] for s in script["scenes"]]
+    assert "status-flow" in ids and ids.index("status-flow") < ids.index("item-screen")
 
 
 def test_no_real_tenant_names(script):

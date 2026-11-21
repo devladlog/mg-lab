@@ -9,6 +9,9 @@ import pytest
 EPISODE = Path(__file__).resolve().parents[2]
 SRC = EPISODE / "src"
 SCHEMA_PATH = SRC / "schema" / "contosoinspections.schema.json"
+# Episode 12 owns the schema; episode 11 keeps an exact copy because both apps run on one Dataverse solution.
+CANONICAL_SCHEMA_PATH = EPISODE.parent / "12-build-a-model-driven-app-from-start-to-end" / "src" / "schema" / "contosoinspections.schema.json"
+SEED_PATH = SRC / "data" / "seed.json"
 SOLUTION = SRC / "solution" / "ContosoInspections"
 APP = SRC / "app" / "Src"
 SCRIPTS = SRC / "scripts"
@@ -17,6 +20,11 @@ SCRIPTS = SRC / "scripts"
 @pytest.fixture(scope="session")
 def schema():
     return json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
+
+
+@pytest.fixture(scope="session")
+def seed():
+    return json.loads(SEED_PATH.read_text(encoding="utf-8"))
 
 
 class Result:

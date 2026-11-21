@@ -224,6 +224,11 @@ def attribute_xml(m, table, col):
         extra = (f"          <DefaultFormValue>{m.option_value(col['choice'], dv)}</DefaultFormValue>\n"
                  f"{option_xml(m, table, col)}")
         return common_attr(n, disp, "picklist", req, extra, secured=secured)
+    if t == "image":
+        # Learn (create and edit columns, image columns): CanStoreFullImage keeps the full-size picture next to the thumbnail.
+        extra = (f"          <MaxSizeInKB>{col.get('maxSizeKB', 10240)}</MaxSizeInKB>\n          <CanStoreFullImage>1</CanStoreFullImage>\n"
+                 f"          <IsPrimaryImage>0</IsPrimaryImage>\n")
+        return common_attr(n, disp, "image", req, extra, secured=secured)
     if t == "lookup":
         extra = "          <LookupStyle>single</LookupStyle>\n          <LookupTypes />\n"
         return common_attr(n, disp, "lookup", req, extra, secured=secured)

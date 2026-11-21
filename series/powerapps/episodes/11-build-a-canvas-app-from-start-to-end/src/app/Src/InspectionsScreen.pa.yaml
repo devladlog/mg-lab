@@ -1,4 +1,6 @@
 # Inspections list: the inspector's own inspections (Dataverse returns only their rows, Basic scope), newest first.
+#   Status      Draft, In progress and Submitted are the inspector's; Approved and Rejected come from the back office (episode 12)
+#               and show under All, read-only
 #   Search + status chips   StartsWith and = on one table: both delegate to Dataverse (Learn: Dataverse delegable operations)
 #   Sort                    always sorted, because rows can come in a different order offline (Learn: offline limitations)
 #   Phone first             Width/Height use Learn's orientation formulas; Size follows App.SizeBreakpoints
@@ -79,16 +81,16 @@ Screens:
                 Properties:
                   # Counts are delegable: CountRows + Filter on Dataverse. Text and shape, not colour alone, carry the warning.
                   Text: |-
-                    =DraftCount & If(DraftCount = 1, " draft", " drafts") & " · " &
-                    If(OverdueFindingCount = 0, "no overdue findings", OverdueFindingCount & If(OverdueFindingCount = 1, " finding is overdue", " findings are overdue"))
-                  Color: =If(OverdueFindingCount = 0, RGBA(16, 110, 16, 1), RGBA(164, 38, 44, 1))
+                    =OpenCount & " open" & " · " &
+                    If(UnresolvedItemCount = 0, "no unresolved items", UnresolvedItemCount & If(UnresolvedItemCount = 1, " item is unresolved", " items are unresolved"))
+                  Color: =If(UnresolvedItemCount = 0, RGBA(16, 110, 16, 1), RGBA(164, 38, 44, 1))
                   Height: =56
             - txtSearch:
                 Control: Classic/TextInput
                 Properties:
                   Default: =""
-                  HintText: ="Search by reference, e.g. CWN-01"
-                  AccessibleLabel: ="Search inspections by reference"
+                  HintText: ="Search by number, e.g. INS-00012"
+                  AccessibleLabel: ="Search inspections by number"
                   TabIndex: =0
                   Height: =TapTarget
             - conChips:
@@ -116,11 +118,23 @@ Screens:
                       Control: Classic/Button
                       Properties:
                         Text: ="Draft"
-                        Fill: =If(statusFilter = 'Inspection status (Inspections)'.Draft, RGBA(0, 90, 158, 1), RGBA(255, 255, 255, 1))
-                        Color: =If(statusFilter = 'Inspection status (Inspections)'.Draft, RGBA(255, 255, 255, 1), RGBA(0, 90, 158, 1))
-                        FontWeight: =If(statusFilter = 'Inspection status (Inspections)'.Draft, FontWeight.Bold, FontWeight.Normal)
-                        OnSelect: =Set(statusFilter, 'Inspection status (Inspections)'.Draft)
+                        Fill: =If(statusFilter = 'Status (Inspections)'.Draft, RGBA(0, 90, 158, 1), RGBA(255, 255, 255, 1))
+                        Color: =If(statusFilter = 'Status (Inspections)'.Draft, RGBA(255, 255, 255, 1), RGBA(0, 90, 158, 1))
+                        FontWeight: =If(statusFilter = 'Status (Inspections)'.Draft, FontWeight.Bold, FontWeight.Normal)
+                        OnSelect: =Set(statusFilter, 'Status (Inspections)'.Draft)
                         AccessibleLabel: ="Show draft inspections"
+                        TabIndex: =0
+                        FillPortions: =1
+                        Height: =TapTarget
+                  - btnInProgress:
+                      Control: Classic/Button
+                      Properties:
+                        Text: ="In progress"
+                        Fill: =If(statusFilter = 'Status (Inspections)'.'In progress', RGBA(0, 90, 158, 1), RGBA(255, 255, 255, 1))
+                        Color: =If(statusFilter = 'Status (Inspections)'.'In progress', RGBA(255, 255, 255, 1), RGBA(0, 90, 158, 1))
+                        FontWeight: =If(statusFilter = 'Status (Inspections)'.'In progress', FontWeight.Bold, FontWeight.Normal)
+                        OnSelect: =Set(statusFilter, 'Status (Inspections)'.'In progress')
+                        AccessibleLabel: ="Show inspections in progress"
                         TabIndex: =0
                         FillPortions: =1
                         Height: =TapTarget
@@ -128,10 +142,10 @@ Screens:
                       Control: Classic/Button
                       Properties:
                         Text: ="Submitted"
-                        Fill: =If(statusFilter = 'Inspection status (Inspections)'.Submitted, RGBA(0, 90, 158, 1), RGBA(255, 255, 255, 1))
-                        Color: =If(statusFilter = 'Inspection status (Inspections)'.Submitted, RGBA(255, 255, 255, 1), RGBA(0, 90, 158, 1))
-                        FontWeight: =If(statusFilter = 'Inspection status (Inspections)'.Submitted, FontWeight.Bold, FontWeight.Normal)
-                        OnSelect: =Set(statusFilter, 'Inspection status (Inspections)'.Submitted)
+                        Fill: =If(statusFilter = 'Status (Inspections)'.Submitted, RGBA(0, 90, 158, 1), RGBA(255, 255, 255, 1))
+                        Color: =If(statusFilter = 'Status (Inspections)'.Submitted, RGBA(255, 255, 255, 1), RGBA(0, 90, 158, 1))
+                        FontWeight: =If(statusFilter = 'Status (Inspections)'.Submitted, FontWeight.Bold, FontWeight.Normal)
+                        OnSelect: =Set(statusFilter, 'Status (Inspections)'.Submitted)
                         AccessibleLabel: ="Show submitted inspections"
                         TabIndex: =0
                         FillPortions: =1
@@ -145,7 +159,8 @@ Screens:
                     =Sort(
                         Filter(
                             Inspections,
-                            StartsWith(Reference, txtSearch.Text) && (IsBlank(statusFilter) || 'Inspection status' = statusFilter)
+                            StartsWith('Inspection number', txtSearch.Text) &&
+                                (IsBlank(statusFilter) || cin_status = statusFilter)
                         ),
                         'Inspection date',
                         SortOrder.Descending
@@ -158,7 +173,8 @@ Screens:
                   - lblRef:
                       Control: Label
                       Properties:
-                        Text: =ThisItem.Reference & " · " & ThisItem.Site.'Site name'
+                        # The number is an auto number: a row created offline has none until it syncs.
+                        Text: =Coalesce(ThisItem.'Inspection number', "New inspection") & " · " & ThisItem.Site.'Site name'
                         FontWeight: =FontWeight.Semibold
                         Size: =18
                         X: =24
@@ -170,8 +186,8 @@ Screens:
                       Properties:
                         # Status is written out as text; the leading mark is a second cue besides the colour.
                         Text: |-
-                          =If(ThisItem.'Inspection status' = 'Inspection status (Inspections)'.Draft, "● ", "✓ ") &
-                          Text(ThisItem.'Inspection status') & " · " & Text(ThisItem.'Inspection date', "ddd d mmm", "en-GB")
+                          =If(IsEditable(Text(ThisItem.cin_status)), "● ", If(Text(ThisItem.cin_status) = "Rejected", "✕ ", "✓ ")) &
+                          Text(ThisItem.cin_status) & " · " & Text(ThisItem.'Inspection date', "ddd d mmm", "en-GB")
                         X: =24
                         Y: =64
                         Width: =Parent.TemplateWidth - 104

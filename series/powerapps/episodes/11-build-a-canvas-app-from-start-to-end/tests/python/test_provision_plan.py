@@ -12,17 +12,22 @@ def plan():
 def test_the_plan_lists_every_table_column_and_relationship_in_the_schema(schema):
     out = plan()
     for t in schema["tables"]:
-        assert t["schemaName"].lower() in out
+        assert t["logicalName"] in out
+        assert t["primaryName"]["logicalName"] not in {c["logicalName"] for c in t["columns"]}
         for c in t["columns"]:
-            assert c["schemaName"] in out, c["schemaName"]
+            assert c["logicalName"] in out, c["logicalName"]   # lookups show up on their relationship line
     for r in schema["relationships"]:
-        assert r["schemaName"] in out
+        assert r["name"] in out
+    for t in schema["tables"]:
+        for k in t.get("alternateKeys", []):
+            assert k["name"] in out
 
 
 def test_the_plan_sends_nothing_and_names_the_role_and_publish_steps(schema):
     out = plan()
     assert "nothing is sent" in out
-    assert schema["securityRole"]["name"] in out
+    assert "Inspection Field Inspector" in out
+    assert "Inspection Back Office" not in out   # that role belongs to episode 12's solution
     assert "PublishAllXml" in out
 
 

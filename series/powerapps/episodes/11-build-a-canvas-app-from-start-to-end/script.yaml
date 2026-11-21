@@ -5,7 +5,7 @@ series_label: "POWER APPS"
 series_name: "DEVLADLOG Power Apps"
 file_prefix: "powerapps"
 title: "Build a canvas app from start to end: Contoso Inspections"
-subtitle: "Dataverse tables, a phone app with photos and offline, named formulas, validation, Monitor, a solution, and a security role"
+subtitle: "One shared Dataverse schema, a phone app with photos and offline, named formulas, validation, Monitor, a solution, and a security role"
 voice: am_michael
 thumbnail_text: "START\nTO\nPUBLISHED"
 youtube:
@@ -24,19 +24,20 @@ scenes:
     sub: "Tables, screens, photos, offline, validation, Monitor, a solution, a security role"
     short: hook
     narration: >
-      Field inspectors walk a site, note what is wrong, and take a photo. Today we build the phone app they carry, from an
-      empty environment to a published app that Alex Demo opens on a real phone. Dataverse tables, a list, a new inspection
-      with findings and photos, offline, validation, and a security role. Welcome to DEVLADLOG Power Apps.
-      We keep it honest along the way. Every formula you see runs in a test on this machine, and anything that needs the
-      real tenant is marked, so you know what was proven and what was recorded.
+      Field inspectors walk a site, check what is on the list, and take a photo of what fails. Today we build the phone app
+      they carry, from an empty environment to a published app that Alex Demo opens on a real phone. Dataverse tables, a
+      list, a new inspection with items and photos, offline, validation, and a security role. And the data model is shared:
+      the next episode builds the back office app for the same tables, where a reviewer approves what Alex submits.
+      Welcome to DEVLADLOG Power Apps. We keep it honest along the way. Every formula you see runs in a test on this machine,
+      and anything that needs the real tenant is marked, so you know what was proven and what was recorded.
 
   - id: plan
     type: bullets
     heading: "The whole path, in order"
     bullets:
-      - "Tables and a security role, from one schema file"
+      - "Tables and a security role, from one shared schema file"
       - "Named formulas and functions hold the rules"
-      - "Screens: list, new inspection, detail, finding"
+      - "Screens: list, new inspection, detail, item"
       - "Delegation, offline, responsive, accessible"
       - "Monitor, solution, share, phone"
     narration: >
@@ -48,26 +49,20 @@ scenes:
 
   - id: schema
     type: code
-    heading: "One schema file is the source of truth"
+    heading: "One schema file, shared with the model-driven app"
     lang: json
     code: |
-      {
-        "schemaName": "cin_Photo",
-        "displayName": "Photo",
-        "type": "image",
-        "maxSizeKB": 10240
-      }
-
-      // four tables, three relationships, one role:
-      //   cin_Site, cin_Inspector        organization owned, read by everyone
-      //   cin_Inspection, cin_Finding    user owned: a row belongs to the inspector who made it
-      //   cin_inspection_finding         parental, so a finding goes with its inspection
+      {"logicalName": "cin_photo", "displayName": "Photo", "type": "image", "maxSizeKB": 10240}
+      {"logicalName": "cin_status", "displayName": "Status", "type": "choice", "choice": "cin_inspectionstatus",
+      "options": [["Draft", 0], ["In progress", 1], ["Submitted", 2], ["Approved", 3], ["Rejected", 4]], "default": 0, "required": true},
+      {"name": "cin_inspection_inspectionitem", "referenced": "cin_inspection", "referencing": "cin_inspectionitem", "lookup": "cin_inspectionid", "delete": "Cascade", "parental": true}
     narration: >
-      Four tables. Site and Inspector are shared reference data. Inspection and Finding are user owned, so every row belongs
-      to the inspector who created it. A finding has a photo column, an image column with a ten megabyte limit. Everything
-      lives in one JSON file, and both the script and the tests read it.
-      Keeping the schema in a file means the app, the provisioning script, the tests and the solution all agree on the
-      names. When a column is renamed, one place changes, and a test fails if anything else disagrees.
+      Four tables. Site and Inspector are shared reference data. Inspection and Inspection item are user owned, so every row
+      belongs to the person who created it. An item has a photo column, an image column with a ten megabyte limit. The
+      inspection status is one choice with five values, and an item is a child of its inspection, so it goes when the
+      inspection goes.
+      This file is an exact copy of the one the model-driven episode uses, and a test fails if the two ever differ. One
+      Dataverse solution, two apps, one data model.
 
   - id: tables-screen
     type: screen
@@ -75,15 +70,17 @@ scenes:
     image: screens/tables.jpg
     bar: "make.powerapps.com · Solutions > ContosoInspections > Tables"
     demo: >
-      Lab tenant, environment DEV, signed in as the lab maker. Solutions > ContosoInspections > Tables: Inspection, Finding, Site,
-      Inspector, all with the cin_ prefix. Open Inspection > Columns: Inspection status is a Choice (Draft, Submitted, Reviewed,
-      Closed). Open Finding > Columns: Photo is an Image column. Mask the environment URL and account name.
+      Lab tenant, environment DEV, signed in as the lab maker. Solutions > ContosoInspections > Tables: Inspector, Site, Inspection,
+      Inspection item, all with the cin_ prefix. Open Inspection > Columns: Status is a Choice (Draft, In progress, Submitted,
+      Approved, Rejected) and Inspection number is an auto number. Open Inspection item > Columns: Photo is an Image column.
+      Mask the environment URL and account name.
     narration: >
       This is what the script creates. Four tables inside a solution called ContosoInspections, all with the c i n prefix.
-      Inspection status is a choice. Photo on Finding is an image column. Because they are created into the solution, they
-      travel with it later.
-      Notice the display names. Reference, Inspection date, Inspection status. Those are the names the formulas use, so they
-      read like a sentence, not like a database dump.
+      Status is a choice. The inspection number is an auto number, so Dataverse hands out I N S dash zero zero zero zero one
+      and the app never builds one. Photo on Inspection item is an image column. Because they are created into the solution,
+      they travel with it later.
+      Notice the display names. Inspection date, Requires follow-up, Inspection items. Those are the names the formulas use,
+      so they read like a sentence, not like a database dump.
 
   - id: provision
     type: code
@@ -92,22 +89,18 @@ scenes:
     code: |
       > Provision-ContosoInspections.ps1 -EnvironmentUrl https://contoso.crm.dynamics.com -PlanOnly
       Plan for solution ContosoInspections (publisher prefix cin): nothing is sent.
-      Table         POST       cin_site
-      Table         POST       cin_inspection
-      Column        POST       /EntityDefinitions(LogicalName='cin_finding') + cin_Photo
-      Relationship  POST       cin_inspection_finding
-      Publisher     GET/POST   /publishers (contosolab)
-      Solution      GET/POST   /solutions (ContosoInspections)
-      SecurityRole  GET/POST   /roles (Contoso Inspector), 18 privileges, AddSolutionComponent
+      Table         POST       cin_inspectionitem
+      Column        POST       /EntityDefinitions(LogicalName='cin_inspectionitem') + cin_photo
+      Relationship  POST       cin_inspection_inspectionitem (adds lookup cin_inspectionid)
+      Key           POST       cin_site_sitecode
+      SecurityRole GET/POST   /roles (Inspection Field Inspector), 17 privileges, AddSolutionComponent
       Publish       POST       /PublishAllXml
-
-      Passed  -PlanOnly prints the plan and never calls the service
     narration: >
       The script talks to the Dataverse Web API, with the solution header on every create so each component lands in the
       solution. It never signs in. You hand it a token. With plan only it prints exactly what it would send. The Pester tests
       mock the web calls and prove a second run creates nothing twice.
-      The script is safe to run twice. It looks for each publisher, solution, table, column and role before it creates one.
-      For the first run in a real environment you give it a token from your own sign in, and it only ever talks to the
+      The script is safe to run twice. It looks for each publisher, solution, table, column, key and role before it creates
+      one. For the first run in a real environment you give it a token from your own sign in, and it only ever talks to the
       environment you name.
 
   - id: role
@@ -116,64 +109,52 @@ scenes:
     lang: json
     short: role
     code: |
-      "securityRole": { "name": "Contoso Inspector", ... },
-      {
-        "table": "cin_inspection",
-        "Create": "Basic",
-        "Read":   "Basic",
-        "Write":  "Basic",
-        "Append": "Basic",
-        "AppendTo": "Basic"
-      },
-      {
-        "table": "cin_site",
-        "Read": "Global",
-        "AppendTo": "Global"
-      }
+      "name": "Inspection Field Inspector",
+      "cin_inspection": {"Create": "Basic", "Read": "Basic", "Write": "Basic", "Append": "Basic", "AppendTo": "Basic"},
+      "cin_inspectionitem": {"Create": "Basic", "Read": "Basic", "Write": "Basic", "Append": "Basic", "AppendTo": "Basic"},
+      "cin_site": {"Read": "Global", "AppendTo": "Global"},
     narration: >
-      Basic scope means own records. The Contoso Inspector role reads and writes only the inspections and findings the
+      Basic scope means own records. The Inspection Field Inspector role reads and writes only the inspections and items the
       signed in person owns, and reads all sites. So the app has no my inspections filter to get wrong. Dataverse only
       returns that inspector's rows. Security that lives in the app is security that can be bypassed.
-      The two lookups, site and inspector, are read only for everyone with the role. That is why the dropdown on the new
-      inspection screen can show every site, while the list only shows what you created.
+      The role has no delete, and the Approved and Rejected decisions are not the inspector's to make. Those belong to a
+      second role, the back office reviewer, which the model-driven episode owns.
 
   - id: named
     type: code
     heading: "Named formulas: rules in one place"
     lang: text
     code: |
-      App.Formulas
-        TapTarget = 88;
-        MinSeriousDetails = 10;
-        CurrentInspector = LookUp(Inspectors, 'Work email' = User().Email);
-        DraftCount = CountRows(Filter(Inspections,
-            'Inspection status' = 'Inspection status (Inspections)'.Draft));
-        OverdueFindingCount = CountRows(Filter(Findings,
-            Resolved = false && !IsBlank('Resolve by') && 'Resolve by' < Today()));
+      Formulas: |-
+      =TapTarget = 88;
+      CurrentInspector = LookUp(Inspectors, Email = User().Email);
+      UnresolvedItemCount = CountRows(Filter('Inspection items',
+          Passed = false && IsBlank('Resolved on')));
     narration: >
       The app's Formulas property holds named formulas. A constant like the touch target size, and values that follow the
-      data, like the signed in inspector, the draft count, and the overdue findings. They recalculate when the data changes,
-      so no screen has an OnVisible that refreshes a counter and no variable gets stale.
-      Named formulas also keep the screens thin. A screen that needs the draft count just says draft count. There is exactly
-      one place that defines what a draft is, and one place to fix if the status choice changes.
+      data, like the signed in inspector and the items still unresolved. They recalculate when the data changes, so no screen
+      has an OnVisible that refreshes a counter and no variable gets stale.
+      Named formulas also keep the screens thin. A screen that needs the open count just says open count. There is exactly
+      one place that defines what open means, and one place to fix if the status choice changes.
 
   - id: udf-pure
     type: code
     heading: "Pure functions you can unit test"
     lang: text
     code: |
-      ValidateFinding(title: Text, details: Text, severity: Text, hasPhoto: Boolean): Text =
+      ValidateItem(name: Text, notes: Text, severity: Text, passed: Boolean, hasPhoto: Boolean): Text =
           If(
-              Len(Trim(title)) < 3, "Give the finding a title of at least 3 characters.",
-              IsSerious(severity) && Len(Trim(details)) < MinSeriousDetails,
-                  "Major and critical findings need details (at least 10 characters).",
-              IsSerious(severity) && !hasPhoto, "Major and critical findings need a photo.",
+              Len(Trim(name)) < 3, "Give the item a name of at least 3 characters.",
+              severity = "Critical" && passed, "A critical item cannot be marked as passed.",
+              !passed && IsSerious(severity) && !hasPhoto,
+                  "A failed Major or Critical item needs a photo.",
               ""
           );
     narration: >
-      A user defined function takes typed inputs and returns text. This one returns the first problem with a finding, or an
-      empty string. It reads no controls and changes nothing, so the open source Power Fx engine can run it in a test. Major and
-      critical findings need details and a photo, minor ones don't.
+      A user defined function takes typed inputs and returns text. This one returns the first problem with an item, or an
+      empty string. It reads no controls and changes nothing, so the open source Power Fx engine can run it in a test. A
+      failed major or critical item needs notes and a photo, and a critical item can never be marked as passed. That last rule
+      is the same one the back office app enforces on the server, mirrored here so the inspector hears it on the phone.
       Because the function is pure, the same call feeds the red message under the form and the guard on the save button.
       They can never disagree, and one test covers both.
 
@@ -182,18 +163,18 @@ scenes:
     heading: "Behavior functions: four writes, one pattern"
     lang: text
     code: |
-      ResolveFinding(): Boolean = {
+      ResolveItem(): Boolean = {
           IfError(
-              Patch(Findings, selectedFinding, { Resolved: true }),
+              Patch('Inspection items', selectedItem, { 'Resolved on': Today() }),
               Notify("Couldn't resolve it: " & FirstError.Message, NotificationType.Error); false,
-              Set(selectedFinding, Blank()); Notify("Marked as resolved", NotificationType.Success); true
+              Set(selectedItem, Blank()); Notify("Marked as resolved", NotificationType.Success); true
           )
       };
     narration: >
       Writes are behavior functions, in curly braces. Each one returns true or false, and it handles its own error with If
       Error. It never navigates, because a function that names a screen can form a cycle with that screen. The button decides
       where to go, only when the function says it worked.
-      There are four of these: start an inspection, add a finding, resolve a finding, and submit. Each one validates first,
+      There are four of these: start an inspection, add an item, resolve an item, and submit. Each one validates first,
       writes second, and reports honestly. A failed write shows a message with the real error text instead of silently doing
       nothing.
 
@@ -204,7 +185,7 @@ scenes:
     bar: "Power Apps Studio · Contoso Inspections"
     demo: >
       Lab tenant, DEV. Solutions > ContosoInspections > New > App > Canvas app, Phone size. Name Contoso Inspections. Add data:
-      Dataverse > Inspection, Finding, Site, Inspector. Settings > Display: Scale to fit off, Lock aspect ratio off, Lock
+      Dataverse > Inspection, Inspection item, Site, Inspector. Settings > Display: Scale to fit off, Lock aspect ratio off, Lock
       orientation off. Settings > Updates: show that Data row limit is 500. Open App > Formulas to show the named formulas.
       Mask account name.
     narration: >
@@ -220,16 +201,15 @@ scenes:
     lang: text
     short: gallery
     code: |
-      galInspections.Items
-        Sort(
-            Filter(
-                Inspections,
-                StartsWith(Reference, txtSearch.Text)
-                    && (IsBlank(statusFilter) || 'Inspection status' = statusFilter)
-            ),
-            'Inspection date',
-            SortOrder.Descending
-        )
+      =Sort(
+          Filter(
+              Inspections,
+              StartsWith('Inspection number', txtSearch.Text) &&
+                  (IsBlank(statusFilter) || cin_status = statusFilter)
+          ),
+          'Inspection date',
+          SortOrder.Descending
+      )
     narration: >
       The list. Filter, StartsWith on a text column, equals on a choice, and a sort are the operations Learn lists as
       delegable to Dataverse. The server does the work, so the gallery stays correct past five hundred rows. No Search, no
@@ -260,103 +240,109 @@ scenes:
     image: screens/list.jpg
     bar: "Power Apps Studio · InspectionsScreen (phone preview)"
     demo: >
-      Lab tenant, DEV, Studio play mode, phone preview. InspectionsScreen shows the title "Inspections", the summary line
-      "2 drafts · no overdue findings", the search box, chips All, Draft, Submitted, and rows like "CWN-01-20261121-AD-001 · Canal
-      Works North". Type "CWN" in search: the list narrows. Tap Draft: only drafts, the Draft chip is bold and filled. Mask
-      account name.
+      Lab tenant, DEV, Studio play mode, phone preview, signed in as Alex Demo. InspectionsScreen shows the title "Inspections",
+      the summary line "2 open · no unresolved items" (numbers depend on the data), the search box, chips All, Draft, In progress,
+      Submitted, and rows like "INS-00001 · Harbor Warehouse". Type "INS-0000" in search: the list narrows. Tap In progress: only
+      those, the chip is bold and filled. Mask account name.
     narration: >
-      The list screen. A summary line, a search box, three status chips, and the inspections newest first. Type a few letters
-      and the list narrows. The pressed chip is bold and filled, not only a different color, and each row says its status in
-      words.
-      The summary line at the top uses two named formulas, so it updates the moment a draft is submitted. The warning about
-      overdue findings is words first, and the color only reinforces it.
+      The list screen. A summary line, a search box, three status chips plus all, and the inspections newest first. Type a few
+      letters and the list narrows. The pressed chip is bold and filled, not only a different color, and each row says its
+      status in words, with a mark in front.
+      The summary line at the top uses two named formulas, so it updates the moment an inspection is submitted. The warning
+      about unresolved items is words first, and the color only reinforces it. Approved and rejected inspections also show
+      up here, read only, and we come back to those.
 
   - id: newinsp-screen
     type: screen
-    heading: "New inspection: pick a site, get a reference"
+    heading: "New inspection: pick a site, start a draft"
     image: screens/new-inspection.jpg
     bar: "Power Apps Studio · NewInspectionScreen"
     demo: >
       Lab tenant, DEV, Studio play mode. Tap New inspection. The screen says who is inspecting (Alex Demo). Open the Site
-      dropdown, pick Canal Works North, leave today's date, tap Start. The detail screen opens with reference
-      "CWN-01-20261121-AD-001" and status Draft. Mask account name.
+      dropdown, pick Harbor Warehouse, leave today's date, tap Start. The detail screen opens with status Draft. Online, the number
+      INS-000xx is assigned by Dataverse once saved; if the title still says "New inspection", go back to the list and the number
+      is there. Mask account name.
     narration: >
-      A new inspection needs a site and a date. The reference is built from the site code, today's date, and the inspector's
-      initials, plus a counter, so two inspectors never collide. Start creates the draft and opens it.
-      The counter counts the inspections that already start with that prefix, using StartsWith, so even the counter
-      delegates. If two people start the same site on the same day, their initials keep the references apart.
+      A new inspection needs a site and a date. Start creates the draft for the signed in inspector and opens it. The number
+      comes from Dataverse, an auto number, so two inspectors can never collide and the app has no counter to get wrong.
+      Draft means the visit is planned and nothing is recorded yet. The first item moves it to in progress, and submit
+      moves it to submitted. Those three are the inspector's part of the flow.
+
+  - id: status-flow
+    type: bullets
+    heading: "Status: the inspector's part, and the reviewer's"
+    bullets:
+      - "Draft: the visit is planned, nothing recorded"
+      - "In progress: the first item was saved"
+      - "Submitted: score, follow-up and summary entered"
+      - "Approved or Rejected: set by the reviewer in the model-driven app"
+    narration: >
+      One status choice, five values, two apps. This app only ever writes the first three. Draft when you start, in progress
+      when the first item is saved, and submitted when you hand it in. A test checks that the app never writes approved or
+      rejected. Those two are the reviewer's decision, made in the model-driven app we build next, and the inspector sees them
+      here, read only, with a banner saying so.
+      That is the bridge between the two episodes. The same row, the same status column, two apps, and a security role that
+      decides who can do what.
 
   - id: camera
     type: code
     heading: "The camera, and what the Dataverse column wants"
     lang: text
     code: |
-      camFinding
-        Control: Camera
-        OnSelect: =Set(findingPhoto, Self.Photo)
-
-      // inside AddFinding, from Learn's take-and-upload pattern:
-      Photo: If(IsBlank(findingPhoto), Blank(),
-                { Full: findingPhoto, Value: findingPhoto }),
+      OnSelect: =Set(itemPhoto, Self.Photo)
+      Photo: If(IsBlank(itemPhoto), Blank(), { Full: itemPhoto, Value: itemPhoto })
     narration: >
       The Camera control takes a picture when you tap it, and the Photo property holds it. An image column in Dataverse takes a
-      record with Full and Value, both set to the picture's address. A photo is optional for minor findings, so a blank photo
+      record with Full and Value, both set to the picture's address. A photo is optional for a passed item, so a blank photo
       saves a blank column.
       Remember that a camera control is for quick evidence. If an inspector needs a sharp, full resolution picture, the add
       picture control reads from the phone's gallery or camera app at the full size instead.
 
-  - id: finding-screen
+  - id: item-screen
     type: screen
-    heading: "A finding with a photo, and the rule that blocks it"
-    image: screens/finding.jpg
-    bar: "Power Apps mobile (Android) · FindingScreen"
+    heading: "An item with a photo, and the rule that blocks it"
+    image: screens/item.jpg
+    bar: "Power Apps mobile (Android) · ItemScreen"
     demo: >
       Real phone, Power Apps mobile, signed in as Alex Demo, screen recorded with the phone's recorder. Open the draft inspection,
-      tap Add finding. Title "Fire door wedged open", severity Major, details empty: the red message under the form says "Major
-      and critical findings need details (at least 10 characters)." Type details, the message changes to "Major and critical
-      findings need a photo." Tap the camera to capture: the message clears. Tap Save. Mask account name.
+      tap Add item. Name "Fire door", severity Major, category Fire, switch Passed off, notes empty: the red message under the form
+      says "A failed Major or Critical item needs notes (at least 10 characters)." Type notes, the message changes to "A failed
+      Major or Critical item needs a photo." Tap the camera to capture: the message clears. Tap Save: the inspection goes to In
+      progress. Mask account name.
     narration: >
-      On the phone. Major severity, no details, and the message appears under the form, in words. Add details and the message
-      changes. Take the photo and it clears. The same function that shows the message also guards the save, so the button
-      cannot skip it.
-      Severity and category are dropdowns, so there is nothing to mistype. The resolve by date is calculated from the
-      severity: one day for critical, a week for major, a month for minor, three months for the rest.
+      On the phone. A failed major item with no notes, and the message appears under the form, in words. Add notes and the
+      message changes. Take the photo and it clears. The same function that shows the message also guards the save, so the
+      button cannot skip it. Save, and the draft becomes in progress.
+      Severity and category are dropdowns, so there is nothing to mistype. A passed item needs neither notes nor a photo.
+      An item that failed stays open until the inspector taps mark resolved, which stamps today's date.
 
   - id: validate-test
     type: code
     heading: "The tests run the same function"
     lang: csharp
     code: |
-      [InlineData("Loose cable", "", "Observation", false, "")]
-      [InlineData("Fire door", "short", "Major", true,
-          "Major and critical findings need details (at least 10 characters).")]
-      [InlineData("Fire door", "wedged open with a bin", "Major", false,
-          "Major and critical findings need a photo.")]
-      [InlineData("Fire door", "wedged open with a bin", "Critical", true, "")]
-      public void A_finding_is_validated_before_it_is_saved(...)
-
-      Passed  104 of 104  (Microsoft.PowerFx.Interpreter 1.8.1)
+      [InlineData("Aisle clear", "", "Info", true, false, "")]
+      [InlineData("Fire door", "short", "Major", false, true, "A failed Major or Critical item needs notes (at least 10 characters).")]
+      [InlineData("Fire door", "", "Critical", true, true, "A critical item cannot be marked as passed.")]
+      public void An_item_is_validated_before_it_is_saved(string name, string notes, string severity, bool passed, bool photo, string expected)
     narration: >
       The tests load the app's real formulas into the open source Power Fx interpreter, with in memory Dataverse tables built
-      from the same schema file. This one feeds the validation function every combination of severity, details and photo. A
-      hundred and four tests like it run in about twenty seconds, and none of them needs a tenant.
-      The same pattern covers the submit rules too. A result other than pass needs at least one finding, and a failed
-      inspection needs a summary. If someone edits a rule, a test fails, and you see which sentence changed.
+      from the same schema file. This one feeds the validation function every combination of severity, notes, photo and
+      passed. A hundred and twenty six tests like it run in a few seconds, and none of them needs a tenant.
+      The same pattern covers the submit rules too. A score between zero and a hundred, at least one item, a follow up date
+      when follow up is on, and a summary. If someone edits a rule, a test fails, and you see which sentence changed.
 
   - id: responsive
     type: code
     heading: "One screen, one column or two"
     lang: text
     code: |
-      App.SizeBreakpoints = [1200, 1800, 2400]
-
-      conInspectionBody  (AutoLayout container)
-        LayoutDirection: =If(InspectionScreen.Size >= ScreenSize.Medium,
-                              LayoutDirection.Horizontal, LayoutDirection.Vertical)
-
-      Passed  The_inspection_screen_has_one_column_on_a_phone_and_two_panes_when_wide
+      SizeBreakpoints: =[1200, 1800, 2400]
+      LayoutDirection: |-
+        =If(InspectionScreen.Size >= ScreenSize.Medium,
+            LayoutDirection.Horizontal, LayoutDirection.Vertical)
     narration: >
-      Layout is containers, not pixel positions. On a phone the details and the findings stack in one column. When the screen
+      Layout is containers, not pixel positions. On a phone the details and the items stack in one column. When the screen
       reaches the medium breakpoint, a sideways phone or a tablet, the same container turns horizontal and they sit side by
       side. The breakpoints are the phone defaults from Learn.
       A minimum screen width and height keep the layout from collapsing on a very small device. The screens are never
@@ -368,11 +354,11 @@ scenes:
     image: screens/responsive.jpg
     bar: "Power Apps mobile (Android) · InspectionScreen"
     demo: >
-      Real phone, Power Apps mobile, signed in as Alex Demo, screen recorded. Open the draft inspection upright: details above
-      the findings list, one column. Rotate the phone to landscape: details on the left, findings on the right, no horizontal
+      Real phone, Power Apps mobile, signed in as Alex Demo, screen recorded. Open the in progress inspection upright: details above
+      the items list, one column. Rotate the phone to landscape: details on the left, items on the right, no horizontal
       scrolling. Mask account name.
     narration: >
-      Upright, one column. Turn the phone and the details move left, the findings move right, and nothing scrolls sideways. We
+      Upright, one column. Turn the phone and the details move left, the items move right, and nothing scrolls sideways. We
       changed no screen, only the container direction.
       This is the cheapest kind of responsive design. There is no separate tablet app and no duplicated screen. One layout,
       two directions, decided by a single formula.
@@ -416,18 +402,19 @@ scenes:
     heading: "Offline: the globe, and a banner that tells the truth"
     lang: text
     code: |
-      icoSync.Icon
-        Switch(Connection.Sync,
-            ConnectionSync.Connected,              Icon.Globe,
-            ConnectionSync.ConnectedPendingUpsync, Icon.GlobeChangesPending,
-            ConnectionSync.NotConnected,           Icon.GlobeNotConnected,
-            ConnectionSync.NotConnectedSyncError,  Icon.GlobeError, ...)
-      icoSync.Visible        Host.OfflineEnabled
-      lblOffline.Visible     !Connection.Connected
+      =Switch(Connection.Sync,
+          ConnectionSync.Connected, Icon.Globe,
+          ConnectionSync.ConnectedPendingUpsync, Icon.GlobeChangesPending,
+          ConnectionSync.NotConnected, Icon.GlobeNotConnected,
+          ConnectionSync.NotConnectedSyncError, Icon.GlobeError)
+      Visible: =Host.OfflineEnabled
+      Visible: =!Connection.Connected
     narration: >
       Offline uses the built in Dataverse offline mode, not Save Data and Load Data. The globe icon follows Connection dot
       Sync, as in Learn's offline template, and the banner appears when there is no connection. Creating inspections and
-      findings works offline. No button depends on the connection, because the app uses no flows.
+      items works offline. No button depends on the connection, because the app uses no flows. One consequence: the
+      inspection number is an auto number, so a row created offline has none until it syncs, and the screen says new
+      inspection until then.
       Offline mode has its own rules. Sort the galleries, because rows can come back in a different order. Don't expect
       calculated columns to refresh on the device. And keep the offline profile small, because everything in it has to fit
       on the phone.
@@ -439,12 +426,12 @@ scenes:
     bar: "Power Apps Studio · Settings > General > Can be used offline"
     demo: >
       Lab tenant, DEV. In Studio, Settings > General > Can be used offline: on, then New profile with current app data. Show the
-      tables: Inspection, Finding, Site, Inspector. Save and publish the profile, then save and publish the app. Then on the
-      real phone: open the app, wait for the first sync, turn on airplane mode: the banner and the globe not connected. Add a
-      finding, the globe shows changes pending. Turn airplane mode off: the globe goes back to connected. Mask account name.
+      tables: Inspection, Inspection item, Site, Inspector. Save and publish the profile, then save and publish the app. Then on the
+      real phone: open the app, wait for the first sync, turn on airplane mode: the banner and the globe not connected. Add an
+      item, the globe shows changes pending. Turn airplane mode off: the globe goes back to connected. Mask account name.
     narration: >
       Turn on can be used offline in the app settings and create a profile with only the four tables we need. Publish the
-      profile first, then the app. On the phone, wait for the first sync, then airplane mode. The banner shows, the finding
+      profile first, then the app. On the phone, wait for the first sync, then airplane mode. The banner shows, the item
       still saves, and when the signal comes back it syncs.
       One detail from Learn: if you edit and publish the offline profile later, you must publish the app again. And a user
       needs read access to the canvas app, the mobile offline profile and the sync error tables, which our role includes.
@@ -455,8 +442,8 @@ scenes:
     image: screens/monitor.jpg
     bar: "Power Apps Studio · Advanced tools > Monitor"
     demo: >
-      Lab tenant, DEV. In Studio, Advanced tools > Open monitor. Play the app in Studio, open a few inspections and save a
-      finding. In Monitor: the list of events, a Dataverse request, its duration, and a row of the Network type. Then, for a
+      Lab tenant, DEV. In Studio, Advanced tools > Open monitor. Play the app in Studio, open a few inspections and save an
+      item. In Monitor: the list of events, a Dataverse request, its duration, and a row of the Network type. Then, for a
       published app: the app's Details page > Live monitor > Play published app. Mask account name and URLs.
     narration: >
       Monitor shows every event as the app runs. Dataverse requests, how long they took, and the errors. Open it from Studio
@@ -489,7 +476,7 @@ scenes:
     image: screens/solution.jpg
     bar: "make.powerapps.com · Solutions > ContosoInspections"
     demo: >
-      Lab tenant, DEV. Solutions > ContosoInspections: the four tables, the Contoso Inspector role, the Contoso Inspections canvas
+      Lab tenant, DEV. Solutions > ContosoInspections: the four tables, the Inspection Field Inspector role, the Contoso Inspections canvas
       app. Select the app > Advanced > Add required objects: the offline profile is added. Then Export solution > Unmanaged.
       Mask account name and environment URL.
     narration: >
@@ -505,8 +492,8 @@ scenes:
     bar: "make.powerapps.com · Contoso Inspections > Share"
     demo: >
       Lab tenant, DEV, signed in as the lab administrator. Apps > Contoso Inspections > Share. Add Alex Demo. Under Data
-      permissions, assign the security role Contoso Inspector. Save. Open the lab user list in the admin center and show Alex Demo
-      has the Contoso Inspector role. Mask account names.
+      permissions, assign the security role Inspection Field Inspector. Save. Open the lab user list in the admin center and show
+      Alex Demo has the Inspection Field Inspector role. Mask account names.
     narration: >
       Save and publish the app first. Then share it with Alex Demo. The share panel lets a system administrator assign a security
       role, so the user can read and write the tables. Roles go to people and security groups, not to Microsoft 365 groups.
@@ -520,30 +507,35 @@ scenes:
     bar: "Power Apps mobile (Android) · Contoso Inspections"
     demo: >
       Real phone, Power Apps mobile signed in as Alex Demo, screen recorded. The app is in the app list. Open it: list of Alex's
-      inspections only. New inspection > site > Start > Add finding with a photo > choose Fail with a summary > Submit. The status
-      chip moves from Draft to Submitted. Then sign in as Sam Demo on the lab host and show that Sam does not see Alex's
-      inspections. Mask account names.
+      inspections only. New inspection > site > Start > Add item with a photo > enter a score and a summary, switch follow up on
+      > Submit. The row moves to Submitted and the screen says "Waiting for the back office to review it." Then sign in as Sam
+      Demo on the lab host and show that Sam does not see Alex's inspections. If the model-driven app from episode 12 is built:
+      as the reviewer, approve Alex's inspection there, pull to refresh on the phone, and show the row with Approved and the
+      banner "Approved by the back office." Mask account names.
     narration: >
-      The finished test. Alex opens the app on the phone and sees only Alex's inspections. New inspection, a finding with a
-      photo, a result of fail with a summary, submit. The status moves to submitted. Sam signs in and doesn't see any of it,
-      and that comes from the role.
-      This is the check no unit test can do. A real person, a real phone, a real camera, and the role doing its job. If
-      something is wrong, Monitor on the published app shows what the phone asked for.
+      The finished test. Alex opens the app on the phone and sees only Alex's inspections. New inspection, an item with a
+      photo, a score, a summary, follow up, submit. The status moves to submitted, and the screen says it is waiting for the
+      back office. Sam signs in and doesn't see any of it, and that comes from the role.
+      Then the bridge. In the model-driven app, the reviewer approves it, and back on Alex's phone the same row reads
+      approved, read only. This is the check no unit test can do. A real person, a real phone, a real camera, and the role
+      doing its job.
 
   - id: gotcha
     type: bullets
     heading: "Gotcha: what this app does not prove"
     bullets:
       - "Delegation: only Studio's blue underline is proof"
+      - "Two columns are called Status: the app writes cin_status"
+      - "Set does not carry an error: take the record into With first"
       - "Camera photos are limited to 640 by 480 pixels"
-      - "UDFs reading variables: confirm in Studio"
-      - "Offline: no flows, no Save Data"
-      - "Dropdown Value: set it to Site name in the pane"
+      - "Offline: no flows, no Save Data, no number until it syncs"
     narration: >
       Honest limits. Delegation: my tests reject calls that Learn doesn't list as delegable, but Studio's blue underline is the
-      real check. The camera control tops out at six forty by four eighty, so use the add picture control for full
-      resolution. Functions that read variables worked in the test engine, so confirm them in Studio. And the dropdown needs its
-      value column set to site name in the property pane, by hand.
+      real check. Dataverse has a system status column with the same display name as ours, so the app uses the logical name
+      c i n underscore status, and the first thing to check in Studio is that IntelliSense agrees. In the test engine, the Set
+      function swallowed a failed save, so start inspection takes the new record into With first and tests it with If Error.
+      Confirm that in Studio too. The camera control tops out at six forty by four eighty, so use the add picture control for
+      full resolution.
       None of these is a reason not to build this way. They are the things to check before you tell your team the app is
       done.
 
@@ -551,14 +543,15 @@ scenes:
     type: bullets
     heading: "What the tests run, and what they cannot"
     bullets:
-      - "104 canvas tests: formulas, flows, lint, offline, responsive"
-      - "21 Python tests: schema, solution pack, plan"
-      - "15 Pester tests: the provisioning script, mocked"
+      - "126 canvas tests: formulas, flows, lint, offline, responsive"
+      - "Python tests: schema copy, solution pack, plan"
+      - "19 Pester tests: the provisioning script, mocked"
       - "Not tested: a real tenant, a real phone, a real camera"
     narration: >
-      A hundred and four canvas tests, twenty one Python tests, and fifteen Pester tests. They prove the formulas, the schema,
-      the solution packaging, and the script's plan. They do not prove that Dataverse accepts the calls, that Studio loads the
-      source, or that a phone behaves. That is what the recording is for.
+      A hundred and twenty six canvas tests, the Python tests, and nineteen Pester tests. They prove the formulas, that the
+      schema is still the exact copy the back office app uses, the solution packaging, and the script's plan. They do not prove
+      that Dataverse accepts the calls, that Studio loads the source, or that a phone behaves. That is what the recording is
+      for.
       Run them in the order the readme lists. The Python and Pester tests need no packages beyond the ones in the readme,
       and the canvas tests restore their packages once. Everything runs locally, one at a time.
 
@@ -566,15 +559,15 @@ scenes:
     type: bullets
     heading: "What we built"
     bullets:
-      - "Four tables, one role, one schema file"
+      - "Four tables, one role, one schema shared with episode 12"
       - "Four screens, rules in named formulas and functions"
       - "Delegable list, validation, camera, offline"
       - "Monitor, solution, shared with a role, tested on a phone"
     narration: >
-      So that's the path. Four tables and a role from one file. Four screens with the rules in named formulas and functions.
-      A delegable list, validation, a camera, and offline. And then Monitor, a solution, sharing with a role, and a real phone.
-      Every piece is in the repo, from the schema file to the last test. Take the parts you need, and change the table names
-      to your own.
+      So that's the path. Four tables and a role from one file, shared with the back office app. Four screens with the rules in
+      named formulas and functions. A delegable list, validation, a camera, and offline. And then Monitor, a solution, sharing
+      with a role, and a real phone. Every piece is in the repo, from the schema file to the last test. Take the parts you
+      need, and change the table names to your own.
 
   - id: outro
     type: outro

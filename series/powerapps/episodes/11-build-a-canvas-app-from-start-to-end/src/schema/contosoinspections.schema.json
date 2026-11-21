@@ -1,337 +1,209 @@
 {
-  "$comment": "ContosoInspections: the one Dataverse schema shared by the three build specials (canvas app, model-driven app, agents/AI). Source of truth for Provision-ContosoInspections.ps1 and for the test harness. Display names are what Power Fx sees in a canvas app. Fictional business, no real identifiers.",
+  "_comment": "ContosoInspections: the Dataverse schema shared by the DEVLADLOG Power Apps build specials (canvas app, model-driven app, agents). Fictional publisher and names. build_solution.py turns this file into solution source.",
+  "version": "1.0.0.0",
   "solution": {
     "uniqueName": "ContosoInspections",
-    "friendlyName": "Contoso Inspections",
-    "version": "1.0.0.0",
-    "publisher": {
-      "uniqueName": "contosolab",
-      "friendlyName": "Contoso Lab",
-      "prefix": "cin",
-      "optionValuePrefix": 72700
-    }
+    "displayName": "Contoso Inspections",
+    "description": "Field inspections for Contoso sites: one data model, a canvas app for inspectors and a model-driven app for the back office (DEVLADLOG Power Apps demo)."
+  },
+  "publisher": {
+    "uniqueName": "contosolab",
+    "displayName": "Contoso Lab",
+    "description": "Contoso Lab (fictional publisher for the DEVLADLOG demos)",
+    "prefix": "cin",
+    "optionValuePrefix": 45532
   },
   "tables": [
     {
-      "schemaName": "cin_Site",
-      "displayName": "Site",
-      "pluralName": "Sites",
-      "description": "A place that gets inspected: a warehouse, a plant or a depot.",
-      "ownership": "OrganizationOwned",
-      "availableOffline": true,
-      "primaryName": {
-        "schemaName": "cin_Name",
-        "displayName": "Site name",
-        "maxLength": 100
-      },
-      "columns": [
-        {
-          "schemaName": "cin_SiteCode",
-          "displayName": "Site code",
-          "type": "string",
-          "maxLength": 20,
-          "required": true,
-          "description": "Short unique code printed on the site's signs, for example CWN-01."
-        },
-        {
-          "schemaName": "cin_Address",
-          "displayName": "Address",
-          "type": "string",
-          "maxLength": 200
-        },
-        {
-          "schemaName": "cin_City",
-          "displayName": "City",
-          "type": "string",
-          "maxLength": 100
-        },
-        {
-          "schemaName": "cin_RiskRating",
-          "displayName": "Risk rating",
-          "type": "choice",
-          "options": [
-            "Low",
-            "Medium",
-            "High"
-          ]
-        }
-      ]
-    },
-    {
-      "schemaName": "cin_Inspector",
+      "logicalName": "cin_inspector",
       "displayName": "Inspector",
       "pluralName": "Inspectors",
-      "description": "A person who carries out inspections. The work email is how the canvas app recognises the signed-in user.",
+      "description": "A person who carries out inspections.",
       "ownership": "OrganizationOwned",
-      "availableOffline": true,
-      "primaryName": {
-        "schemaName": "cin_Name",
-        "displayName": "Full name",
-        "maxLength": 100
-      },
+      "primaryName": {"logicalName": "cin_name", "displayName": "Full name", "maxLength": 100},
       "columns": [
-        {
-          "schemaName": "cin_WorkEmail",
-          "displayName": "Work email",
-          "type": "string",
-          "format": "Email",
-          "maxLength": 100,
-          "required": true
-        },
-        {
-          "schemaName": "cin_Region",
-          "displayName": "Region",
-          "type": "string",
-          "maxLength": 50
-        },
-        {
-          "schemaName": "cin_Certified",
-          "displayName": "Certified",
-          "type": "boolean",
-          "trueLabel": "Yes",
-          "falseLabel": "No",
-          "default": false
-        }
+        {"logicalName": "cin_email", "displayName": "Email", "type": "email", "maxLength": 100, "required": true},
+        {"logicalName": "cin_phone", "displayName": "Phone", "type": "phone", "maxLength": 30},
+        {"logicalName": "cin_certified", "displayName": "Certified", "type": "bool", "default": true}
       ]
     },
     {
-      "schemaName": "cin_Inspection",
+      "logicalName": "cin_site",
+      "displayName": "Site",
+      "pluralName": "Sites",
+      "description": "A location that is inspected.",
+      "ownership": "OrganizationOwned",
+      "primaryName": {"logicalName": "cin_name", "displayName": "Site name", "maxLength": 100},
+      "columns": [
+        {"logicalName": "cin_sitecode", "displayName": "Site code", "type": "string", "maxLength": 20, "required": true},
+        {"logicalName": "cin_address", "displayName": "Address", "type": "string", "maxLength": 200},
+        {"logicalName": "cin_city", "displayName": "City", "type": "string", "maxLength": 80},
+        {"logicalName": "cin_risklevel", "displayName": "Risk level", "type": "choice", "choice": "cin_risklevel",
+         "options": [["Low", 0], ["Medium", 1], ["High", 2]], "default": 1},
+        {"logicalName": "cin_lastinspectedon", "displayName": "Last inspected on", "type": "date"}
+      ],
+      "alternateKeys": [{"name": "cin_site_sitecode", "displayName": "Site code", "columns": ["cin_sitecode"]}]
+    },
+    {
+      "logicalName": "cin_inspection",
       "displayName": "Inspection",
       "pluralName": "Inspections",
-      "description": "One visit to one site by one inspector.",
+      "description": "One visit to a site by an inspector.",
       "ownership": "UserOwned",
-      "availableOffline": true,
-      "primaryName": {
-        "schemaName": "cin_Reference",
-        "displayName": "Reference",
-        "maxLength": 60
-      },
+      "quickCreate": true,
+      "primaryName": {"logicalName": "cin_name", "displayName": "Inspection number", "maxLength": 100, "autoNumber": "INS-{SEQNUM:5}"},
       "columns": [
-        {
-          "schemaName": "cin_InspectionDate",
-          "displayName": "Inspection date",
-          "type": "date",
-          "required": true
-        },
-        {
-          "schemaName": "cin_Status",
-          "displayName": "Inspection status",
-          "type": "choice",
-          "required": true,
-          "options": [
-            "Draft",
-            "Submitted",
-            "Reviewed",
-            "Closed"
-          ]
-        },
-        {
-          "schemaName": "cin_Result",
-          "displayName": "Result",
-          "type": "choice",
-          "options": [
-            "Pass",
-            "Needs follow-up",
-            "Fail"
-          ]
-        },
-        {
-          "schemaName": "cin_Summary",
-          "displayName": "Summary",
-          "type": "memo",
-          "maxLength": 2000
-        }
+        {"logicalName": "cin_siteid", "displayName": "Site", "type": "lookup", "target": "cin_site", "required": true},
+        {"logicalName": "cin_inspectorid", "displayName": "Inspector", "type": "lookup", "target": "cin_inspector"},
+        {"logicalName": "cin_inspectiondate", "displayName": "Inspection date", "type": "date", "required": true},
+        {"logicalName": "cin_status", "displayName": "Status", "type": "choice", "choice": "cin_inspectionstatus",
+         "options": [["Draft", 0], ["In progress", 1], ["Submitted", 2], ["Approved", 3], ["Rejected", 4]], "default": 0, "required": true},
+        {"logicalName": "cin_score", "displayName": "Score", "type": "whole", "min": 0, "max": 100},
+        {"logicalName": "cin_summary", "displayName": "Summary", "type": "memo", "maxLength": 2000},
+        {"logicalName": "cin_requiresfollowup", "displayName": "Requires follow-up", "type": "bool", "default": false},
+        {"logicalName": "cin_followupdate", "displayName": "Follow-up date", "type": "date"},
+        {"logicalName": "cin_reviewernotes", "displayName": "Reviewer notes", "type": "memo", "maxLength": 2000, "secured": true}
       ]
     },
     {
-      "schemaName": "cin_Finding",
-      "displayName": "Finding",
-      "pluralName": "Findings",
-      "description": "A problem or observation recorded during an inspection, with an optional photo.",
+      "logicalName": "cin_inspectionitem",
+      "displayName": "Inspection item",
+      "pluralName": "Inspection items",
+      "description": "One check or finding recorded during an inspection.",
       "ownership": "UserOwned",
-      "availableOffline": true,
-      "primaryName": {
-        "schemaName": "cin_Title",
-        "displayName": "Title",
-        "maxLength": 100
-      },
+      "quickCreate": true,
+      "primaryName": {"logicalName": "cin_name", "displayName": "Item", "maxLength": 100},
       "columns": [
-        {
-          "schemaName": "cin_Severity",
-          "displayName": "Severity",
-          "type": "choice",
-          "required": true,
-          "options": [
-            "Observation",
-            "Minor",
-            "Major",
-            "Critical"
-          ]
-        },
-        {
-          "schemaName": "cin_Category",
-          "displayName": "Category",
-          "type": "choice",
-          "options": [
-            "Safety",
-            "Housekeeping",
-            "Equipment",
-            "Documentation"
-          ]
-        },
-        {
-          "schemaName": "cin_Details",
-          "displayName": "Details",
-          "type": "memo",
-          "maxLength": 2000
-        },
-        {
-          "schemaName": "cin_Photo",
-          "displayName": "Photo",
-          "type": "image",
-          "maxSizeKB": 10240
-        },
-        {
-          "schemaName": "cin_Resolved",
-          "displayName": "Resolved",
-          "type": "boolean",
-          "trueLabel": "Yes",
-          "falseLabel": "No",
-          "default": false
-        },
-        {
-          "schemaName": "cin_ResolveBy",
-          "displayName": "Resolve by",
-          "type": "date"
-        }
+        {"logicalName": "cin_inspectionid", "displayName": "Inspection", "type": "lookup", "target": "cin_inspection", "required": true},
+        {"logicalName": "cin_category", "displayName": "Category", "type": "choice", "choice": "cin_itemcategory",
+         "options": [["Safety", 0], ["Electrical", 1], ["Fire", 2], ["Structural", 3], ["Housekeeping", 4]], "default": 0},
+        {"logicalName": "cin_severity", "displayName": "Severity", "type": "choice", "choice": "cin_itemseverity",
+         "options": [["Info", 0], ["Minor", 1], ["Major", 2], ["Critical", 3]], "default": 0},
+        {"logicalName": "cin_passed", "displayName": "Passed", "type": "bool", "default": true},
+        {"logicalName": "cin_notes", "displayName": "Notes", "type": "memo", "maxLength": 2000},
+        {"logicalName": "cin_resolvedon", "displayName": "Resolved on", "type": "date"},
+        {"logicalName": "cin_photo", "displayName": "Photo", "type": "image", "maxSizeKB": 10240}
       ]
     }
   ],
   "relationships": [
-    {
-      "schemaName": "cin_site_inspection",
-      "referenced": "cin_Site",
-      "referencing": "cin_Inspection",
-      "lookup": {
-        "schemaName": "cin_SiteId",
-        "displayName": "Site",
-        "required": true
-      },
-      "cascade": "Referential"
-    },
-    {
-      "schemaName": "cin_inspector_inspection",
-      "referenced": "cin_Inspector",
-      "referencing": "cin_Inspection",
-      "lookup": {
-        "schemaName": "cin_InspectorId",
-        "displayName": "Inspector",
-        "required": true
-      },
-      "cascade": "Referential"
-    },
-    {
-      "schemaName": "cin_inspection_finding",
-      "referenced": "cin_Inspection",
-      "referencing": "cin_Finding",
-      "lookup": {
-        "schemaName": "cin_InspectionId",
-        "displayName": "Inspection",
-        "required": true
-      },
-      "cascade": "Parental"
-    }
+    {"name": "cin_site_inspection", "referenced": "cin_site", "referencing": "cin_inspection", "lookup": "cin_siteid", "delete": "Restrict"},
+    {"name": "cin_inspector_inspection", "referenced": "cin_inspector", "referencing": "cin_inspection", "lookup": "cin_inspectorid", "delete": "RemoveLink"},
+    {"name": "cin_inspection_inspectionitem", "referenced": "cin_inspection", "referencing": "cin_inspectionitem", "lookup": "cin_inspectionid", "delete": "Cascade", "parental": true}
   ],
-  "securityRole": {
-    "name": "Contoso Inspector",
-    "description": "Field inspectors: create and edit their own inspections and findings, read sites and inspectors. Everything user-owned stays at Basic (own records) so Dataverse, not the app, decides who sees what.",
-    "privileges": [
-      {
-        "table": "cin_site",
-        "schemaName": "cin_Site",
-        "Read": "Global",
-        "AppendTo": "Global"
+  "ui": {
+    "forms": {
+      "cin_inspector": {
+        "main": {"name": "Inspector", "header": ["cin_certified"], "tabs": [
+          {"name": "general", "label": "General", "sections": [
+            {"name": "contact", "label": "Contact", "fields": ["cin_name", "cin_email", "cin_phone", "cin_certified"]}]}]}
       },
-      {
-        "table": "cin_inspector",
-        "schemaName": "cin_Inspector",
-        "Read": "Global",
-        "AppendTo": "Global"
+      "cin_site": {
+        "main": {"name": "Site", "header": ["cin_risklevel", "cin_lastinspectedon"], "tabs": [
+          {"name": "general", "label": "General", "sections": [
+            {"name": "site", "label": "Site", "fields": ["cin_name", "cin_sitecode", "cin_address", "cin_city", "cin_risklevel", "cin_lastinspectedon"]}]},
+          {"name": "inspections", "label": "Inspections", "sections": [
+            {"name": "history", "label": "History", "subgrid": {"name": "subgrid_inspections", "target": "cin_inspection", "relationship": "cin_site_inspection", "view": "Active Inspections"}}]}]}
       },
-      {
-        "table": "cin_inspection",
-        "schemaName": "cin_Inspection",
-        "Create": "Basic",
-        "Read": "Basic",
-        "Write": "Basic",
-        "Append": "Basic",
-        "AppendTo": "Basic"
+      "cin_inspection": {
+        "main": {"name": "Inspection", "header": ["cin_status", "cin_score", "cin_inspectiondate", "ownerid"], "tabs": [
+          {"name": "general", "label": "General", "sections": [
+            {"name": "visit", "label": "Visit", "fields": ["cin_name", "cin_siteid", "cin_inspectorid", "cin_inspectiondate", "cin_status"]},
+            {"name": "result", "label": "Result", "fields": ["cin_score", "cin_requiresfollowup", "cin_followupdate", "cin_summary"]}]},
+          {"name": "findings", "label": "Findings", "sections": [
+            {"name": "items", "label": "Inspection items", "subgrid": {"name": "subgrid_items", "target": "cin_inspectionitem", "relationship": "cin_inspection_inspectionitem", "view": "Items of an inspection"}}]},
+          {"name": "review", "label": "Review", "sections": [
+            {"name": "reviewer", "label": "Reviewer", "fields": ["cin_reviewernotes"]}]}]},
+        "quickCreate": {"name": "Inspection quick create", "fields": ["cin_siteid", "cin_inspectorid", "cin_inspectiondate"]}
       },
-      {
-        "table": "cin_finding",
-        "schemaName": "cin_Finding",
-        "Create": "Basic",
-        "Read": "Basic",
-        "Write": "Basic",
-        "Delete": "Basic",
-        "Append": "Basic",
-        "AppendTo": "Basic"
-      },
-      {
-        "table": "canvasapp",
-        "schemaName": "CanvasApp",
-        "Read": "Global",
-        "why": "Learn (mobile offline for canvas apps): needed to open an offline-enabled app"
-      },
-      {
-        "table": "mobileofflineprofile",
-        "schemaName": "MobileOfflineProfile",
-        "Read": "Global",
-        "why": "same"
-      },
-      {
-        "table": "syncerror",
-        "schemaName": "SyncError",
-        "Read": "Global",
-        "why": "same"
+      "cin_inspectionitem": {
+        "main": {"name": "Inspection item", "header": ["cin_severity", "cin_passed"], "tabs": [
+          {"name": "general", "label": "General", "sections": [
+            {"name": "item", "label": "Item", "fields": ["cin_name", "cin_inspectionid", "cin_category", "cin_severity", "cin_passed", "cin_resolvedon", "cin_notes"]}]}]},
+        "quickCreate": {"name": "Inspection item quick create", "fields": ["cin_name", "cin_category", "cin_severity", "cin_passed"]}
       }
-    ]
+    },
+    "views": {
+      "cin_inspector": [
+        {"name": "Active Inspectors", "default": true, "columns": [["cin_name", 200], ["cin_email", 220], ["cin_phone", 120], ["cin_certified", 100]], "orderBy": "cin_name"}
+      ],
+      "cin_site": [
+        {"name": "Active Sites", "default": true, "columns": [["cin_name", 200], ["cin_sitecode", 100], ["cin_city", 140], ["cin_risklevel", 100], ["cin_lastinspectedon", 140]], "orderBy": "cin_name"},
+        {"name": "High risk sites", "columns": [["cin_name", 200], ["cin_sitecode", 100], ["cin_city", 140], ["cin_lastinspectedon", 140]], "orderBy": "cin_lastinspectedon",
+         "filter": [["cin_risklevel", "eq", "2"]]}
+      ],
+      "cin_inspection": [
+        {"name": "Active Inspections", "default": true, "columns": [["cin_name", 110], ["cin_siteid", 170], ["cin_inspectorid", 150], ["cin_inspectiondate", 120], ["cin_status", 100], ["cin_score", 70]], "orderBy": "cin_inspectiondate", "descending": true},
+        {"name": "Inspections to review", "columns": [["cin_name", 110], ["cin_siteid", 170], ["cin_inspectorid", 150], ["cin_inspectiondate", 120], ["cin_score", 70]], "orderBy": "cin_inspectiondate",
+         "filter": [["cin_status", "eq", "2"]]},
+        {"name": "Needs follow-up", "columns": [["cin_name", 110], ["cin_siteid", 170], ["cin_followupdate", 130], ["cin_status", 100]], "orderBy": "cin_followupdate",
+         "filter": [["cin_requiresfollowup", "eq", "1"]]}
+      ],
+      "cin_inspectionitem": [
+        {"name": "Items of an inspection", "default": true, "columns": [["cin_name", 220], ["cin_category", 110], ["cin_severity", 100], ["cin_passed", 80], ["cin_resolvedon", 120]], "orderBy": "cin_name"},
+        {"name": "Open critical findings", "columns": [["cin_name", 220], ["cin_inspectionid", 150], ["cin_category", 110], ["cin_severity", 100]], "orderBy": "createdon",
+         "filter": [["cin_severity", "eq", "3"], ["cin_resolvedon", "null", null]]}
+      ]
+    },
+    "charts": [
+      {"name": "Inspections by status", "table": "cin_inspection", "type": "column", "category": "cin_status", "measure": "count"},
+      {"name": "Open findings by severity", "table": "cin_inspectionitem", "type": "bar", "category": "cin_severity", "measure": "count",
+       "filter": [["cin_resolvedon", "null", null]]}
+    ],
+    "dashboard": {
+      "name": "Inspection overview",
+      "components": [
+        {"kind": "chart", "table": "cin_inspection", "view": "Active Inspections", "chart": "Inspections by status"},
+        {"kind": "chart", "table": "cin_inspectionitem", "view": "Open critical findings", "chart": "Open findings by severity"},
+        {"kind": "list", "table": "cin_inspection", "view": "Inspections to review"},
+        {"kind": "list", "table": "cin_inspectionitem", "view": "Open critical findings"}
+      ]
+    },
+    "app": {
+      "uniqueName": "cin_InspectionBackOffice",
+      "name": "Inspection Back Office",
+      "description": "Back-office review of field inspections.",
+      "sitemap": [
+        {"area": "Inspections", "groups": [
+          {"group": "Overview", "pages": [{"type": "dashboard", "title": "Overview"}]},
+          {"group": "Review", "pages": [
+            {"type": "table", "table": "cin_inspection", "title": "Inspections"},
+            {"type": "table", "table": "cin_inspectionitem", "title": "Findings"}]},
+          {"group": "Reference", "pages": [
+            {"type": "table", "table": "cin_site", "title": "Sites"},
+            {"type": "table", "table": "cin_inspector", "title": "Inspectors"}]}]}
+      ],
+      "roles": ["Inspection Back Office"]
+    }
   },
-  "sampleData": {
-    "sites": [
+  "security": {
+    "roles": [
       {
-        "name": "Contoso Warehouse North",
-        "code": "CWN-01",
-        "city": "Porto",
-        "risk": "Medium"
+        "name": "Inspection Back Office",
+        "description": "Reviews and approves inspections. Reads and edits everything in ContosoInspections.",
+        "privileges": {
+          "cin_inspection": {"Create": "Global", "Read": "Global", "Write": "Global", "Delete": "Global", "Append": "Global", "AppendTo": "Global", "Assign": "Global", "Share": "Global"},
+          "cin_inspectionitem": {"Create": "Global", "Read": "Global", "Write": "Global", "Delete": "Global", "Append": "Global", "AppendTo": "Global", "Assign": "Global", "Share": "Global"},
+          "cin_site": {"Create": "Global", "Read": "Global", "Write": "Global", "Delete": "Global", "Append": "Global", "AppendTo": "Global"},
+          "cin_inspector": {"Create": "Global", "Read": "Global", "Write": "Global", "Delete": "Global", "Append": "Global", "AppendTo": "Global"}
+        }
       },
       {
-        "name": "Contoso Plant East",
-        "code": "CPE-02",
-        "city": "Braga",
-        "risk": "High"
-      },
-      {
-        "name": "Contoso Depot South",
-        "code": "CDS-03",
-        "city": "Faro",
-        "risk": "Low"
+        "name": "Inspection Field Inspector",
+        "description": "Records inspections in the field. Sees and edits only the inspections they own; cannot delete or reassign.",
+        "privileges": {
+          "cin_inspection": {"Create": "Basic", "Read": "Basic", "Write": "Basic", "Append": "Basic", "AppendTo": "Basic"},
+          "cin_inspectionitem": {"Create": "Basic", "Read": "Basic", "Write": "Basic", "Append": "Basic", "AppendTo": "Basic"},
+          "cin_site": {"Read": "Global", "AppendTo": "Global"},
+          "cin_inspector": {"Read": "Global", "AppendTo": "Global"}
+        }
       }
     ],
-    "inspectors": [
+    "fieldSecurityProfiles": [
       {
-        "name": "Alex Demo",
-        "emailParameter": "AlexEmail",
-        "defaultEmail": "alex.demo@contoso.com",
-        "region": "North",
-        "certified": true
-      },
-      {
-        "name": "Sam Demo",
-        "emailParameter": "SamEmail",
-        "defaultEmail": "sam.demo@contoso.com",
-        "region": "South",
-        "certified": true
+        "name": "Inspection reviewer notes",
+        "description": "Lets reviewers read and write the reviewer notes of an inspection.",
+        "permissions": [{"table": "cin_inspection", "column": "cin_reviewernotes", "read": true, "create": true, "update": true}]
       }
     ]
   }

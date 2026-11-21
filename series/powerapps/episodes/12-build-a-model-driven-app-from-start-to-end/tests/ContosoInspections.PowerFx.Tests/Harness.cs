@@ -53,6 +53,7 @@ public sealed class Harness
                     case "whole": ft = FormulaType.Decimal; break;
                     case "bool": ft = FormulaType.Boolean; break;
                     case "date": ft = FormulaType.Date; break;
+                    case "image": ft = RecordType.Empty().Add("Full", FormulaType.String).Add("Value", FormulaType.String); break;   // Learn: an image column is a record with Full and Value
                     case "lookup": ft = Types[c["target"]!.GetValue<string>()]; break;
                     case "choice":
                         // Dataverse local choices appear as 'Column (Table plural)', e.g. 'Status (Inspections)'.

@@ -3,13 +3,19 @@
 # Lock orientation OFF (Learn: build responsive apps). Settings > General: "Can be used offline" ON only after the offline
 # profile exists (Learn: set up mobile offline for canvas apps); Settings > Updates: Data row limit stays 500.
 #
+# The data model is the shared ContosoInspections schema (src/schema, the same file episode 12's back-office app uses).
+# Inspector story: Draft (visit planned) -> In progress (first item recorded) -> Submitted. Approved and Rejected are set by the
+# reviewer in episode 12's model-driven app; here they only show up, read-only, on the inspector's list.
+#
 # One file holds the rules, so every screen stays thin:
 #   Named formulas   values that follow the data (counts, the signed-in inspector) and constants (TapTarget, MaxPhotoKB)
-#   Pure UDFs        ValidateFinding, ValidateSubmit, SuggestResult, InspectionRef ... no side effects, unit-tested
-#   Behavior UDFs    StartInspection, AddFinding, ResolveFinding, SubmitInspection: the four writes. Each returns true or false
+#   Pure UDFs        ValidateItem, ValidateSubmit, SuggestScore, IsEditable ... no side effects, unit-tested
+#   Behavior UDFs    StartInspection, AddItem, ResolveItem, SubmitInspection: the four writes. Each returns true or false
 #                    and leaves navigation to the screen, so the UDFs never name a screen.
-# Security is NOT in the app: the Contoso Inspector role gives Basic (own records) on Inspection and Finding, so Dataverse
-# only returns the signed-in inspector's rows. The app has no "my inspections" filter to get wrong.
+# Security is NOT in the app: the Inspection Field Inspector role gives Basic (own records) on Inspection and Inspection item, so
+# Dataverse only returns the signed-in inspector's rows. The app has no "my inspections" filter to get wrong.
+# The inspection number is an auto number (INS-00001) assigned by Dataverse, so the app never builds one.
+# The Status column is addressed by its logical name, cin_status: the system Status (statecode) has the same display name.
 App:
   Properties:
     StartScreen: =InspectionsScreen
@@ -19,96 +25,108 @@ App:
     Formulas: |-
       =TapTarget = 88;
       MaxPhotoKB = 10240;
-      MinSeriousDetails = 10;
-      CurrentInspector = LookUp(Inspectors, 'Work email' = User().Email);
-      DraftCount = CountRows(Filter(Inspections, 'Inspection status' = 'Inspection status (Inspections)'.Draft));
-      OverdueFindingCount = CountRows(Filter(Findings, Resolved = false && !IsBlank('Resolve by') && 'Resolve by' < Today()));
+      MinTextLength = 10;
+      CurrentInspector = LookUp(Inspectors, Email = User().Email);
+      OpenCount = CountRows(Filter(Inspections,
+          cin_status = 'Status (Inspections)'.Draft || cin_status = 'Status (Inspections)'.'In progress'));
+      UnresolvedItemCount = CountRows(Filter('Inspection items',
+          Passed = false && IsBlank('Resolved on')));
       SeverityRank(severity: Text): Number = Switch(severity, "Critical", 4, "Major", 3, "Minor", 2, 1);
       IsSerious(severity: Text): Boolean = SeverityRank(severity) >= 3;
-      ResolveByFor(severity: Text): Date = DateAdd(Today(), Switch(severity, "Critical", 1, "Major", 7, "Minor", 30, 90));
-      Initials(fullName: Text): Text = Concat(ForAll(Split(Trim(fullName), " "), Upper(Left(Value, 1))), Value);
-      RefPrefix(siteCode: Text, fullName: Text): Text = siteCode & "-" & Text(Today(), "yyyymmdd") & "-" & Initials(fullName) & "-";
-      InspectionRef(prefix: Text, existing: Number): Text = prefix & Text(existing + 1, "000");
-      SuggestResult(critical: Number, major: Number, minor: Number): Text =
-          If(critical > 0 || major >= 2, "Fail", major > 0 || minor > 2, "Needs follow-up", "Pass");
-      ValidateFinding(title: Text, details: Text, severity: Text, hasPhoto: Boolean): Text =
+      IsEditable(status: Text): Boolean = status = "Draft" || status = "In progress";
+      SuggestScore(critical: Number, major: Number, minor: Number): Number =
+          Max(0, 100 - 30 * critical - 15 * major - 5 * minor);
+      SuggestFollowUp(critical: Number, major: Number): Boolean = critical > 0 || major > 0;
+      FollowUpDateFor(critical: Number, major: Number): Date = DateAdd(Today(), If(critical > 0, 1, If(major > 0, 7, 30)));
+      ValidateItem(name: Text, notes: Text, severity: Text, passed: Boolean, hasPhoto: Boolean): Text =
           If(
-              Len(Trim(title)) < 3, "Give the finding a title of at least 3 characters.",
-              IsSerious(severity) && Len(Trim(details)) < MinSeriousDetails, "Major and critical findings need details (at least 10 characters).",
-              IsSerious(severity) && !hasPhoto, "Major and critical findings need a photo.",
+              Len(Trim(name)) < 3, "Give the item a name of at least 3 characters.",
+              severity = "Critical" && passed, "A critical item cannot be marked as passed.",
+              !passed && IsSerious(severity) && Len(Trim(notes)) < MinTextLength,
+                  "A failed Major or Critical item needs notes (at least 10 characters).",
+              !passed && IsSerious(severity) && !hasPhoto,
+                  "A failed Major or Critical item needs a photo.",
               ""
           );
-      ValidateSubmit(findingCount: Number, result: Text, summary: Text): Text =
+      ValidateSubmit(itemCount: Number, score: Number, followUp: Boolean, followUpDate: Date, summary: Text): Text =
           If(
-              IsBlank(result), "Choose a result before submitting.",
-              result <> "Pass" && findingCount = 0, "A result other than Pass needs at least one finding.",
-              result = "Fail" && Len(Trim(summary)) < 10, "A failed inspection needs a summary (at least 10 characters).",
+              IsBlank(score), "Enter a score from 0 to 100 before you submit.",
+              score < 0 || score > 100, "The score must be between 0 and 100.",
+              itemCount = 0, "Add at least one item before you submit.",
+              followUp && IsBlank(followUpDate), "Pick a follow-up date or switch follow-up off.",
+              Len(Trim(summary)) < MinTextLength, "Write a summary of at least 10 characters.",
               ""
           );
-      FindingCount(inspectionId: GUID): Number = CountRows(Filter(Findings, Inspection.cin_inspectionid = inspectionId));
+      ItemCount(inspectionId: GUID): Number = CountRows(Filter('Inspection items', Inspection.cin_inspectionid = inspectionId));
+      FailedCount(inspectionId: GUID, severity: Text): Number =
+          With(
+              { level: Switch(severity, "Critical", 'Severity (Inspection items)'.Critical, "Major", 'Severity (Inspection items)'.Major,
+                  "Minor", 'Severity (Inspection items)'.Minor, 'Severity (Inspection items)'.Info) },
+              CountRows(Filter('Inspection items', Inspection.cin_inspectionid = inspectionId && Passed = false && Severity = level))
+          );
       StartInspection(siteCode: Text, inspectionDate: Date): Boolean = {
           With(
               {
-                  site: LookUp(Sites, 'Site code' = siteCode),
-                  prefix: RefPrefix(siteCode, CurrentInspector.'Full name')
-              },
-              With(
-                  { reference: InspectionRef(prefix, CountRows(Filter(Inspections, StartsWith(Reference, prefix)))) },
-                  IfError(
-                      Collect(
-                          Inspections,
-                          {
-                              Reference: reference,
-                              Site: site,
-                              Inspector: CurrentInspector,
-                              'Inspection date': inspectionDate,
-                              'Inspection status': 'Inspection status (Inspections)'.Draft
-                          }
-                      ),
-                      Notify("Couldn't start the inspection: " & FirstError.Message, NotificationType.Error); false,
-                      Set(selectedInspection, LookUp(Inspections, Reference = reference)); true
+                  created: Collect(
+                      Inspections,
+                      {
+                          Site: LookUp(Sites, 'Site code' = siteCode),
+                          Inspector: CurrentInspector,
+                          'Inspection date': inspectionDate,
+                          cin_status: 'Status (Inspections)'.Draft
+                      }
                   )
+              },
+              IfError(
+                  created,
+                  Notify("Couldn't start the inspection: " & FirstError.Message, NotificationType.Error); false,
+                  Set(selectedInspection, created); true
               )
           )
       };
-      AddFinding(title: Text, details: Text, severity: Text, category: Text): Boolean = {
+      AddItem(name: Text, notes: Text, severity: Text, category: Text, passed: Boolean): Boolean = {
           With(
-              { problem: ValidateFinding(title, details, severity, !IsBlank(findingPhoto)) },
+              { problem: ValidateItem(name, notes, severity, passed, !IsBlank(itemPhoto)) },
               If(
                   problem <> "", Notify(problem, NotificationType.Warning); false,
                   IfError(
                       Collect(
-                          Findings,
+                          'Inspection items',
                           {
-                              Title: Trim(title),
+                              Item: Trim(name),
                               Inspection: selectedInspection,
-                              Severity: Switch(severity, "Critical", 'Severity (Findings)'.Critical, "Major", 'Severity (Findings)'.Major,
-                                  "Minor", 'Severity (Findings)'.Minor, 'Severity (Findings)'.Observation),
-                              Category: Switch(category, "Safety", 'Category (Findings)'.Safety, "Equipment", 'Category (Findings)'.Equipment,
-                                  "Documentation", 'Category (Findings)'.Documentation, 'Category (Findings)'.Housekeeping),
-                              Details: Trim(details),
+                              Severity: Switch(severity, "Critical", 'Severity (Inspection items)'.Critical, "Major", 'Severity (Inspection items)'.Major,
+                                  "Minor", 'Severity (Inspection items)'.Minor, 'Severity (Inspection items)'.Info),
+                              Category: Switch(category, "Electrical", 'Category (Inspection items)'.Electrical, "Fire", 'Category (Inspection items)'.Fire,
+                                  "Structural", 'Category (Inspection items)'.Structural, "Housekeeping", 'Category (Inspection items)'.Housekeeping,
+                                  'Category (Inspection items)'.Safety),
+                              Passed: passed,
+                              Notes: Trim(notes),
                               // Learn (take and upload photos, Dataverse): an image column takes a record with Full and Value, both set to the image URI.
-                              Photo: If(IsBlank(findingPhoto), Blank(), { Full: findingPhoto, Value: findingPhoto }),
-                              Resolved: false,
-                              'Resolve by': ResolveByFor(severity)
+                              Photo: If(IsBlank(itemPhoto), Blank(), { Full: itemPhoto, Value: itemPhoto })
                           }
                       ),
-                      Notify("Couldn't save the finding: " & FirstError.Message, NotificationType.Error); false,
-                      Set(findingPhoto, Blank()); Notify("Finding added", NotificationType.Success); true
+                      Notify("Couldn't save the item: " & FirstError.Message, NotificationType.Error); false,
+                      // The first saved item is what moves a Draft to In progress.
+                      If(
+                          selectedInspection.cin_status = 'Status (Inspections)'.Draft,
+                          Set(selectedInspection, Patch(Inspections, selectedInspection, { cin_status: 'Status (Inspections)'.'In progress' }))
+                      );
+                      Set(itemPhoto, Blank()); Notify("Item added", NotificationType.Success); true
                   )
               )
           )
       };
-      ResolveFinding(): Boolean = {
+      ResolveItem(): Boolean = {
           IfError(
-              Patch(Findings, selectedFinding, { Resolved: true }),
+              Patch('Inspection items', selectedItem, { 'Resolved on': Today() }),
               Notify("Couldn't resolve it: " & FirstError.Message, NotificationType.Error); false,
-              Set(selectedFinding, Blank()); Notify("Marked as resolved", NotificationType.Success); true
+              Set(selectedItem, Blank()); Notify("Marked as resolved", NotificationType.Success); true
           )
       };
-      SubmitInspection(result: Text, summary: Text): Boolean = {
+      SubmitInspection(score: Number, followUp: Boolean, followUpDate: Date, summary: Text): Boolean = {
           With(
-              { problem: ValidateSubmit(FindingCount(selectedInspection.cin_inspectionid), result, summary) },
+              { problem: ValidateSubmit(ItemCount(selectedInspection.cin_inspectionid), score, followUp, followUpDate, summary) },
               If(
                   problem <> "", Notify(problem, NotificationType.Warning); false,
                   IfError(
@@ -116,9 +134,10 @@ App:
                           Inspections,
                           selectedInspection,
                           {
-                              'Inspection status': 'Inspection status (Inspections)'.Submitted,
-                              Result: Switch(result, "Fail", 'Result (Inspections)'.Fail, "Needs follow-up", 'Result (Inspections)'.'Needs follow-up',
-                                  'Result (Inspections)'.Pass),
+                              cin_status: 'Status (Inspections)'.Submitted,
+                              Score: score,
+                              'Requires follow-up': followUp,
+                              'Follow-up date': If(followUp, followUpDate, Blank()),
                               Summary: Trim(summary)
                           }
                       ),

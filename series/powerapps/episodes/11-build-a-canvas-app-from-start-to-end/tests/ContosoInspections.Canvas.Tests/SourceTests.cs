@@ -60,7 +60,7 @@ public class SourceTests
         Assert.True(h.FunctionsResult.IsSuccess, string.Join("\n", h.FunctionsResult.Errors.Select(e => e.ToString())));
         var defs = AppSource.Definitions();
         Assert.Equal(6, defs.Count(d => d.Kind == CanvasSource.DefinitionKind.NamedFormula));
-        Assert.Equal(new[] { "StartInspection", "AddFinding", "ResolveFinding", "SubmitInspection" },
+        Assert.Equal(new[] { "StartInspection", "AddItem", "ResolveItem", "SubmitInspection" },
             defs.Where(d => d.Kind == CanvasSource.DefinitionKind.BehaviorFunction).Select(d => d.Name));
     }
 
@@ -73,13 +73,13 @@ public class SourceTests
     {
         // The engine fixes a variable's type when it is first declared, so ThisItem gets one harness per gallery table.
         var inspections = NewHarness();
-        inspections.SetThisItem(inspections.InspectionRow("CPE-02-20261127-AD-001"));
-        var findings = NewHarness();
-        findings.SetThisItem(findings.FindingRow("Fire door wedged open"));
+        inspections.SetThisItem(inspections.InspectionRow("INS-00003"));
+        var items = NewHarness();
+        items.SetThisItem(items.ItemRow("Fire door"));
         var problems = new List<string>();
         foreach (var c in AppSource.Controls.Values)
         {
-            var h = c.Parent == "galFindings" || c.Name == "galFindings" ? findings : inspections;
+            var h = c.Parent == "galItems" || c.Name == "galItems" ? items : inspections;
             foreach (var (prop, raw) in c.Properties)
             {
                 if (!raw.StartsWith('=')) { problems.Add($"{c.Name}.{prop}: not a formula"); continue; }
@@ -102,50 +102,75 @@ public class SourceTests
         var h = NewHarness();
         string[] Items(string control) =>
             ((TableValue)h.Eval(AppSource.Formula(control, "Items"))).Rows.Select(r => ((StringValue)r.Value.GetField("Value")).Value).ToArray();
-        string[] Options(string column)
-        {
-            var (table, col) = (column.Split('.')[0], column.Split('.')[1]);
-            return h.Schema.GetProperty("tables").EnumerateArray().First(t => Harness.Logical(t.GetProperty("schemaName").GetString()!) == table)
-                .GetProperty("columns").EnumerateArray().First(c => Harness.Logical(c.GetProperty("schemaName").GetString()!) == col)
-                .GetProperty("options").EnumerateArray().Select(o => o.GetString()!).ToArray();
-        }
+        string[] Options(string table, string column) =>
+            h.Schema.GetProperty("tables").EnumerateArray().First(t => t.GetProperty("logicalName").GetString() == table)
+                .GetProperty("columns").EnumerateArray().First(c => c.GetProperty("logicalName").GetString() == column)
+                .GetProperty("options").EnumerateArray().Select(o => o[0].GetString()!).ToArray();
 
-        Assert.Equal(Options("cin_finding.cin_severity"), Items("drpSeverity"));
-        Assert.Equal(Options("cin_finding.cin_category"), Items("drpCategory"));
-        Assert.Equal(Options("cin_inspection.cin_result"), Items("drpResult"));
+        Assert.Equal(Options("cin_inspectionitem", "cin_severity"), Items("drpSeverity"));
+        Assert.Equal(Options("cin_inspectionitem", "cin_category"), Items("drpCategory"));
+    }
+
+    [Fact]
+    public void The_status_flow_is_the_canonical_one_and_the_app_writes_only_the_inspectors_part()
+    {
+        // Episode 12's schema owns the choice: Draft, In progress, Submitted, Approved, Rejected. The canvas app only ever writes the first
+        // three (Draft on start, In progress on the first item, Submitted on submit); Approved and Rejected are the reviewer's.
+        var h = NewHarness();
+        var status = h.Schema.GetProperty("tables").EnumerateArray().First(t => t.GetProperty("logicalName").GetString() == "cin_inspection")
+            .GetProperty("columns").EnumerateArray().First(c => c.GetProperty("logicalName").GetString() == "cin_status")
+            .GetProperty("options").EnumerateArray().Select(o => o[0].GetString()!).ToArray();
+        Assert.Equal(new[] { "Draft", "In progress", "Submitted", "Approved", "Rejected" }, status);
+        var written = Regex.Matches(AppSource.AppProperties["Formulas"], @"cin_status: 'Status \(Inspections\)'\.('[^']+'|\w+)").Select(m => m.Groups[1].Value.Trim('\'')).ToArray();
+        Assert.Equal(new[] { "Draft", "In progress", "Submitted" }, written);
+        var all = string.Join("\n", Directory.GetFiles(CanvasSource.AppDir, "*.yaml").Select(File.ReadAllText));
+        Assert.DoesNotMatch(@"cin_status: 'Status \(Inspections\)'\.(Approved|Rejected)", all);
     }
 
     [Fact]
     public void MaxPhotoKB_is_the_image_column_limit_in_the_schema()
     {
         var h = NewHarness();
-        var finding = h.Schema.GetProperty("tables").EnumerateArray().First(t => t.GetProperty("schemaName").GetString() == "cin_Finding");
-        var photo = finding.GetProperty("columns").EnumerateArray().First(c => c.GetProperty("schemaName").GetString() == "cin_Photo");
+        var item = h.Schema.GetProperty("tables").EnumerateArray().First(t => t.GetProperty("logicalName").GetString() == "cin_inspectionitem");
+        var photo = item.GetProperty("columns").EnumerateArray().First(c => c.GetProperty("logicalName").GetString() == "cin_photo");
         Assert.Equal(photo.GetProperty("maxSizeKB").GetDecimal(), h.Number("MaxPhotoKB"));
+    }
+
+    [Fact]
+    public void The_schema_file_is_a_byte_for_byte_copy_of_episode_12s()
+    {
+        // One Dataverse solution, two apps: if the canonical file changes, this copy must change with it (cp, don't edit).
+        var mine = Path.Combine(CanvasSource.EpisodeDir, "src", "schema", "contosoinspections.schema.json");
+        var theirs = Path.GetFullPath(Path.Combine(CanvasSource.EpisodeDir, "..", "12-build-a-model-driven-app-from-start-to-end",
+            "src", "schema", "contosoinspections.schema.json"));
+        Assert.True(File.Exists(theirs), $"episode 12's schema is not at {theirs}");
+        Assert.Equal(File.ReadAllBytes(theirs), File.ReadAllBytes(mine));
     }
 
     [Fact]
     public void The_app_only_reads_tables_the_security_role_can_read()
     {
-        // Dataverse, not the app, decides who sees what: the role must let the inspector read every table the app queries.
+        // Dataverse, not the app, decides who sees what: the field-inspector role must let the inspector read every table the app queries.
         var h = NewHarness();
-        var role = h.Schema.GetProperty("securityRole").GetProperty("privileges").EnumerateArray()
-            .Where(p => p.TryGetProperty("Read", out _)).Select(p => p.GetProperty("table").GetString()!).ToHashSet();
+        var role = FieldInspectorRole(h).GetProperty("privileges").EnumerateObject().Where(p => p.Value.TryGetProperty("Read", out _)).Select(p => p.Name).ToHashSet();
         var yaml = string.Join("\n", Directory.GetFiles(CanvasSource.AppDir, "*.yaml").Select(File.ReadAllText));
         var used = h.Schema.GetProperty("tables").EnumerateArray()
-            .Where(t => Regex.IsMatch(yaml, $@"\b{t.GetProperty("pluralName").GetString()}\b"))
-            .Select(t => Harness.Logical(t.GetProperty("schemaName").GetString()!)).ToList();
+            .Where(t => Regex.IsMatch(yaml, $@"\b{t.GetProperty("pluralName").GetString()}\b|'{t.GetProperty("pluralName").GetString()}'"))
+            .Select(t => t.GetProperty("logicalName").GetString()!).ToList();
         Assert.Equal(4, used.Count);
         Assert.All(used, t => Assert.Contains(t, role));
     }
+
+    private static System.Text.Json.JsonElement FieldInspectorRole(Harness h) =>
+        h.Schema.GetProperty("security").GetProperty("roles").EnumerateArray().First(r => r.GetProperty("name").GetString() == "Inspection Field Inspector");
 
     [Fact]
     public void There_is_no_my_inspections_filter_in_the_app_because_the_role_scopes_the_rows()
     {
         var all = string.Join("\n", Directory.GetFiles(CanvasSource.AppDir, "*.yaml").Select(File.ReadAllText));
         Assert.DoesNotMatch(@"Owner\b|\bCreated By\b|User\(\)\.Email\s*=\s*Owner", all);
-        var role = Harness.LoadSchema().GetProperty("securityRole").GetProperty("privileges").EnumerateArray();
-        foreach (var table in new[] { "cin_inspection", "cin_finding" })
-            Assert.Equal("Basic", role.First(p => p.GetProperty("table").GetString() == table).GetProperty("Read").GetString());
+        var role = FieldInspectorRole(NewHarness()).GetProperty("privileges");
+        foreach (var table in new[] { "cin_inspection", "cin_inspectionitem" })
+            Assert.Equal("Basic", role.GetProperty(table).GetProperty("Read").GetString());
     }
 }

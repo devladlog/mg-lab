@@ -14,11 +14,14 @@ def test_solution_xml_matches_the_schema(schema):
     root = solution_xml(SOLUTION / "Other" / "Solution.xml")
     m = root.find("SolutionManifest")
     assert m.findtext("UniqueName") == schema["solution"]["uniqueName"]
-    assert m.findtext("Version") == schema["solution"]["version"]
+    assert m.findtext("Version") == schema["version"]
+    assert m.find("LocalizedNames/LocalizedName").get("description") == schema["solution"]["displayName"]
+    assert m.find("Descriptions/Description").get("description") == schema["solution"]["description"]
     pub = m.find("Publisher")
-    assert pub.findtext("UniqueName") == schema["solution"]["publisher"]["uniqueName"]
-    assert pub.findtext("CustomizationPrefix") == schema["solution"]["publisher"]["prefix"]
-    assert int(pub.findtext("CustomizationOptionValuePrefix")) == schema["solution"]["publisher"]["optionValuePrefix"]
+    assert pub.findtext("UniqueName") == schema["publisher"]["uniqueName"]
+    assert pub.findtext("CustomizationPrefix") == schema["publisher"]["prefix"]
+    assert int(pub.findtext("CustomizationOptionValuePrefix")) == schema["publisher"]["optionValuePrefix"]
+    assert pub.find("Descriptions/Description").get("description") == schema["publisher"]["description"]
 
 
 def test_the_shell_does_not_hand_write_entities_or_roles():
