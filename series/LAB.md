@@ -11,6 +11,9 @@ All demos are recorded for real. Use these shared resources before asking for ne
   `labadmin` (Lab Admin, the recording account), `alex.demo`, `sam.demo`, `jordan.demo`, `riley.demo`, `taylor.demo`
   (display names "<First> Demo"). Departments, managers, groups and roles are not set yet: each demo.md says what it
   needs and sets it up in its own steps (and undoes it in tear-down). The owner's own account is never used in demos.
+  Premium Power Platform: there are no spare Power Apps Premium licences. A demo user who needs premium connectors
+  starts the self-service Power Apps / Power Automate Premium trial the first time (say so in demo.md), or the app
+  runs in `DEV` under the environment's pay-as-you-go plan if one is set (not set today).
 - Power Platform environment `DEV` (Dataverse). Developer environments can no longer be created; plan for `DEV`
   or a sandbox environment.
 - Dynamics 365 Sales trial environment "Sales trial" (EMEA, created 21 Nov 2026, 30-day trial): Sales Hub app with
