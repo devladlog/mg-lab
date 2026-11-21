@@ -1,0 +1,264 @@
+# DEVLADLOG .NET — episode 09 (draft; screens are captured in the lab, see demo.md)
+episode: 9
+slug: performance-optimization
+series_label: ".NET"
+series_name: "DEVLADLOG .NET"
+file_prefix: "net"
+title: "Performance Optimization"
+subtitle: "Measure first: N+1, caching, JSON, live metrics"
+voice: am_michael
+thumbnail_text: "MEASURE\nTHEN FIX\nASP.NET CORE"
+youtube:
+  title: "ASP.NET Core Performance: Fix N+1, HybridCache, Output Cache, Benchmarks | DEVLADLOG .NET #9"
+  tags: [ASP.NET Core performance, .NET 10, EF Core, N+1 query, HybridCache, output caching, BenchmarkDotNet, response compression, System.Text.Json source generation, dotnet-counters, C#, Minimal APIs]
+sources:
+  - https://www.devladlog.com/articles/dotnet/2026-05-19-performance-optimization-complete-guide-2026/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Performance Optimization"
+    sub: "Don't guess. Measure."
+    short: hook
+    narration: >
+      The requests list is slow. Everyone has a theory. Add a cache. Add an index. Rewrite it in something faster.
+      Today we don't guess. We measure, fix the one thing the measurement points at, and measure again. Welcome to
+      DEVLADLOG dot net.
+
+  - id: plan
+    type: bullets
+    heading: "What we're doing"
+    bullets:
+      - "Count the SQL the endpoint really sends"
+      - "Fix the query, prove it with BenchmarkDotNet"
+      - "Cache twice: output cache and HybridCache"
+      - "Source generated JSON, reflection switched off"
+      - "Watch your own counters live"
+    narration: >
+      Our project requests A P I now holds twenty thousand requests. We'll count the S Q L it sends, fix the query
+      and prove it with BenchmarkDotNet, add two kinds of cache for two different jobs, switch to source generated
+      JSON, and watch our own counters live.
+
+  - id: sqllog
+    type: screen
+    heading: "Count the queries"
+    image: screens/sql-log.jpg
+    bar: "Terminal · dotnet run (Development), EF Core command log"
+    demo: >
+      Windows Terminal, two panes. Left: dotnet run for the Perf.Api project in Development, EF Core command log
+      visible. Right: curl.exe "http://localhost:5209/api/slow/requests?take=2" then
+      "http://localhost:5209/api/requests?department=FIN&pageSize=2". Left pane shows five SELECT commands for the
+      first call (one on Requests, then Requesters and Departments by Id, twice) and two for the second (COUNT, then
+      one SELECT with INNER JOINs). Parameter values show as question marks. Nothing to mask.
+    narration: >
+      Two requests, same data. The old endpoint asks for two rows and logs five commands: one for the rows, then a
+      requester query and a department query for every row. One plus two N. The new endpoint sends two commands, a
+      count and one select with the joins. Ask for a hundred rows and the first one sends two hundred and one.
+
+  - id: nplus1
+    type: code
+    heading: "The classic N plus one"
+    lang: csharp
+    code: |
+      var rows = await query.OrderBy(r => r.Id).Take(take).ToListAsync(ct);   // tracked
+
+      foreach (var r in rows)
+      {
+          // A query inside the loop for data a JOIN would bring along
+          var requester = await db.Requesters.Where(p => p.Id == r.RequesterId).FirstAsync(ct);
+          var department = await db.Departments.Where(d => d.Id == r.DepartmentId).FirstAsync(ct);
+          result.Add(new RequestDto(r.Id, r.Title, r.Budget, department.Code, requester.Name,
+              r.Priority, r.Status, r.CreatedAtUtc));
+      }
+    narration: >
+      Here's the culprit. It loads tracked entities, then asks the database again inside the loop. It looks
+      innocent, it passes every functional test, and it gets slower with every row.
+
+  - id: projection
+    type: code
+    heading: "The fix: project, page, cap"
+    lang: csharp
+    code: |
+      Filtered(db.Requests.AsNoTracking(), departmentCode)
+          .OrderBy(r => r.Id).Skip(skip).Take(take)
+          .Select(r => new RequestDto(r.Id, r.Title, r.Budget, r.Department.Code, r.Requester.Name,
+              r.Priority, r.Status, r.CreatedAtUtc))
+          .ToListAsync(ct);
+
+      // and nobody can ask for everything at once
+      if (size is < 1 or > 100)
+          errors["pageSize"] = ["pageSize must be between 1 and 100."];
+    narration: >
+      The fix is one query. Project straight into the D T O, let the database do the joins, read only the columns
+      you need, and track nothing. Paging is capped at a hundred, because an unbounded list is a performance bug
+      waiting for a big customer.
+
+  - id: bench
+    type: screen
+    heading: "Prove it: BenchmarkDotNet"
+    image: screens/benchmarks.jpg
+    bar: "Terminal · dotnet run -c Release, QueryBenchmarks"
+    demo: >
+      Windows Terminal. Run: dotnet run -c Release --project src\ProjectRequests.Perf.Benchmarks -- --filter "*QueryBenchmarks*".
+      Show the final summary table: rows List_NPlusOne_Tracked, List_Include_Tracked, List_Include_NoTracking,
+      List_Projection (category "list") and Sum_LoadEverything, Sum_InDatabase (category "sum"), with the Mean, Ratio,
+      Gen0 and Allocated columns. Zoom so Allocated is readable. Machine name and user name in the host banner
+      must be cropped or masked.
+    narration: >
+      BenchmarkDotNet runs each version on twenty thousand real rows, with warm-up, and measures allocations too.
+      Look at the allocated column: the N plus one version allocates around six megabytes for two hundred rows, the
+      projection under two hundred kilobytes. And adding up budgets in the database beats loading every entity by a
+      wide margin. Read the ratios, not my laptop's milliseconds.
+
+  - id: hybrid
+    type: code
+    heading: "HybridCache: one caller computes"
+    lang: csharp
+    code: |
+      cache.GetOrCreateAsync("summary:all", async token =>
+          {
+              metrics.SummaryComputed();             // counts real computations
+              return await ComputeAsync(token);
+          },
+          new HybridCacheEntryOptions { Expiration = TimeSpan.FromMinutes(1), LocalCacheExpiration = TimeSpan.FromMinutes(1) },
+          Tags, ct);
+
+      public ValueTask InvalidateAsync(CancellationToken ct = default) =>
+          cache.RemoveByTagAsync(Tag, ct);
+    short: stampede
+    narration: >
+      For a computed value, the dashboard summary, we use HybridCache. When thirty requests arrive on a cold cache,
+      only one runs the factory and the others wait for it. Our test proves it with a counter: thirty callers, one
+      computation. A plain memory cache ran the factory several times in the same experiment. And tags let a write
+      invalidate everything about requests in one call.
+
+  - id: outputcache
+    type: code
+    heading: "Output cache, compression, eviction"
+    lang: csharp
+    code: |
+      builder.Services.AddOutputCache(o => o.AddPolicy(RequestEndpoints.ListPolicy, p => p
+          .Expire(TimeSpan.FromSeconds(30))
+          .SetVaryByQuery("department", "page", "pageSize")
+          .Tag(SummaryService.Tag)));
+      builder.Services.AddResponseCompression();     // EnableForHttps stays off
+
+      app.UseResponseCompression();                  // before the middleware that writes the body
+      app.UseOutputCache();
+
+      // in POST /api/requests
+      await outputCache.EvictByTagAsync(SummaryService.Tag, ct);
+      await summary.InvalidateAsync(ct);
+    narration: >
+      For whole responses we use output caching. The policy names the query keys that matter and carries the same
+      tag. Compression sits before it in the pipeline, and stays off over H T T P S, because Learn warns about
+      compressing dynamic content there. When a request is created, the post evicts both caches by tag. A test
+      checks the next read is fresh.
+
+  - id: load
+    type: screen
+    heading: "Before, after, cached"
+    image: screens/loadtest.jpg
+    bar: "PowerShell · deploy\\Measure-Endpoints.ps1"
+    demo: >
+      Windows Terminal, PowerShell 7. Run: pwsh .\deploy\Measure-Endpoints.ps1 (8 seconds per phase, 8 workers).
+      Show the three blocks: "BEFORE: N+1, tracked entities", "AFTER: projection + paging, output cache off",
+      "AFTER + output cache on", each with requests, throughput in req/s and p50/p95/p99 latency. Freeze or cut so
+      the three throughput lines and the p99 lines are readable together. Nothing to mask.
+    narration: >
+      Now the same thing from the outside. A small load generator, eight workers, eight seconds each. The old
+      endpoint gives you throughput in the tens of requests per second, and a p ninety nine that hurts. The
+      projection is more than an order of magnitude better. With the output cache on, the query disappears
+      altogether. On loopback with a local SQLite file, so judge the shape, not the digits.
+
+  - id: json
+    type: code
+    heading: "Source generated JSON, reflection off"
+    lang: csharp
+    code: |
+      // csproj: <JsonSerializerIsReflectionEnabledByDefault>false</JsonSerializerIsReflectionEnabledByDefault>
+
+      [JsonSourceGenerationOptions(JsonSerializerDefaults.Web, UseStringEnumConverter = true)]
+      [JsonSerializable(typeof(RequestDto))]
+      [JsonSerializable(typeof(PagedResult<RequestDto>))]
+      [JsonSerializable(typeof(SummaryDto))]
+      public partial class AppJsonContext : JsonSerializerContext;
+
+      builder.Services.ConfigureHttpJsonOptions(o =>
+          o.SerializerOptions.TypeInfoResolverChain.Insert(0, AppJsonContext.Default));
+    narration: >
+      Serialization goes through a source generated context, and we switch reflection off in the project. If someone
+      adds a type and forgets to register it, it fails loudly instead of quietly using reflection. That's not a
+      speed miracle on dot net ten, as we'll see in a second, but it's what makes trimming and native A O T possible.
+
+  - id: gotchas
+    type: bullets
+    heading: "Honest results"
+    bullets:
+      - "HybridCache serialises values, even in memory only"
+      - "Source generated JSON: same allocation as a string, half as UTF-8 bytes"
+      - "No-tracking was not faster than tracking here"
+      - "Output cache ignored the client's no-cache header"
+    short: gotcha
+    narration: >
+      Four honest findings. With reflection off, the first HybridCache call threw, because it serializes what it
+      stores. We registered a serializer on the source generated context. Source generated JSON allocated the same
+      as reflection for a string, and half as much as U T F eight bytes. No tracking wasn't faster than tracking in
+      our run, only lighter. And a client's no cache header did not bypass the output cache, so evict by tag.
+
+  - id: counters
+    type: screen
+    heading: "Watch your own counters"
+    image: screens/counters.jpg
+    bar: "Terminal · dotnet-counters monitor"
+    demo: >
+      Two panes. Left: dotnet-counters monitor -n ProjectRequests.Perf.Api --counters ProjectRequests.Perf, showing the
+      two custom counters mglab.perf.requests.created and mglab.perf.summary.computed. Right: a loop of curl.exe
+      calls to /api/summary (eight times), then one POST /api/requests, then /api/summary again. Show that
+      summary.computed ticks once after the write, not for the cached reads. Nothing to mask.
+    narration: >
+      Two counters on System dot Diagnostics dot Metrics, and dotnet counters shows them live. Read the summary
+      eight times, nothing computed. Create a request, read again, and the computed counter ticks once. That's the
+      cache doing exactly its job, visible without a debugger.
+
+  - id: tests
+    type: code
+    heading: "Tests that count SQL"
+    lang: csharp
+    code: |
+      app.Commands.Reset();
+      var rows = await GetSlow(client, "?take=25");
+      Assert.Equal(1 + 2 * 25, app.Commands.Count);     // 51 round trips for 25 rows
+
+      app.Commands.Reset();
+      var page = await GetList(client, "?pageSize=100");
+      Assert.Equal(2, app.Commands.Count);              // COUNT + one SELECT
+
+      $ dotnet test
+        total: 30, failed: 0, succeeded: 30
+    narration: >
+      Performance work needs tests, or it rots. An interceptor counts every command E F Core sends, so the tests
+      assert two queries for a page and zero for a cache hit. Other tests check the stampede, the tag eviction,
+      the compression and the benchmark variants returning identical data. Thirty tests.
+
+  - id: recap
+    type: bullets
+    heading: "Five rules"
+    bullets:
+      - "Measure first: SQL log, BenchmarkDotNet, load test"
+      - "Project and page; never loop and query"
+      - "Output cache for responses, HybridCache for values"
+      - "Evict by tag on every write"
+      - "Count what you cache"
+    narration: >
+      Five rules. Measure first. Project and page, never loop and query. Output cache for responses, HybridCache for
+      computed values. Evict by tag on every write. And count what you cache, so you know it works.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The A P I, the benchmarks, the load tool and the thirty tests are on GitHub, and the full guide is on
+      devladlog dot com. Next time: what's new in dot net eight and nine, and what you get by moving to ten.
+      Subscribe so you don't miss it. This was DEVLADLOG dot net, by Momento Galático.

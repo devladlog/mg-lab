@@ -1,0 +1,55 @@
+# EF Core command log (Development), real output. take=2 on the slow endpoint, pageSize=2 on the new one.
+## GET /api/slow/requests?take=2  (1 + 2*2 = 5 commands)
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (0ms) [Parameters=[@p='?' (DbType = Int32)], CommandType='Text', CommandTimeout='30']
+      SELECT "r"."Id", "r"."Budget", "r"."CreatedAtUtc", "r"."DepartmentId", "r"."Priority", "r"."RequesterId", "r"."Status", "r"."Title"
+      FROM "Requests" AS "r"
+      ORDER BY "r"."Id"
+      LIMIT @p
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (0ms) [Parameters=[@r_RequesterId='?' (DbType = Int32)], CommandType='Text', CommandTimeout='30']
+      SELECT "r"."Id", "r"."Email", "r"."Name"
+      FROM "Requesters" AS "r"
+      WHERE "r"."Id" = @r_RequesterId
+      LIMIT 1
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (0ms) [Parameters=[@r_DepartmentId='?' (DbType = Int32)], CommandType='Text', CommandTimeout='30']
+      SELECT "d"."Id", "d"."Code", "d"."Name"
+      FROM "Departments" AS "d"
+      WHERE "d"."Id" = @r_DepartmentId
+      LIMIT 1
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (0ms) [Parameters=[@r_RequesterId='?' (DbType = Int32)], CommandType='Text', CommandTimeout='30']
+      SELECT "r"."Id", "r"."Email", "r"."Name"
+      FROM "Requesters" AS "r"
+      WHERE "r"."Id" = @r_RequesterId
+      LIMIT 1
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (0ms) [Parameters=[@r_DepartmentId='?' (DbType = Int32)], CommandType='Text', CommandTimeout='30']
+      SELECT "d"."Id", "d"."Code", "d"."Name"
+      FROM "Departments" AS "d"
+      WHERE "d"."Id" = @r_DepartmentId
+      LIMIT 1
+
+## GET /api/requests?department=FIN&pageSize=2  (cold: COUNT + one SELECT with JOINs)
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (0ms) [Parameters=[@departmentCode='?' (Size = 3)], CommandType='Text', CommandTimeout='30']
+      SELECT COUNT(*)
+      FROM "Requests" AS "r"
+      INNER JOIN "Departments" AS "d" ON "r"."DepartmentId" = "d"."Id"
+      WHERE "d"."Code" = @departmentCode
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (0ms) [Parameters=[@departmentCode='?' (Size = 3), @p2='?' (DbType = Int32), @p='?' (DbType = Int32)], CommandType='Text', CommandTimeout='30']
+      SELECT "s"."Id", "s"."Title", "s"."Budget", "s"."Code", "r0"."Name", "s"."Priority", "s"."Status", "s"."CreatedAtUtc"
+      FROM (
+          SELECT "r"."Id", "r"."Budget", "r"."CreatedAtUtc", "r"."Priority", "r"."RequesterId", "r"."Status", "r"."Title", "d"."Code"
+          FROM "Requests" AS "r"
+          INNER JOIN "Departments" AS "d" ON "r"."DepartmentId" = "d"."Id"
+          WHERE "d"."Code" = @departmentCode
+          ORDER BY "r"."Id"
+          LIMIT @p2 OFFSET @p
+      ) AS "s"
+      INNER JOIN "Requesters" AS "r0" ON "s"."RequesterId" = "r0"."Id"
+      ORDER BY "s"."Id"
+
+## the same GET again: output cache hit, no SQL at all (lines logged: 0)

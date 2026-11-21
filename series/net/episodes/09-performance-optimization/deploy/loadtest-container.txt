@@ -1,0 +1,23 @@
+# deploy/Measure-Endpoints.ps1 output, build container (2 shared vCPUs; API and load generator on the same box, loopback, Release).
+# Compare the SHAPE (orders of magnitude, p99), not the absolute numbers: record again on the laptop.
+
+=== BEFORE: N+1, tracked entities (take=100)
+warm-up 2s ...
+measuring 8s, 8 workers: GET http://localhost:5209/api/slow/requests?take=100
+requests   391   errors 0
+throughput 48.7 req/s
+latency ms p50 150.0   p95 338.2   p99 424.1   max 539.2
+
+=== AFTER: projection + paging, output cache off
+warm-up 2s ...
+measuring 8s, 8 workers: GET http://localhost:5209/api/requests?department=FIN&pageSize=100
+requests   6797   errors 0
+throughput 849.4 req/s
+latency ms p50 8.2   p95 19.8   p99 29.5   max 94.8
+
+=== AFTER + output cache on
+warm-up 2s ...
+measuring 8s, 8 workers: GET http://localhost:5209/api/requests?department=FIN&pageSize=100
+requests   262383   errors 0
+throughput 32789.0 req/s
+latency ms p50 0.2   p95 0.4   p99 2.3   max 51.7

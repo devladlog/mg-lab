@@ -1,0 +1,18 @@
+# What happens when .NET 9 / C# 13 code is compiled for net8.0 (SDK 10.0.115; the default LangVersion for net8.0 is C# 12).
+# Each snippet was built on its own: a syntax-level error (CS9202) stops the compiler before it reports the missing APIs.
+
+## Console.WriteLine('\e');                                                   // C# 13: the ESCAPE character
+Program.cs(1,20): error CS9202: Feature 'string escape character' is not available in C# 12.0. Please use language version 13.0 or greater. 
+
+## static bool Any(params ReadOnlySpan<int> values) => values.Length > 0;     // C# 13: params with a span
+Program.cs(1,17): error CS9202: Feature 'params collections' is not available in C# 12.0. Please use language version 13.0 or greater. 
+
+## var counts = new[] { "a", "b", "a" }.CountBy(s => s);                      // .NET 9 LINQ
+Program.cs(1,38): error CS1061: 'string[]' does not contain a definition for 'CountBy' and no accessible extension method 'CountBy' accepting a first argument of type 'string[]' could be found (are you missing a using directive or an assembly reference?) 
+
+## var id = Guid.CreateVersion7();                                            // .NET 9 Guid
+Program.cs(1,15): error CS0117: 'Guid' does not contain a definition for 'CreateVersion7' 
+
+## var gate = new System.Threading.Lock();                                    // .NET 9 lock type
+Program.cs(1,33): error CS0234: The type or namespace name 'Lock' does not exist in the namespace 'System.Threading' (are you missing an assembly reference?) 
+

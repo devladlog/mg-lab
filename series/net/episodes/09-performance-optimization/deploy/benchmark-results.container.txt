@@ -1,0 +1,29 @@
+# BenchmarkDotNet results, run in the build container (NOT the recording laptop)
+# ShortRun job (3 iterations), 2 shared vCPUs with other builders running: expect wide error bars.
+# Re-run on the laptop for the recording (see demo.md); the ratios and allocations are the stable part.
+
+BenchmarkDotNet v0.15.8, Linux Ubuntu 24.04.5 LTS (Noble Numbat)
+Intel Xeon Processor 2.10GHz, 1 CPU, 2 logical and 2 physical cores
+.NET SDK 10.0.115
+  [Host]   : .NET 10.0.15 (10.0.15, 10.0.1526.53008), X64 RyuJIT x86-64-v4
+
+| Method                  | Categories | Rows | Mean       | Error        | StdDev    | Median     | Ratio | RatioSD | Gen0      | Gen1      | Gen2      | Allocated   | Alloc Ratio |
+|------------------------ |----------- |----- |-----------:|-------------:|----------:|-----------:|------:|--------:|----------:|----------:|----------:|------------:|------------:|
+| List_NPlusOne_Tracked   | list       | 200  |  52.951 ms |   153.453 ms |  8.411 ms |  52.593 ms |  1.02 |    0.20 |         - |         - |         - |  6010.43 KB |        1.00 |
+| List_Include_Tracked    | list       | 200  |   7.552 ms |    50.505 ms |  2.768 ms |   7.110 ms |  0.15 |    0.05 |         - |         - |         - |   578.05 KB |        0.10 |
+| List_Include_NoTracking | list       | 200  |   9.511 ms |    80.247 ms |  4.399 ms |   7.340 ms |  0.18 |    0.08 |         - |         - |         - |   400.12 KB |        0.07 |
+| List_Projection         | list       | 200  |   6.018 ms |    19.486 ms |  1.068 ms |   5.418 ms |  0.12 |    0.02 |         - |         - |         - |   175.11 KB |        0.03 |
+|                         |            |      |            |              |           |            |       |         |           |           |           |             |             |
+| Sum_LoadEverything      | sum        | 200  | 473.124 ms | 1,127.509 ms | 61.803 ms | 483.414 ms |  1.01 |    0.17 | 1000.0000 | 1000.0000 | 1000.0000 | 24258.48 KB |        1.00 |
+| Sum_InDatabase          | sum        | 200  |  41.417 ms |   389.899 ms | 21.372 ms |  34.893 ms |  0.09 |    0.04 |         - |         - |         - |  3171.04 KB |        0.13 |
+
+BenchmarkDotNet v0.15.8, Linux Ubuntu 24.04.5 LTS (Noble Numbat)
+Intel Xeon Processor 2.10GHz, 1 CPU, 2 logical and 2 physical cores
+.NET SDK 10.0.115
+  [Host]   : .NET 10.0.15 (10.0.15, 10.0.1526.53008), X64 RyuJIT x86-64-v4
+
+| Method                | Mean     | Error     | StdDev   | Ratio | RatioSD | Gen0   | Allocated | Alloc Ratio |
+|---------------------- |---------:|----------:|---------:|------:|--------:|-------:|----------:|------------:|
+| Reflection_based      | 30.75 us |  9.647 us | 0.529 us |  1.00 |    0.02 | 0.2441 |  35.36 KB |        1.00 |
+| Source_generated      | 23.31 us | 43.509 us | 2.385 us |  0.76 |    0.07 | 0.2441 |  35.05 KB |        0.99 |
+| Source_generated_utf8 | 30.52 us | 38.854 us | 2.130 us |  0.99 |    0.06 | 0.1221 |  17.55 KB |        0.50 |

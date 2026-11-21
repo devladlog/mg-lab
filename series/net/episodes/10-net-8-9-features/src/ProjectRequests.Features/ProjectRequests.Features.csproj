@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    One library, two (optionally three) target frameworks. The default language version follows the target:
+    net8.0 -> C# 12, net9.0 -> C# 13, net10.0 -> C# 14. Code that needs .NET 9 APIs or C# 13 sits behind
+    #if NET9_0_OR_GREATER, so the same source compiles for every target and each target gets what it can use.
+    dotnet build -p:IncludeNet9=true also compiles the net9.0 target (the container has no .NET 9 runtime to run it).
+  -->
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+    <TargetFrameworks Condition="'$(IncludeNet9)' == 'true'">net8.0;net9.0;net10.0</TargetFrameworks>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>ProjectRequests.Features</RootNamespace>
+  </PropertyGroup>
+
+</Project>

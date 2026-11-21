@@ -1,0 +1,257 @@
+# DEVLADLOG .NET — episode 10 (draft; screens are captured in the lab, see demo.md)
+episode: 10
+slug: net-8-9-features
+series_label: ".NET"
+series_name: "DEVLADLOG .NET"
+file_prefix: "net"
+title: ".NET 8 and 9 Features"
+subtitle: "What you already have, what .NET 10 adds"
+voice: am_michael
+thumbnail_text: ".NET 8 + 9\nEND OF\nSUPPORT"
+youtube:
+  title: ".NET 8 and 9 Features: C# 12, C# 13, Lock, CountBy, FrozenDictionary | DEVLADLOG .NET #10"
+  tags: [.NET 8, .NET 9, .NET 10, C# 12, C# 13, primary constructors, collection expressions, System.Threading.Lock, LINQ CountBy, FrozenDictionary, multi-targeting, end of support, upgrade, C#]
+sources:
+  - https://www.devladlog.com/articles/dotnet/2026-05-27-net-89-features-complete-guide-2026/
+  - https://learn.microsoft.com/lifecycle/products/microsoft-net-and-net-core
+  - https://learn.microsoft.com/dotnet/csharp/whats-new/csharp-13
+
+scenes:
+  - id: hook
+    type: title
+    heading: ".NET 8 and 9: end of support"
+    sub: "What you have, what ten adds"
+    short: hook
+    narration: >
+      Dot net eight and dot net nine both stop getting security patches in November twenty twenty six. If your
+      project requests service still runs on one of them, the question is what you already use, and what moving to
+      dot net ten gives you. We'll answer it with one library, built for both, and a test run on each. Welcome to
+      DEVLADLOG dot net.
+
+  - id: plan
+    type: bullets
+    heading: "What we're doing"
+    bullets:
+      - "Support dates: 8 and 9 end 11/11/2026, 10 is LTS"
+      - "C# 12 and .NET 8 features in the project requests code"
+      - "C# 13 and .NET 9 features behind one #if"
+      - "Same tests on every target framework"
+      - "What the compiler says when you go too early"
+    narration: >
+      One class library targets dot net eight and ten, with the dot net nine code behind a single conditional. The
+      same tests run once per target. First the dates, then what eight gave us, then nine, and then what the
+      compiler says if you try nine on eight.
+
+  - id: lifecycle
+    type: screen
+    heading: "The dates"
+    image: screens/lifecycle.jpg
+    bar: "Browser · Microsoft Learn, .NET and .NET Core lifecycle"
+    demo: >
+      Browser, public page learn.microsoft.com/lifecycle/products/microsoft-net-and-net-core. Scroll to the table and
+      point at .NET 10 (LTS), .NET 9 and .NET 8 with their end of support dates. No sign-in, nothing to mask.
+    narration: >
+      Microsoft's lifecycle page lists dot net eight and dot net nine ending support on November eleventh, twenty
+      twenty six. Dot net ten is a long term support release, supported until November twenty twenty eight. Nine was
+      a standard term release, and eight is the one a lot of production systems are still on.
+
+  - id: csharp12
+    type: code
+    heading: "C# 12: primary constructors, spread"
+    lang: csharp
+    code: |
+      public sealed class RequestReport(IReadOnlyList<RequestRecord> requests, TimeProvider clock)
+      {
+          public int OpenCount => requests.Count(r => r.Status == RequestStatus.Submitted);
+
+          public Money Total(string currency = "EUR") => (requests.Sum(r => r.Budget), currency);
+
+          public IReadOnlyList<RequestRecord> HighThenStandard()
+          {
+              RequestRecord[] high = [.. requests.Where(r => r.Priority == Priority.High)];
+              RequestRecord[] standard = [.. requests.Where(r => r.Priority == Priority.Standard)];
+              return [.. high, .. standard];
+          }
+      }
+    narration: >
+      From C sharp twelve. The class takes its dependencies in the type declaration, with no fields and no
+      constructor body. Collection expressions with spread build the list. A tuple alias gives us a money type, and
+      the lambda has a default currency. One catch: on a class, the parameter is not a property. Only records get one.
+
+  - id: net8lib
+    type: code
+    heading: ".NET 8: frozen lookups, better JSON"
+    lang: csharp
+    code: |
+      public static readonly FrozenDictionary<string, string> Departments =
+          new Dictionary<string, string>
+          {
+              ["IT"] = "Information Technology",
+              ["FIN"] = "Finance",
+              ["OPS"] = "Operations",
+          }.ToFrozenDictionary(StringComparer.OrdinalIgnoreCase);
+
+      // snake_case names, enums as strings, fill read-only members:
+      JsonSerializerOptions o = new() { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
+          PreferredObjectCreationHandling = JsonObjectCreationHandling.Populate };
+    narration: >
+      Dot net eight. A frozen dictionary costs more to build and is faster to read, which is exactly right for the
+      department table. The J S O N serializer gets snake case naming, string enums with a generic converter, and a
+      populate mode that fills read only lists instead of ignoring them. There's also search values, composite
+      format, and random shuffle, all tested.
+
+  - id: tour8
+    type: screen
+    heading: "Run it on .NET 8"
+    image: screens/tour-net8.jpg
+    bar: "Terminal · dotnet run -f net8.0"
+    demo: >
+      Windows Terminal. dotnet run --project src\ProjectRequests.Features.Tour -f net8.0. Output starts with
+      "runtime : .NET 8.0.x" and "compiled : net8.0", prints the C# 12 section, then the .NET 9 section with the line
+      saying it is not compiled into this build. Nothing to mask.
+    narration: >
+      Same console app, run on dot net eight. The C sharp twelve section works. The dot net nine section says it
+      isn't compiled into this build, because the conditional compiled it out. That's not a failure. That's the
+      design.
+
+  - id: net9linq
+    type: code
+    heading: ".NET 9: LINQ without the groups"
+    lang: csharp
+    code: |
+      requests.CountBy(r => r.Department)
+              .ToDictionary(p => p.Key, p => p.Value);
+
+      requests.AggregateBy(r => r.Department, 0m, (sum, r) => sum + r.Budget)
+              .ToDictionary(p => p.Key, p => p.Value);
+
+      requests.Index().Select(x => $"{x.Index + 1}. {x.Item.Title}");
+    narration: >
+      Dot net nine. Count by, aggregate by and index replace the group by and select dance. Our tests compare them
+      with the group by versions and get the same answers, so the swap is safe. Index finally gives you the position
+      without a manual counter.
+
+  - id: lock
+    type: code
+    heading: "Lock: the type matters"
+    lang: csharp
+    code: |
+      private readonly Lock _gate = new();
+
+      public int Next()
+      {
+          lock (_gate)      // compiled to Lock.EnterScope()
+          {
+              return ++_next;
+          }
+      }
+
+      // typed as object, the same instance silently uses Monitor: CS9216
+      static bool Held(object gate) { lock (gate) { return ((Lock)gate).IsHeldByCurrentThread; } }
+    narration: >
+      The new lock type. The lock statement uses it only when the expression's type is exactly that lock. If a
+      field or parameter is still declared as object, the compiler quietly uses the monitor instead, and warns with
+      C S ninety two sixteen. Our test holds the same instance both ways, and asks if it's held by the current thread.
+      True with the lock type. False as object.
+
+  - id: tour10
+    type: screen
+    heading: "Run it on .NET 10"
+    image: screens/tour-net10.jpg
+    bar: "Terminal · dotnet run -f net10.0"
+    demo: >
+      Same terminal. dotnet run --project src\ProjectRequests.Features.Tour -f net10.0. Output "runtime : .NET 10.0.x",
+      "compiled : net10.0", the C# 12 section, then the .NET 9 / C# 13 section with CountBy, AggregateBy, Index,
+      params ReadOnlySpan, Lock (held in lock(Lock)=True, in lock(object)=False), Guid.CreateVersion7 (version 7),
+      Base64Url, Web options, Task.WhenEach. The GUID differs on every run. Nothing to mask.
+    narration: >
+      Now dot net ten. Same source, same app, and the whole dot net nine section runs. Count by, aggregate by, the
+      lock, version seven GUIDs, base sixty four U R L cursors, and tasks that arrive in completion order. The
+      medium task finishes before the slow one, and you see it in that order.
+
+  - id: errors
+    type: screen
+    heading: "Too early: what the compiler says"
+    image: screens/compile-errors.jpg
+    bar: "Terminal · dotnet build -f net8.0 on .NET 9 code"
+    demo: >
+      Terminal. Show deploy\net8-compile-errors.txt (type or cat it) and point at the five messages: CS9202 for
+      the escape character and for params collections; CS1061 for CountBy; CS0117 for Guid.CreateVersion7; CS0234
+      for System.Threading.Lock. Optional live: put one of the snippets in a scratch console project that targets
+      net8.0 and run dotnet build. Nothing to mask.
+    narration: >
+      What does going early look like? Syntax from C sharp thirteen fails on eight with C S ninety two oh two, the
+      feature isn't available in C sharp twelve. The library features fail with missing members. A syntax error stops
+      the compiler first, so you only see the missing A P Is after you fix it. And raising the language version isn't
+      the fix. Microsoft says a newer language version than the target framework isn't supported.
+
+  - id: params
+    type: code
+    heading: "params spans: Release only"
+    lang: csharp
+    code: |
+      public static bool AnyOf(RequestRecord request, params ReadOnlySpan<Priority> priorities)
+      {
+          foreach (var p in priorities)
+              if (request.Priority == p) return true;
+          return false;
+      }
+
+      // AnyOf(r, Priority.High, Priority.Standard)   // no array behind the call
+
+      // 10,000 calls, Release:  span 0 bytes   |  int[] 320,000 bytes
+      // 10,000 calls, Debug:    span 720,000 bytes (worse than the array)
+    narration: >
+      C sharp thirteen lets params take a span, so a call needs no array. In a release build we measured zero bytes
+      over ten thousand calls, against three hundred twenty thousand for the array. In a debug build it allocated
+      more than the array. So the test skips itself in debug, and says why.
+
+  - id: gotchas
+    type: bullets
+    heading: "Honest results"
+    bullets:
+      - "Lock typed as object is a Monitor: CS9216"
+      - "A class primary-constructor parameter is not a property"
+      - "Read-only JSON lists are ignored until you choose Populate"
+      - "FromSeconds(101.832) is one tick short; the integer overload is exact"
+    short: gotcha
+    narration: >
+      Four things that surprised us. A lock typed as object is still a monitor. A class primary constructor
+      parameter isn't a property, and you can mutate it. The serializer ignores read only lists until you pick
+      populate, and then it appends. And time span from seconds with a double came out one tick short, where the
+      integer overload in dot net nine is exact.
+
+  - id: tests
+    type: screen
+    heading: "One test run, two runtimes"
+    image: screens/tests.jpg
+    bar: "Terminal · dotnet test -c Release"
+    demo: >
+      Terminal. dotnet test -c Release from the episode folder. Output shows one test app per target: net8.0 total 18,
+      net10.0 total 35, and a summary of 53 succeeded, 0 failed. Needs both the .NET 8 and .NET 10 runtimes
+      installed. Nothing to mask.
+    narration: >
+      One command, two runs. The dot net eight build runs eighteen tests. The dot net ten build runs thirty five,
+      because the dot net nine tests only exist there. Fifty three pass. That split is the proof that the
+      conditional does what we said.
+
+  - id: shorts
+    type: bullets
+    heading: "Upgrade in three moves"
+    bullets:
+      - "Retarget, don't raise LangVersion"
+      - "Multi-target with NET9_0_OR_GREATER while you migrate"
+      - "Run the same tests on every target"
+    short: tip
+    narration: >
+      Upgrade in three moves. Retarget the framework, don't just raise the language version. Multi target with a
+      conditional while you migrate. And run the same tests on every target, so the migration is a green run.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The library, the tour and the fifty three tests are on GitHub, and the full guide is on devladlog dot com.
+      Next time: microservices with dot net, splitting the project requests service into pieces that talk to each
+      other. Subscribe so you don't miss it. This was DEVLADLOG dot net, by Momento Galático.
