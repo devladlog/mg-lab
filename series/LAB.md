@@ -7,6 +7,10 @@ All demos are recorded for real. Use these shared resources before asking for ne
 - Entra ID Governance add-on trial (until 20 Dec 2026): lifecycle workflows, entitlement management, access reviews.
 - Power Automate process mining 90-day trial in `DEV` (started 21 Nov 2026, until ~19 Feb 2027).
 - Power Apps Premium, Microsoft 365 Business Standard, Fabric + Power BI 60-day trial (West Europe capacity).
+- Lab users (fictional, all with E5 + Entra ID Governance + Dynamics 365 Sales trial licences, location Portugal):
+  `labadmin` (Lab Admin, the recording account), `alex.demo`, `sam.demo`, `jordan.demo`, `riley.demo`, `taylor.demo`
+  (display names "<First> Demo"). Departments, managers, groups and roles are not set yet: each demo.md says what it
+  needs and sets it up in its own steps (and undoes it in tear-down). The owner's own account is never used in demos.
 - Power Platform environment `DEV` (Dataverse). Developer environments can no longer be created; plan for `DEV`
   or a sandbox environment.
 - Dynamics 365 Sales trial environment "Sales trial" (EMEA, created 21 Nov 2026, 30-day trial): Sales Hub app with
@@ -25,6 +29,7 @@ Internal NAT network `10.20.0.0/24`, host = `10.20.0.1`, domain `lab.contoso.com
 | CON-SRV01 | Windows Server 2025 Datacenter Eval, Server Core | member server | 10.20.0.21 | 2 / 1–2 GB |
 | CON-SRV02 | Windows Server 2025 Datacenter Eval, Desktop Experience | member server (GUI tools) | 10.20.0.22 | 2 / 2–3 GB |
 | CON-SQL01 | Windows Server 2025 Datacenter Eval, Server Core | SQL Server 2022 Developer, default instance, TCP 1433, mixed auth | 10.20.0.30 | 2 / 2–6 GB |
+| CON-CLI01 | Windows Server 2025 Datacenter Eval, Server Core | test client (DHCP/DNS/GPO demos) | 10.20.0.41 | 1 / 1–1.5 GB |
 
 - The recording laptop itself is Windows: Power BI Desktop, VS Code, SSMS, browsers and terminals run on the host and
   reach the VMs at the IPs above.
