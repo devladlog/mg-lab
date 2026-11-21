@@ -1,0 +1,284 @@
+# Copilot catalog for DEVLADLOG Copilot & AI #1.
+# Every entry is verified against the vendor's own documentation on `verified_on`.
+# Rules enforced by tests/test_catalog.py:
+#   - every entry has at least one `sources` URL on an official vendor domain
+#   - a non-null `price` must say where it comes from in `price_source` (one of the `sources`)
+#   - `licence_model` and `lab_status` use the fixed vocabularies below
+# Prices change: the recorder re-checks every non-null price on the day of recording.
+#
+# licence_model: included | add-on | usage-based | capacity | per-user | bundle | free-tier
+# lab_status:    real-in-lab | trial-in-lab | check-in-lab | needs-purchase | needs-owner-account
+verified_on: "2026-11-21"
+entries:
+  - id: copilot-chat-basic
+    name: "Microsoft Copilot Chat (Basic)"
+    former_names: ["Microsoft 365 Copilot Chat"]
+    vendor: Microsoft
+    area: m365
+    where: "copilot.cloud.microsoft, Microsoft Copilot app, Edge, Outlook, Teams"
+    licence_model: included
+    price: "US$0 extra (pricing page lists Copilot Chat at $0 for Entra account users)"
+    price_source: "https://www.microsoft.com/microsoft-365-copilot/pricing/enterprise"
+    summary: "Web-grounded chat with Enterprise Data Protection. Organisational content only if you upload it, open it in Outlook or Teams, or use a pay-as-you-go agent. No Microsoft Graph grounding."
+    lab_status: real-in-lab
+    lab_note: "All lab users (E5 trial) can sign in with their work account."
+    episode: 2
+    sources:
+      - "https://learn.microsoft.com/copilot/plan/copilot-overview"
+      - "https://learn.microsoft.com/copilot/plan/microsoft-copilot-requirements"
+      - "https://www.microsoft.com/microsoft-365-copilot/pricing/enterprise"
+
+  - id: m365-copilot-basic
+    name: "Microsoft 365 Copilot (Basic)"
+    former_names: []
+    vendor: Microsoft
+    area: m365
+    where: "Word, Excel, PowerPoint, OneNote, Outlook, Teams, Forms (limited, fair-use limits)"
+    licence_model: included
+    price: null
+    price_source: null
+    summary: "Users without the add-on licence who still get Copilot features inside the Microsoft 365 apps. No full chat integration, no Graph grounding."
+    lab_status: check-in-lab
+    lab_note: "Which apps light up depends on the tenant; check with alex.demo in Word before the recording."
+    episode: 2
+    sources:
+      - "https://learn.microsoft.com/copilot/plan/copilot-overview"
+
+  - id: m365-copilot-premium
+    name: "Microsoft 365 Copilot (Premium) - the add-on licence"
+    former_names: ["Copilot for Microsoft 365"]
+    vendor: Microsoft
+    area: m365
+    where: "Copilot app, Word, Excel, PowerPoint, Outlook, Teams, SharePoint, Researcher, Analyst, agents"
+    licence_model: add-on
+    price: "US$30 per user per month, paid yearly (en-US pricing page)"
+    price_source: "https://www.microsoft.com/microsoft-365-copilot/pricing/enterprise"
+    summary: "Grounds answers in Microsoft Graph and Work IQ (mail, files, meetings), includes agents that use work data, SharePoint Advanced Management and advanced admin analytics. Needs a qualifying Microsoft 365 plan underneath."
+    lab_status: needs-purchase
+    lab_note: "Not licensed in the lab. One seat would be needed for any demo of Graph-grounded answers."
+    episode: 2
+    sources:
+      - "https://learn.microsoft.com/copilot/plan/copilot-overview"
+      - "https://learn.microsoft.com/copilot/plan/copilot-license-options"
+      - "https://www.microsoft.com/microsoft-365-copilot/pricing/enterprise"
+
+  - id: copilot-business
+    name: "Microsoft Copilot Business"
+    former_names: []
+    vendor: Microsoft
+    area: m365
+    where: "Same Copilot capabilities, for organisations with up to 300 users on Microsoft 365 Business plans"
+    licence_model: add-on
+    price: null
+    price_source: null
+    summary: "Add-on for eligible Microsoft 365 Business licences, annual commitment, up to 300 licensed users per tenant."
+    lab_status: needs-purchase
+    lab_note: "The lab has Microsoft 365 Business Standard, which is an eligible plan; nothing is purchased."
+    episode: 1
+    sources:
+      - "https://learn.microsoft.com/copilot/plan/copilot-license-options"
+
+  - id: m365-e7
+    name: "Microsoft 365 E7"
+    former_names: []
+    vendor: Microsoft
+    area: m365
+    where: "Licence bundle"
+    licence_model: bundle
+    price: null
+    price_source: null
+    summary: "Includes the Microsoft 365 E5 capabilities plus Microsoft Copilot, the Microsoft Entra Suite and Microsoft Agent 365 in one licence."
+    lab_status: needs-purchase
+    lab_note: "The lab runs the E5 trial, not E7."
+    episode: 1
+    sources:
+      - "https://learn.microsoft.com/copilot/plan/compare-copilot-e3-e5-e7"
+      - "https://learn.microsoft.com/copilot/plan/copilot-license-options"
+
+  - id: copilot-agents-payg
+    name: "Pay-as-you-go agents in Copilot Chat"
+    former_names: []
+    vendor: Microsoft
+    area: m365
+    where: "Copilot Chat agents that use shared tenant data; SharePoint agents; Retrieval API (preview)"
+    licence_model: usage-based
+    price: "US$0.01 per Copilot Studio message (Azure meter)"
+    price_source: "https://learn.microsoft.com/copilot/plan/pay-as-you-go-meters"
+    summary: "Agents that use shared tenant data are pay-as-you-go only for Basic users and are off by default. Billed to an Azure subscription through a billing policy."
+    lab_status: needs-purchase
+    lab_note: "Needs a billing policy on the lab Azure subscription; the owner decides."
+    episode: 3
+    sources:
+      - "https://learn.microsoft.com/copilot/manage/manage-agents-copilot-chat"
+      - "https://learn.microsoft.com/copilot/plan/pay-as-you-go-overview"
+      - "https://learn.microsoft.com/copilot/plan/pay-as-you-go-meters"
+
+  - id: sharepoint-agents
+    name: "SharePoint agents"
+    former_names: []
+    vendor: Microsoft
+    area: sharepoint
+    where: "SharePoint sites and document libraries"
+    licence_model: usage-based
+    price: null
+    price_source: null
+    summary: "Available with a Microsoft 365 Copilot licence or on a pay-as-you-go basis, no full Copilot licence required for the pay-as-you-go route."
+    lab_status: needs-purchase
+    lab_note: "Pay-as-you-go billing policy needed; see episode 9."
+    episode: 9
+    sources:
+      - "https://learn.microsoft.com/microsoft-365/commerce/services/pay-as-you-go-services"
+      - "https://learn.microsoft.com/copilot/plan/pay-as-you-go-overview"
+
+  - id: copilot-studio
+    name: "Microsoft Copilot Studio"
+    former_names: ["Power Virtual Agents"]
+    vendor: Microsoft
+    area: copilot-studio
+    where: "copilotstudio.microsoft.com; agents published to Teams, web, Microsoft 365 Copilot and other channels"
+    licence_model: capacity
+    price: "Pay-as-you-go: US$0.01 per Copilot Credit (US$1 buys 100 credits)"
+    price_source: "https://learn.microsoft.com/microsoft-365/admin/manage/apps/licensing-faq"
+    summary: "Copilot Credits are the common currency: prepaid packs, pay-as-you-go through Azure, or a prepurchase plan. The trial licence lets you build and test but not publish."
+    lab_status: trial-in-lab
+    lab_note: "labadmin and sam.demo hold the trial licence. Agents cannot be published with it."
+    episode: 3
+    sources:
+      - "https://learn.microsoft.com/microsoft-copilot-studio/billing-licensing"
+      - "https://learn.microsoft.com/microsoft-365/admin/manage/apps/licensing-faq"
+      - "https://learn.microsoft.com/copilot/plan/pay-as-you-go-meters"
+
+  - id: copilot-power-platform-ai
+    name: "AI prompts and AI tools in Power Apps and Power Automate"
+    former_names: ["AI Builder"]
+    vendor: Microsoft
+    area: power-platform
+    where: "Prompts and AI models used inside apps, cloud flows and agent flows"
+    licence_model: usage-based
+    price: null
+    price_source: null
+    summary: "Consume AI Builder credits, or Copilot Credits when none are left or as the only mechanism. Prompt rates start at 0.1 Copilot Credit per 1K tokens (basic tier)."
+    lab_status: check-in-lab
+    lab_note: "AI Builder trials are discontinued; running a prompt in a flow needs pay-as-you-go. Testing in the prompt builder is free."
+    episode: 6
+    sources:
+      - "https://learn.microsoft.com/ai-builder/message-management"
+
+  - id: copilot-model-driven-apps
+    name: "Microsoft Copilot in model-driven apps"
+    former_names: []
+    vendor: Microsoft
+    area: power-platform
+    where: "Model-driven apps (Power Apps) and Dynamics 365 apps"
+    licence_model: add-on
+    price: null
+    price_source: null
+    summary: "A Power Apps app needs a Power Apps premium licence and a Microsoft 365 Copilot licence. A Dynamics 365 app needs a Dynamics 365 Enterprise or Premium licence; full Work IQ capabilities beyond Dataverse grounding need Microsoft 365 Copilot."
+    lab_status: check-in-lab
+    lab_note: "The Sales trial environment has Dynamics 365 Sales licences; the admin must enable Copilot in the app."
+    episode: 5
+    sources:
+      - "https://learn.microsoft.com/power-apps/user/use-microsoft-365-copilot-model-driven-apps"
+      - "https://learn.microsoft.com/power-apps/maker/model-driven-apps/add-microsoft-365-copilot"
+
+  - id: dynamics-sales-agent
+    name: "Sales agent (Dynamics 365 Sales and Microsoft 365 Copilot)"
+    former_names: ["Copilot in Dynamics 365 Sales", "Microsoft Sales Copilot"]
+    vendor: Microsoft
+    area: dynamics-365
+    where: "Outlook, Teams, Microsoft 365 Copilot, Dynamics 365 Sales"
+    licence_model: bundle
+    price: null
+    price_source: null
+    summary: "Sales Enterprise, Sales Premium and Relationship Sales include the basic Sales agent (CRM data only). Graph-grounded answers need a Microsoft 365 Copilot licence."
+    lab_status: check-in-lab
+    lab_note: "Lab users hold Dynamics 365 Sales trial licences; the Sales agent installs automatically for eligible users."
+    episode: 8
+    sources:
+      - "https://learn.microsoft.com/dynamics365/sales/buy-dynamics-365-sales"
+      - "https://learn.microsoft.com/microsoft-sales-copilot/use-sales-chat"
+
+  - id: copilot-fabric-power-bi
+    name: "Copilot in Microsoft Fabric and Power BI"
+    former_names: []
+    vendor: Microsoft
+    area: power-bi
+    where: "Power BI service and Desktop, Fabric workloads"
+    licence_model: capacity
+    price: null
+    price_source: null
+    summary: "Needs a paid Fabric capacity (F2 or higher) or Power BI Premium (P1 or higher), or a Fabric Copilot capacity. Trial capacities are not supported."
+    lab_status: needs-purchase
+    lab_note: "The lab only has the Fabric trial capacity, which Learn says does not support Copilot. Episode 7 must plan an F2 or a Fabric Copilot capacity and state the cost."
+    episode: 7
+    sources:
+      - "https://learn.microsoft.com/power-bi/create-reports/copilot-introduction"
+      - "https://learn.microsoft.com/power-bi/create-reports/copilot-enable-power-bi"
+      - "https://learn.microsoft.com/fabric/fundamentals/copilot-enable-fabric"
+
+  - id: security-copilot
+    name: "Microsoft Security Copilot"
+    former_names: ["Microsoft Copilot for Security"]
+    vendor: Microsoft
+    area: security
+    where: "Standalone portal; embedded in Defender, Entra, Intune, Purview"
+    licence_model: capacity
+    price: "Included for eligible Microsoft 365 E5 and E7: 400 SCUs per month per 1,000 licences, up to 10,000. Beyond that, US$6 per SCU pay-as-you-go (Microsoft says this option comes later)"
+    price_source: "https://learn.microsoft.com/copilot/security/security-copilot-inclusion"
+    summary: "Priced in Security Compute Units. Without E5 or E7 you provision SCUs (billed hourly) plus optional overage."
+    lab_status: check-in-lab
+    lab_note: "Verify in the Defender portal whether the lab's E5 trial tenant is auto-provisioned. Never provision paid SCUs without the owner."
+    episode: 18
+    sources:
+      - "https://learn.microsoft.com/copilot/security/security-copilot-inclusion"
+      - "https://learn.microsoft.com/copilot/security/security-compute-units-capacity"
+
+  - id: azure-copilot
+    name: "Azure Copilot"
+    former_names: ["Microsoft Copilot in Azure"]
+    vendor: Microsoft
+    area: azure
+    where: "Azure portal"
+    licence_model: included
+    price: "No extra cost for current capabilities, except the Observability Agent (usage-based)"
+    price_source: "https://learn.microsoft.com/azure/copilot/overview"
+    summary: "All users in a tenant can use it by default; a Global Administrator can restrict access. Not available in national clouds."
+    lab_status: real-in-lab
+    lab_note: "The lab has a pay-as-you-go Azure subscription."
+    episode: 10
+    sources:
+      - "https://learn.microsoft.com/azure/copilot/overview"
+
+  - id: github-copilot
+    name: "GitHub Copilot"
+    former_names: []
+    vendor: GitHub
+    area: developer-tools
+    where: "VS Code, Visual Studio, JetBrains, GitHub.com, CLI, SSMS 22"
+    licence_model: per-user
+    price: "Free; Pro US$10; Pro+ US$39; Business US$19 per seat; Enterprise US$39 per seat (per month, GitHub plans page)"
+    price_source: "https://docs.github.com/en/copilot/get-started/plans"
+    summary: "Licensed by GitHub, not through Microsoft 365. Plans include a monthly AI credit allowance; Free is limited to 2,000 completions per month."
+    lab_status: needs-owner-account
+    lab_note: "Uses the owner's GitHub account. Confirm the plan at recording time."
+    episode: 13
+    sources:
+      - "https://docs.github.com/en/copilot/get-started/plans"
+      - "https://learn.microsoft.com/copilot/plan/copilot-overview"
+
+  - id: ssms-copilot
+    name: "GitHub Copilot in SQL Server Management Studio"
+    former_names: ["Copilot in SSMS (Azure OpenAI endpoint, preview)"]
+    vendor: Microsoft
+    area: sql
+    where: "SSMS 22 with the AI Assistance workload"
+    licence_model: per-user
+    price: null
+    price_source: null
+    summary: "Needs SSMS 22 and a GitHub account with Copilot access; Copilot Free works with a monthly chat limit."
+    lab_status: needs-owner-account
+    lab_note: "Sign in with the owner's GitHub account; see episode 11."
+    episode: 11
+    sources:
+      - "https://learn.microsoft.com/ssms/github-copilot/installation-state"
+      - "https://learn.microsoft.com/ssms/github-copilot/free-plan"

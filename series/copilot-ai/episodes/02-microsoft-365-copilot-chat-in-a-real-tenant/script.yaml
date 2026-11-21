@@ -1,0 +1,222 @@
+# DEVLADLOG Copilot & AI - episode 02 (draft: screen scenes need the recording described in demo.md)
+episode: 2
+slug: microsoft-365-copilot-chat-in-a-real-tenant
+series_label: "COPILOT & AI"
+series_name: "DEVLADLOG Copilot & AI"
+file_prefix: "copilot-ai"
+title: "Microsoft Copilot Chat in a Real Tenant"
+subtitle: "What users get, what admins control, what the audit log shows"
+voice: am_michael
+thumbnail_text: "COPILOT CHAT\nREAL TENANT\nNO LICENCE"
+youtube:
+  title: "Microsoft Copilot Chat in a Real Tenant: Web, Files, Admin, Audit | DEVLADLOG Copilot & AI #2"
+  tags: [Microsoft Copilot Chat, Copilot Chat, Microsoft 365 Copilot, enterprise data protection, Purview audit, CopilotInteraction, web search policy, Copilot admin, Microsoft 365 admin center, PowerShell]
+next_episode: "Copilot Studio: Your First Agent with SharePoint Knowledge"
+sources:
+  - "https://learn.microsoft.com/copilot/plan/copilot-overview"
+  - "https://learn.microsoft.com/copilot/manage/manage-copilot-chat"
+  - "https://learn.microsoft.com/copilot/plan/manage-public-web-access"
+  - "https://learn.microsoft.com/copilot/implement/pin-copilot-chat-navbar"
+  - "https://learn.microsoft.com/purview/audit-copilot"
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Copilot Chat, no licence, real tenant"
+    sub: "What users get, what admins control"
+    short: hook
+    narration: >
+      Everyone at Contoso already has Copilot Chat, and nobody bought anything. So what can it do, what can it not do,
+      and what can you, the admin, see and control? In this episode we use it as a normal user with no Copilot
+      licence, then switch to the admin side and read the audit log with code. Welcome to Dev Lad Log, Copilot and
+      A I.
+
+  - id: what
+    type: bullets
+    heading: "Copilot Chat (Basic) in one slide"
+    bullets:
+      - "Eligible Microsoft 365 licence, Entra work account"
+      - "Grounded in the web, protected by enterprise data protection"
+      - "Your files: upload them, or open them in Outlook or Teams"
+      - "No automatic Microsoft Graph grounding"
+    narration: >
+      First, what it is. Copilot Chat comes with eligible Microsoft three six five licences, and you sign in with your
+      Entra work account. Answers are grounded in the web, and your prompts are protected by enterprise data
+      protection. Your own files only come in if you upload them, or open them in Outlook or Teams. There is no
+      automatic reach into Microsoft Graph. That is the paid add-on.
+
+  - id: where
+    type: bullets
+    heading: "Where users find it"
+    bullets:
+      - "copilot.cloud.microsoft and the Microsoft Copilot app"
+      - "Copilot Chat in Edge, Outlook and Teams"
+      - "Work account: look for the Work label and the green shield"
+      - "Personal account: separate chats, files and protections"
+    narration: >
+      Where do users find it? On copilot dot cloud dot microsoft, in the Microsoft Copilot app, in Edge, and in
+      Outlook and Teams. The trap is the account. Learn says chats, files and protections stay separate depending on
+      which account you sign in with. Look for the Work label and the green shield, and train people to check.
+
+  - id: chat-web
+    type: screen
+    heading: "A web question, with its sources"
+    image: screens/chat-web.jpg
+    bar: "copilot.cloud.microsoft · Alex Demo · Work account"
+    demo: "Browser as alex.demo (E5 trial, no Copilot add-on) on copilot.cloud.microsoft. Visible: Work label and green shield; the question 'What is the difference between a Copilot Studio agent and a declarative agent?' answered with web citations, and the citation section that lists the exact web search queries. Mask tenant name and email domain."
+    narration: >
+      Alex Demo asks a web question. The answer comes with sources, and the citation section shows the exact search
+      queries Copilot sent to Bing. Those queries stay in the thread for twenty four hours, and admins can still find
+      them later in the audit tools.
+
+  - id: chat-upload
+    type: screen
+    heading: "Your file, only because you uploaded it"
+    image: screens/chat-upload.jpg
+    bar: "copilot.cloud.microsoft · upload contoso-vendor-summary.docx"
+    short: upload
+    demo: "Same Copilot Chat: upload contoso-vendor-summary.docx (four fictional vendors with renewal date and yearly cost) and ask 'Which vendor renews first in the calendar year, and what is the total yearly cost?'. The answer must show Fabrikam Cloud (31 March) and a total of 45,000 euros. If the arithmetic is wrong, record that too and keep it: it is a lesson."
+    narration: >
+      Now a file. Alex uploads a small vendor summary and asks which vendor renews first, and the total yearly cost.
+      Copilot reads the file because Alex handed it over. Fabrikam renews first, on the thirty first of March, and the
+      total is forty five thousand euros. Check the arithmetic yourself, every time.
+
+  - id: chat-graph
+    type: screen
+    heading: "Gotcha: it does not know your mailbox"
+    image: screens/chat-graph.jpg
+    bar: "copilot.cloud.microsoft · Alex Demo · mailbox question"
+    short: gotcha
+    demo: "Same Copilot Chat as alex.demo: ask 'Summarise my last five emails'. Capture whatever it really answers. Learn says Basic cannot use Microsoft Graph, so expect it to say it cannot access the mailbox or to ask for pasted content. If it does read the mailbox, STOP: the script claim is wrong and must be rewritten before publishing."
+    narration: >
+      And here is the gotcha. Alex asks for a summary of the last five emails. Microsoft Learn is clear that without
+      the add-on, Copilot Chat cannot use Microsoft Graph, so it cannot reach the mailbox by itself. Watch what it says.
+      The fix is not a setting. It is the Premium licence, or pasting the text.
+
+  - id: controls
+    type: bullets
+    heading: "What the admin controls"
+    bullets:
+      - "Allow web search in Copilot: Cloud Policy service"
+      - "Pin Microsoft Copilot Chat: Copilot, Settings"
+      - "Block the app: Integrated Apps, tenant-wide"
+      - "Allow *.cloud.microsoft; personal accounts: tenant restrictions v2"
+    narration: >
+      The admin side. Web search has its own policy, called Allow web search in Copilot, in the Cloud Policy service.
+      Pinning lives under Copilot, Settings, in the admin centre. Blocking the app goes through Integrated Apps, and it
+      blocks everyone, licensed users too. Allow the star dot cloud dot microsoft domain, and control personal accounts
+      with tenant restrictions, not by blocking Copilot's address.
+
+  - id: policy-screen
+    type: screen
+    heading: "The web search policy"
+    image: screens/web-search-policy.jpg
+    bar: "Microsoft 365 Apps admin center · Cloud Policy · Allow web search in Copilot"
+    demo: "Browser as labadmin: Microsoft 365 Apps admin center (config.office.com), Microsoft 365 Cloud Policy, the policy setting 'Allow web search in Copilot' opened without saving: show its three options (Enabled in Microsoft Copilot and Microsoft Copilot Chat; Disabled in both; Disabled in Copilot Work mode, enabled in Web mode and Copilot Chat). Optional second capture: Microsoft 365 admin center, Copilot, Settings, Pin Microsoft Copilot Chat. Change nothing."
+    narration: >
+      This is the policy. Enabled everywhere, disabled everywhere, or disabled in work mode but enabled in web mode and
+      in Copilot Chat. If you never configure it, web search stays on. And users keep their own web content toggle,
+      unless you turn the policy off, which dims it.
+
+  - id: agents
+    type: bullets
+    heading: "Agents: the next licence question"
+    bullets:
+      - "Agents on public websites and instructions: included"
+      - "Agents on shared tenant data: pay-as-you-go only"
+      - "Off by default for Basic users"
+      - "Billed to an Azure subscription, per message"
+    narration: >
+      One more question you will get. Agents. Declarative agents grounded in instructions and public websites are
+      included. Agents that use shared tenant data are pay-as-you-go only for Basic users, and they are off by default.
+      You switch them on with a billing policy on an Azure subscription. We build the first one in the next episode.
+
+  - id: export-code
+    type: code
+    heading: "Export the audit records"
+    lang: powershell
+    code: |
+      $query = @{
+          StartDate      = $StartDate
+          EndDate        = $EndDate
+          Operations     = 'CopilotInteraction'
+          SessionId      = $SessionId
+          SessionCommand = 'ReturnLargeSet'
+          ResultSize     = $PageSize
+      }
+      if ($UserIds) { $query.UserIds = $UserIds }
+      $page = @(Search-UnifiedAuditLog @query)
+      if ($page.Count -gt 0) { $all.AddRange($page) }
+      # repeat with the same SessionId until a page comes back empty
+    narration: >
+      Every Copilot conversation leaves an audit record, with the operation name Copilot Interaction. This script
+      pages through Search Unified Audit Log, with one session id, until a page comes back empty. You need the Audit
+      Logs or View Only Audit Logs role, and Microsoft recommends the Management Activity A P I for anything recurring.
+
+  - id: parse-code
+    type: code
+    heading: "Web search, agents, files"
+    lang: python
+    code: |
+      plugins = [str(_ci(p, "Id") or "")
+                 for p in _as_list(_ci(event, "AISystemPlugin"))]
+      resources = _as_list(_ci(event, "AccessedResources"))
+      ...
+      return Interaction(
+          app_host=str(pick("AppHost") or ""),
+          agent_name=str(pick("AgentName") or ""),
+          web_search="BingWebSearch" in plugins,
+          resources=len(resources),
+          labelled_resources=sum(1 for r in resources
+                                 if _ci(r, "SensitivityLabelId")),
+          jailbreak=any(_ci(m, "JailbreakDetected") for m in messages),
+      )
+    narration: >
+      The Python side reads the Audit Data. Web search shows up as a plugin called Bing Web Search. Accessed resources
+      list the files, and their sensitivity labels. Agents have a name. And a prompt flagged as a jailbreak attempt
+      is a boolean we can count.
+
+  - id: audit-screen
+    type: screen
+    heading: "The real audit, summarised"
+    image: screens/audit-summary.jpg
+    bar: "PowerShell 7 · Export-CopilotInteractions.ps1 · copilot_chat_audit"
+    demo: "Terminal (dark, 18 pt) on the lab laptop after Connect-ExchangeOnline as labadmin: run ./src/scripts/Export-CopilotInteractions.ps1 -StartDate (Get-Date).AddDays(-2) -OutFile $HOME/copilot-interactions.csv, then `python -m copilot_chat_audit $HOME/copilot-interactions.csv`. Visible: interaction count, a Bing web-search share above zero, by-app-host lines including BizChat (or the host the real records show), and Alex Demo as a user. Mask the tenant domain in the UPNs."
+    narration: >
+      Here it is on the real tenant. Alex's conversations are in the log, with the app that hosted them, whether the
+      web was used, and which files were touched. This is metadata. It tells you who used Copilot, where, and with
+      what. It does not replace the prompt text, which lives in the eDiscovery and Purview tools.
+
+  - id: limits
+    type: bullets
+    heading: "What the audit does and does not tell you"
+    bullets:
+      - "Who, when, which app, which files, which labels"
+      - "Web search flag and, where present, model provider"
+      - "Standard audit: kept for 180 days"
+      - "Prompt text: eDiscovery or Purview DSPM for AI"
+    narration: >
+      So, what does the log tell you? Who, when, which app, which files, which labels. A web search flag, and the
+      model provider when it is recorded. Standard audit keeps it for one hundred and eighty days. For the actual
+      prompt text, use eDiscovery or the Purview data security posture tool for A I.
+
+  - id: recap
+    type: bullets
+    heading: "Roll it out in four steps"
+    bullets:
+      - "Decide web search: policy on, off, or work mode only"
+      - "Allow the domain, control personal sign-in separately"
+      - "Teach users: upload files, open them in Outlook or Teams"
+      - "Review the audit export every month"
+    narration: >
+      Four steps. Decide on web search. Allow the domain, and control personal sign in separately. Teach people to
+      upload files or open them in Outlook and Teams. And review the audit export every month. Next time: your first
+      agent in Copilot Studio, with SharePoint knowledge.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The export script, the analyzer and the tests are on GitHub, and the Microsoft Learn pages are in the
+      description. This was Dev Lad Log, Copilot and A I, by Momento Galático.

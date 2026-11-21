@@ -1,0 +1,221 @@
+# DEVLADLOG Copilot & AI - episode 01 (draft: screen scenes need the recording described in demo.md)
+episode: 1
+slug: the-copilot-landscape-every-copilot-licence-and-wh
+series_label: "COPILOT & AI"
+series_name: "DEVLADLOG Copilot & AI"
+file_prefix: "copilot-ai"
+title: "The Copilot Landscape"
+subtitle: "Every Copilot, its licence, and what is really free"
+voice: am_michael
+thumbnail_text: "EVERY COPILOT\nWHAT IT COSTS\nWHAT IS FREE"
+youtube:
+  title: "Every Microsoft Copilot: Licences, Prices, What's Free (Real Tenant) | DEVLADLOG Copilot & AI #1"
+  tags: [Microsoft Copilot, Copilot Chat, Microsoft 365 Copilot, Copilot licensing, Copilot Studio, GitHub Copilot, Security Copilot, Azure Copilot, Copilot Credits, Microsoft Graph]
+next_episode: "Microsoft 365 Copilot Chat in a Real Tenant"
+sources:
+  - "https://learn.microsoft.com/copilot/plan/copilot-overview"
+  - "https://learn.microsoft.com/copilot/plan/copilot-license-options"
+  - "https://learn.microsoft.com/copilot/security/security-copilot-inclusion"
+  - "https://learn.microsoft.com/fabric/fundamentals/copilot-enable-fabric"
+  - "https://docs.github.com/en/copilot/get-started/plans"
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Which Copilots do we already pay for?"
+    sub: "Every Copilot, its licence, and what is free"
+    short: hook
+    narration: >
+      Contoso's I T director asks one question. Which Copilots do we already pay for, and which ones are free? There
+      are more than a dozen products with that name, and the answers sit in a dozen different documentation sets. In
+      this episode we sort them out, and then we check what a real tenant actually holds, with code. Welcome to Dev Lad
+      Log, Copilot and A I.
+
+  - id: families
+    type: bullets
+    heading: "Five families, one name"
+    bullets:
+      - "Microsoft Copilot: chat and the apps"
+      - "Copilot Studio: build your own agents"
+      - "Copilot in products: Power BI, Dynamics, Azure, Security"
+      - "GitHub Copilot: licensed by GitHub"
+      - "Copilot in tools: SQL Server Management Studio"
+    narration: >
+      Start with the map. Five families share the name. Microsoft Copilot, the chat and the Microsoft 365 apps.
+      Copilot Studio, where you build agents. Copilot inside products, like Power B I, Dynamics, Azure and Security.
+      GitHub Copilot, which GitHub licenses, not Microsoft 365. And Copilot inside tools, like SQL Server Management
+      Studio.
+
+  - id: names
+    type: bullets
+    heading: "The renames to know"
+    bullets:
+      - "Microsoft 365 Copilot Chat is now Microsoft Copilot Chat"
+      - "Basic and Premium: what Learn now calls the experiences"
+      - "Premium is the add-on licence"
+      - "Power Virtual Agents became Copilot Studio"
+    narration: >
+      The names moved. Microsoft three six five Copilot Chat is now called Microsoft Copilot Chat. Learn now describes
+      Basic and Premium experiences, and Premium is the add-on licence. Power Virtual Agents became Copilot Studio.
+      If a video or a blog uses the old names, the licence story may be older too.
+
+  - id: free
+    type: bullets
+    heading: "What is free, for real"
+    short: free
+    bullets:
+      - "Copilot Chat (Basic): Entra sign-in, web grounded, protected"
+      - "Your files only if you upload or open them"
+      - "Azure Copilot: no extra cost, except one agent"
+      - "GitHub Copilot Free: two thousand completions a month"
+    narration: >
+      So what is free? Copilot Chat, with a work account, protected by enterprise data protection. It answers from the
+      web. It sees your files only if you upload them, or open them in Outlook or Teams. It does not read your mailbox
+      on its own. Azure Copilot has no extra cost, apart from one agent that bills by usage. And GitHub has a free plan
+      with two thousand completions a month.
+
+  - id: chat-screen
+    type: screen
+    heading: "Copilot Chat, work account"
+    image: screens/copilot-chat-work.jpg
+    bar: "copilot.cloud.microsoft · signed in as Alex Demo · no Copilot licence"
+    demo: "Browser on the lab tenant: copilot.cloud.microsoft signed in as alex.demo (E5 trial, no Microsoft 365 Copilot add-on). Visible: the Work label under the profile and the green data protection shield, a web-grounded question typed and answered with citations. Mask the tenant name and the account email domain."
+    narration: >
+      This is the real thing, in our lab tenant. Alex Demo has an E five trial licence and no Copilot add-on. The Work
+      label and the green shield tell you the account is protected. Ask a web question and it answers, with sources.
+      No purchase, no setup.
+
+  - id: catalog-code
+    type: code
+    heading: "One catalog, verified against the docs"
+    lang: yaml
+    code: |
+      - id: m365-copilot-premium
+        name: "Microsoft 365 Copilot (Premium) - the add-on licence"
+        licence_model: add-on
+        price: "US$30 per user per month, paid yearly (en-US pricing page)"
+        price_source: "https://www.microsoft.com/microsoft-365-copilot/pricing/enterprise"
+        lab_status: needs-purchase
+        sources:
+          - "https://learn.microsoft.com/copilot/plan/copilot-overview"
+          - "https://learn.microsoft.com/copilot/plan/copilot-license-options"
+    narration: >
+      Every product in this episode is a row in one catalog file. Licence model, price, and the official page it came
+      from. A test fails if a price has no source, or if a source is not an official Microsoft or GitHub address.
+      Here the add-on is thirty dollars per user per month, paid yearly, on the United States pricing page.
+
+  - id: audit-code
+    type: code
+    heading: "Does the tenant hold the add-on?"
+    lang: python
+    code: |
+      COPILOT_ADDON_PLANS = {
+          "M365_COPILOT_APPS": "a62f8878-de10-42f3-b68f-6149a25ceb97",
+          "M365_COPILOT_BUSINESS_CHAT": "3f30311c-6b1e-48a4-ab79-725b469da960",
+          "M365_COPILOT_TEAMS": "b95945de-b3bd-46db-8437-f2beb6ea2347",
+          # ...eight service plans, from the Learn licensing reference
+      }
+
+      for sku in skus:
+          plans = _plan_names(sku) & set(COPILOT_ADDON_PLANS)
+          if sku.get("skupartnumber") in ADDON_SKU_PART_NUMBERS or plans:
+              addon.append(_seats(sku))
+    narration: >
+      Now the tenant. The Graph call subscribed SKUs lists every licence with its service plans. The add-on carries
+      eight Copilot service plans, so the audit looks for those by name. It matches the part number too, in case the
+      names change again.
+
+  - id: licences-screen
+    type: screen
+    heading: "Licences page in the admin centre"
+    image: screens/admin-licences.jpg
+    bar: "Microsoft 365 admin center · Billing · Licenses"
+    demo: "Browser as labadmin: Microsoft 365 admin center, Billing, Licenses. Show the product list: Microsoft 365 E5 (trial), Microsoft 365 Business Standard, Copilot Studio trial, and that there is no Microsoft 365 Copilot line. Mask the tenant name."
+    narration: >
+      And the admin centre agrees. Microsoft three six five E five, Business Standard, the Copilot Studio trial. No
+      Microsoft three six five Copilot line anywhere. We never bought it.
+
+  - id: audit-screen
+    type: screen
+    heading: "The audit, against the real tenant"
+    image: screens/audit-run.jpg
+    bar: "PowerShell 7 · Export-SubscribedSkus.ps1 · copilot_landscape audit"
+    demo: "Terminal (dark theme, 18 pt) on the lab laptop: run ./src/scripts/Export-SubscribedSkus.ps1 signed in as labadmin (consent LicenseAssignment.Read.All), then `python -m copilot_landscape audit --skus ./skus.json`. Visible: 'Microsoft 365 Copilot add-on: none', the E5 and Business Standard lines, the Copilot Studio trial line and the Verdict sentence. The skus.json file must stay out of the repo."
+    narration: >
+      Here is the audit against the real tenant. Add-on, none. E five and Business Standard are eligible plans. The
+      Copilot Studio trial is there. And the verdict says what that means: Copilot Chat is included, the add-on can
+      be bought on top.
+
+  - id: paid
+    type: bullets
+    heading: "What costs money"
+    bullets:
+      - "Microsoft 365 Copilot add-on: $30 per user per month, yearly"
+      - "Microsoft 365 E7 bundles Copilot with E5"
+      - "Copilot Business: up to 300 users, Business plans"
+      - "Security Copilot: included with E5 and E7, in compute units"
+      - "GitHub Copilot: Pro $10, Business $19 per seat"
+    narration: >
+      What costs money. The Microsoft three six five Copilot add-on, thirty dollars per user per month, paid yearly.
+      Microsoft three six five E seven bundles it with E five. Copilot Business is for up to three hundred users on
+      Business plans. Security Copilot is included with E five and E seven, measured in compute units, four hundred a
+      month per thousand licences. And GitHub Copilot is ten dollars for Pro, nineteen per seat for Business.
+
+  - id: metered
+    type: bullets
+    heading: "Pay for what you use"
+    bullets:
+      - "Copilot Credits: one dollar buys a hundred"
+      - "Agents on shared tenant data: pay-as-you-go, off by default"
+      - "Copilot Studio trial: build and test, no publishing"
+      - "Always check the date on the price"
+    narration: >
+      Then there is metered money. Copilot Credits are the common currency for Copilot Studio and agents. One dollar
+      buys a hundred credits. In Copilot Chat, agents that use shared tenant data are pay-as-you-go only, and off by
+      default. The Copilot Studio trial lets you build and test, but not publish. And prices move, so every price in
+      our catalog carries its source.
+
+  - id: gotcha
+    type: bullets
+    heading: "Gotcha: the trial that cannot run Copilot"
+    short: gotcha
+    bullets:
+      - "Copilot in Power BI and Fabric needs a paid F2 or Premium P1"
+      - "Learn: trial capacities are not supported"
+      - "Our lab has the Fabric trial, so we cannot demo it for free"
+      - "Read the requirements before you plan the demo"
+    narration: >
+      Here is a gotcha we hit while planning this series. Copilot in Power B I and Fabric needs a paid F two capacity
+      or a Premium P one, and Microsoft Learn says trial capacities are not supported. Our lab has the Fabric trial.
+      So that episode will cost real money, and we say so up front. Read the requirements before you plan the demo.
+
+  - id: tests-screen
+    type: screen
+    heading: "Tests and the catalog"
+    image: screens/tests-catalog.jpg
+    bar: "PowerShell 7 · pytest · copilot_landscape catalog --free"
+    demo: "Terminal in the episode folder: `python -m pytest -q` ending in '21 passed', then `python -m copilot_landscape catalog --free` listing Copilot Chat (Basic), Microsoft 365 Copilot (Basic) and Azure Copilot with their lab status."
+    narration: >
+      Twenty one tests pass, and the catalog can answer the first question on demand. Free only: Copilot Chat, the
+      basic Copilot in the apps, and Azure Copilot.
+
+  - id: recap
+    type: bullets
+    heading: "Four rules"
+    bullets:
+      - "Name the Copilot before you price it"
+      - "Chat is free, Graph grounding is the add-on"
+      - "Credits and compute units are metered, not per user"
+      - "Check the tenant, not the brochure"
+    narration: >
+      Four rules. Name the Copilot before you price it. Chat is free, Graph grounding is the add-on. Credits and
+      compute units are metered, not per user. And check the tenant, not the brochure. Next time: Copilot Chat in a
+      real tenant, and what it can and cannot see.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The catalog, the audit and the tests are on GitHub, and every source is a Microsoft Learn or GitHub page listed
+      in the description. This was Dev Lad Log, Copilot and A I, by Momento Galático.
