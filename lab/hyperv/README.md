@@ -28,6 +28,12 @@ Generated on your PC and stored encrypted for your Windows user only in `<LabRoo
 It's never printed or sent anywhere. To see it:
 `(Import-Clixml E:\MGLab\secrets\lab-admin.xml).GetNetworkCredential().Password`
 
+## Windows 11 client (Intune episode)
+`CON-W11-01` is a Windows 11 Enterprise evaluation VM with a virtual TPM on Hyper-V's built-in `Default Switch`
+(DHCP + internet). Download the x64 ISO from microsoft.com/evalcenter → Windows 11 Enterprise (registration needed) and
+save it as `E:\MGLab\iso\Win11Ent-Eval.iso`, then run `Run-MGLab.cmd` again. The VM stops at Windows setup on purpose:
+the Entra join and Intune enrolment are done there as part of the recording. Without the ISO the VM is simply skipped.
+
 ## Daily use
 - Free RAM after recording: `.\Stop-MGLab.ps1`. Start again: `.\Stop-MGLab.ps1 -Start`.
 - Connect: `mstsc /v:10.50.0.22` (GUI server), `Enter-PSSession -VMName CON-DC01 -Credential CONTOSO\Administrator`,

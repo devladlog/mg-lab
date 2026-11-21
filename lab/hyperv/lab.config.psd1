@@ -20,6 +20,8 @@
         # SQL Server 2022 Developer edition ISO (free, non-production), ~1.1 GB. Downloaded directly: the SSEI
         # bootstrapper's quiet /ACTION=Download exited without downloading anything.
         SqlIso    = 'https://download.microsoft.com/download/3/8/d/38de7036-2433-4207-8eae-06e247e17b25/SQLServer2022-x64-ENU-Dev.iso'
+        # Windows 11 Enterprise evaluation ISO: save it as <LabRoot>\iso\Win11Ent-Eval.iso, or put a direct URL here.
+        Win11Iso  = ''
     }
 
     # Image: 'Core' = Datacenter Evaluation (Server Core), 'Desktop' = Datacenter Evaluation (Desktop Experience)
@@ -28,6 +30,8 @@
         @{ Name = 'CON-SRV01'; Role = 'Member'; Image = 'Core';    vCPU = 2; StartupGB = 1; MaxGB = 2; DiskGB = 60;  IP = 21 }
         @{ Name = 'CON-SRV02'; Role = 'Member'; Image = 'Desktop'; vCPU = 2; StartupGB = 2; MaxGB = 3; DiskGB = 60;  IP = 22 }
         @{ Name = 'CON-CLI01'; Role = 'Member'; Image = 'Core';    vCPU = 1; StartupGB = 1; MaxGB = 1.5; DiskGB = 60; IP = 41 }
+        # Windows 11 Enterprise eval client for the Intune episode: boots into Windows setup for a real Entra join.
+        @{ Name = 'CON-W11-01'; Role = 'Client'; Image = 'Win11'; vCPU = 2; StartupGB = 4; MaxGB = 4; DiskGB = 64; IP = 42; Switch = 'Default Switch' }
         @{ Name = 'CON-SQL01'; Role = 'SQL';    Image = 'Core';    vCPU = 2; StartupGB = 2; MaxGB = 6; DiskGB = 100; IP = 30 }
     )
 }

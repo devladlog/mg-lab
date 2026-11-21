@@ -141,6 +141,15 @@ function Get-Download([string]$Url, [string]$Dest, [long]$MinBytes) {
 }
 $serverIso = "$($P.Iso)\WindowsServer2025-Eval.iso"
 Get-Download $cfg.Media.ServerIso $serverIso 4GB
+# Windows 11 Enterprise evaluation (90 days) for client VMs (Role = 'Client'). The Evaluation Center asks you to
+# register, so there is no stable direct link: download the x64 ISO yourself and save it as the path below, or put a
+# direct URL in Media.Win11Iso. Without it, client VMs are skipped and everything else is built.
+$win11Iso = "$($P.Iso)\Win11Ent-Eval.iso"
+if (-not (Test-Path $win11Iso) -and $cfg.Media.Win11Iso -match '^https?://') { Get-Download $cfg.Media.Win11Iso $win11Iso 4GB }
+if (($vms | Where-Object Role -eq 'Client') -and -not (Test-Path $win11Iso)) {
+    Write-Warn2 "No Windows 11 ISO at ${win11Iso}: client VMs are skipped (get it from microsoft.com/evalcenter > Windows 11 Enterprise)."
+    $vms = @($vms | Where-Object Role -ne 'Client')
+}
 
 # ---------------------------------------------------------------- base disks
 Write-Stage 'Base disks'
@@ -154,7 +163,9 @@ function Get-PartitionLetter($Part) {
     [string]$p.DriveLetter
 }
 function New-BaseDisk([string]$Kind) {
-    $path = "$($P.Base)\ws2025-$($Kind.ToLower()).vhdx"
+    $isClient = $Kind -eq 'Win11'
+    $iso = if ($isClient) { $win11Iso } else { $serverIso }
+    $path = if ($isClient) { "$($P.Base)\win11-enterprise.vhdx" } else { "$($P.Base)\ws2025-$($Kind.ToLower()).vhdx" }
     if (Test-Path $path) {
         # The read-only flag is set only after a base disk is complete, so it doubles as the "finished" marker.
         if ((Get-Item $path).IsReadOnly) { Write-Skip (Split-Path $path -Leaf); return $path }
@@ -162,16 +173,20 @@ function New-BaseDisk([string]$Kind) {
         try { Dismount-VHD -Path $path -ErrorAction Stop } catch { }
         Remove-Item $path -Force
     }
-    $img = Mount-DiskImage -ImagePath $serverIso -PassThru
+    $img = Mount-DiskImage -ImagePath $iso -PassThru
     try {
         $isoDrive = ($img | Get-Volume).DriveLetter
         $wim = "${isoDrive}:\sources\install.wim"
         $images = Get-WindowsImage -ImagePath $wim
-        $want = $images | Where-Object { $_.ImageName -match 'Datacenter' -and $_.ImageName -match 'Evaluation' -and
-            (($Kind -eq 'Desktop') -eq ($_.ImageName -match 'Desktop')) } | Select-Object -First 1
+        $want = if ($isClient) {
+            $images | Where-Object { $_.ImageName -match 'Enterprise' -and $_.ImageName -notmatch '\bN\b|LTSC' } | Select-Object -First 1
+        } else {
+            $images | Where-Object { $_.ImageName -match 'Datacenter' -and $_.ImageName -match 'Evaluation' -and
+                (($Kind -eq 'Desktop') -eq ($_.ImageName -match 'Desktop')) } | Select-Object -First 1
+        }
         if (-not $want) { throw "No Datacenter Evaluation ($Kind) image in the ISO: $($images.ImageName -join '; ')" }
         Write-Host "  Applying '$($want.ImageName)' to $(Split-Path $path -Leaf) (10-20 min)..."
-        $vhd = New-VHD -Path $path -SizeBytes 60GB -Dynamic
+        $vhd = New-VHD -Path $path -SizeBytes $(if ($isClient) { 64GB } else { 60GB }) -Dynamic
         $disk = Mount-VHD -Path $path -Passthru | Get-Disk
         try {
             Initialize-Disk -Number $disk.Number -PartitionStyle GPT
@@ -189,8 +204,8 @@ function New-BaseDisk([string]$Kind) {
         } finally { Dismount-VHD -Path $path }
         Set-ItemProperty -Path $path -Name IsReadOnly -Value $true   # parents of differencing disks must never change
         Write-Ok (Split-Path $path -Leaf)
-    } catch { Dismount-DiskImage -ImagePath $serverIso -ErrorAction SilentlyContinue | Out-Null; if (Test-Path $path) { Remove-Item $path -Force }; throw }
-    finally { Dismount-DiskImage -ImagePath $serverIso -ErrorAction SilentlyContinue | Out-Null }
+    } catch { Dismount-DiskImage -ImagePath $iso -ErrorAction SilentlyContinue | Out-Null; if (Test-Path $path) { Remove-Item $path -Force }; throw }
+    finally { Dismount-DiskImage -ImagePath $iso -ErrorAction SilentlyContinue | Out-Null }
     return $path
 }
 $base = @{}
@@ -234,7 +249,19 @@ foreach ($v in $vms) {
         Remove-Item $child -Force
     }
     New-VHD -Path $child -ParentPath $base[$v.Image] -Differencing | Out-Null
-    if ($v.DiskGB -gt 60) { Resize-VHD -Path $child -SizeBytes ([int64]$v.DiskGB * 1GB) }
+    if ($v.DiskGB -gt 64 -or ($v.DiskGB -gt 60 -and $v.Role -ne 'Client')) { Resize-VHD -Path $child -SizeBytes ([int64]$v.DiskGB * 1GB) }
+    if ($v.Role -eq 'Client') {
+        # Client VMs boot into Windows setup (OOBE) on purpose: the Entra join / Intune enrolment is done there, for real.
+        $vmSwitch = if ($v.Switch) { $v.Switch } else { 'Default Switch' }   # Hyper-V's built-in NAT switch has DHCP
+        New-VM -Name $v.Name -Generation 2 -VHDPath $child -SwitchName $vmSwitch -MemoryStartupBytes ([int64]($v.StartupGB * 1GB)) -Path $P.Vms | Out-Null
+        Set-VM -Name $v.Name -ProcessorCount $v.vCPU -StaticMemory -AutomaticCheckpointsEnabled $false -AutomaticStopAction ShutDown -AutomaticStartAction Nothing
+        Set-VMKeyProtector -VMName $v.Name -NewLocalKeyProtector
+        Enable-VMTPM -VMName $v.Name                                          # Windows 11 needs TPM 2.0
+        Enable-VMIntegrationService -VMName $v.Name -Name 'Guest Service Interface'
+        Start-VM -Name $v.Name
+        Write-Ok "$($v.Name) created and started at Windows setup (Windows 11, vTPM, $($v.vCPU) vCPU, $($v.StartupGB) GB, switch $vmSwitch)"
+        continue
+    }
     $disk = Mount-VHD -Path $child -Passthru | Get-Disk
     try {
         $osPart = Get-Partition -DiskNumber $disk.Number | Where-Object { $_.GptType -eq '{ebd0a0a2-b9e5-4433-87c0-68b6b72699c7}' } | Select-Object -First 1
@@ -273,6 +300,8 @@ function Get-GuestCred([string]$Name) {
 
 # ---------------------------------------------------------------- guest network
 Write-Stage 'Guest network and remote access'
+$clientVms = @($vms | Where-Object Role -eq 'Client')
+$vms = @($vms | Where-Object Role -ne 'Client')   # client VMs are finished by hand at Windows setup
 $dcCfg = $cfg.VMs | Where-Object Role -eq 'DC' | Select-Object -First 1
 $dcIP = "$($sw.Prefix).$($dcCfg.IP)"
 foreach ($v in $vms) {

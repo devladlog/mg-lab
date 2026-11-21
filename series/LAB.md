@@ -46,6 +46,7 @@ Internal NAT network `10.50.0.0/24`, host = `10.50.0.1`, domain `lab.contoso.com
 | CON-SRV02 | Windows Server 2025 Datacenter Eval, Desktop Experience | member server (GUI tools) | 10.50.0.22 | 2 / 2–3 GB |
 | CON-SQL01 | Windows Server 2025 Datacenter Eval, Server Core | SQL Server 2022 Developer, default instance, TCP 1433, mixed auth | 10.50.0.30 | 2 / 2–6 GB |
 | CON-CLI01 | Windows Server 2025 Datacenter Eval, Server Core | test client (DHCP/DNS/GPO demos) | 10.50.0.41 | 1 / 1–1.5 GB |
+| CON-W11-01 | Windows 11 Enterprise Eval (90 days), vTPM | Intune/Entra-joined client; stops at Windows setup for an on-camera Entra join. Needs the ISO saved as `E:\MGLab\iso\Win11Ent-Eval.iso` | DHCP on Hyper-V `Default Switch` (not on the lab network) | 2 / 4 GB |
 
 - The recording laptop itself is Windows: Power BI Desktop, VS Code, SSMS, browsers and terminals run on the host and
   reach the VMs at the IPs above.
