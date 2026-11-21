@@ -1,0 +1,205 @@
+# DEVLADLOG Deep Dive #8: secure build, scan, publish and deploy for a small ASP.NET Core container.
+# Rules this file follows (security/tests/test_pipeline_policy.py enforces them):
+#  - every action is pinned to a full commit SHA (the tag is in the comment; Dependabot keeps both current)
+#  - the workflow token starts with NO permissions; each job asks for exactly what it needs
+#  - no stored cloud secret: the deploy job signs in to Azure with OpenID Connect (federated credential)
+#  - the image is scanned BEFORE it is pushed, and the bytes that were scanned are the bytes that are pushed
+name: secure-pipeline
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  DOTNET_NOLOGO: "1"
+  DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+  IMAGE_NAME: purchase-status
+
+jobs:
+  build-test:
+    name: Build and test
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
+        with:
+          dotnet-version: 10.0.x
+      # Locked mode: restore fails if packages.lock.json does not match the project. NuGet Audit runs during restore.
+      - run: dotnet restore PurchaseStatus.slnx --locked-mode
+      - run: dotnet build PurchaseStatus.slnx --no-restore --configuration Release
+      - run: dotnet test PurchaseStatus.slnx --no-build --configuration Release
+
+  secrets-scan:
+    name: Secret scan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.13"
+      - name: Install detect-secrets (hash-pinned)
+        run: pip install --require-hashes --requirement security/requirements-ci.txt
+      - name: Scan tracked files against the baseline
+        run: git ls-files -z | xargs -0 detect-secrets-hook --baseline .secrets.baseline
+
+  codeql:
+    name: CodeQL
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      security-events: write # upload the CodeQL results to code scanning
+      actions: read          # CodeQL reads workflow run metadata
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: github/codeql-action/init@1bd86f2fdb4b86187fa4059f16f31a3202acc9ea # v4.39.4
+        with:
+          languages: csharp
+          build-mode: none
+          queries: security-extended
+      - uses: github/codeql-action/analyze@1bd86f2fdb4b86187fa4059f16f31a3202acc9ea # v4.39.4
+        with:
+          category: /language:csharp
+
+  dependency-review:
+    name: Dependency review
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/dependency-review-action@bbc44d14a204704ccc493733616cd1e93a0321ec # v5.0.1
+        with:
+          fail-on-severity: high
+
+  container:
+    name: Container - lint, build, scan
+    needs: [build-test, secrets-scan]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.13"
+      - name: Lint the Dockerfile (hadolint, hash-pinned)
+        run: |
+          pip install --require-hashes --requirement security/requirements-ci.txt
+          hadolint Dockerfile
+      - name: Build the image
+        run: docker build --tag "${IMAGE_NAME}:${GITHUB_SHA}" .
+      - name: Scan the image with Trivy (report everything, the gate decides)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ env.IMAGE_NAME }}:${{ github.sha }}
+          scanners: vuln
+          format: json
+          output: trivy-image.json
+          exit-code: "0"
+          version: v0.76.2
+      - name: Gate on fixable CRITICAL and HIGH findings
+        run: python security/vuln_gate.py --report trivy-image.json --waivers security/waivers.json
+      - name: Write the SBOM (CycloneDX)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ env.IMAGE_NAME }}:${{ github.sha }}
+          format: cyclonedx
+          output: sbom.cdx.json
+          exit-code: "0"
+          version: v0.76.2
+      - name: Save the scanned image
+        run: docker save "${IMAGE_NAME}:${GITHUB_SHA}" --output image.tar
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: scan-results
+          path: |
+            trivy-image.json
+            sbom.cdx.json
+          retention-days: 30
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: image
+          path: image.tar
+          retention-days: 1
+
+  publish-and-deploy:
+    name: Publish and deploy
+    # Only main, only after every gate. The "prod-lab" environment holds the Azure ids, requires a reviewer, and its name
+    # is part of the federated credential subject, so no other job or branch can get an Azure token.
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: [container, codeql]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment: prod-lab
+    permissions:
+      contents: read
+      id-token: write       # OIDC token request for azure/login
+      attestations: write   # build provenance
+      packages: write       # push the attestation next to the image in the registry
+    env:
+      ACR_NAME: ${{ vars.ACR_NAME }}
+      APP_NAME: ${{ vars.APP_NAME }}
+      RESOURCE_GROUP: ${{ vars.RESOURCE_GROUP }}
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: image
+      - name: Load the scanned image
+        run: docker load --input image.tar
+      - uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - name: Push, by digest
+        id: push
+        run: |
+          az acr login --name "${ACR_NAME}"
+          target="${ACR_NAME}.azurecr.io/${IMAGE_NAME}:${GITHUB_SHA}"
+          docker tag "${IMAGE_NAME}:${GITHUB_SHA}" "${target}"
+          docker push "${target}"
+          digest="$(docker inspect --format '{{index .RepoDigests 0}}' "${target}" | cut -d@ -f2)"
+          echo "digest=${digest}" >> "${GITHUB_OUTPUT}"
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ${{ vars.ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true
+      - name: Deploy the digest to Azure Container Apps
+        env:
+          DIGEST: ${{ steps.push.outputs.digest }}
+        run: |
+          az containerapp update \
+            --name "${APP_NAME}" \
+            --resource-group "${RESOURCE_GROUP}" \
+            --image "${ACR_NAME}.azurecr.io/${IMAGE_NAME}@${DIGEST}" \
+            --output none

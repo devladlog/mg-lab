@@ -1,0 +1,109 @@
+<!--
+  DEVLADLOG Deep Dive #7: policy for the "Contoso purchasing events" API (operation POST /purchase-events).
+  Written for the Consumption tier: policy document <= 16 KiB, no rate-limit-by-key, validate-content body <= 100 KiB.
+  Named values: tenant-id, api-client-id, servicebus-namespace, topic-name.
+  Expressions use single-quoted attributes and XML entities so the file is valid XML; the tests compile every
+  expression with Roslyn and run the important ones.
+-->
+<policies>
+  <inbound>
+    <base />
+
+    <!-- 1. Who is calling? Entra token for THIS API, with the Purchase.Submit app role. -->
+    <validate-jwt header-name="Authorization" require-scheme="Bearer" failed-validation-httpcode="401" failed-validation-error-message="Unauthorized.">
+      <openid-config url="https://login.microsoftonline.com/{{tenant-id}}/v2.0/.well-known/openid-configuration" />
+      <audiences>
+        <audience>{{api-client-id}}</audience>
+      </audiences>
+      <required-claims>
+        <claim name="roles" match="any">
+          <value>Purchase.Submit</value>
+        </claim>
+      </required-claims>
+    </validate-jwt>
+
+    <!-- 2. How often? Per subscription key (rate-limit-by-key is not available on Consumption). -->
+    <rate-limit calls="20" renewal-period="60" remaining-calls-header-name="x-ratelimit-remaining" />
+
+    <!-- 3. What are they sending? The schema comes from the OpenAPI definition imported into the API. -->
+    <validate-content unspecified-content-type-action="prevent" max-size="16384" size-exceeded-action="prevent" errors-variable-name="bodyErrors">
+      <content type="application/json" validate-as="json" action="prevent" allow-additional-properties="false" />
+    </validate-content>
+
+    <!-- 4. Idempotency: the caller's key becomes the Service Bus MessageId (duplicate detection does the rest). -->
+    <set-variable name="idempotencyKey" value='@(context.Request.Headers.GetValueOrDefault("Idempotency-Key", "").Trim().ToLowerInvariant())' />
+    <choose>
+      <when condition='@(!Regex.IsMatch((string)context.Variables["idempotencyKey"], "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"))'>
+        <return-response>
+          <set-status code="400" reason="Bad Request" />
+          <set-header name="Content-Type" exists-action="override">
+            <value>application/json</value>
+          </set-header>
+          <set-body>{"error":"Idempotency-Key header must be a GUID."}</set-body>
+        </return-response>
+      </when>
+    </choose>
+
+    <!-- 5. Routing label: 5,000 and above goes to finance review (same threshold as episodes 3 and 4). -->
+    <set-variable name="label" value='@{
+      var body = context.Request.Body.As&lt;JObject&gt;(preserveContent: true);
+      return (decimal)body["total"] &gt;= 5000m ? "purchase.high" : "purchase.standard";
+    }' />
+
+    <!-- 6. Talk to Service Bus with the gateway's managed identity (Azure Service Bus Data Sender, on the topic only). -->
+    <authentication-managed-identity resource="https://servicebus.azure.net/" />
+    <set-header name="BrokerProperties" exists-action="override">
+      <value>@{
+        var props = new JObject();
+        props["MessageId"] = (string)context.Variables["idempotencyKey"];
+        props["Label"] = (string)context.Variables["label"];
+        props["CorrelationId"] = context.RequestId.ToString();
+        return props.ToString(Formatting.None);
+      }</value>
+    </set-header>
+    <set-header name="Ocp-Apim-Subscription-Key" exists-action="delete" />
+    <set-header name="Idempotency-Key" exists-action="delete" />
+    <set-backend-service base-url="https://{{servicebus-namespace}}.servicebus.windows.net" />
+    <rewrite-uri template="/{{topic-name}}/messages" copy-unmatched-params="false" />
+  </inbound>
+
+  <backend>
+    <forward-request timeout="20" />
+  </backend>
+
+  <outbound>
+    <base />
+    <choose>
+      <!-- Service Bus answers 201 Created for a send, and also for a duplicate it silently drops. -->
+      <when condition="@(context.Response.StatusCode == 201)">
+        <set-status code="202" reason="Accepted" />
+        <set-header name="Content-Type" exists-action="override">
+          <value>application/json</value>
+        </set-header>
+        <set-body>@{
+          var accepted = new JObject();
+          accepted["status"] = "accepted";
+          accepted["id"] = (string)context.Variables["idempotencyKey"];
+          accepted["correlationId"] = context.RequestId.ToString();
+          return accepted.ToString(Formatting.None);
+        }</set-body>
+      </when>
+      <otherwise>
+        <set-status code="502" reason="Bad Gateway" />
+        <set-header name="Content-Type" exists-action="override">
+          <value>application/json</value>
+        </set-header>
+        <set-body>@{
+          var failed = new JObject();
+          failed["error"] = "The event could not be queued.";
+          failed["correlationId"] = context.RequestId.ToString();
+          return failed.ToString(Formatting.None);
+        }</set-body>
+      </otherwise>
+    </choose>
+  </outbound>
+
+  <on-error>
+    <base />
+  </on-error>
+</policies>

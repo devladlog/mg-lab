@@ -1,0 +1,210 @@
+# DEVLADLOG Deep Dive - episode 08. Code and test scenes are real (from app/); screen scenes need the lab
+# recording described in demo.md.
+episode: 8
+slug: devsecops-pipeline
+series_label: "DEEP DIVE"
+series_name: "DEVLADLOG Deep Dive"
+file_prefix: "deep-dive"
+title: "DevSecOps pipeline"
+subtitle: "GitHub Actions, Azure DevOps and container security"
+voice: am_michael
+thumbnail_text: "NOTHING SHIPS\nUNSCANNED\nNO SECRETS STORED"
+youtube:
+  title: "DevSecOps Pipeline: GitHub Actions, Azure DevOps and Container Security | DEVLADLOG Deep Dive #8"
+  tags: [DevSecOps, GitHub Actions, Azure DevOps, OIDC, workload identity federation, Trivy, CodeQL, SBOM, container security, Azure Container Apps, Dependabot, supply chain security]
+sources:
+  - https://www.devladlog.com/articles/deep-dive/2025-05-19-devsecops-pipeline-azure-devops-github-actions-container-security/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Nobody reviewed the build."
+    sub: "a pipeline that says no"
+    short: hook
+    narration: >
+      Contoso's purchase platform has an API, an approval process and a gateway. Then someone updates a dependency,
+      and a build nobody reviewed lands in production. This is the DEVLADLOG Deep Dive.
+      Today we build the pipeline
+      that decides what is allowed to ship, with no cloud secret stored anywhere.
+
+  - id: flow
+    type: diagram
+    nodes: ["Pull request", "Checks", "Scan", "Approval", "Azure"]
+    labels: ["build and test", "secrets, CodeQL, deps", "image before push", "prod-lab reviewer", "Container Apps"]
+    heading: "Every gate before the cloud"
+    narration: >
+      A pull request runs the build and the tests, a secret scan, CodeQL and a dependency review. The container job scans
+      the image before anything is pushed. Only main reaches the last job, and only after a human approves the
+      production environment. Then, and only then, the pipeline gets an Azure token. The order matters: the cheap, fast checks run first, so a bad change
+      is rejected in minutes, before anyone spends time reviewing it or any compute is spent building a container.
+
+  - id: pinning
+    type: code
+    heading: "A tag is not a pin"
+    lang: yaml
+    code: |
+      permissions: {}
+
+      jobs:
+        build-test:
+          permissions:
+            contents: read
+          steps:
+            - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+              with:
+                persist-credentials: false
+            - run: dotnet restore PurchaseStatus.slnx --locked-mode
+    narration: >
+      Start with the pipeline itself. The workflow token starts with no permissions at all, and each job asks for what it
+      needs. Every action is pinned to a full commit hash, with the tag in a comment, because a tag can move. Restore runs
+      in locked mode, so a drifting dependency fails the build, and NuGet audit turns known vulnerable packages into errors,
+      not warnings nobody reads. Dependabot keeps all of it current, with a short cooldown so you never adopt a release
+      minutes after it was published.
+
+  - id: gate
+    type: code
+    heading: "A gate with expiring exceptions"
+    lang: python
+    code: |
+      # security/vuln_gate.py: blocks fixable CRITICAL and HIGH findings
+      # waivers.json: {"id", "owner", "reason", "expires"}; at most 90 days out
+      # an expired waiver no longer hides the finding
+
+      $ python -m pytest security -q
+      31 passed
+    narration: >
+      Trivy reports everything. A small gate decides. It blocks critical and high findings that already have a fix, and
+      lets a team waive one only with an owner, a reason and a date within ninety days. Past that date the waiver stops
+      working. A scanner that only reports gets ignored; a gate with expiring exceptions does not. The gate is plain Python with no
+      dependencies, and it has fourteen tests of its own, including the expired and the stale waiver.
+
+  - id: dockerfile
+    type: code
+    heading: "Small image, digest pinned, not root"
+    lang: dockerfile
+    code: |
+      FROM mcr.microsoft.com/dotnet/aspnet:10.0-noble-chiseled@sha256:7c625e44... AS final
+      COPY --from=build /app .
+      EXPOSE 8080
+      USER 1654
+      ENTRYPOINT ["dotnet", "PurchaseStatus.Api.dll"]
+    narration: >
+      The image is a chiseled ASP.NET base: no shell, no package manager, pinned by digest. The service runs as the
+      non-root app user, written as a number so Kubernetes can verify it. The same job lints the Dockerfile, scans the built
+      image, and writes a software bill of materials, so you can answer, later, what was inside.
+
+  - id: oidc
+    type: code
+    heading: "No secret to steal"
+    short: oidc
+    lang: bicep
+    code: |
+      resource deployFederation '.../federatedIdentityCredentials@2023-01-31' = {
+        parent: deployIdentity
+        name: 'github-prod-lab'
+        properties: {
+          issuer: 'https://token.actions.githubusercontent.com'
+          subject: 'repo:contoso-demo/purchase-status:environment:prod-lab'
+          audiences: [ 'api://AzureADTokenExchange' ]
+        }
+      }
+    narration: >
+      This replaces the stored password. A managed identity trusts tokens from one GitHub environment. The subject names
+      the repository and the production environment, so a pull request, another branch or another job cannot get a
+      token. The identity can push to the registry and update this one container app, nothing else. A second identity, which can only pull, runs the app.
+
+  - id: policy-tests
+    type: code
+    heading: "The pipeline has tests too"
+    lang: text
+    code: |
+      $ python -m pytest security/tests/test_pipeline_policy.py -q
+        test_every_action_is_pinned_to_a_full_commit_sha            PASSED
+        test_workflow_token_starts_with_no_permissions              PASSED
+        test_azure_login_uses_oidc_ids_only_no_stored_credential    PASSED
+        test_dockerfile_pins_every_base_image_by_digest_and_runs_non_root  PASSED
+        test_bicep_federated_subject_is_restricted_to_the_environment      PASSED
+        test_bicep_registry_has_admin_user_disabled                 PASSED
+      17 passed
+    narration: >
+      Security rules rot when nobody checks them. So the rules are tests. Unpin one action, add a stored credential, widen
+      the federated subject or switch on the registry admin user, and a named test fails in the pull request, before the
+      change can run anywhere. We checked this by breaking each rule on purpose.
+
+  - id: run-screen
+    type: screen
+    heading: "Green, then a human"
+    image: screens/actions-run.jpg
+    bar: "GitHub Actions - secure-pipeline"
+    demo: >
+      Actions run on main: all jobs green, the prod-lab approval step waiting for the reviewer.
+    narration: >
+      Here is the run on main. Everything is green, and the deploy job waits for the reviewer. Nothing in Azure has
+      happened yet. The code scan, the secret scan and the dependency review all report here, in one place, on the same commit.
+
+  - id: gate-screen
+    type: screen
+    heading: "The gate says no"
+    image: screens/gate-fail.jpg
+    bar: "GitHub Actions - job summary"
+    demo: >
+      PR branch with an outdated base image: the gate summary lists the finding, the package and the fixed version.
+    narration: >
+      Now a branch with an outdated base image. The gate fails the job and writes the finding, the package and the version
+      that fixes it into the summary. The image never reaches the registry. To ship it anyway, someone has to write a waiver with their name, a reason and an end date, in a pull request that another person reads.
+
+  - id: attest-screen
+    type: screen
+    heading: "Provenance and CodeQL"
+    image: screens/attestation.jpg
+    bar: "GitHub - Attestations and Security"
+    demo: >
+      Attestations page for the pushed digest, Security tab with CodeQL results.
+    narration: >
+      After approval the image is pushed and deployed by digest, and a build provenance attestation is stored next to it.
+      Months later you can show which commit and which workflow produced what is running. The software bill of materials from the scan sits beside it as a build artifact.
+
+  - id: ado-screen
+    type: screen
+    heading: "The same gates on Azure DevOps"
+    image: screens/ado-run.jpg
+    bar: "Azure DevOps - azure-pipelines.yml"
+    demo: >
+      Azure DevOps run with Build and Deploy stages, environment approval, and the workload identity federation service connection.
+    narration: >
+      Azure DevOps gets the same shape. A deployment job targets an environment with an approval, and the service
+      connection uses workload identity federation, again with no secret. The secret scan, the image scan and the gate are the same scripts, so the rules do not depend on which product runs them.
+
+  - id: gotcha
+    type: bullets
+    heading: "Where this bites"
+    short: gotcha
+    bullets:
+      - "Tags move: pin the SHA, let Dependabot update it"
+      - "Waivers must expire"
+      - "Scan before push, deploy the digest"
+      - "AcrPull can take minutes to propagate"
+    narration: >
+      Four things that bite. Tags move, so pin the hash. Exceptions that never expire become the policy. Scan before you
+      push and deploy the digest, not the tag. And a new role assignment can take minutes, so the first container app
+      deployment may need a rerun.
+
+  - id: recap
+    type: bullets
+    heading: "What to take away"
+    bullets:
+      - "Least privilege tokens, pinned actions"
+      - "A gate that blocks, with expiring waivers"
+      - "OIDC to one environment, no stored secret"
+      - "Scan what you ship, deploy by digest"
+    narration: >
+      Least privilege tokens and pinned actions. A gate that blocks, with exceptions that expire. A federated identity tied
+      to one environment. And you ship exactly what you scanned.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The pipeline, the tests and the Bicep are in the repository, and the full guide is on devladlog dot com. See you
+      in the next Deep Dive.

@@ -1,0 +1,73 @@
+{
+  "openapi": "3.0.1",
+  "info": {
+    "title": "Contoso purchasing events",
+    "description": "Asynchronous intake for purchase request events. The gateway validates the caller and the body, then puts the event on a Service Bus topic. 202 means the event was accepted for processing, not that it was processed.",
+    "version": "1.0"
+  },
+  "paths": {
+    "/purchase-events": {
+      "post": {
+        "operationId": "submitPurchaseEvent",
+        "summary": "Submit a purchase request event",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "description": "A GUID chosen by the caller. Sending the same key again within the duplicate detection window is accepted but never delivered twice.",
+            "schema": { "type": "string", "format": "uuid" }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/PurchaseEvent" }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Accepted for processing",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Accepted" }
+              }
+            }
+          },
+          "400": { "description": "Missing or invalid Idempotency-Key, or body does not match the schema" },
+          "401": { "description": "Missing, expired or wrong-audience token, or missing Purchase.Submit role" },
+          "429": { "description": "Call rate exceeded for this subscription key" },
+          "502": { "description": "The message could not be put on the topic" }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "PurchaseEvent": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["eventType", "purchaseRequestId", "requestedBy", "total", "currency"],
+        "properties": {
+          "eventType": { "type": "string", "enum": ["submitted", "approved", "rejected"] },
+          "purchaseRequestId": { "type": "string", "pattern": "^PR-[0-9]{4,8}$" },
+          "requestedBy": { "type": "string", "minLength": 3, "maxLength": 254 },
+          "total": { "type": "number", "minimum": 0.01, "maximum": 10000000 },
+          "currency": { "type": "string", "enum": ["EUR", "USD", "GBP"] },
+          "note": { "type": "string", "maxLength": 500 }
+        }
+      },
+      "Accepted": {
+        "type": "object",
+        "required": ["status", "id", "correlationId"],
+        "properties": {
+          "status": { "type": "string" },
+          "id": { "type": "string" },
+          "correlationId": { "type": "string" }
+        }
+      }
+    }
+  }
+}

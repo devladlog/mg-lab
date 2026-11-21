@@ -1,0 +1,261 @@
+# DEVLADLOG Deep Dive — episode 07. Code and test scenes are real (from this folder); screen scenes need the lab
+# recording described in demo.md. Narration ~830 words.
+episode: 7
+slug: enterprise-api-management-apim-service-bus
+series_label: "DEEP DIVE"
+series_name: "DEVLADLOG Deep Dive"
+file_prefix: "deep-dive"
+title: "Enterprise API management"
+subtitle: "Azure API Management + Service Bus topics"
+voice: am_michael
+thumbnail_text: "ONE FRONT DOOR\nFOR EVERY\nPURCHASE EVENT"
+youtube:
+  title: "Enterprise API Management: APIM in Front of Service Bus Topics | DEVLADLOG Deep Dive #7"
+  tags: [Azure API Management, APIM, Consumption tier, Azure Service Bus, topics and subscriptions, duplicate detection, idempotency, validate-jwt, managed identity, Bicep, API gateway, solution architecture]
+sources:
+  - https://www.devladlog.com/articles/deep-dive/2025-03-17-enterprise-api-management-azure-apim-service-bus-microservices/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "The app retries. Finance gets it twice."
+    sub: "one front door for purchase events"
+    short: hook
+    narration: >
+      A network blip, the app retries, and finance reviews the same seven thousand euro purchase twice. In episodes
+      three and four, Contoso's purchase requests got an API and an approval process. Today every system that wants
+      to tell them something comes through one front door: Azure API Management, in front of a Service Bus topic.
+      This is the DEVLADLOG Deep Dive.
+
+  - id: architecture
+    type: diagram
+    heading: "A gateway that only knows how to enqueue"
+    nodes: ["Caller", "Gateway", "Topic", "Workers"]
+    labels: ["Entra token + key", "API Management", "Service Bus Standard", "Subscriptions"]
+    narration: >
+      The caller gets an Entra token and a subscription key. The gateway checks the token, the call rate and the
+      body, then puts the event on a Service Bus topic with its own managed identity and answers two oh two:
+      accepted, not processed. Two subscriptions read the topic: everything, and only the big purchases for finance.
+
+  - id: why-gateway
+    type: bullets
+    heading: "What belongs at the gateway"
+    bullets:
+      - "Who is calling: token, audience, app role"
+      - "How often: a rate limit per subscription key"
+      - "What they send: schema, size, content type"
+      - "Where it goes: no keys, only a managed identity"
+    narration: >
+      The gateway answers four questions before anything reaches your systems. Who is calling. How often. What they
+      are sending. And where it goes, without a single shared key in the policy. Everything else, the business
+      rules, stays in the services behind it.
+
+  - id: policy
+    type: code
+    heading: "Three checks, in this order"
+    short: policy
+    lang: xml
+    code: |
+      <validate-jwt header-name="Authorization" require-scheme="Bearer" failed-validation-httpcode="401" ...>
+        <openid-config url="https://login.microsoftonline.com/{{tenant-id}}/v2.0/.well-known/openid-configuration" />
+        <audiences><audience>{{api-client-id}}</audience></audiences>
+        <required-claims>
+          <claim name="roles" match="any"><value>Purchase.Submit</value></claim>
+        </required-claims>
+      </validate-jwt>
+
+      <rate-limit calls="20" renewal-period="60" remaining-calls-header-name="x-ratelimit-remaining" />
+
+      <validate-content unspecified-content-type-action="prevent" max-size="16384" size-exceeded-action="prevent">
+        <content type="application/json" validate-as="json" action="prevent" allow-additional-properties="false" />
+      </validate-content>
+    narration: >
+      Here is the policy. First the token: right issuer from the tenant, right audience, and the Purchase dot Submit
+      app role. Then a rate limit of twenty calls a minute. Then the body, checked against the schema from the open
+      a p i definition, with no extra properties allowed. Cheap checks first, so bad calls never cost more.
+
+  - id: idempotency
+    type: code
+    heading: "The caller's key becomes the MessageId"
+    lang: xml
+    code: |
+      <set-variable name="idempotencyKey" value='@(context.Request.Headers.GetValueOrDefault("Idempotency-Key", "").Trim().ToLowerInvariant())' />
+      ...
+      <authentication-managed-identity resource="https://servicebus.azure.net/" />
+      <set-header name="BrokerProperties" exists-action="override">
+        <value>@{
+          var props = new JObject();
+          props["MessageId"] = (string)context.Variables["idempotencyKey"];
+          props["Label"] = (string)context.Variables["label"];
+          props["CorrelationId"] = context.RequestId.ToString();
+          return props.ToString(Formatting.None);
+        }</value>
+      </set-header>
+      <rewrite-uri template="/{{topic-name}}/messages" copy-unmatched-params="false" />
+    narration: >
+      This is the trick for the retry. The caller sends an idempotency key, a guid. The gateway makes it the Service
+      Bus message id, adds a label for routing, and sends it over the Service Bus rest api with its managed identity.
+      The topic has duplicate detection on, so the same id again is accepted and silently dropped.
+
+  - id: bicep
+    type: code
+    heading: "Standard tier, no keys, send on one topic"
+    lang: bicep
+    code: |
+      sku: { name: 'Standard', tier: 'Standard' }   // Basic: queues only, no duplicate detection
+      properties: { disableLocalAuth: true, minimumTlsVersion: '1.2' }
+
+      resource topic 'topics' = {
+        name: 'purchase-events'
+        properties: { requiresDuplicateDetection: true, duplicateDetectionHistoryTimeWindow: 'PT10M' }
+      }
+      // finance-review: only what the gateway labelled purchase.high
+      correlationFilter: { label: 'purchase.high' }
+
+      sku: { name: 'Consumption', capacity: 0 }
+      identity: { type: 'SystemAssigned' }
+      // Azure Service Bus Data Sender, scope: the topic
+    narration: >
+      In Bicep: Service Bus Standard, because topics and duplicate detection are not in Basic. Shared keys are off.
+      The finance subscription uses a correlation filter on the label. API Management runs on the Consumption tier
+      with a system identity, and that identity gets the Data Sender role on the topic, nothing wider.
+
+  - id: gotcha
+    type: bullets
+    heading: "Consumption tier: read the fine print"
+    short: gotcha
+    bullets:
+      - "rate-limit-by-key: not available on Consumption"
+      - "send-service-bus-message policy: classic tiers only"
+      - "Policy document: 16 KiB. Body validation: 100 KiB"
+      - "Duplicate detection is immutable: decide at creation"
+    narration: >
+      The gotchas, all from Learn. Rate limit by key is not available on the Consumption tier, so we limit per
+      subscription key instead. The built in send service bus message policy is for the classic tiers, so we call
+      the rest api. The policy document is capped at sixteen kilobytes, and our tests check that. And you can't switch
+      duplicate detection on later: it is fixed when the topic is created.
+
+  - id: tests
+    type: code
+    heading: "Policy expressions, compiled and run"
+    lang: text
+    code: |
+      $ dotnet test tests/PurchaseEvents.Tests -m:1
+        PolicyExpressionTests.Every_expression_in_the_policy_compiles                       Passed
+        PolicyExpressionTests.The_label_follows_the_threshold_and_agrees_with_the_consumer  Passed
+        ContractTests.The_policy_fits_the_consumption_tier_document_limit                   Passed
+        ContractTests.The_policy_uses_no_policy_the_consumption_tier_lacks                  Passed
+        ContractTests.The_gateway_can_only_send_and_only_on_the_topic                       Passed
+        HandlerTests.The_same_message_id_twice_is_handled_once                              Passed
+      Passed!  - Failed: 0, Passed: 48, Skipped: 0, Total: 48
+      $ pwsh -c 'Invoke-Pester ./scripts/PurchaseGateway.Tests.ps1'
+      Tests Passed: 7, Failed: 0
+    narration: >
+      There is no local gateway, so the tests do the next best thing. Every expression in the policy is compiled with
+      Roslyn and the ones with logic run against a small stand in for the context. Contract tests compare the policy,
+      the open a p i file, the Bicep and the worker, so the threshold and the label can't drift apart. Forty eight
+      tests pass, plus seven in Pester.
+
+  - id: worker
+    type: code
+    heading: "The consumer is idempotent too"
+    lang: csharp
+    code: |
+      if (!string.Equals(message.Subject, PurchaseRouting.LabelFor(evt!.Total), StringComparison.Ordinal))
+          return HandlerResult.Poison("LabelMismatch", $"Label '{message.Subject}' does not match total {evt.Total}.");
+
+      if (await store.HasProcessedAsync(message.MessageId, ct))
+          return HandlerResult.Done; // delivered again: already handled
+
+      try { await sink.WriteAsync(evt, message.MessageId, message.CorrelationId, ct); }
+      catch (Exception ex) when (ex is not OperationCanceledException)
+      {
+          return HandlerResult.Retry(ex.Message); // back to the subscription; dead-letters after MaxDeliveryCount
+      }
+
+      await store.MarkProcessedAsync(message.MessageId, ct);
+    narration: >
+      Duplicate detection only covers a time window, and delivery is at least once anyway, so the worker checks the
+      message id too. Poison messages are dead lettered with a reason, a failing database means retry, and the id is
+      marked as processed only after the work succeeded.
+
+  - id: policy-screen
+    type: screen
+    heading: "The policy, in the portal"
+    image: screens/policy-portal.jpg
+    bar: "Azure portal · API Management · Policy code editor"
+    demo: >
+      Browser (Edge, 1920x1080, zoom 100 %) on the Azure portal, signed in as labadmin: API Management service (Consumption)
+      > APIs > "Contoso purchasing events" > POST /purchase-events > Inbound processing > Policy code editor, showing
+      validate-jwt, rate-limit and validate-content as deployed from Bicep. Mask the subscription name, the APIM name and
+      the tenant id in the named values.
+    narration: >
+      Deployed from Bicep, this is the same policy in the portal. The instance is on the Consumption tier: no fixed
+      monthly price, it scales with traffic, and it is billed per call. That makes it a good fit for a lab and for
+      spiky event traffic, as long as you know its limits, which we will get to in a moment.
+
+  - id: calls-screen
+    type: screen
+    heading: "202, 401, 400, 429"
+    image: screens/calls.jpg
+    bar: "PowerShell 7 · lab laptop"
+    demo: >
+      Windows Terminal (PowerShell 7) on the lab laptop, two real captures. (1) After importing scripts/PurchaseGateway.psm1
+      and getting a token with Get-GatewayToken: Send-PurchaseEvent for PR-1001 at 1476 (202), PR-1002 at 7380 (202),
+      PR-1002 again with the same idempotency key (202, same id), the same call without a token (401), and a body with a
+      negative total (400). (2) Later, a loop of 25 calls: 202 for the first twenty, then 429 with a Retry-After value.
+      Never show the subscription key, the client secret or the token: they stay in environment variables.
+    narration: >
+      The real gateway. A fourteen seventy six euro request: accepted. A seven thousand three hundred eighty euro one:
+      accepted. The same one again with the same key: accepted, and it returns the same id. No token: four oh one. A
+      negative total: four hundred. And after twenty calls in a minute: four twenty nine, with a retry after header.
+      Notice that two oh two only means the event was accepted for processing.
+
+  - id: topic-screen
+    type: screen
+    heading: "Two sent twice, one delivered once"
+    image: screens/topic.jpg
+    bar: "Azure portal · Service Bus · purchase-events"
+    demo: >
+      Azure portal > the Service Bus namespace > Topics > purchase-events > Subscriptions, right after the first three calls
+      and before the worker starts: all-events with active message count 2, finance-review with 1. Then Service Bus Explorer
+      on finance-review, peek: one message with Subject purchase.high, the MessageId equal to the key used in the terminal
+      and Content type application/json. Mask the subscription and namespace names.
+    narration: >
+      We sent three calls, two of them identical. All events holds two messages. Finance review holds one, the big
+      purchase, labelled purchase high, with the caller's key as its message id.
+
+  - id: worker-screen
+    type: screen
+    heading: "Each subscription, its own worker"
+    image: screens/worker.jpg
+    bar: "Windows Terminal · two panes"
+    demo: >
+      Windows Terminal with two panes running the real worker (dotnet run --project src/PurchaseEvents.Worker) as labadmin
+      with az login: left pane subscription all-events prints PR-1001 and PR-1002, right pane subscription finance-review
+      prints only PR-1002. Namespace host masked in the command line.
+    narration: >
+      Two workers, one per subscription, signed in with Entra, no keys. Everything on the left. Only the big purchase on
+      the right. The duplicate never arrives: Service Bus dropped it at the topic, inside the ten minute window.
+
+  - id: recap
+    type: bullets
+    heading: "What to take away"
+    bullets:
+      - "Gateway: identity, rate, shape. Services: business rules"
+      - "The caller's key becomes the MessageId"
+      - "Managed identity, Data Sender on one topic"
+      - "Check tier limits before you design the policy"
+      - "Consumers stay idempotent"
+    narration: >
+      To recap. The gateway does identity, rate and shape, and the services keep the business rules. The caller's key
+      becomes the message id. A managed identity sends, scoped to one topic. Check the tier limits before you design
+      the policy. And keep consumers idempotent.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The policy, the open a p i file, the Bicep, the worker and the tests are on GitHub, and the full guide is on
+      devladlog dot com. Next time: a dev sec ops pipeline. This was the DEVLADLOG Deep Dive, by Momento Galático.

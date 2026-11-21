@@ -1,0 +1,130 @@
+# DEVLADLOG Deep Dive #8: the same secure pipeline on Azure DevOps (Azure Pipelines, YAML).
+# Same gates as .github/workflows/ci.yml: locked restore + NuGet Audit, tests, secret scan, Dockerfile lint,
+# image scan BEFORE push (security/vuln_gate.py decides), SBOM, then push by digest and deploy.
+# Azure access: a service connection that uses workload identity federation (no client secret stored in Azure DevOps).
+# Needs a tenant: this file is NOT validated against the Azure Pipelines schema in the repo (see README).
+
+trigger:
+  branches:
+    include: [main]
+
+pr:
+  branches:
+    include: [main]
+
+pool:
+  vmImage: ubuntu-24.04
+
+variables:
+  imageName: purchase-status
+  # Name of the service connection (Project settings > Service connections > Azure Resource Manager >
+  # Workload identity federation). Federated credential subject: sc://<org>/<project>/sc-mgl08-wif
+  azureServiceConnection: sc-mgl08-wif
+  # Set as pipeline variables (they are identifiers, not secrets): acrName, appName, resourceGroup
+  # Trivy, pinned by digest (tag 0.76.2, read from the registry manifest)
+  trivyImage: ghcr.io/aquasecurity/trivy@sha256:8f6bb947dbc528902e11f2f5be52f7b519f6a39d5d148f41166f2040499768fb
+  DOTNET_NOLOGO: '1'
+  DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+
+stages:
+  - stage: Build
+    displayName: Build, test and scan
+    jobs:
+      - job: BuildTest
+        displayName: Build and test
+        steps:
+          - checkout: self
+            persistCredentials: false
+          - task: UseDotNet@2
+            inputs:
+              packageType: sdk
+              version: 10.0.x
+          - script: dotnet restore PurchaseStatus.slnx --locked-mode
+            displayName: Restore (locked mode, NuGet Audit)
+          - script: dotnet build PurchaseStatus.slnx --no-restore --configuration Release
+            displayName: Build
+          - script: dotnet test PurchaseStatus.slnx --no-build --configuration Release
+            displayName: Test
+
+      - job: SecretScan
+        displayName: Secret scan
+        steps:
+          - checkout: self
+            persistCredentials: false
+          - task: UsePythonVersion@0
+            inputs:
+              versionSpec: '3.13'
+          - script: pip install --require-hashes --requirement security/requirements-ci.txt
+            displayName: Install detect-secrets (hash-pinned)
+          - script: git ls-files -z | xargs -0 detect-secrets-hook --baseline .secrets.baseline
+            displayName: Scan tracked files against the baseline
+
+      - job: Container
+        displayName: Container - lint, build, scan
+        dependsOn: [BuildTest, SecretScan]
+        steps:
+          - checkout: self
+            persistCredentials: false
+          - task: UsePythonVersion@0
+            inputs:
+              versionSpec: '3.13'
+          - script: |
+              pip install --require-hashes --requirement security/requirements-ci.txt
+              hadolint Dockerfile
+            displayName: Lint the Dockerfile (hadolint, hash-pinned)
+          - script: docker build --tag "$(imageName):$(Build.SourceVersion)" .
+            displayName: Build the image
+          - script: |
+              docker run --rm \
+                --volume /var/run/docker.sock:/var/run/docker.sock \
+                --volume "$(Build.ArtifactStagingDirectory):/out" \
+                "$(trivyImage)" image --scanners vuln --format json --output /out/trivy-image.json \
+                "$(imageName):$(Build.SourceVersion)"
+              docker run --rm \
+                --volume /var/run/docker.sock:/var/run/docker.sock \
+                --volume "$(Build.ArtifactStagingDirectory):/out" \
+                "$(trivyImage)" image --format cyclonedx --output /out/sbom.cdx.json \
+                "$(imageName):$(Build.SourceVersion)"
+            displayName: Scan the image and write the SBOM (Trivy)
+          - script: python security/vuln_gate.py --report "$(Build.ArtifactStagingDirectory)/trivy-image.json" --waivers security/waivers.json
+            displayName: Gate on fixable CRITICAL and HIGH findings
+          - script: docker save "$(imageName):$(Build.SourceVersion)" --output "$(Build.ArtifactStagingDirectory)/image.tar"
+            displayName: Save the scanned image
+          - publish: $(Build.ArtifactStagingDirectory)
+            artifact: scan-and-image
+            displayName: Publish scan results and image
+
+  - stage: Deploy
+    displayName: Publish and deploy
+    dependsOn: Build
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'), ne(variables['Build.Reason'], 'PullRequest'))
+    jobs:
+      # A deployment job targets the "prod-lab" environment, where Approvals and checks (a reviewer) are configured.
+      - deployment: PublishDeploy
+        displayName: Push by digest and deploy
+        environment: prod-lab
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - download: current
+                  artifact: scan-and-image
+                - task: AzureCLI@2
+                  displayName: Push by digest and update the Container App
+                  inputs:
+                    azureSubscription: $(azureServiceConnection)
+                    scriptType: bash
+                    scriptLocation: inlineScript
+                    inlineScript: |
+                      set -euo pipefail
+                      docker load --input "$(Pipeline.Workspace)/scan-and-image/image.tar"
+                      az acr login --name "$(acrName)"
+                      target="$(acrName).azurecr.io/$(imageName):$(Build.SourceVersion)"
+                      docker tag "$(imageName):$(Build.SourceVersion)" "${target}"
+                      docker push "${target}"
+                      digest="$(docker inspect --format '{{index .RepoDigests 0}}' "${target}" | cut -d@ -f2)"
+                      az containerapp update \
+                        --name "$(appName)" \
+                        --resource-group "$(resourceGroup)" \
+                        --image "$(acrName).azurecr.io/$(imageName)@${digest}" \
+                        --output none
