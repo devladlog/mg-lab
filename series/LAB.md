@@ -5,11 +5,16 @@ All demos are recorded for real. Use these shared resources before asking for ne
 ## Cloud tenant (Momento Galático lab tenant)
 - Microsoft 365 E5 trial (25 licences, until 20 Dec 2026): includes Entra ID P2, Purview, Defender, Teams, SharePoint.
 - Entra ID Governance add-on trial (until 20 Dec 2026): lifecycle workflows, entitlement management, access reviews.
+- Power Automate process mining 90-day trial in `DEV` (started 21 Nov 2026, until ~19 Feb 2027).
 - Power Apps Premium, Microsoft 365 Business Standard, Fabric + Power BI 60-day trial (West Europe capacity).
 - Power Platform environment `DEV` (Dataverse). Developer environments can no longer be created; plan for `DEV`
   or a sandbox environment.
-- Dynamics 365 Sales trial: being set up (check with the lead session before relying on it).
-- Azure subscription: not yet available. If a demo needs Azure resources, list them with SKU and estimated cost.
+- Dynamics 365 Sales trial environment "Sales trial" (EMEA, created 21 Nov 2026, 30-day trial): Sales Hub app with
+  sample data. Use it for Dynamics 365 app demos (Sales, leads/opportunities, BPFs on sales entities); Dataverse-only
+  demos can use `DEV`. Mask the org URL in every capture.
+- Azure subscription: one pay-as-you-go subscription in the lab tenant (Owner). Every demo deploys into its own
+  resource group `rg-mglab-<series>-<ep>` (West Europe, or Sweden Central for Azure OpenAI), lists each resource with SKU
+  and estimated cost for the recording window, and deletes the resource group in tear-down. Prefer free tiers.
 
 ## Local Hyper-V lab (on the recording laptop, built by `lab/hyperv/Start-MGLab.ps1`)
 Internal NAT network `10.20.0.0/24`, host = `10.20.0.1`, domain `lab.contoso.com` (NetBIOS `CONTOSO`).
