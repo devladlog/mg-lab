@@ -113,7 +113,8 @@ foreach ($ep in $episodes) {
     if ($pester) {
         $dirs = $pester.DirectoryName | Sort-Object -Unique
         $paths = ($dirs | ForEach-Object { "'" + ($_ -replace "'", "''") + "'" }) -join ','
-        $cmd = "`$ErrorActionPreference='Stop'; Import-Module Pester -MinimumVersion 5.0; `$c = New-PesterConfiguration; `$c.Run.Path = @($paths); `$c.Run.Exit = `$true; `$c.Output.Verbosity = 'Normal'; Invoke-Pester -Configuration `$c"
+        $localMods = Join-Path $Root '.tools\Modules'
+        $cmd = "`$ErrorActionPreference='Stop'; if (Test-Path '$localMods') { `$env:PSModulePath = '$localMods' + [IO.Path]::PathSeparator + `$env:PSModulePath }; Import-Module Pester -MinimumVersion 5.0; `$c = New-PesterConfiguration; `$c.Run.Path = @($paths); `$c.Run.Exit = `$true; `$c.Output.Verbosity = 'Normal'; Invoke-Pester -Configuration `$c"
         $enc = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($cmd))
         if ($pwsh) { Invoke-Suite $name 'pester:pwsh7' $ep.FullName $pwsh @('-NoProfile', '-NonInteractive', '-EncodedCommand', $enc) | Out-Null }
         $needs7 = Get-ChildItem $ep.FullName -Recurse -Include *.ps1, *.psm1 -File | Where-Object { $_.FullName -notmatch $skip } |
