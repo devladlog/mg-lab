@@ -155,7 +155,7 @@ def render_slide(scene, ep, W=1920, H=1080):
             im.alpha_composite(ci, (110 + max(0, (W - 220 - ci.width) // 2), 315))
         elif t == "screen":
             # real (masked) screen capture inside a neutral browser frame
-            src = Path(scene["image"])
+            src = Path(scene.get("_poster") or scene["image"])
             if not src.is_absolute():
                 src = Path(scene.get("_base", ".")) / src
             shot = Image.open(src).convert("RGBA")
@@ -173,6 +173,7 @@ def render_slide(scene, ep, W=1920, H=1080):
                 fd.ellipse((18 + i * 26, 16, 34 + i * 26, 32), fill=c)
             fd.text((sw // 2, 14), scene.get("bar", "demo environment"), font=font("Inter-Medium.otf", 22), fill=MUTED, anchor="ma")
             frame.alpha_composite(shot.resize((sw, sh), Image.LANCZOS), (4, 48))
+            scene["_video_box"] = (fx, fy + 48, sw, sh)  # where a live recording is overlaid
             hl = scene.get("highlight")  # [x, y, w, h] in (cropped) source pixels
             if hl:
                 hx, hy = 4 + hl[0] * sc, 48 + hl[1] * sc
@@ -249,6 +250,26 @@ def still_segment(img_path, wav, dur, out, size="1920x1080", zoom=True):
          f"[0:v]{vf},format=yuv420p,fade=t=in:st=0:d=0.3,fade=t=out:st={dur-0.3:.2f}:d=0.3[v];[1:a]apad,atrim=0:{dur:.2f}[a]",
          "-map", "[v]", "-map", "[a]", "-t", f"{dur:.2f}", "-c:v", "libx264", "-preset", "veryfast", "-crf", "20",
          "-c:a", "aac", "-b:a", "160k", "-ar", "48000", str(out)])
+
+
+def video_duration(path):
+    return float(subprocess.check_output(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", str(path)]).decode())
+
+
+def video_segment(slide_png, clip, box, wav, speech, out, rate=1.0):
+    """Live recording played inside the screen frame of the slide. The segment lasts as long as the longer of the
+    narration and the clip (at `rate`), so a live run is never cut; the clip holds its last frame if the voice is longer."""
+    x, y, w, h = box
+    clip_dur = video_duration(clip) / rate
+    dur = max(speech + PAD, clip_dur + 0.8)
+    run(["ffmpeg", "-y", "-loop", "1", "-i", str(slide_png), "-i", str(clip), "-i", str(wav), "-filter_complex",
+         f"[1:v]setpts=PTS/{rate},scale={w}:{h}:force_original_aspect_ratio=decrease,pad={w}:{h}:(ow-iw)/2:(oh-ih)/2:color=black,"
+         f"tpad=stop_mode=clone:stop_duration={dur:.2f}[clip];"
+         f"[0:v]scale=1920:1080,fps=30[bg];[bg][clip]overlay={x}:{y}:shortest=0,format=yuv420p,"
+         f"fade=t=in:st=0:d=0.3,fade=t=out:st={dur-0.3:.2f}:d=0.3[v];[2:a]apad,atrim=0:{dur:.2f}[a]",
+         "-map", "[v]", "-map", "[a]", "-t", f"{dur:.2f}", "-r", "30", "-c:v", "libx264", "-preset", "veryfast", "-crf", "20",
+         "-c:a", "aac", "-b:a", "160k", "-ar", "48000", str(out)])
+    return dur
 
 
 def concat(parts, out, music=None, music_db=-24):
@@ -380,10 +401,20 @@ def main():
         sc["_base"] = str(Path(a.script).parent)
 
     parts, srt, t = [], [], 0.0
-    durations = {}
+    durations, seg_durs = {}, {}
     for i, sc in enumerate(script["scenes"]):
         png = work / f"{i:02d}_{sc['id']}.png"
         wav = work / f"{i:02d}_{sc['id']}.wav"
+        clip = None
+        if sc["type"] == "screen" and sc.get("video"):
+            clip = Path(sc["video"]) if Path(sc["video"]).is_absolute() else Path(sc["_base"]) / sc["video"]
+            if clip.exists():
+                poster = work / f"{i:02d}_{sc['id']}_poster.png"
+                run(["ffmpeg", "-y", "-sseof", "-0.1", "-i", str(clip), "-frames:v", "1", "-update", "1", str(poster)])
+                sc["_poster"] = str(poster)
+            else:
+                print(f"  ! {sc['id']}: video {clip} missing, using the still image", flush=True)
+                clip = None
         render_slide(sc, ep).save(png)
         if not wav.exists():
             tts(sc["narration"], wav, voice, a.speed)
@@ -392,6 +423,9 @@ def main():
         speech = info.frames / info.samplerate
         durations[sc["id"]] = (speech, wav, png)
         dur = speech + PAD
+        if clip is not None:
+            dur = max(dur, video_duration(clip) / float(sc.get("video_rate", 1.0)) + 0.8)
+        seg_durs[sc["id"]] = dur
         chunks = caption_chunks(sc["narration"])
         total = sum(len(c) for c in chunks)
         ct = t
@@ -401,7 +435,10 @@ def main():
             ct += seg
         if not a.only_shorts:
             seg_mp4 = work / f"{i:02d}_{sc['id']}.mp4"
-            still_segment(png, wav, dur, seg_mp4, zoom=sc["type"] not in ("code", "screen"))
+            if clip is not None:
+                video_segment(png, clip, sc["_video_box"], wav, speech, seg_mp4, float(sc.get("video_rate", 1.0)))
+            else:
+                still_segment(png, wav, dur, seg_mp4, zoom=sc["type"] not in ("code", "screen"))
             parts.append(seg_mp4)
         t += dur
         print(f"[{i+1}/{len(script['scenes'])}] {sc['id']}: {speech:.1f}s", flush=True)
@@ -415,7 +452,7 @@ def main():
         chapters, ct = [], 0.0
         for sc in script["scenes"]:
             chapters.append(f"{int(ct//60)}:{int(ct%60):02d} {sc['heading']}")
-            ct += durations[sc["id"]][0] + PAD
+            ct += seg_durs[sc["id"]]
         (out / f"{base}-chapters.txt").write_text("\n".join(chapters), encoding="utf-8")
     if not a.skip_shorts:
         for sc in script["scenes"]:
