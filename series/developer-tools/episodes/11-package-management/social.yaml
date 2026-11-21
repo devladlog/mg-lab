@@ -1,0 +1,82 @@
+episode: 11
+series: "DEVLADLOG Dev Tools"
+status: draft-hold-for-review
+ai_label: true
+youtube_url: "{YOUTUBE_URL}"
+linkedin_company:
+  text: |
+    Every package you add is code you did not write, running with your permissions. Can your team say who chose each version, where each package comes from, and what happens when a new advisory lands on a Friday?
+
+    Episode 11 of DEVLADLOG Dev Tools puts those three answers into files, on a fictional Contoso orders API:
+
+    - Central package management: one Directory.Packages.props decides every version
+    - NuGet Audit warnings that become errors in one pipeline job only
+    - Package source mapping, so Contoso.* comes only from the private feed
+    - An Azure Artifacts feed, published by the build identity
+    - Python tools pinned with hashes
+
+    The gotcha: source mapping is not applied when the package is already in the global packages folder. A wrong mapping let a lookalike copy in, and fixing it changed nothing until we cleared the folder.
+
+    Watch the episode: {YOUTUBE_URL}
+    Code and tests: {REPO_URL}
+    Written guide: {BLOG_URL}
+
+    Narration uses an AI voice.
+    #DevTools #NuGet #DotNet #SupplyChainSecurity
+linkedin_personal:
+  text: |
+    A pull request added an old web client library. Restore warned about Newtonsoft.Json 10.0.1, a high severity advisory, and nobody on the PR had asked for that package. It came in as a transitive dependency.
+
+    The fix was one line in Directory.Packages.props. With transitive pinning on, every project gets the fixed version and no project file changes. Audit codes stay warnings on laptops and fail only in one dedicated pipeline job, so a new advisory does not block someone's bug fix.
+
+    Episode 11 of DEVLADLOG Dev Tools: {YOUTUBE_URL}
+
+    #NuGet #DotNet
+    Narration uses an AI voice.
+facebook:
+  text: |
+    Who decides which packages end up in your build?
+
+    In this DEVLADLOG Dev Tools episode we move three decisions into files: which version of each NuGet package, which source may serve which package, and which vulnerabilities fail a build. We also publish a shared library to a private Azure Artifacts feed and pin the Python tools with hashes.
+
+    Watch it here: {YOUTUBE_URL}
+
+    #NuGet #DotNet
+    Narration uses an AI voice.
+shorts:
+  - id: hook
+    youtube_short_title: "Who decides what you install? Versions, sources, advisories #Shorts"
+    instagram_reel:
+      caption: |
+        Every package you add is code you didn't write, running with your permissions. Most teams can't say who chose each version, where each package comes from, or what happens when a new advisory lands on a Friday. In this episode those three answers go into files in the repository.
+
+        Full episode: link in bio
+
+        #DevTools #NuGet #DotNet
+      cover_text: "WHO DECIDES WHAT YOU INSTALL?"
+    tiktok:
+      caption: "Who chose each package version, where does it come from, what happens when an advisory lands on Friday? Put the answers in files. #NuGet #DotNet #DevTools"
+  - id: fix
+    youtube_short_title: "Fix a vulnerable transitive NuGet package with one line #Shorts"
+    instagram_reel:
+      caption: |
+        A pull request pulled in Newtonsoft.Json 10.0.1, a high severity advisory, as a transitive package nobody asked for. The fix is one line in Directory.Packages.props. With transitive pinning, every project gets the fixed version and no project file changes.
+
+        Full episode: link in bio
+
+        #NuGet #DotNet #DevTools
+      cover_text: "ONE LINE FIXES IT"
+    tiktok:
+      caption: "Vulnerable transitive NuGet package? Pin it centrally in Directory.Packages.props. One line, every project, no project file changes. #NuGet #DotNet #DevTools"
+  - id: mapping
+    youtube_short_title: "NuGet package source mapping: which feed may serve which package #Shorts"
+    instagram_reel:
+      caption: |
+        Without source mapping, NuGet asks every source, and a package with the same name on a public source can win. Map Contoso.* to your private feed and everything else to nuget.org. Both top level and transitive packages must match a pattern.
+
+        Full episode: link in bio
+
+        #NuGet #DotNet #DevTools
+      cover_text: "MAP EVERY SOURCE"
+    tiktok:
+      caption: "No source mapping? NuGet asks every feed and a same-name public package can win. Map Contoso.* to the private feed, * to nuget.org. #NuGet #DotNet #DevTools"

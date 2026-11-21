@@ -1,0 +1,82 @@
+episode: 18
+series: "DEVLADLOG Deep Dive"
+status: draft-hold-for-review
+ai_label: true
+youtube_url: "{YOUTUBE_URL}"
+linkedin_company:
+  text: |
+    A cold room door is left open and the temperature climbs. Do you find out within minutes, or at the next morning round?
+
+    Episode 18 of DEVLADLOG Deep Dive builds an alert pipeline for a fictional Contoso warehouse, designed to stay on the IoT Hub free tier:
+
+    - Three simulated cold rooms send telemetry to an IoT Hub
+    - A Stream Analytics job writes one-minute aggregates and a COLD_ROOM_TOO_WARM alert to blob storage
+    - The alert is a hopping window: at least three readings and an average above 8 degrees, so one noisy reading cannot trigger it
+    - A simulator that refuses to use more than 80 percent of the free daily message quota
+    - 50 tests, including the query on Microsoft's local Stream Analytics runtime
+
+    The gotcha: the Stream Analytics input for IoT Hub does not support managed identity, so the job needs the service policy key. The blob outputs do use managed identity.
+
+    Watch the episode: {YOUTUBE_URL}
+    Code and tests: {REPO_URL}
+    Written guide: {BLOG_URL}
+
+    Narration uses an AI voice.
+    #Azure #AzureIoTHub #StreamAnalytics #IoT
+linkedin_personal:
+  text: |
+    I wanted every part of this IoT pipeline on managed identity. Then Microsoft Learn told me the Stream Analytics input for IoT Hub does not support it. The workaround is routing through Event Hubs. In this episode I took the other road: the job reads the hub's service policy key inside the Bicep template, never outputs it, and the blob outputs use the job's managed identity, scoped to each container.
+
+    Use identity where it is supported and be honest where it is not.
+
+    Episode 18 of DEVLADLOG Deep Dive: {YOUTUBE_URL}
+
+    #Azure #StreamAnalytics
+    Narration uses an AI voice.
+facebook:
+  text: |
+    A cold room door is left open. How fast do you find out?
+
+    In this DEVLADLOG Deep Dive episode, simulated sensors in a fictional Contoso warehouse send temperatures to Azure IoT Hub. A Stream Analytics query raises an alert when a room stays warm, not on a single noisy reading. It is built to stay on the free tier, and the query is tested locally.
+
+    Watch it here: {YOUTUBE_URL}
+
+    #Azure #IoT
+    Narration uses an AI voice.
+shorts:
+  - id: hook
+    youtube_short_title: "A cold room warms up. Who knows first? #Shorts"
+    instagram_reel:
+      caption: |
+        Contoso's warehouse keeps food in three cold rooms. A door is left open and the temperature climbs. Today we want to know within minutes, not at the next morning round. Sensors send telemetry to IoT Hub, Stream Analytics watches the stream, and a sustained warm room raises an alert. On the free tier.
+
+        Full episode: link in bio
+
+        #Azure #AzureIoTHub #StreamAnalytics
+      cover_text: "WHO KNOWS FIRST?"
+    tiktok:
+      caption: "A cold room door is left open. Sensors, IoT Hub and Stream Analytics raise an alert on the free tier. Full episode on YouTube. #Azure #IoT #StreamAnalytics"
+  - id: alert
+    youtube_short_title: "One Stream Analytics clause is the whole alert rule #Shorts"
+    instagram_reel:
+      caption: |
+        The cold room alert is a hopping window: the last three minutes, recalculated every minute. HAVING COUNT(*) >= 3 AND AVG(temperatureC) > 8.0. At least three readings means a single spike or a quiet sensor cannot trigger it. The same query file runs locally and in Azure.
+
+        Full episode: link in bio
+
+        #Azure #StreamAnalytics #IoT
+      cover_text: "THE WHOLE ALERT RULE"
+    tiktok:
+      caption: "Alert on a trend, not one reading: HoppingWindow(minute, 3, 1) with COUNT(*) >= 3 and AVG > 8.0. Same query runs locally and in Azure. #StreamAnalytics #Azure"
+  - id: gotcha
+    youtube_short_title: "Stream Analytics + IoT Hub gotchas, all from the docs #Shorts"
+    instagram_reel:
+      caption: |
+        Four gotchas from Microsoft Learn. The IoT Hub input does not support managed identity, so a key is needed. An empty partition delays output by the late arrival tolerance. The free hub is limited to one per subscription. And the local test runtime ignores time policies, so check those in the cloud.
+
+        Full episode: link in bio
+
+        #Azure #StreamAnalytics #AzureIoTHub
+      cover_text: "4 DOCS GOTCHAS"
+    tiktok:
+      caption: "IoT Hub input has no managed identity, an empty partition delays output, the free hub is one per subscription, local runs ignore time policies. #Azure #StreamAnalytics"

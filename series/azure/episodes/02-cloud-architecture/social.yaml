@@ -1,0 +1,82 @@
+episode: 2
+series: "DEVLADLOG Azure"
+status: draft-hold-for-review
+ai_label: true
+youtube_url: "{YOUTUBE_URL}"
+linkedin_company:
+  text: |
+    Most cloud architecture lives in a diagram nobody tests. Six months later the storage account has a public endpoint and nobody knows when that happened.
+
+    Episode 2 of DEVLADLOG Azure turns the architecture into code with tests, for a small fictional Contoso workload:
+
+    - Bicep with one shape and two environments: lab and prod differ only in values
+    - Storage and Key Vault with public network access disabled, reached through private endpoints
+    - 15 pytest guardrails that read the compiled template, not the source
+    - PSRule for Azure running Well-Architected rules before deployment, with narrow exceptions that expire
+    - Two built-in Azure Policy assignments in the template: allowed locations and a required workload tag
+
+    The gotcha: our first exception file matched on the environment tag only. PSRule reported 78 suppressed results, every rule against every lab resource. A broad exception hides the next real problem.
+
+    Watch the episode: {YOUTUBE_URL}
+    Code and tests: {REPO_URL}
+    Written guide: {BLOG_URL}
+
+    Narration uses an AI voice.
+    #Azure #Bicep #PSRule #AzureWellArchitected
+linkedin_personal:
+  text: |
+    I wrote my first PSRule exception file in five minutes. It matched on the environment tag only, which looked sensible. Then PSRule reported 78 suppressed results: every listed rule, against every lab resource, including ones that had nothing to do with the rule.
+
+    A broad exception is a blind spot with a nice name. Now each exception group targets one resource type, carries a reason, and has an expiry date. I checked it: with a date in the past, the rule fails again.
+
+    That is episode 2 of DEVLADLOG Azure, where the architecture has tests. {YOUTUBE_URL}
+
+    #Azure #Bicep
+    Narration uses an AI voice.
+facebook:
+  text: |
+    Is your cloud architecture a diagram, or does something check it?
+
+    In this DEVLADLOG Azure episode a small Contoso workload is written in Bicep, with storage and Key Vault behind private endpoints. Fifteen tests read the compiled template, and Well-Architected rules run before anything is deployed. Exceptions have to be narrow and they expire.
+
+    Watch it here: {YOUTUBE_URL}
+
+    #Azure #Bicep
+    Narration uses an AI voice.
+shorts:
+  - id: hook
+    youtube_short_title: "Your cloud architecture is a diagram nobody tests #Shorts"
+    instagram_reel:
+      caption: |
+        Most cloud architecture lives in a diagram that nobody tests. Then the storage account gets a public endpoint and nobody knows when. In this episode the architecture is Bicep, every decision has a test, every exception has an expiry date, and Azure Policy is in the template to block the rest.
+
+        Full episode: link in bio
+
+        #Azure #Bicep #InfrastructureAsCode
+      cover_text: "ARCHITECTURE YOU CAN TEST"
+    tiktok:
+      caption: "Cloud architecture in a diagram nobody tests? Put it in Bicep, give every decision a test and every exception an expiry date. Full episode on YouTube. #Azure #Bicep"
+  - id: policy
+    youtube_short_title: "Azure Policy as the second guardrail: region and tag rules #Shorts"
+    instagram_reel:
+      caption: |
+        Tests protect the template. Azure Policy is there for everything else. The episode deploys governance first with two built-in assignments: allowed locations, and a required workload tag, each with a message we wrote. Per Microsoft Learn, a new assignment takes about five minutes to apply, so the deploy order matters.
+
+        Full episode: link in bio
+
+        #Azure #AzurePolicy #Bicep
+      cover_text: "POLICY GOES FIRST"
+    tiktok:
+      caption: "Tests guard the template, Azure Policy guards the subscription. Deploy governance first: allowed regions plus a required tag. New assignments take about 5 minutes. #Azure #AzurePolicy"
+  - id: gotcha
+    youtube_short_title: "78 suppressed results: how one broad PSRule exception hid everything #Shorts"
+    instagram_reel:
+      caption: |
+        My first PSRule exception matched on the environment tag only. PSRule reported 78 suppressed results: every rule, against every lab resource. A broad exception hides the next real problem. Now each group targets one resource type and every group expires. With a past date, the rule fails again.
+
+        Full episode: link in bio
+
+        #Azure #PSRule #Bicep
+      cover_text: "78 SUPPRESSED RESULTS"
+    tiktok:
+      caption: "One broad PSRule exception = 78 suppressed results. Target one resource type per group and give every exception an expiry date. #Azure #PSRule #Bicep"
