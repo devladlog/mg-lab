@@ -1,0 +1,84 @@
+episode: 13
+series: "DEVLADLOG Deep Dive"
+status: draft-hold-for-review
+ai_label: true
+youtube_url: "{YOUTUBE_URL}"
+linkedin_company:
+  text: |
+    A partner has no Teams licence and no account, and nobody wants to email a raw meeting link around. How does that guest join a real Teams meeting safely?
+
+    Episode 13 of DEVLADLOG Deep Dive builds the path, on Contoso's fictional setup:
+    - The host creates the meeting with Microsoft Graph, with the lobby limited to the organizer
+    - A small Azure Function broker turns the meeting link into a one-time invitation, and stores only a hash of the code
+    - The browser joins through the Azure Communication Services Calling SDK with a voip-only token that lasts 60 minutes, instead of the 24 hour default
+    - The Azure Function authenticates with a managed identity, with no keys
+
+    We also cover what changed since the original guide: Microsoft's retirement guide ends several Communication Services features on 30 September 2028, so we build only the Teams interop path. The tests include a race of ten guests on a 3-use invite against the Azurite emulator.
+
+    Watch the episode: {YOUTUBE_URL}
+    Code: {REPO_URL}
+    Guide: {BLOG_URL}
+
+    Narration uses an AI voice.
+
+    #Azure #Microsoft365 #MicrosoftTeams #AzureFunctions #Bicep
+linkedin_personal:
+  text: |
+    When a guest has no account, the invitation is the credential, so I treated it like one. The broker stores only a hash of the code, with an expiry and a use limit. A leaked table gives nobody a working link.
+
+    Unknown, expired and used-up invitations all return the same 403, so the endpoint cannot be probed. And the code travels in the URL fragment, which the browser never sends to a server.
+
+    Episode 13 of DEVLADLOG Deep Dive builds a guest join for Teams meetings: {YOUTUBE_URL}
+
+    Narration uses an AI voice.
+
+    #Azure #MicrosoftTeams
+facebook:
+  text: |
+    How can a partner with no Teams licence and no account join your Teams meeting? This episode of DEVLADLOG Deep Dive builds it: Microsoft Graph creates the meeting, an Azure Function issues a one-time invitation, and the guest joins from a web page. The lobby stays closed until the host lets them in.
+
+    Watch: {YOUTUBE_URL}
+
+    Narration uses an AI voice.
+
+    #Azure #MicrosoftTeams #Microsoft365
+shorts:
+  - id: hook
+    youtube_short_title: "A guest with no Teams licence joins your meeting from a web page #Shorts"
+    instagram_reel:
+      caption: |
+        A partner has no Teams licence and no account, and nobody wants to email a raw meeting link around.
+
+        In this episode we build the path that lets that guest join a real Teams meeting from a Contoso web page, and we keep it safe. Graph creates the meeting, a small Azure Function issues the invitation, and the Teams lobby decides who gets in.
+
+        Full episode: link in bio
+        #Azure #MicrosoftTeams #Microsoft365
+      cover_text: "Guest joins a Teams meeting"
+    tiktok:
+      caption: "A guest with no Teams licence joins a real Teams meeting from your own web page. Graph, an Azure Function and the Teams lobby. #Azure #MicrosoftTeams #Microsoft365"
+  - id: invite
+    youtube_short_title: "One-time guest invites: store only the hash of the code #Shorts"
+    instagram_reel:
+      caption: |
+        Guests have no account, so the invitation is the credential. The broker makes 32 random bytes and stores only their hash, with the meeting link, an expiry and a use limit.
+
+        A leaked table gives nobody a working link. And the meeting link must be a real Teams address on the Teams host, or it is refused.
+
+        Full episode: link in bio
+        #Azure #AzureFunctions #MicrosoftTeams
+      cover_text: "Store only the hash"
+    tiktok:
+      caption: "Guests have no account, so the invite is the credential. Store only the hash, an expiry and a use limit. A leaked table is useless. #Azure #AzureFunctions #MicrosoftTeams"
+  - id: gotcha
+    youtube_short_title: "Guest join to Teams: 5 gotchas before you build it #Shorts"
+    instagram_reel:
+      caption: |
+        A guest cannot enter until a Teams user is in the meeting. The token lifetime defaults to 24 hours, so ask for 60 minutes. Keep the invitation code in the URL fragment, never the query.
+
+        Graph says not to parse the join URL, so we only check the host and path prefix. And anonymous join is both a tenant setting and an organizer policy.
+
+        Full episode: link in bio
+        #Azure #MicrosoftTeams #Microsoft365
+      cover_text: "Guest join gotchas"
+    tiktok:
+      caption: "Guest join to Teams: no Teams user present means no admit. Token defaults to 24 hours. Code in the fragment, not the query. #Azure #MicrosoftTeams #Microsoft365"

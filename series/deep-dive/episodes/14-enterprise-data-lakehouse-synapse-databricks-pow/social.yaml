@@ -1,0 +1,84 @@
+episode: 14
+series: "DEVLADLOG Deep Dive"
+status: draft-hold-for-review
+ai_label: true
+youtube_url: "{YOUTUBE_URL}"
+linkedin_company:
+  text: |
+    A Delta table can look fine in Databricks and still return deleted rows in Synapse serverless. With deletion vectors on, a DELETE marks the row without rewriting the file, and a Delta reader version 1 ignores that mark.
+
+    Episode 14 of DEVLADLOG Deep Dive builds a small lakehouse for Contoso's order change feed:
+    - Bronze keeps every line, including corrupt ones, and silver quarantines each rejected row with a named reason
+    - One Delta merge handles insert, update and delete, guarded by a sequence number, so a replayed or late batch changes nothing
+    - Synapse serverless views with explicit schemas, and a Power BI model written as TMDL text files
+    - One contract file that the views and the model are tested against
+
+    The 23 tests run locally on open source Spark and Delta, with no cloud. We also cover what changed since the original guide: classic Purview cannot create new accounts, and input_file_name is unsupported from Databricks runtime 17.3.
+
+    Watch the episode: {YOUTUBE_URL}
+    Code: {REPO_URL}
+    Guide: {BLOG_URL}
+
+    Narration uses an AI voice.
+
+    #Azure #PowerBI #Databricks #DeltaLake #Synapse
+linkedin_personal:
+  text: |
+    The most useful test in this episode reproduces a bug I would not have caught in Spark alone. With deletion vectors on, Spark says row 7 is gone, but a Delta reader version 1, which is what Synapse serverless is, still returns it.
+
+    So the tables are written with deletion vectors off, and a second test proves it. Lesson: test what the other engine will see, not only what Spark sees.
+
+    Episode 14 of DEVLADLOG Deep Dive: {YOUTUBE_URL}
+
+    Narration uses an AI voice.
+
+    #Azure #DeltaLake #Synapse
+facebook:
+  text: |
+    Contoso orders arrive as a change feed, finance wants dashboards, and engineers want Spark. This episode of DEVLADLOG Deep Dive builds a small lakehouse with Databricks, Synapse and Power BI on one Delta lake, and shows a trap where a reader returns deleted rows. The code and the 23 tests run locally.
+
+    Watch: {YOUTUBE_URL}
+
+    Narration uses an AI voice.
+
+    #Azure #PowerBI #Databricks
+shorts:
+  - id: hook
+    youtube_short_title: "One lake, four tools: Databricks, Synapse, Power BI, one contract #Shorts"
+    instagram_reel:
+      caption: |
+        Contoso orders arrive as a change feed. Finance wants dashboards, engineers want Spark, and nobody wants three copies of the truth.
+
+        We build a small lakehouse that really runs, and find what the original guide missed: a storage rule that breaks the tables, a reader that returns deleted rows, and a governance service you can no longer create.
+
+        Full episode: link in bio
+        #Azure #PowerBI #Databricks #DeltaLake
+      cover_text: "One lake, four tools"
+    tiktok:
+      caption: "One Delta lake, Databricks for writing, Synapse and Power BI for reading. We hit three traps the original guide missed. #Azure #PowerBI #Databricks #DeltaLake"
+  - id: merge
+    youtube_short_title: "One Delta merge for insert, update and delete, guarded by seq #Shorts"
+    instagram_reel:
+      caption: |
+        The change feed becomes one merge. A newer delete removes the row, a newer update replaces it, and an unknown order is inserted.
+
+        The sequence number is the guard, so a replayed batch or a late update loses. Run the same batch twice and silver does not change. Tests prove both.
+
+        Full episode: link in bio
+        #Azure #DeltaLake #PySpark #Databricks
+      cover_text: "One merge, guarded by seq"
+    tiktok:
+      caption: "One Delta MERGE does insert, update and delete. A sequence number guards it, so replays and late rows lose. #Azure #DeltaLake #PySpark #Databricks"
+  - id: gotcha
+    youtube_short_title: "Delta lakehouse gotchas: archive, deletion vectors, currencies #Shorts"
+    instagram_reel:
+      caption: |
+        Never archive a Delta table or its _delta_log: archived blobs cannot be read. Keep deletion vectors off for Synapse readers.
+
+        Never add revenue across currencies, because the lake has no exchange rates. And a delete that arrives before its insert is ignored, so the insert wins.
+
+        Full episode: link in bio
+        #Azure #DeltaLake #Synapse #PowerBI
+      cover_text: "Lakehouse gotchas"
+    tiktok:
+      caption: "Delta gotchas: never archive _delta_log, keep deletion vectors off for Synapse, never add revenue across currencies. #Azure #DeltaLake #Synapse #PowerBI"
