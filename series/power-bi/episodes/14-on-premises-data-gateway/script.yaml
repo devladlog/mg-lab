@@ -1,0 +1,199 @@
+episode: 14
+slug: on-premises-data-gateway
+series_label: "POWER BI"
+series_name: "DEVLADLOG Power BI"
+file_prefix: "power-bi"
+title: "On-Premises Data Gateway"
+subtitle: "From a SQL Server on the lab network to a scheduled refresh in the service"
+voice: am_michael
+thumbnail_text: "ON-PREM\nDATA\nGATEWAY"
+youtube:
+  title: "Power BI On-Premises Data Gateway: Install, Data Source and Refresh | DEVLADLOG Power BI #14"
+  tags: [Power BI, on-premises data gateway, gateway, scheduled refresh, SQL Server, data source, Power BI REST API, PowerShell, Fabric, semantic model, data refresh]
+sources:
+  - https://www.devladlog.com/articles/power-bi/2025-07-10-data-gateway-complete-guide-2025/
+  - https://learn.microsoft.com/en-us/data-integration/gateway/service-gateway-install
+  - https://learn.microsoft.com/en-us/data-integration/gateway/service-gateway-communication
+  - https://learn.microsoft.com/en-us/power-bi/connect-data/service-gateway-enterprise-manage-sql
+  - https://learn.microsoft.com/en-us/rest/api/power-bi/gateways/create-datasource
+
+scenes:
+  - id: hook
+    type: title
+    heading: "It works on my laptop. The refresh fails."
+    sub: "The on-premises data gateway, step by step"
+    short: hook
+    narration: >
+      Back in episode nine we said the lab had no gateway yet, so the data had to live in SharePoint. Now the sales
+      data is in a SQL Server on the lab network, and the Power BI service cannot see it. This episode puts a gateway
+      in between, and checks the three places where it usually goes wrong.
+
+  - id: plan
+    type: bullets
+    heading: "What we're building"
+    bullets:
+      - "A read-only SQL login for the gateway"
+      - "A gateway on a member server, with a network check"
+      - "The data source, created in the portal and by the REST A P I"
+      - "A model bound to it, refreshed, and a check that the names match"
+    narration: >
+      A read only login on the SQL Server. A gateway on a member server, and a check of its network before and after. The
+      data source, once in the portal and once through the REST A P I with encrypted credentials. Then the semantic model bound
+      to it, a refresh, and a check that catches the most common mistake before anyone publishes.
+
+  - id: sql
+    type: code
+    heading: "A login that can only read"
+    lang: sql
+    code: |
+      CREATE LOGIN [pbi_gateway_reader] WITH PASSWORD = N'$(GatewayPassword)', CHECK_POLICY = ON, DEFAULT_DATABASE = [ContosoBikesDW];
+      CREATE USER [pbi_gateway_reader] FOR LOGIN [pbi_gateway_reader];
+      ALTER ROLE [db_datareader] ADD MEMBER [pbi_gateway_reader];
+    narration: >
+      The data is the Contoso Bikes database from episode eleven. The gateway needs to read and nothing else, so it gets a
+      sql login with the data reader role. The password is a variable of the command line tool, typed on the day, never in a
+      file. A second script removes the login again.
+
+  - id: before
+    type: screen
+    heading: "Published, and stuck"
+    image: screens/before.jpg
+    bar: "Power BI service · semantic model settings · Contoso Sales (Lab)"
+    demo: "Desktop: new blank query with queries/sales-by-store.pq (server 10.50.0.30, database ContosoBikesDW), Close and apply, Publish to Contoso Sales (Lab). Service: workspace, the new semantic model, More options, Settings, 'Gateway and cloud connections': no gateway listed (or the source shown as not bound). Click Refresh now and show the failure in Refresh history. Record the real wording. Needs the lab and the tenant."
+    narration: >
+      This is the same query in Power BI Desktop, pointing at the SQL Server by its address, published to the workspace. In
+      the service the model settings show no gateway for that source, and a refresh fails. The service lives in the cloud, and
+      ten dot fifty dot zero dot thirty is a private address.
+
+  - id: host
+    type: bullets
+    heading: "Where the gateway goes"
+    bullets:
+      - "Windows Server 2019 or later, or Windows 10 or 11"
+      - "Not Server Core, not a domain controller, not a laptop"
+      - "Standard mode, and a cluster for high availability"
+      - "Keep the recovery key: Microsoft can't recover it"
+    narration: >
+      Learn is clear about the machine. A supported Windows version, but not Server Core, not a domain controller, and not
+      a laptop that sleeps. Standard mode, and a cluster of more than one gateway if the refresh matters. And the recovery
+      key, which only you have. That rules out the core servers in the lab, so the gateway goes on C O N dash S R V zero two, the member server with the desktop.
+
+  - id: network
+    type: code
+    heading: "Check the network before installing"
+    lang: powershell
+    code: |
+      foreach ($t in $targets) {
+          $sw = [System.Diagnostics.Stopwatch]::StartNew()
+          $r = if ($Connector) { & $Connector $t.Host $t.Port $TimeoutMs } else { Test-TcpPort -Hostname $t.Host -Port $t.Port -TimeoutMs $TimeoutMs }
+          $sw.Stop()
+          [pscustomobject]@{ Host = $t.Host; Port = $t.Port; Kind = $t.Kind; Reachable = [bool]$r.Reachable; Ms = [int]$sw.ElapsedMilliseconds; Error = (Get-Prop $r 'Error') }
+      }
+    narration: >
+      The gateway makes outbound connections only, on port eighty, four four three, fourteen thirty three, and the Azure
+      Relay ports. No inbound port. The script opens a connection to every endpoint with a fixed name, and to the SQL Server
+      on the data side, because the gateway has to reach both. The service bus ports have wildcard names, so for those we use
+      the network ports test in the gateway app.
+
+  - id: install
+    type: screen
+    heading: "Install and register"
+    image: screens/install.jpg
+    bar: "CON-SRV02 · on-premises data gateway"
+    demo: "Hyper-V console of CON-SRV02 (lab Administrator desktop). Windows Terminal, PowerShell 7: ./Test-GatewayHost.ps1 (all cloud endpoints and 10.50.0.30:1433 reachable). Then the standard-mode installer: default path, sign in as labadmin (blur nothing but the tenant domain), 'Register a new gateway on this computer', name contoso-lab-gw, recovery key typed (never shown), Configure, summary page. Then the gateway app: Diagnostics, Network ports test, Start new test, 'Completed (Succeeded)'. Needs the lab and the tenant."
+    narration: >
+      On the server we run the check, then the installer. Default path, sign in with the lab admin, register a new gateway,
+      give it a name and a recovery key. Then the gateway app runs its own network ports test, which gets the list of
+      ports from Azure Relay and tries them all. Completed, succeeded.
+
+  - id: datasource
+    type: screen
+    heading: "The data source"
+    image: screens/datasource.jpg
+    bar: "Power BI service · Manage connections and gateways"
+    demo: "Service, Settings, Manage connections and gateways. The cluster contoso-lab-gw shows as online. New, On-premises, gateway cluster contoso-lab-gw, connection name 'Contoso Bikes DW (lab)', type SQL Server, server 10.50.0.30, database ContosoBikesDW, authentication Basic with the pbi_gateway_reader login (password off camera), privacy level Organizational, Create. Needs the lab and the tenant."
+    narration: >
+      In the service, the gateway shows as online. A new on premises connection of type SQL Server, with the same server
+      address and the same database name as the query, and basic authentication with the read only login. The link between
+      the model and this data source is the server name and the database name, nothing else.
+
+  - id: rest
+    type: code
+    heading: "The same data source, from code"
+    lang: csharp
+    code: |
+      var credentialDetails = new CredentialDetails(
+          new BasicCredentials(o.Username, o.Password),
+          ParsePrivacy(o.PrivacyLevel),
+          EncryptedConnection.Encrypted,
+          new AsymmetricKeyEncryptor(publicKey),
+          null);
+
+      var request = new PublishDatasourceToGatewayRequest(o.DataSourceType, connection, credentialDetails, o.DataSourceName);
+    narration: >
+      For many gateways or a repeatable setup, there is Create Datasource. On premises credentials must be encrypted with the
+      gateway's public key, and the power b i dotnet S D K already has the encryptor, so the small tool just uses it. The password is read
+      from an environment variable, never a parameter. The body it writes is what the script then posts.
+
+  - id: match
+    type: code
+    heading: "Do the names match?"
+    lang: powershell
+    code: |
+      if ($sql | Where-Object { $_.Server -ceq $s.Server -and $_.Database -ceq $s.Database }) {
+          New-Finding 'GW003' 'Info' "$label matches a gateway data source." $QueryPath
+          continue
+      }
+      $hint = if ($sql | Where-Object { $_.Server -ieq $s.Server -and $_.Database -ieq $s.Database }) {
+          'A data source exists that differs only in letter case: matching is case-sensitive.'
+    short: match
+    narration: >
+      Here is the mistake everyone makes once. Learn says the link is the server name and the database name, they must
+      match exactly, and matching is case sensitive. If Desktop says the IP address, the gateway must say the IP address. If the
+      query says the server's name and the gateway has the address, the gateway never shows up for the refresh. This check
+      reads the query and the gateway's data sources and says exactly which of the cases it is.
+
+  - id: bind
+    type: screen
+    heading: "Bound, refreshed, correct"
+    image: screens/bind.jpg
+    bar: "Power BI service · Settings · Refresh history · report"
+    demo: "Semantic model Settings, 'Gateway and cloud connections': contoso-lab-gw selected for the SQL Server source, Apply. Refresh now. Refresh history: Completed. Then the PowerShell check ./Register-LabDataSource.ps1 output or Get-DatasetGatewayInfo: IsBound True. Open the report: Sales Amount 1,862,401.98, 4,071 order lines, five stores (tools/expected.py). Needs the lab and the tenant."
+    narration: >
+      The model settings now offer the gateway for this source. Apply, refresh now, and the history says completed. The
+      same fact through the A P I is the bound flag of the data source. And the report shows what the Python reference
+      expects. One million eight hundred sixty two thousand in sales, four thousand seventy one order lines, five stores.
+
+  - id: gotcha
+    type: screen
+    heading: "Gotcha: the certificate you never created"
+    image: screens/cert.jpg
+    bar: "Power BI service · Refresh history · CON-SRV02"
+    demo: "If the refresh fails: Refresh history, the failed entry, Show details: the SQL Server error about a certificate chain from an authority that is not trusted (record the exact text). On CON-SRV02, elevated PowerShell: Set-GatewaySqlTrustedServer -Server 10.50.0.30 (shows the old and new value; the backup file), restart the gateway from the gateway app, refresh again: Completed. If the refresh already succeeded, show the SqlTrustedServers entry in the config file instead and say it was not needed here. Record what really happens. Needs the lab and the tenant."
+    short: gotcha
+    narration: >
+      Now the honest part. A SQL Server with its own self signed certificate can make the refresh fail with a certificate
+      chain that is not trusted. Learn says to list the server in the gateway's SQL trusted servers setting, and a backup of
+      the configuration file comes first. Two more traps. Republishing the model removes the link to the gateway, so you bind
+      again. And the person who binds has to be listed as a user of the data source.
+
+  - id: limits
+    type: bullets
+    heading: "Before you rely on it"
+    bullets:
+      - "A cluster of gateways, the same version on each"
+      - "It can take minutes before a new data source is usable"
+      - "Every source of the model needs a data source on the gateway"
+      - "SQL Server: Windows or basic authentication"
+    narration: >
+      Before you rely on it, add a second gateway to make a cluster, and keep the versions equal. A new data source can take
+      several minutes before it is usable. If the model has more than one source, every one of them needs a data source on
+      the gateway, or the gateway is not offered at all. And for SQL Server the data source takes Windows or basic authentication.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The network check, the module, the credential tool and the S Q L scripts are on GitHub, and the complete guide to the
+      data gateway is on dev lad log dot com. Links in the description. This was DEVLADLOG Power BI, by Momento Galático.
