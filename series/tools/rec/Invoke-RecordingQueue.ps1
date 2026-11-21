@@ -11,6 +11,22 @@ $ErrorActionPreference = 'Stop'
 
 $queueFile = Join-Path $Root 'recordings\queue.txt'
 $wanted = if (Test-Path $queueFile) { @(Get-Content $queueFile | ForEach-Object { $_.Trim() } | Where-Object { $_ -and -not $_.StartsWith('#') }) } else { @() }
+
+# "prepare: <episode>" / "teardown: <episode>" lines only run that episode's setup or cleanup, for app and browser
+# screens that are performed live while Record-Window.ps1 (MG R4) records; nothing is recorded by these lines
+$actions = @($wanted | Where-Object { $_ -match '^(prepare|teardown):\s*(.+)$' })
+if ($actions) {
+    foreach ($a in $actions) {
+        $null = $a -match '^(prepare|teardown):\s*(.+)$'
+        $what = $Matches[1]; $epDir = Join-Path $Root ($Matches[2].Trim().Replace('/', '\'))
+        $def = Get-Content (Join-Path $epDir 'record.json') -Raw | ConvertFrom-Json
+        Write-Host "`n=== $what $($Matches[2].Trim()) ===" -ForegroundColor Cyan
+        if ($def.$what) { Invoke-HostStatements -Statements $def.$what -EpisodeRoot $epDir }
+        Write-Host "$what done." -ForegroundColor Green
+    }
+    New-Item -ItemType File -Force -Path (Join-Path $Root 'recordings\queue-actions.done') | Out-Null
+    return
+}
 $episodes = Get-ChildItem (Join-Path $Root 'series\*\episodes\*\record.json') | ForEach-Object { $_.Directory } |
     Where-Object { -not $wanted -or ($wanted -contains $_.FullName.Substring($Root.Length + 1).Replace('/', '\')) -or ($wanted -contains $_.FullName.Substring($Root.Length + 1).Replace('\', '/')) }
 
