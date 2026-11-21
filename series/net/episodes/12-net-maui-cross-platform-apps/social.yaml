@@ -1,0 +1,86 @@
+episode: 12
+series: "DEVLADLOG .NET"
+status: draft-hold-for-review
+ai_label: true
+youtube_url: "{YOUTUBE_URL}"
+linkedin_company:
+  text: |
+    A phone app lives where the network comes and goes. In episode 12 of DEVLADLOG .NET we build a .NET MAUI app for the requests service from the previous episode, around one rule: save on the device first, send second.
+    - One MAUI project with a request list and a form, targeting Android and Windows (Apple targets need a Mac, so they are out)
+    - Logic in a plain library, with thin pages, so it is testable without an emulator
+    - An outbox that flushes oldest first and stops when the server is unavailable
+    - The draft's GUID doubles as the idempotency key, so a repeated send is a replay, not a second request
+    - 59 tests, plus compiled bindings that turn a binding typo into a build error
+
+    The episode also covers a CanExecute trap and the Android emulator address 10.0.2.2.
+
+    Watch the episode: {YOUTUBE_URL}
+    Code: {REPO_URL}
+    Guide: {BLOG_URL}
+
+    Narration uses an AI voice.
+
+    #DotNet #DotNetMAUI #CSharp #MVVM #Android
+linkedin_personal:
+  text: |
+    In episode 12 of DEVLADLOG .NET I learned that the guard on a MAUI command is CanExecute, not the command itself. Through ICommand, which is what a Button uses, a second tap is ignored while the first runs. Call SubmitCommand.ExecuteAsync twice from code and you get two drafts. A test now documents it.
+
+    The same episode keeps the sync logic in a plain library and uses the draft's GUID as the idempotency key, so a retried send cannot create a duplicate.
+
+    {YOUTUBE_URL}
+
+    Narration uses an AI voice.
+
+    #DotNet #DotNetMAUI
+facebook:
+  text: |
+    A phone app lives where the network comes and goes. This DEVLADLOG .NET episode builds a .NET MAUI app where a request is saved on the device first and sent second, so a retried send doesn't create a duplicate.
+
+    The logic sits in a plain library with 59 tests, and the app targets Android and Windows. Watch here: {YOUTUBE_URL}
+
+    Narration uses an AI voice.
+
+    #DotNet #DotNetMAUI
+shorts:
+  - id: hook
+    youtube_short_title: "A .NET MAUI app that survives no network #Shorts"
+    instagram_reel:
+      caption: |
+        A phone app lives where the network comes and goes.
+
+        In this episode we build a .NET MAUI app for our requests service. The idea: you type a request with no network, it waits on the device, and it is sent once, even if the send is retried.
+
+        Full episode: link in bio
+
+        #DotNet #DotNetMAUI #CSharp #Android
+      cover_text: "MAUI app, no network"
+    tiktok:
+      caption: "Phone apps live where the network comes and goes. A .NET MAUI app that saves on the device first, then sends once. #DotNet #DotNetMAUI #CSharp"
+  - id: offline
+    youtube_short_title: "Outbox first, send second: offline in .NET MAUI #Shorts"
+    instagram_reel:
+      caption: |
+        With no network, the request shouldn't fail. It should wait. The app writes each draft to an outbox on the device first, and only then tries to send it.
+
+        The sync service flushes the outbox oldest first. If the server is unavailable it stops, keeps the order and waits for the next try. Network access reporting Internet doesn't mean the server answers.
+
+        Full episode: link in bio
+
+        #DotNet #DotNetMAUI #CSharp #Offline
+      cover_text: "Save first, send second"
+    tiktok:
+      caption: "Offline-first in .NET MAUI: write the draft to an outbox on the device, then send. Server unavailable? Stop, keep the order, retry later. #DotNet #DotNetMAUI #CSharp"
+  - id: online
+    youtube_short_title: "Retried send, one request: the GUID is the key #Shorts"
+    instagram_reel:
+      caption: |
+        Why a repeated send can't count twice: the draft's GUID is its idempotency key.
+
+        If a flush died after the server answered, the draft is simply sent again, and the service recognises the key and replays the first result. That's the payoff of building the idempotency key into the service in the previous episode.
+
+        Full episode: link in bio
+
+        #DotNet #DotNetMAUI #Idempotency #CSharp
+      cover_text: "Same key, counted once"
+    tiktok:
+      caption: "The draft's GUID is its Idempotency-Key. A flush that died after the server answered just resends and gets a replay, not a duplicate. #DotNet #DotNetMAUI #CSharp"

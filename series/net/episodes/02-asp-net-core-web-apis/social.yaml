@@ -1,0 +1,88 @@
+episode: 2
+series: "DEVLADLOG .NET"
+status: draft-hold-for-review
+ai_label: true
+youtube_url: "{YOUTUBE_URL}"
+linkedin_company:
+  text: |
+    Most API tutorials stop at "it returns JSON". Then production asks: who is calling, what are they allowed to do, what does an error look like, and what happens when someone hammers the endpoint?
+
+    In episode 2 of DEVLADLOG .NET we answer all four with an ASP.NET Core controller API on .NET 10, an expense claims service.
+    - JWT bearer authentication with the authority and audience in configuration
+    - Approvers need the Claims.Approve app role, and nobody can approve their own claim
+    - One exception handler, so every error is problem details
+    - Rate limiting per user: five submits per minute, then 429 instead of the default 503
+    - Tests that use the real JwtBearer handler, not a fake login
+
+    We also show three gotchas, including a Produces attribute that quietly changed our error content type.
+
+    Watch the episode: {YOUTUBE_URL}
+    Code: {REPO_URL}
+    Guide: {BLOG_URL}
+
+    Narration uses an AI voice.
+
+    #DotNet #ASPNETCore #WebAPI #RateLimiting #CSharp
+linkedin_personal:
+  text: |
+    ASP.NET Core rate limiting rejects with a 503 by default. That tells clients your server is down, not that they are going too fast. In episode 2 of DEVLADLOG .NET we set 429 explicitly and partition the limit by user.
+
+    One more detail: UseRateLimiter must come after UseAuthentication. Otherwise every request lands in the same anonymous partition. Also, the limiter runs before model validation, so invalid submits use up permits too, and a test pins it.
+
+    {YOUTUBE_URL}
+
+    Narration uses an AI voice.
+
+    #DotNet #ASPNETCore
+facebook:
+  text: |
+    Most API tutorials stop at "it returns JSON". Then production asks who is calling, what they're allowed to do, what an error looks like, and what happens when someone hammers the endpoint.
+
+    This DEVLADLOG .NET episode builds an ASP.NET Core controller API on .NET 10 that answers all four. Watch here: {YOUTUBE_URL}
+
+    Narration uses an AI voice.
+
+    #DotNet #ASPNETCore
+shorts:
+  - id: hook
+    youtube_short_title: "Beyond 'it returns JSON': auth, errors, rate limits #Shorts"
+    instagram_reel:
+      caption: |
+        Most API tutorials stop at "it returns JSON". Then production asks: who is calling, what are they allowed to do, what does an error look like, and what happens when someone hammers the endpoint?
+
+        In this episode we answer all four with an ASP.NET Core controller API on .NET 10.
+
+        Full episode: link in bio
+
+        #DotNet #ASPNETCore #WebAPI #CSharp
+      cover_text: "Beyond 'returns JSON'"
+    tiktok:
+      caption: "Who is calling? What may they do? What does an error look like? What if they hammer it? An ASP.NET Core API on .NET 10. #DotNet #ASPNETCore #WebAPI"
+  - id: ratelimit
+    youtube_short_title: "ASP.NET Core rate limiting returns 503 by default #Shorts"
+    instagram_reel:
+      caption: |
+        Rate limiting is built into ASP.NET Core, with one surprise: rejected requests get a 503 by default, which tells clients the server is down. Set 429.
+
+        Partition by user, so one noisy client doesn't block everyone. And call UseRateLimiter after authentication, otherwise every caller lands in the same anonymous window.
+
+        Full episode: link in bio
+
+        #DotNet #ASPNETCore #RateLimiting #CSharp
+      cover_text: "Default is 503, not 429"
+    tiktok:
+      caption: "ASP.NET Core rate limiting rejects with 503 by default. Set 429, partition by user, and call UseRateLimiter after UseAuthentication. #DotNet #ASPNETCore #CSharp"
+  - id: gotcha
+    youtube_short_title: "Three ASP.NET Core API gotchas that bit us #Shorts"
+    instagram_reel:
+      caption: |
+        Three gotchas. A Produces application/json attribute on the controller changed our error responses from problem+json to plain json, and two tests caught it.
+
+        One class-level ProducesResponseType 401 made every 200 disappear from the OpenAPI document. And dotnet user-jwts with --role writes a role claim, singular, while Entra writes roles. Use --claim roles instead.
+
+        Full episode: link in bio
+
+        #DotNet #ASPNETCore #OpenAPI #CSharp
+      cover_text: "Three API gotchas"
+    tiktok:
+      caption: "Produces(application/json) hid problem+json. A class-level ProducesResponseType(401) removed every 200 from OpenAPI. user-jwts --role writes 'role'. #DotNet #ASPNETCore"

@@ -1,0 +1,90 @@
+episode: 4
+series: "DEVLADLOG .NET"
+status: draft-hold-for-review
+ai_label: true
+youtube_url: "{YOUTUBE_URL}"
+linkedin_company:
+  text: |
+    Here is a bug that passes every test on your laptop. In production the app starts fine, then quietly serves data that is no longer true. The cause: a singleton that takes a DbContext in its constructor.
+
+    In episode 4 of DEVLADLOG .NET we add a background digest feature to the project requests API and catch that bug before it ships.
+    - Scope validation is on by default only in Development, so Production starts anyway and returns stale data
+    - A BackgroundService that creates one scope per run
+    - Keyed services to pick the notification channel by name
+    - Options with ValidateOnStart, so a bad setting stops the app at startup
+    - Everything on the built-in container, with tests pinning each rule
+
+    Watch the episode: {YOUTUBE_URL}
+    Code: {REPO_URL}
+    Guide: {BLOG_URL}
+
+    Narration uses an AI voice.
+
+    #DotNet #DependencyInjection #ASPNETCore #CSharp #BackgroundService
+linkedin_personal:
+  text: |
+    The nastiest DI bug in episode 4 of DEVLADLOG .NET did not throw. A singleton captured the first DbContext, and after we approved a request through the API it still said Submitted. Its change tracker kept handing back the object it already had.
+
+    ValidateScopes and ValidateOnBuild are on by default only in Development, so Production started without complaint. If you can afford it, turn validation on everywhere.
+
+    The episode also covers keyed services, ValidateOnStart and why one exception stops a BackgroundService host.
+
+    {YOUTUBE_URL}
+
+    Narration uses an AI voice.
+
+    #DotNet #DependencyInjection
+facebook:
+  text: |
+    Here's a bug that passes every test on your laptop: in production the app starts fine, then quietly serves data that's no longer true. The cause is one line of dependency injection, a singleton holding on to a DB context.
+
+    This DEVLADLOG .NET episode shows how it happens and how to catch it before it ships. Watch here: {YOUTUBE_URL}
+
+    Narration uses an AI voice.
+
+    #DotNet #DependencyInjection
+shorts:
+  - id: hook
+    youtube_short_title: "The DI bug that passes every test on your laptop #Shorts"
+    instagram_reel:
+      caption: |
+        Here's a bug that passes every test on your laptop. In production the app starts fine, then quietly serves data that is no longer true.
+
+        The cause is one line of dependency injection: a singleton holding on to a DB context. In this episode we build a background feature the right way and catch that bug before it ships.
+
+        Full episode: link in bio
+
+        #DotNet #DependencyInjection #CSharp #ASPNETCore
+      cover_text: "The silent DI bug"
+    tiktok:
+      caption: "A bug that passes every test on your laptop, then serves stale data in production. The cause: a singleton holding a DbContext. #DotNet #DependencyInjection #CSharp"
+  - id: captive
+    youtube_short_title: "A captive DbContext: no exception, just wrong data #Shorts"
+    instagram_reel:
+      caption: |
+        A singleton that takes the DB context in its constructor is created once, so it keeps the first DB context forever.
+
+        We approve a request through the API and ask both. The API, with a fresh context, says Approved. The captive singleton says Submitted, because its change tracker hands back the object it already has. No exception. Just wrong data.
+
+        Full episode: link in bio
+
+        #DotNet #DependencyInjection #EFCore #CSharp
+      cover_text: "No exception. Wrong data."
+    tiktok:
+      caption: "Singleton + DbContext = captive dependency. After approval the API says Approved, the singleton still says Submitted. No exception. #DotNet #EFCore #CSharp"
+  - id: gotcha
+    youtube_short_title: "BackgroundService gotchas: one exception stops the host #Shorts"
+    instagram_reel:
+      caption: |
+        Three gotchas from the DI episode. Our digest query sorted after projecting into a record, and EF Core couldn't translate it: sort before the projection.
+
+        Advancing a fake clock four days on a one-day timer gave four digests, not one.
+
+        And since .NET 6 an unhandled exception in a BackgroundService stops the whole host, so every run is caught and logged. We removed that catch, and a test failed.
+
+        Full episode: link in bio
+
+        #DotNet #BackgroundService #CSharp #EFCore
+      cover_text: "One exception stops the host"
+    tiktok:
+      caption: "Since .NET 6 an unhandled exception in a BackgroundService stops the whole host. One failed webhook would take the API down. #DotNet #CSharp #ASPNETCore"

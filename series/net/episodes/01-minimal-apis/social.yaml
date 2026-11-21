@@ -1,0 +1,90 @@
+episode: 1
+series: "DEVLADLOG .NET"
+status: draft-hold-for-review
+ai_label: true
+youtube_url: "{YOUTUBE_URL}"
+linkedin_company:
+  text: |
+    Minimal APIs get a reputation: fine for a demo, a mess in production, with everything piled into one giant Program.cs.
+
+    In episode 1 of DEVLADLOG .NET we build a project requests API on .NET 10 and keep Program.cs short:
+    - Route groups, with the endpoints in their own class
+    - Built-in validation (AddValidation) with a cross-field rule for big budgets
+    - TypedResults and Results<...>, so the compiler checks every response
+    - An OpenAPI 3.1 document that describes every status code
+    - 22 tests (10 unit, 12 integration) that run in about a second
+
+    It also covers two things that bit us: the CLI picking an OpenAPI package version for the wrong major release, and a validation rule that only runs after every attribute passes.
+
+    Watch the episode: {YOUTUBE_URL}
+    Code: {REPO_URL}
+    Guide: {BLOG_URL}
+
+    Narration uses an AI voice.
+
+    #DotNet #MinimalAPIs #ASPNETCore #OpenAPI #CSharp
+linkedin_personal:
+  text: |
+    A small lesson from building the first DEVLADLOG .NET episode: pin your package versions to your target framework.
+
+    I ran dotnet add package for OpenAPI on a net10.0 project and the CLI picked version 11.0.0. Restore succeeded, then the build failed with "no AddOpenApi". The 11.0.0 package only ships a net11.0 library. Pinning --version 10.0.15 fixed it.
+
+    The episode builds a Minimal API with route groups, TypedResults, built-in validation and 22 tests, and shows that gotcha plus the validation one.
+
+    {YOUTUBE_URL}
+
+    Narration uses an AI voice.
+
+    #DotNet #MinimalAPIs
+facebook:
+  text: |
+    Are Minimal APIs only good for demos? In this DEVLADLOG .NET episode we build a project requests API on .NET 10 with route groups, built-in validation, typed results, an OpenAPI document and 22 tests, and keep Program.cs short.
+
+    We also show two things that tripped us up along the way. Full episode here: {YOUTUBE_URL}
+
+    Narration uses an AI voice.
+
+    #DotNet #MinimalAPIs
+shorts:
+  - id: hook
+    youtube_short_title: "Minimal APIs: demo toy or production-ready? #Shorts"
+    instagram_reel:
+      caption: |
+        Minimal APIs have a reputation: great for a demo, a mess in production, with everything in one giant Program.cs.
+
+        In this episode we build a real API on .NET 10 with route groups, built-in validation, typed results, OpenAPI and 22 tests. Program.cs stays short because the endpoints live in their own class.
+
+        Full episode: link in bio
+
+        #DotNet #MinimalAPIs #ASPNETCore #CSharp
+      cover_text: "Minimal APIs, done right"
+    tiktok:
+      caption: "Minimal APIs: great for a demo, a mess in production? We build one on .NET 10 with route groups, validation, typed results and 22 tests. #DotNet #MinimalAPIs #CSharp"
+  - id: validation
+    youtube_short_title: "Built-in validation in .NET 10 Minimal APIs #Shorts"
+    instagram_reel:
+      caption: |
+        Validation in Minimal APIs used to need a library or a hand-written filter. In .NET 10 you call AddValidation and the DataAnnotations on your request are checked before the handler runs.
+
+        Attributes cover the simple rules. A cross-field rule, like requiring a justification for big budgets, goes in IValidatableObject. If anything fails, the client gets a 400 with every error.
+
+        Full episode: link in bio
+
+        #DotNet #MinimalAPIs #ASPNETCore #CSharp
+      cover_text: "AddValidation in .NET 10"
+    tiktok:
+      caption: "No library needed: .NET 10 AddValidation checks DataAnnotations on Minimal API requests before your handler runs. Cross-field rules go in IValidatableObject. #DotNet #MinimalAPIs #CSharp"
+  - id: gotcha
+    youtube_short_title: "dotnet add package picked the wrong OpenAPI version #Shorts"
+    instagram_reel:
+      caption: |
+        Two gotchas from this episode. dotnet add package for OpenAPI on a net10.0 app picked version 11.0.0. Restore worked, the build failed with "no AddOpenApi". Fix: pin --version 10.0.15.
+
+        Second: the cross-field validation rule only runs once every attribute passes, so a client fixes the title first and only then learns about the justification. It is documented, and we have a test for it.
+
+        Full episode: link in bio
+
+        #DotNet #MinimalAPIs #ASPNETCore #CSharp
+      cover_text: "Pin your package versions"
+    tiktok:
+      caption: "dotnet add package picked OpenApi 11.0.0 for a net10.0 app. Restore worked, the build failed. Fix: pin --version 10.0.15. #DotNet #CSharp #ASPNETCore"

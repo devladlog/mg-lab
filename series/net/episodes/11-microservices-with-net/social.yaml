@@ -1,0 +1,88 @@
+episode: 11
+series: "DEVLADLOG .NET"
+status: draft-hold-for-review
+ai_label: true
+youtube_url: "{YOUTUBE_URL}"
+linkedin_company:
+  text: |
+    A microservice is easy to build. The hard part starts the first time the other service is down.
+
+    In episode 11 of DEVLADLOG .NET we take the budget check out of the project requests API, put it in its own service, add a YARP gateway, and then stop that service on camera.
+    - Services know names, not addresses (service discovery)
+    - Retry reads freely, retry writes only with an idempotency key
+    - Budget down: the request is saved as Pending, the circuit opens, the gateway reports Degraded, and a worker finishes the job when Budget returns
+    - The lost answer: the reservation is made but the reply is lost, and the retry with the same key does not reserve twice
+    - 30 tests, then three real processes
+
+    One honest limit: there is no message broker, so the services are still coupled in time.
+
+    Watch the episode: {YOUTUBE_URL}
+    Code: {REPO_URL}
+    Guide: {BLOG_URL}
+
+    Narration uses an AI voice.
+
+    #DotNet #Microservices #YARP #Resilience #ASPNETCore
+linkedin_personal:
+  text: |
+    The standard .NET resilience handler retries every HTTP method, including POST. Learn says so, and warns that a retried POST can duplicate data.
+
+    In episode 11 of DEVLADLOG .NET we keep the handler but only retry when the failure is transient and the call is a read or carries an Idempotency-Key. Then we inject a fault where the Budget service makes the reservation and loses the answer. The retry gets the first reservation back, so a test sees 12,000 reserved, not 36,000.
+
+    {YOUTUBE_URL}
+
+    Narration uses an AI voice.
+
+    #DotNet #Microservices
+facebook:
+  text: |
+    A microservice is easy to build. The hard part starts the first time the other service is down.
+
+    In this DEVLADLOG .NET episode we split a budget check out of our API into its own service, add a gateway, and then stop that service on camera to see what happens to retries, circuits and the lost answer. Watch here: {YOUTUBE_URL}
+
+    Narration uses an AI voice.
+
+    #DotNet #Microservices
+shorts:
+  - id: hook
+    youtube_short_title: "Microservices are easy. Until the other service is down #Shorts"
+    instagram_reel:
+      caption: |
+        A microservice is easy to build. The hard part starts the first time the other service is down.
+
+        In this episode we take the budget check out of the project requests API, put it in its own service, add a gateway, and then stop that service on camera.
+
+        Full episode: link in bio
+
+        #DotNet #Microservices #YARP #ASPNETCore
+      cover_text: "When the other service dies"
+    tiktok:
+      caption: "Microservices are easy to build. The hard part is the first time the other service is down. We stop one on camera. #DotNet #Microservices #YARP"
+  - id: down
+    youtube_short_title: "Stop a microservice: pending, circuit open, degraded #Shorts"
+    instagram_reel:
+      caption: |
+        We stop the Budget service. The request still comes back, as accepted, with the budget state Pending.
+
+        The retries ran, then the circuit opened, so the next call fails fast. The gateway reports Degraded, not down. The budget route gives a 502, and the requests service itself is still healthy.
+
+        Full episode: link in bio
+
+        #DotNet #Microservices #Resilience #YARP
+      cover_text: "Budget service: down"
+    tiktok:
+      caption: "Budget service stopped: request accepted as Pending, retries, then the circuit opens. Gateway says Degraded, budget route gives 502. #DotNet #Microservices"
+  - id: lostanswer
+    youtube_short_title: "The lost answer: reserved once, not three times #Shorts"
+    instagram_reel:
+      caption: |
+        The nastiest failure: the money is reserved, and the answer is lost. Twice.
+
+        The requests service retries with the same idempotency key, and the third answer is the first reservation again. 5,000 reserved, not 15,000. Without the key, that retry would have spent the budget three times.
+
+        Full episode: link in bio
+
+        #DotNet #Microservices #Idempotency #ASPNETCore
+      cover_text: "Reserved once, not 3x"
+    tiktok:
+      caption: "Reservation made, answer lost, twice. Retry with the same idempotency key returns the first reservation: 5,000, not 15,000. #DotNet #Microservices"

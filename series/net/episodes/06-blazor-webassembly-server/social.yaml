@@ -1,0 +1,88 @@
+episode: 6
+series: "DEVLADLOG .NET"
+status: draft-hold-for-review
+ai_label: true
+youtube_url: "{YOUTUBE_URL}"
+linkedin_company:
+  text: |
+    Blazor Server or Blazor WebAssembly? On .NET 10 that is the wrong question. One Blazor app can render a page as plain HTML, run the next one on the server over a live connection, and the next one in the browser on .NET compiled to WebAssembly.
+
+    In episode 6 of DEVLADLOG .NET we build all three on top of the project requests API:
+    - Requests list: static server rendering, streamed
+    - Request page: Interactive Server, with [PersistentState] so prerendering does not call the API twice
+    - New request form: Interactive WebAssembly, calling the API directly with CORS configured
+    - One Contracts library, so the same DTOs and validation rules are shared by the API, the server and the browser
+    - 19 bUnit component and host tests
+
+    We also show the trap where a WebAssembly page crashes during server prerendering.
+
+    Watch the episode: {YOUTUBE_URL}
+    Code: {REPO_URL}
+    Guide: {BLOG_URL}
+
+    Narration uses an AI voice.
+
+    #DotNet #Blazor #WebAssembly #ASPNETCore #CSharp
+linkedin_personal:
+  text: |
+    Here is a Blazor trap from episode 6 of DEVLADLOG .NET. A WebAssembly page is prerendered on the server first, using the server's services. I registered my API client only in the client project, and the page returned a 500 before the browser ever got anything: no registered service of type IRequestsApi.
+
+    Two fixes: register the service on the server too, or turn prerendering off for that page. I registered it in both Program.cs files and added a test so nobody removes it.
+
+    {YOUTUBE_URL}
+
+    Narration uses an AI voice.
+
+    #DotNet #Blazor
+facebook:
+  text: |
+    Blazor Server or Blazor WebAssembly? On .NET 10, that's the wrong question. One app can render a page as plain HTML, run another on the server over a live connection, and a third in the browser on WebAssembly.
+
+    This DEVLADLOG .NET episode builds all three on top of our project requests API. Watch here: {YOUTUBE_URL}
+
+    Narration uses an AI voice.
+
+    #DotNet #Blazor
+shorts:
+  - id: hook
+    youtube_short_title: "Blazor Server or WebAssembly? Wrong question on .NET 10 #Shorts"
+    instagram_reel:
+      caption: |
+        Blazor Server or Blazor WebAssembly? On .NET 10, that's the wrong question.
+
+        One Blazor app can render a page as plain HTML, run the next one on the server over a live connection, and the next one in the browser, on .NET compiled to WebAssembly. In this episode we build all three on top of our project requests API.
+
+        Full episode: link in bio
+
+        #DotNet #Blazor #WebAssembly #CSharp
+      cover_text: "Wrong Blazor question"
+    tiktok:
+      caption: "Blazor Server or WebAssembly? Wrong question on .NET 10: one app can use static SSR, Interactive Server and WebAssembly. #DotNet #Blazor #WebAssembly #CSharp"
+  - id: persist
+    youtube_short_title: "Blazor prerendering calls your API twice. Fix it #Shorts"
+    instagram_reel:
+      caption: |
+        An Interactive Server page is prerendered first, then a circuit takes over. Learn warns that OnInitializedAsync then runs twice, once for the prerender and once for the interactive render. That's two API calls per page view.
+
+        New in .NET 10, the PersistentState attribute saves the value into the page and restores it. A test checks the API is called once during prerender.
+
+        Full episode: link in bio
+
+        #DotNet #Blazor #ASPNETCore #CSharp
+      cover_text: "Two API calls per view"
+    tiktok:
+      caption: "Blazor prerendering runs OnInitializedAsync twice = two API calls per page view. .NET 10 [PersistentState] fixes it. #DotNet #Blazor #CSharp"
+  - id: gotcha
+    youtube_short_title: "Blazor WebAssembly page crashes before it reaches the browser #Shorts"
+    instagram_reel:
+      caption: |
+        A Blazor WebAssembly page is prerendered on the server first, with the server's services. Register your API client only in the client project and the page returns a 500 before it ever reaches the browser.
+
+        Learn gives two fixes: register the service on the server too, or turn prerendering off for that page. We register it in both, and a test makes sure nobody removes it.
+
+        Full episode: link in bio
+
+        #DotNet #Blazor #WebAssembly #CSharp
+      cover_text: "WASM page, server 500"
+    tiktok:
+      caption: "Blazor WebAssembly pages are prerendered on the server. Register your API client only in the client project and you get a 500. #DotNet #Blazor #WebAssembly"

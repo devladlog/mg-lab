@@ -1,0 +1,85 @@
+episode: 5
+series: "DEVLADLOG .NET"
+status: draft-hold-for-review
+ai_label: true
+youtube_url: "{YOUTUBE_URL}"
+linkedin_company:
+  text: |
+    Your team writes xUnit. The team next door writes NUnit. Can you run both from one command, with one coverage report? On .NET 10, yes. But one innocent filter breaks half of it, and another silently does nothing.
+
+    In episode 5 of DEVLADLOG .NET we test the same API with both frameworks side by side:
+    - xUnit v2 to v3 on Microsoft.Testing.Platform: two lines changed, about 50 new warnings
+    - The same core tests rewritten in NUnit 5
+    - xUnit creates a new instance per test; NUnit shares one instance across a fixture, and the parallelism defaults are opposite
+    - One dotnet test, one routed filter and one merged coverage report
+
+    Watch the episode: {YOUTUBE_URL}
+    Code: {REPO_URL}
+    Guide: {BLOG_URL}
+
+    Narration uses an AI voice.
+
+    #DotNet #xUnit #NUnit #UnitTesting #CSharp
+linkedin_personal:
+  text: |
+    One filter option, two test frameworks, two outcomes. In episode 5 of DEVLADLOG .NET I passed --filter-trait to a solution with an xUnit v3 project and an NUnit 5 project. xUnit ran. NUnit refused to start: unknown option, exit code 5.
+
+    The fix is conditional TestingPlatformCommandLineArguments. Put it in Directory.Build.props and nothing happens: no error, no filter, all 69 tests run. It works in Directory.Build.targets, because the properties it checks are not defined yet when props is evaluated.
+
+    {YOUTUBE_URL}
+
+    Narration uses an AI voice.
+
+    #DotNet #xUnit #NUnit
+facebook:
+  text: |
+    Your team writes xUnit, the team next door writes NUnit. Can you run both from one command with one coverage report? On .NET 10, yes, but one innocent filter will break half of it and another will silently do nothing.
+
+    This DEVLADLOG .NET episode tests the same API with both frameworks, side by side. Watch here: {YOUTUBE_URL}
+
+    Narration uses an AI voice.
+
+    #DotNet #xUnit #NUnit
+shorts:
+  - id: hook
+    youtube_short_title: "xUnit and NUnit in one dotnet test run? #Shorts"
+    instagram_reel:
+      caption: |
+        Your team writes xUnit. The team next door writes NUnit. Can you run both from one command, with one coverage report?
+
+        Yes, on .NET 10. But one innocent filter will break half of it, and another will silently do nothing. In this episode we test the same API with both frameworks, side by side.
+
+        Full episode: link in bio
+
+        #DotNet #xUnit #NUnit #CSharp
+      cover_text: "xUnit and NUnit, one run"
+    tiktok:
+      caption: "Can you run xUnit v3 and NUnit 5 tests from one dotnet test command? Yes, but one filter breaks half of it. #DotNet #xUnit #NUnit #CSharp"
+  - id: lifecycle
+    youtube_short_title: "xUnit vs NUnit: same words, opposite defaults #Shorts"
+    instagram_reel:
+      caption: |
+        xUnit creates a new instance of the test class for every test. NUnit does the opposite: one instance, shared by every test in the class, so a field is shared state.
+
+        Parallelism is flipped too. xUnit runs test classes in parallel by default; NUnit runs nothing in parallel until you say so. In NUnit, OneTimeSetUp starts the app once and SetUp gives each test a fresh client.
+
+        Full episode: link in bio
+
+        #DotNet #xUnit #NUnit #CSharp
+      cover_text: "Opposite defaults"
+    tiktok:
+      caption: "xUnit: new instance per test. NUnit: one instance shared by every test, so fields are shared state. Parallelism defaults are flipped too. #DotNet #xUnit #NUnit"
+  - id: gotcha
+    youtube_short_title: "One test filter, exit code 5, and a silent no-op #Shorts"
+    instagram_reel:
+      caption: |
+        xUnit v3 filters with --filter-trait. NUnit keeps the old filter syntax. Pass one filter to both and the NUnit app refuses to start: unknown option, exit code 5.
+
+        The fix is to route each argument only to the projects that understand it. Put it in Directory.Build.targets, not props. In props, those properties don't exist yet, so the condition is false. No error, no filter, all 69 tests run.
+
+        Full episode: link in bio
+
+        #DotNet #xUnit #NUnit #CSharp
+      cover_text: "Exit code 5"
+    tiktok:
+      caption: "--filter-trait broke the NUnit app (exit code 5). The fix in Directory.Build.props did nothing: all 69 tests ran. Use .targets. #DotNet #xUnit #NUnit"

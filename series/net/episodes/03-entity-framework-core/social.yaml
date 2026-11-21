@@ -1,0 +1,87 @@
+episode: 3
+series: "DEVLADLOG .NET"
+status: draft-hold-for-review
+ai_label: true
+youtube_url: "{YOUTUBE_URL}"
+linkedin_company:
+  text: |
+    An approver opens a request for 40,000. While they read it, the requester raises it to 400,000. The approver clicks approve. What got approved?
+
+    In episode 3 of DEVLADLOG .NET we move the project requests API from an in-memory store to Entity Framework Core 10, and make the answer "nothing, until they have seen the new number".
+    - A concurrency token that is the version the client saw, not just the version read a few milliseconds ago
+    - Reads as projections: one SELECT, nothing tracked
+    - Separate migration sets per provider, plus a committed SQL script checked by a test
+    - SQLite for local runs and tests
+
+    We also cover three gotchas: dates losing their Z, DateTimeOffset on SQLite, and case-sensitive text comparison.
+
+    Watch the episode: {YOUTUBE_URL}
+    Code: {REPO_URL}
+    Guide: {BLOG_URL}
+
+    Narration uses an AI voice.
+
+    #DotNet #EntityFrameworkCore #EFCore #SQLite #CSharp
+linkedin_personal:
+  text: |
+    Loading a row and saving it only protects the few milliseconds between your SELECT and your UPDATE. The approver in our demo looked at the screen for minutes.
+
+    In episode 3 of DEVLADLOG .NET the client sends back the version it read, and we set that as the original value of the EF Core concurrency token. If the row changed since, the update matches zero rows and the API answers 409. Removing that one line makes the 409 test fail; we tried.
+
+    {YOUTUBE_URL}
+
+    Narration uses an AI voice.
+
+    #DotNet #EFCore
+facebook:
+  text: |
+    An approver opens a 40,000 request. While they read it, the requester raises it to 400,000. The approver clicks approve. What got approved?
+
+    This DEVLADLOG .NET episode moves our API to Entity Framework Core 10 and makes sure the answer is "nothing, until they've seen the new number". Watch here: {YOUTUBE_URL}
+
+    Narration uses an AI voice.
+
+    #DotNet #EFCore
+shorts:
+  - id: hook
+    youtube_short_title: "The approver clicked approve. What got approved? #Shorts"
+    instagram_reel:
+      caption: |
+        An approver opens a request for 40,000. While he reads it, the requester raises it to 400,000. The approver clicks approve. What got approved?
+
+        In this episode we move our API to Entity Framework Core 10 and make sure the answer is: nothing, until he has seen the new number.
+
+        Full episode: link in bio
+
+        #DotNet #EFCore #EntityFramework #CSharp
+      cover_text: "What got approved?"
+    tiktok:
+      caption: "Approver opens a 40k request. Requester raises it to 400k. Approver clicks approve. What got approved? EF Core 10 concurrency tokens. #DotNet #EFCore #CSharp"
+  - id: concurrency
+    youtube_short_title: "EF Core concurrency: approve what you saw, or nothing #Shorts"
+    instagram_reel:
+      caption: |
+        Loading a row and saving it only protects the milliseconds in between. The approver looked at the screen for minutes.
+
+        So the client sends back the version it read, and we hand that to EF Core as the original value of the concurrency token. If someone changed the row since, the update matches zero rows, EF Core throws, and the API answers 409.
+
+        Full episode: link in bio
+
+        #DotNet #EFCore #EntityFramework #CSharp
+      cover_text: "Approve what you saw"
+    tiktok:
+      caption: "Client sends back the version it read, EF Core uses it as the token's original value. Row changed since? Zero rows updated, API answers 409. #DotNet #EFCore #CSharp"
+  - id: gotcha
+    youtube_short_title: "EF Core gotchas: dates lose the Z, SQLite is case-sensitive #Shorts"
+    instagram_reel:
+      caption: |
+        Three gotchas from this EF Core episode. Right after a POST, createdAt ended with a Z. Read it back and the Z was gone, because the database doesn't store DateTime.Kind.
+
+        We used DateTime, not DateTimeOffset, because SQLite can't order DateTimeOffsets in SQL. And SQLite compares text case-sensitively while SQL Server doesn't, so we normalise department codes.
+
+        Full episode: link in bio
+
+        #DotNet #EFCore #SQLite #CSharp
+      cover_text: "Where did the Z go?"
+    tiktok:
+      caption: "EF Core gotchas: DateTime loses its Z, DateTimeOffset can't be ordered in SQLite, and SQLite text compares are case-sensitive. #DotNet #EFCore #SQLite"
