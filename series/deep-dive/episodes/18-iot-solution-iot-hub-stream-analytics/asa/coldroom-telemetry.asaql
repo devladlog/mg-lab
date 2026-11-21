@@ -1,0 +1,33 @@
+-- Contoso Porto warehouse: cold-room telemetry from IoT Hub.
+-- 1) one-minute aggregates per device   2) alert on a sustained warm room
+WITH Readings AS (
+    SELECT
+        deviceId,
+        TRY_CAST(temperatureC AS float) AS temperatureC,
+        TRY_CAST(humidityPct AS float)  AS humidityPct,
+        observedAt
+    FROM telemetry TIMESTAMP BY observedAt
+    WHERE deviceId IS NOT NULL
+      AND TRY_CAST(temperatureC AS float) IS NOT NULL
+)
+SELECT
+    deviceId,
+    System.Timestamp() AS windowEnd,
+    COUNT(*) AS readings,
+    AVG(temperatureC) AS avgTempC,
+    MIN(temperatureC) AS minTempC,
+    MAX(temperatureC) AS maxTempC
+INTO aggregates
+FROM Readings
+GROUP BY deviceId, TumblingWindow(minute, 1)
+
+SELECT
+    deviceId,
+    System.Timestamp() AS windowEnd,
+    COUNT(*) AS readings,
+    AVG(temperatureC) AS avgTempC,
+    'COLD_ROOM_TOO_WARM' AS alertType
+INTO alerts
+FROM Readings
+GROUP BY deviceId, HoppingWindow(minute, 3, 1)
+HAVING COUNT(*) >= 3 AND AVG(temperatureC) > 8.0

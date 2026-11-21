@@ -1,0 +1,258 @@
+# DEVLADLOG Deep Dive, episode 17. Code and test scenes are real (from this folder); screen scenes need the lab
+# recording described in demo.md. Narration ~830 words.
+episode: 17
+slug: cloud-migration-platform
+series_label: "DEEP DIVE"
+series_name: "DEVLADLOG Deep Dive"
+file_prefix: "deep-dive"
+title: "Cloud migration platform"
+subtitle: "Azure Migrate and Site Recovery"
+voice: am_michael
+thumbnail_text: "14 SERVERS\nWHICH ONE\nMOVES FIRST?"
+youtube:
+  title: "Azure Migrate + Site Recovery: Plan Waves, Prove Failover | DEVLADLOG Deep Dive #17"
+  tags: [Azure Migrate, Azure Site Recovery, cloud migration, migration waves, server assessment, disaster recovery, test failover, Bicep, PowerShell, hybrid cloud, lift and shift, solution architecture]
+sources:
+  - https://www.devladlog.com/articles/deep-dive/2025-10-20-cloud-migration-platform-azure-migrate-site-recovery-hybrid-cloud/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Fourteen servers. One lease ending."
+    sub: "which one moves first?"
+    short: hook
+    narration: >
+      Contoso's data centre lease ends soon, and fourteen servers have to go. Which one moves first? Which ones must
+      move together? And how do you prove you can fail over before the big night? Today we plan with Azure Migrate,
+      then rehearse the safety net with Site Recovery. This is the DEVLADLOG Deep Dive.
+
+  - id: architecture
+    type: diagram
+    heading: "From inventory to rehearsal"
+    nodes: ["Inventory", "Azure Migrate", "Wave plan", "Site Recovery"]
+    labels: ["PowerShell or CMDB", "import and assess", "dependency groups", "replicate and test"]
+    narration: >
+      Four steps. An inventory of what you have. Azure Migrate imports it and assesses what each server needs.
+      We group the servers into waves, by who talks to whom. And Site Recovery replicates a machine to another
+      region, so we can rehearse a failover.
+
+  - id: principles
+    type: bullets
+    heading: "Four rules we encode"
+    bullets:
+      - "Check the data before Azure sees it"
+      - "Size from use, not from what was bought"
+      - "Servers that talk move together"
+      - "No cutover without a recent test failover"
+    narration: >
+      Each step becomes a small tool with tests. Check the inventory before it goes to Azure. Size from what a server
+      uses, with headroom, not from what someone bought years ago. Keep chatty servers in the same wave. And never
+      cut over without a recent, successful test failover.
+
+  - id: collector
+    type: code
+    heading: "Collecting who talks to whom"
+    lang: powershell
+    code: |
+      foreach ($r in $Rows) {
+          if ($r.RemotePort -ge 49152) { continue }
+          if ($r.RemoteAddress -like '127.*' -or $r.RemoteAddress -like '169.254.*' -or $r.RemoteAddress -match ':') { continue }
+          $key = "$($r.RemoteAddress):$($r.RemotePort)"
+          if ($seen.ContainsKey($key)) { continue }
+          $seen[$key] = $true
+          [pscustomobject][ordered]@{ source = $Source.ToLowerInvariant(); destinationIp = $r.RemoteAddress; port = [int]$r.RemotePort }
+      }
+    narration: >
+      A PowerShell collector reads each Windows server: cores, memory, disks, firmware, and established TCP
+      connections. This part turns those rows into dependencies. It keeps outbound connections to a service port,
+      drops loopback and link local noise, and removes duplicates. It is a snapshot, not a flow log.
+
+  - id: waves
+    type: code
+    heading: "The domain controller trap"
+    short: waves
+    lang: python
+    code: |
+      INFRA_PORTS = frozenset({53, 88, 123, 135, 389, 445, 464, 636, 3268, 3269, 3389, 5985, 5986})
+      ...
+      for conn in inv.connections:
+          if conn.port in ignore_ports:
+              continue
+          target = ips.get(conn.destination_ip)
+          source = names.get(conn.source.lower())
+          if target is None or source is None or source.name == target:
+              continue
+          edges.add(frozenset({source.name, target}))
+    narration: >
+      Here is the trap. Every domain member talks to the domain controller. Count those connections, and nearly all
+      fourteen servers become one giant group, so nothing can move first. The fix is to ignore infrastructure ports
+      like directory, name resolution and file sharing, and treat shared services as a foundation step. What is left
+      is the real structure: the web tier, the app tier and the database, together.
+
+  - id: check
+    type: code
+    heading: "Check before you import"
+    lang: text
+    code: |
+      $ python -m migplan check data/contoso-cmdb.json
+      BLOCKER  legacy01  missing-field          memoryMb is required by the Azure Migrate CSV import
+      WARNING  legacy01  os-end-of-support      Learn lists this Windows Server version as end of support ...
+      WARNING  rep01     os-end-of-support      Learn lists this Windows Server version as end of support ...
+      ...
+      sql01    performance  Standard_E16s_v5 (16 vCPU, 128 GiB)  comfort factor 1.3
+      files01  as-is        Standard_D2s_v5 (2 vCPU, 8 GiB)      no utilisation data
+      legacy01 none         -                                    cores and memory are required
+    narration: >
+      On Contoso's fictional export, the checker finds one blocker: a legacy server with no memory figure, which the
+      import requires. It warns about three servers on versions Learn lists as end of support. And it makes a first
+      size guess. The real assessment stays the authority. This is a cheap early warning.
+
+  - id: import-screen
+    type: screen
+    heading: "Import, no appliance needed"
+    image: screens/import.jpg
+    bar: "Azure portal · Azure Migrate"
+    demo: >
+      Edge on the Azure portal, Azure Migrate project in rg-mglab-deep-dive-17 > Servers > Azure Migrate: Discovery and assessment >
+      Discovered servers > Import based tab, showing the imported servers (the real lab VMs from the PowerShell collector plus the
+      fictional Contoso rows) after the CSV import status shows Completed. Mask the subscription id and the tenant name.
+    narration: >
+      The import in Azure Migrate. No appliance, no credentials shared: just the file our tool wrote, with the header
+      row from Microsoft's own template. One honest limit, straight from Learn: you cannot migrate servers imported
+      from a file. This is for assessment and planning.
+
+  - id: assessment-screen
+    type: screen
+    heading: "What each server needs in Azure"
+    image: screens/assessment.jpg
+    bar: "Azure portal · Azure Migrate assessment"
+    demo: >
+      The Azure VM assessment created for the imported group, West Europe as target: the summary with Azure VM readiness counts and the
+      estimated monthly cost, then the Azure VM readiness tab with the recommended size per server. Capture one assessment with
+      performance-based and one as-is sizing if time allows, and say which settings were used. Mask the subscription id.
+    narration: >
+      The assessment. Each server gets a readiness verdict, a recommended size and a monthly estimate. Sizing depends
+      on a setting: as is uses what was allocated, performance based uses what was used, with a comfort factor on
+      top. Compare it with our early guess, and where they disagree, find out why.
+
+  - id: gotcha
+    type: bullets
+    heading: "Gotchas, all from the docs"
+    short: gotcha
+    bullets:
+      - "Imported servers can be assessed, not migrated"
+      - "The vault must not be in the source region"
+      - "Windows 2008 and 2012 are end of support"
+      - "Test failover is billed, and protection is free for 31 days"
+    narration: >
+      The gotchas, all from the docs. Servers imported from a file can be assessed, never migrated. For Azure to Azure
+      recovery, the vault has to be in a different region from the machines it protects. Windows Server two thousand
+      eight and two thousand twelve are out of support, so plan the upgrade. And Site Recovery is free for the first
+      thirty one days per protected instance, but storage, transfer and test failover compute are still billed.
+
+  - id: bicep
+    type: code
+    heading: "The landing zone, in Bicep"
+    lang: bicep
+    code: |
+      // vault and target network: North Europe. Source VM: West Europe.
+      param sourceLocation string = 'westeurope'
+      param drLocation string = 'northeurope'
+      param sourceAddressSpace string = '10.60.0.0/16'
+      param drAddressSpace string = '10.61.0.0/16'
+      ...
+      resource vault 'Microsoft.RecoveryServices/vaults@2024-04-01' = {
+        name: 'rsv-mglab-dr'
+        location: location
+        sku: { name: 'RS0', tier: 'Standard' }
+      }
+    narration: >
+      The landing zone is Bicep. A source network and one private only test server in West Europe. A vault and a
+      target network in North Europe. A test checks that the address ranges do not overlap, that the vault region
+      differs, and that there is no public address. The password is a secure parameter, never in a file.
+
+  - id: replication-screen
+    type: screen
+    heading: "Protected, and how fresh"
+    image: screens/replication.jpg
+    bar: "Azure portal · Recovery Services vault"
+    demo: >
+      Recovery Services vault in the North Europe group > Replicated items > the test VM, then its Overview: replication health,
+      status Protected, the RPO and the time it was last computed, and Failover readiness. Capture only after initial replication
+      has finished (it can take a while). Mask subscription id and resource ids.
+    narration: >
+      The vault, with the test server protected. The page shows replication health, and the recovery point objective:
+      how much data you could lose, and when it was last calculated. A crash consistent recovery point is taken every
+      five minutes. This is what an operator looks at, and our gate reads the same fields.
+
+  - id: gate
+    type: code
+    heading: "The gate: ready, or not ready"
+    lang: python
+    code: |
+      add("replication-health", health == "Normal", f"{name}: replicationHealth={health}")
+      ...
+      add("rpo", rpo <= rpo_target_s, f"{name}: RPO {rpo}s against a target of {rpo_target_s}s")
+      ...
+      add("test-failover-recent", tested is not None and now - tested <= timedelta(days=max_test_age_days),
+          f"{name}: last successful test failover {tested.date().isoformat() if tested else 'never'}")
+      ...
+      add("failover-allowed", "UnplannedFailover" in allowed and "TestFailover" in allowed,
+          f"{name}: allowedOperations={','.join(allowed) or 'none'}")
+    narration: >
+      The gate reads the list of protected items from the Site Recovery REST interface. Health must be normal. The
+      recovery point objective must be within fifteen minutes and freshly calculated. A test failover must have
+      succeeded within ninety days. And failover must be an allowed operation. The thresholds are our policy, not
+      Microsoft's, and one failing check means not ready.
+
+  - id: failover-screen
+    type: screen
+    heading: "Rehearse, then ask the gate"
+    image: screens/failover.jpg
+    bar: "Azure portal · Windows Terminal"
+    demo: >
+      Left: the portal, Replicated items > the VM > Test failover (latest recovery point, a non-production target network), with the job
+      succeeding and the test VM appearing in the North Europe group, then Cleanup test failover. Right: Windows Terminal,
+      az rest on replicationProtectedItems saved to items.json, then python -m migplan gate items.json showing PASS lines and READY (or the
+      real FAIL lines if something is not ready: say so in the narration). Mask subscription id and resource ids.
+    narration: >
+      Now the rehearsal. A test failover creates a copy of the machine in the target region, in a network that is not
+      production, and we clean it up afterwards. Then the gate runs against the live vault. If every check passes, it
+      says ready. If not, it says which one failed, and that is worth more than any slide.
+
+  - id: tests
+    type: code
+    heading: "Fifty eight checks, no Azure needed"
+    lang: text
+    code: |
+      $ python3 -m pytest -q
+        inventory, readiness, sizing, waves: 26
+        CSV headers equal the template; gate; CLI: 18
+        Bicep: regions differ, no overlap, no public IP: 11
+        PowerShell: parse, Pester (9 tests), feeds the planner: 3
+      58 passed
+    narration: >
+      None of this needs a subscription to test. Fifty eight Python tests cover the checks, the sizing, the waves,
+      the file format and the gate, one failing check at a time. The Bicep is compiled and inspected. And the
+      PowerShell collector has Pester tests, and its output must be readable by the planner.
+
+  - id: recap
+    type: bullets
+    heading: "What to take away"
+    bullets:
+      - "Inventory, assess, group, rehearse"
+      - "Shared services are a foundation, not a wave"
+      - "Imported servers are for planning only"
+      - "Gate every cutover on a fresh test failover"
+    narration: >
+      To recap. Inventory, assess, group, rehearse. Treat shared services as a foundation, not as a wave. Use the
+      import for planning, and the appliance when you actually migrate. And gate every cutover on a fresh, successful
+      test failover. Then the big night is a procedure you have already done once.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The collector, the planner, the Bicep and the tests are on GitHub, and the full guide is on devladlog dot com.
+      This was the DEVLADLOG Deep Dive, by Momento Galático.

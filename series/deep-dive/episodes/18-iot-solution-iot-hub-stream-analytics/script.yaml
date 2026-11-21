@@ -1,0 +1,238 @@
+# DEVLADLOG Deep Dive, episode 18. Code and test scenes are real (from this folder); screen scenes need the lab
+# recording described in demo.md. Narration ~840 words.
+episode: 18
+slug: iot-solution-iot-hub-stream-analytics
+series_label: "DEEP DIVE"
+series_name: "DEVLADLOG Deep Dive"
+file_prefix: "deep-dive"
+title: "IoT solution"
+subtitle: "IoT Hub and Stream Analytics"
+voice: am_michael
+thumbnail_text: "A COLD ROOM\nWARMS UP.\nWHO KNOWS FIRST?"
+youtube:
+  title: "IoT Hub + Stream Analytics: Real-Time Cold Room Alerts on the Free Tier | DEVLADLOG Deep Dive #18"
+  tags: [Azure IoT Hub, Azure Stream Analytics, IoT, real-time analytics, telemetry, tumbling window, hopping window, managed identity, Bicep, free tier, streaming, solution architecture]
+sources:
+  - https://www.devladlog.com/articles/deep-dive/2025-12-01-iot-solution-azure-iot-hub-stream-analytics-real-time-dashboards/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "A cold room warms up. Who knows first?"
+    sub: "IoT Hub and Stream Analytics, free tier"
+    short: hook
+    narration: >
+      Contoso's Porto warehouse keeps food in three cold rooms. A door is left open, and the temperature climbs. Today
+      we find out within minutes, not at the next morning round. Sensors send telemetry to IoT Hub, Stream Analytics
+      watches the stream, and a sustained warm room raises an alert. On the free tier. This is the DEVLADLOG Deep Dive.
+
+  - id: architecture
+    type: diagram
+    heading: "Telemetry in, two streams out"
+    nodes: ["Cold rooms", "IoT Hub", "Stream Analytics", "Blob storage"]
+    labels: ["three simulated devices", "free tier F1", "one query, two outputs", "aggregates and alerts"]
+    narration: >
+      Three simulated cold rooms send a reading every few seconds to an IoT Hub on the free tier. A Stream Analytics
+      job reads the hub's built in endpoint with its own consumer group. One query writes two outputs: a one minute
+      aggregate per room, and an alert when a room stays warm. Both land in blob storage, written with a managed identity.
+
+  - id: principles
+    type: bullets
+    heading: "Design rules"
+    bullets:
+      - "Stay inside the free quota, on purpose"
+      - "Parse defensively: devices send junk"
+      - "Alert on a trend, not a single reading"
+      - "Test the query without a cloud job"
+    narration: >
+      Four rules. The free hub allows eight thousand messages a day, so the simulator refuses to exceed that. Devices
+      send junk, so the query parses defensively. An alert fires on a sustained average, not one noisy reading. And
+      the query is tested before any job exists.
+
+  - id: budget
+    type: code
+    heading: "A simulator that guards the quota"
+    lang: python
+    code: |
+      def check_budget(devices: int, interval_seconds: float, duration_seconds: float, *, already_sent_today: int = 0,
+                       headroom: float = 0.8, body_size: int = 150) -> int:
+          """Refuse a run that would use more than `headroom` of the free-tier daily quota."""
+          cost = estimate_daily_cost(devices, interval_seconds, duration_seconds, body_size)
+          limit = int(FREE_TIER_MESSAGES_PER_DAY * headroom)
+          if already_sent_today + cost > limit:
+              raise QuotaExceeded(
+                  f"run needs {cost} messages, {already_sent_today} already sent today, "
+                  f"limit with headroom is {limit} of {FREE_TIER_MESSAGES_PER_DAY}"
+              )
+          return cost
+    narration: >
+      The simulator checks the budget before it connects. Learn says the free hub meters messages in half kilobyte
+      chunks, so a bigger payload would count as several. Three devices, every five seconds, for twenty minutes cost
+      about seven hundred messages. And if a run would pass eighty percent of the day, it refuses and says so.
+
+  - id: query
+    type: code
+    heading: "Parse defensively, aggregate per minute"
+    lang: sql
+    code: |
+      WITH Readings AS (
+          SELECT deviceId,
+                 TRY_CAST(temperatureC AS float) AS temperatureC,
+                 observedAt
+          FROM telemetry TIMESTAMP BY observedAt
+          WHERE deviceId IS NOT NULL
+            AND TRY_CAST(temperatureC AS float) IS NOT NULL
+      )
+      SELECT deviceId, System.Timestamp() AS windowEnd, COUNT(*) AS readings, AVG(temperatureC) AS avgTempC
+      INTO aggregates
+      FROM Readings
+      GROUP BY deviceId, TumblingWindow(minute, 1)
+    narration: >
+      The query timestamps events by when the device observed them, not when they arrived. A malformed temperature,
+      a string, a null or a missing field, becomes a null and is filtered out, instead of breaking the job. Then a one
+      minute tumbling window gives each room its count and average. Windows are open at the start and closed at the
+      end, so an event exactly on the minute belongs to the window ending there.
+
+  - id: alert
+    type: code
+    heading: "Alert on a sustained warm room"
+    short: alert
+    lang: sql
+    code: |
+      SELECT deviceId, System.Timestamp() AS windowEnd, COUNT(*) AS readings, AVG(temperatureC) AS avgTempC,
+             'COLD_ROOM_TOO_WARM' AS alertType
+      INTO alerts
+      FROM Readings
+      GROUP BY deviceId, HoppingWindow(minute, 3, 1)
+      HAVING COUNT(*) >= 3 AND AVG(temperatureC) > 8.0
+    narration: >
+      The alert is a hopping window: the last three minutes, recalculated every minute. It needs at least three
+      readings, so a single spike or a quiet sensor cannot trigger it, and an average above eight degrees. That is
+      the whole alert rule, in one clause, and the same query file runs locally and in Azure.
+
+  - id: devices-screen
+    type: screen
+    heading: "The hub and its devices"
+    image: screens/iothub.jpg
+    bar: "Azure portal · IoT Hub"
+    demo: >
+      Edge on the Azure portal, the IoT hub in rg-mglab-deep-dive-18: Overview showing tier F1 and the daily message limit, then
+      Devices with coldroom-01 to coldroom-03, then (during a run) Monitoring > Metrics "Telemetry messages sent". Mask the
+      subscription id and the hub name suffix if it is derived from the group id.
+    narration: >
+      The hub, free tier, with three device identities created from the command line. The connection strings went
+      straight into a file that is ignored by git, and were never printed. During a run, the metrics show telemetry
+      messages arriving, and the overview shows the daily limit we are protecting.
+
+  - id: job-screen
+    type: screen
+    heading: "The job, running"
+    image: screens/job.jpg
+    bar: "Azure portal · Stream Analytics"
+    demo: >
+      The Stream Analytics job in the same group: Overview with status Running, then Monitoring with Input Events and Output Events
+      for a normal run, and the Watermark Delay metric split by Partition ID if one partition is empty (say so in the narration if you see it).
+      Mask the subscription id.
+    narration: >
+      The job, running on one streaming unit. Input events go up, output events follow a little later, and that
+      delay is deliberate: the job waits for late events for up to a minute, and out of order events for five
+      seconds, in this configuration. With two partitions on the free hub, an empty one can hold the output back, which is the next gotcha.
+
+  - id: aggregates-screen
+    type: screen
+    heading: "One minute aggregates"
+    image: screens/aggregates.jpg
+    bar: "Azure portal · Storage browser"
+    demo: >
+      Storage account > Storage browser > Blob containers > aggregates > the date and hour folders, then open the blob and show a few
+      JSON lines: deviceId, windowEnd, readings, avgTempC, minTempC, maxTempC for coldroom-01 to coldroom-03 from a normal run.
+      Mask the storage account name.
+    narration: >
+      The aggregates container. One line per room per minute, as the query defined it. We wrote them with the job's
+      managed identity, which has the blob contributor role on this container only, and nothing else.
+
+  - id: alert-screen
+    type: screen
+    heading: "The door is open"
+    image: screens/alert.jpg
+    bar: "Windows Terminal · Azure portal"
+    demo: >
+      Left: Windows Terminal, PYTHONPATH=src python -m iotlab simulate --scenario door-open --minutes 10 running (shows sent counts).
+      Right: the alerts container, the blob with COLD_ROOM_TOO_WARM lines for coldroom-02 only. Note the real time from the door-open
+      reading to the first alert line (it includes the window and the late arrival wait) and say it in the narration.
+    narration: >
+      Now the door opens on one room. Its temperature jumps by six degrees. The other two rooms stay normal. After the
+      window has enough warm readings, and the job's wait for late events, the alerts container gets its first
+      line, for that room only. That delay is a design choice you can tune, not an accident.
+
+  - id: gotcha
+    type: bullets
+    heading: "Gotchas, all from the docs"
+    short: gotcha
+    bullets:
+      - "IoT Hub input: no managed identity, a key is needed"
+      - "An empty partition delays output by the late arrival wait"
+      - "Free hub: one per subscription, eight thousand messages"
+      - "Local runs ignore time policies"
+    narration: >
+      The gotchas, all from the docs. The Stream Analytics input for IoT Hub does not support managed identity, so
+      the job uses the service policy key, read inside the template and never printed. Routing through Event Hubs is
+      Learn's workaround. An empty partition delays output by the late arrival tolerance. The free hub is limited
+      to one per subscription. And the local test runtime ignores time policies, so those are checked in the cloud.
+
+  - id: bicep
+    type: code
+    heading: "Keys where they must be, identity everywhere else"
+    lang: bicep
+    code: |
+      sharedAccessPolicyName: 'service'
+      sharedAccessPolicyKey: filter(hub.listKeys().value, policy => policy.keyName == 'service')[0].primaryKey
+      consumerGroupName: consumerGroupName
+      ...
+      // Least privilege: the job's identity may write to its own two containers only.
+      scope: containers[i]
+      principalId: job.identity.principalId
+      roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', blobDataContributor)
+      ...
+      authenticationMode: 'Msi'
+    narration: >
+      In Bicep, the only secret is the one the input needs, and the template reads it from the hub itself. The
+      outputs use the job's system assigned identity, with the contributor role scoped to each container. No
+      connection string is an output, and no secret sits in a parameter or a file.
+
+  - id: tests
+    type: code
+    heading: "Fifty checks, the real runtime"
+    lang: text
+    code: |
+      $ python3 -m pytest -q
+        ASA local runtime: the query against three committed cases
+        a mutated threshold must make the harness fail
+        simulator door-open -> alert for coldroom-02 only
+        Bicep: free tier, no outputs of secrets, scoped roles
+      50 passed
+    narration: >
+      Fifty tests, no Azure needed. The query runs on Microsoft's real local runtime against three committed cases,
+      checked against an independent Python model. A mutation test proves the harness notices a changed threshold.
+      The simulator is replayed through the query. And the Bicep is compiled and inspected.
+
+  - id: recap
+    type: bullets
+    heading: "What to take away"
+    bullets:
+      - "Protect the free quota in code"
+      - "TRY_CAST at the door, windows for the rest"
+      - "Managed identity out, a key in: know the limit"
+      - "Test locally, then verify time policies in Azure"
+    narration: >
+      To recap. Protect the quota in code. Parse at the door and let windows do the maths. Use managed identity where
+      it is supported, and be honest where it is not. And test locally, then check the time policies in the cloud,
+      because the local runtime cannot.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The simulator, the query, the Bicep and the tests are on GitHub, and the full guide is on devladlog dot com.
+      This was the DEVLADLOG Deep Dive, by Momento Galático.
