@@ -90,9 +90,7 @@ scenes:
       little; check the top two lines are the same before recording the narration).
     narration: >
       Now the CPU profile. This runs the slow report under the V8 profiler and prints two tables. The function view
-      says almost everything happens inside the report function itself. Not helpful. The line view is. A little over
-      half the time is one line: the budget formatting with to locale string. About a third is the duplicate check
-      with some. The JSON clone everybody suspected? A few percent.
+      says almost everything happens inside the report function itself. Not helpful. The line view is. Two thirds of the time is one line: the budget formatting with to locale string. The duplicate check with some is about a tenth. The JSON clone everybody suspected? It doesn't even make the list.
 
   - id: vscode
     type: screen
@@ -191,10 +189,9 @@ scenes:
       node src/cli.js lag fast --rows 3000 (event loop delay max in the hundreds of milliseconds for slow, tens at most
       for fast). Reference: demo/expected-output.txt.
     narration: >
-      Now the numbers. The benchmark says the median went from hundreds of milliseconds to a millisecond or two. But
+      Now the numbers. The benchmark says the median went from forty eight milliseconds to under one. But
       speed is not the only thing a Node service cares about. The event loop delay monitor shows what the slow version
-      did to everybody else. While it ran, a timer that should fire every ten milliseconds fired six hundred late. For
-      that long, no request, no timer, nothing else could run. After the fix the delay is the idle background level.
+      did to everybody else. While it ran, a timer that should fire every ten milliseconds fired up to ninety one milliseconds late. For that long, no request, no timer, nothing else could run. After the fix the worst delay is twenty five, close to the idle background level.
 
   - id: memory
     type: screen

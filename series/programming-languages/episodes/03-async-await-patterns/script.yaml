@@ -18,12 +18,12 @@ scenes:
   - id: hook
     type: title
     heading: "Async and await, done properly"
-    sub: "The same twelve requests: 3.7 seconds, or 1"
+    sub: "The same twelve requests: 3.8 seconds, or 1"
     short: hook
     narration: >
       Your code is full of async and await. But is it actually concurrent? Does Control C really stop it? And does
       your timeout stop the work, or just stop waiting for it? In this episode we call a real API from C# and
-      measure everything: twelve requests in three point seven seconds, then in one. Plus a timeout that lies, and a
+      measure everything: twelve requests in three point eight seconds, then in one. Plus a timeout that lies, and a
       deadlock you can reproduce on demand. Welcome to DEVLADLOG Code.
 
   - id: plan
@@ -116,11 +116,9 @@ scenes:
       Windows Terminal split in two panes (dark theme, font 18 pt or larger). Left pane: the Finance API running
       (dotnet run --project src/Contoso.Approvals.Api), its log lines scrolling ("budget CC-100 start (in flight 1)",
       "done 300 ms"). Right pane: dotnet run --project src/Contoso.Approvals.Cli -- sequential, ending with
-      "sequential: 12 requests in 3.7 s, 9 within budget, 3 over budget" and "api saw: ... MaxInFlight = 2".
+      "sequential: 12 requests in 3.8 s, 9 within budget, 3 over budget" and "api saw: ... MaxInFlight = 2".
     narration: >
-      Here's the baseline, running for real. On the left, the Finance API logs every lookup. On the right, the
-      console app processes the twelve requests one after another. Three point seven seconds, and the API never
-      sees more than two calls at a time: the budget and the approver of the same request.
+      Here's the baseline, running for real. The console app processes the twelve requests one after another: three point eight seconds. Then the Finance API's own log, and the API never saw more than two calls at a time: the budget and the approver of the same request.
 
   - id: batch
     type: code

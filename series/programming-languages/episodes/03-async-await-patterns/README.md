@@ -40,7 +40,7 @@ dotnet test AsyncPatterns.slnx -m:1          # Passed: 27, Failed: 0 (~3 s)
 # terminal 1: the Finance API on http://localhost:5080
 dotnet run --project src/Contoso.Approvals.Api            # add  -- --Api:Flaky=CC-400  to see retries
 # terminal 2: the client
-dotnet run --project src/Contoso.Approvals.Cli -- sequential   # 12 requests in ~3.7 s, max 2 calls in flight
+dotnet run --project src/Contoso.Approvals.Cli -- sequential   # 12 requests in ~3.8 s, max 2 calls in flight
 dotnet run --project src/Contoso.Approvals.Cli -- unbounded    # ~0.33 s, 24 calls in flight at once
 dotnet run --project src/Contoso.Approvals.Cli -- bounded      # ~1.0 s, never more than 8 in flight (4 requests x 2)
 dotnet run --project src/Contoso.Approvals.Cli -- timeout --timeout-ms 150     # API logs "ABORTED by the client"
