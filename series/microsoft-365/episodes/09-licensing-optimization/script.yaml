@@ -1,0 +1,205 @@
+# DEVLADLOG Microsoft 365 — episode 09 (draft: code and tests are real; screen scenes still need the lab recording)
+episode: 9
+slug: licensing-optimization
+series_label: "MICROSOFT 365"
+series_name: "DEVLADLOG Microsoft 365"
+file_prefix: "microsoft-365"
+title: "Licensing Optimization"
+subtitle: "Find the licences nobody uses, reclaim them safely, and keep a way back"
+voice: am_michael
+thumbnail_text: "WHO USES\nWHICH\nLICENCE?"
+youtube:
+  title: "Microsoft 365 Licensing Optimization: Reclaim Unused Licences | DEVLADLOG Microsoft 365 #9"
+  tags: [Microsoft 365 licensing, licence optimization, unused licenses, Microsoft Graph, assignLicense, signInActivity, group-based licensing, Microsoft 365 admin, PowerShell, Microsoft 365 E5]
+sources:
+  - https://www.devladlog.com/articles/office-365/2025-05-06-licensing-optimization-complete-guide-2025/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Who uses which licence?"
+    sub: "Find the licences nobody uses, reclaim them safely, and keep a way back"
+    short: hook
+    narration: >
+      Every licence nobody uses costs money every month, and the list of who they are is spread over three places. In this
+      episode we find them with Microsoft Graph: disabled accounts, people who never signed in, overlapping licences, and
+      assignments that are broken. Then we reclaim a few, and keep a rollback file in case we are wrong. It all runs
+      against our real lab tenant. The prices you will see come from our own config file, not from Microsoft.
+
+  - id: waste
+    type: bullets
+    heading: "Where the waste hides"
+    bullets:
+      - "Disabled accounts that still hold a licence"
+      - "Users who never signed in, or stopped months ago"
+      - "A smaller licence next to a bigger one"
+      - "The same licence assigned directly and by a group"
+    narration: >
+      Waste hides in four places. Disabled accounts that still hold a licence. Users who never signed in, or stopped
+      months ago. A smaller licence sitting next to a bigger one that already covers it. And the same licence assigned
+      twice, directly and through a group, so removing the user from the group would not free the seat. Microsoft's own
+      guidance says a reasonable window for inactive accounts is ninety to one hundred eighty days.
+
+  - id: licences-screen
+    type: screen
+    heading: "What the tenant holds"
+    image: screens/licences.jpg
+    bar: "Microsoft 365 admin center > Billing > Licenses (lab tenant, masked)"
+    demo: >
+      Setup (demo.md): Microsoft 365 admin center > Billing > Licenses, as labadmin. Show the E5 trial, Business Standard and the other
+      trials with Available and Assigned counts, then open one product to show Users and Groups. Rewrite the narration to the real
+      numbers. Mask the tenant name.
+    narration: >
+      This is the lab tenant. Each product shows how many licences we have and how many are assigned. The admin center is
+      good at that. What it does not put next to each other is who holds a licence, how it was assigned, and when that
+      person last signed in. So we ask Graph for exactly that.
+
+  - id: collect-code
+    type: code
+    heading: "One request, three answers"
+    lang: powershell
+    code: |
+      $select = 'id,displayName,userPrincipalName,accountEnabled,userType,createdDateTime,usageLocation,assignedLicenses,licenseAssignmentStates,signInActivity'
+      try { @(Invoke-LOGraphPaged "$script:Graph/users?`$select=$select&`$top=$([Math]::Min(500, $Top))") }
+    narration: >
+      One users request returns the licences, how each one was assigned, and the sign in activity. Sign in activity needs
+      Microsoft Entra ID P1 or P2 and the audit log permission, and with it selected the page size tops out at five
+      hundred. Everything in the audit is a get request. The script can look, but it cannot change anything.
+
+  - id: gotcha
+    type: code
+    heading: "The gotcha: a failed sign-in is not activity"
+    lang: powershell
+    short: gotcha
+    code: |
+      # lastSuccessfulSignInDateTime is not backfilled before Dec 2023; fall back to the other two (Learn: signInActivity).
+      $ok = ConvertTo-LODate (Get-LOProp $s 'lastSuccessfulSignInDateTime')
+      if ($ok) { return $ok }
+    narration: >
+      Here is the gotcha. The last sign in date counts failed attempts too. Someone locked out and retrying looks active.
+      So the script uses the last successful sign in, and only falls back to the other dates when that one is missing,
+      because Microsoft did not backfill it before December twenty twenty three. And if no user comes back with sign in data at all, the script says so,
+      instead of calling everyone inactive.
+
+  - id: audit-screen
+    type: screen
+    heading: "The audit, on real data"
+    image: screens/audit.jpg
+    bar: "PowerShell on the lab Windows desktop (lab tenant, masked)"
+    demo: >
+      Setup (demo.md): licensing.lab.json with short thresholds (the lab is days old, production uses 90), then
+      ./Invoke-LicensingOptimization.ps1 -ConfigFile ./licensing.lab.json -OutFile ./audit.lab.md. Show the findings table with the real
+      rules, how each licence was assigned, and the Reclaimable column, then the seats-not-assigned table. Rewrite the narration to the
+      real findings. Mask UPN domains and ids.
+    narration: >
+      Here is the audit. The lab is only days old, so the thresholds are set to days. In production the default is ninety.
+      Each finding names the user, the licence, how it was assigned, and whether we may reclaim it. Users who never signed in
+      show up, and a licence given through a group is marked as not reclaimable, because the fix is the group, not the user.
+
+  - id: assigned-code
+    type: code
+    heading: "Direct, group, or both"
+    lang: powershell
+    code: |
+      $direct = @($mine | Where-Object { $null -eq (Get-LOProp $_ 'assignedByGroup') }).Count -gt 0
+      $viaGroup = @($mine | Where-Object { $null -ne (Get-LOProp $_ 'assignedByGroup') }).Count -gt 0
+      $source = if ($mine.Count -eq 0) { 'Unknown' } elseif ($direct -and $viaGroup) { 'Both' } elseif ($direct) { 'Direct' } else { 'Group' }
+    narration: >
+      The licence assignment state tells us how each licence arrived. Empty means direct. A group id means inherited. If
+      both are there, the direct one is a leftover. Group licences are never touched by this script, and a licence the
+      script cannot classify counts as unknown and is left alone.
+
+  - id: savings-bullets
+    type: bullets
+    heading: "What it is worth, and what it is not"
+    bullets:
+      - "One seat per user and licence, however many rules hit it"
+      - "Prices come from your config, not from Graph"
+      - "Saved only when the subscription shrinks"
+      - "Annual commitments cannot be cut mid-term"
+    narration: >
+      The report counts one seat per user and licence, however many rules hit it. Prices are not in the data Graph
+      returns, so they come from your own config, and with none configured the report shows no money at all. And be careful with the word saving. A seat is only
+      saved when you reduce the subscription. Microsoft's documentation says you cannot remove a licence from a subscription
+      until an annual commitment is complete.
+
+  - id: allow-code
+    type: code
+    heading: "Nothing is removed unless you allowed it"
+    lang: powershell
+    code: |
+      $allowed = @(Get-LOProp $Config.reclaim 'allowedSkuPartNumbers' @())
+      $rules = @(Get-LOProp $Config.reclaim 'rules' @())
+      $cand = @($Findings | Where-Object { $_.Reclaimable -and $_.Rule -in $rules -and $_.Sku -in $allowed -and $_.UserId -and $_.SkuId })
+    narration: >
+      The shipped config allows no licence at all. To reclaim, you name the licences and the rules. Admin role members and
+      anyone in the protected list are never planned, and neither is anything assigned by a group.
+
+  - id: reclaim-code
+    type: code
+    heading: "Remove one licence, record it first"
+    lang: powershell
+    short: reclaim
+    code: |
+      $body = @{ addLicenses = @(); removeLicenses = @($p.SkuId) } | ConvertTo-Json -Depth 5 -Compress
+      Invoke-MgGraphRequest -Method POST -Uri "$script:Graph/users/$($p.UserId)/assignLicense" -Body $body -ContentType 'application/json' -ErrorAction Stop | Out-Null
+      ConvertTo-Json -InputObject @($rollback.ToArray()) -Depth 6 | Set-Content -LiteralPath $RollbackFile -Encoding utf8
+    narration: >
+      Removing a licence is one post to assign license, with the S K U in remove licenses. Right after each removal, the
+      user, the S K U and the disabled plans go into a rollback file. The function re-reads each user first, and skips a
+      licence that is no longer a direct assignment. It supports what if, and it refuses to overwrite an old rollback file.
+
+  - id: reclaim-screen
+    type: screen
+    heading: "Preview, remove, restore"
+    image: screens/reclaim.jpg
+    bar: "PowerShell + Microsoft 365 admin center (lab tenant, masked)"
+    demo: >
+      Setup (demo.md): licensing.lab.json allows only the one trial SKU named in demo.md. Run the runner with -Reclaim -RollbackFile ./rollback.lab.json -WhatIf
+      (nothing happens), then without -WhatIf and confirm for the one planned user. Open the user's Licenses and apps in the admin center to show the
+      licence gone, then run ./Invoke-LicensingOptimization.ps1 -Restore ./rollback.lab.json and show it back. Rewrite the narration to the real
+      user and licence. Mask the tenant name and ids.
+    narration: >
+      First with what if. It lists what it would remove and sends nothing. Then for real, with a confirmation for each
+      removal. In the admin center the licence is gone from that user. Then the restore command reads the rollback file and
+      gives the licence back, with the same disabled plans, after checking that a seat is free.
+
+  - id: consequences
+    type: bullets
+    heading: "What removing a licence costs"
+    bullets:
+      - "Exchange Online data is held 30 days, then deleted"
+      - "OneDrive of an unlicensed user is archived after 93 days"
+      - "Holds must be removed before the licence goes"
+      - "Office apps show unlicensed product errors"
+    narration: >
+      Removing a licence has consequences. Microsoft's documentation says the user's Exchange Online data is held for thirty
+      days and then deleted. An unlicensed OneDrive is archived after ninety three days. Holds have to be removed before the
+      licence is, and Office apps start showing unlicensed product errors. That is why the default is a short allow list,
+      what if first, and a way back.
+
+  - id: tests
+    type: code
+    heading: "Fifty five tests, no tenant"
+    lang: text
+    code: |
+      $ Invoke-Pester ./tests
+      Describing Collection (fake Graph tenant)
+        [+] only sends GET while auditing (the audit changes nothing)
+      Describing Invoke-LOReclaim and Restore-LOReclaim (fake Graph tenant)
+        [+] -WhatIf sends nothing and writes no rollback file
+      Describing Get-LOReclaimPlan: what may be removed
+        [+] plans nothing when no SKU is allowed (the shipped default)
+
+      Tests Passed: 55, Failed: 0, Skipped: 0
+    narration: >
+      Fifty five Pester tests run without a tenant, against a fake Graph. They prove that the audit only reads, that what if
+      sends nothing, that an empty allow list plans nothing, and that a restore refuses when there is no free seat.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      Code, tests and the shot list are on GitHub, and the complete licensing guide is on dev lad log dot com. Next
+      episode: Exchange Online administration, and the mailboxes behind those licences.

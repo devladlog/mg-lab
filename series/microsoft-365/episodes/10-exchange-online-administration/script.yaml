@@ -1,0 +1,204 @@
+# DEVLADLOG Microsoft 365 — episode 10 (draft: code and tests are real; screen scenes still need the lab recording)
+episode: 10
+slug: exchange-online-administration
+series_label: "MICROSOFT 365"
+series_name: "DEVLADLOG Microsoft 365"
+file_prefix: "microsoft-365"
+title: "Exchange Online Administration"
+subtitle: "Find where mail leaks, fix it safely, and trace what happened"
+voice: am_michael
+thumbnail_text: "WHERE\nDOES YOUR\nMAIL GO?"
+youtube:
+  title: "Exchange Online Administration: Find Mail Forwarding Leaks | DEVLADLOG Microsoft 365 #10"
+  tags: [Exchange Online, Exchange Online PowerShell, mail forwarding, shared mailbox, mail flow rules, transport rules, message trace, Get-MessageTraceV2, outbound spam policy, Microsoft 365 admin, PowerShell, Pester]
+sources:
+  - https://www.devladlog.com/articles/office-365/2025-01-02-exchange-online-complete-guide-2025/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Where does your mail go?"
+    sub: "Find where mail leaks, fix it safely, and trace what happened"
+    short: hook
+    narration: >
+      In a tenant like yours, mail may be forwarded to an address outside the company right now. An admin set it
+      years ago, a user made an Inbox rule, or a mail flow rule copies everything to a partner. In this episode we find
+      all of it with Exchange Online PowerShell, remove the worst one safely, build a shared mailbox from a file, and
+      trace a message. It all runs against our real lab tenant.
+
+  - id: leaks
+    type: bullets
+    heading: "Four places mail leaves"
+    bullets:
+      - "Mailbox forwarding, set by an admin"
+      - "Inbox rules, made by users or by an attacker"
+      - "Mail flow rules that redirect or blind copy"
+      - "An outbound policy that allows it all"
+    narration: >
+      Mail leaves in four ways. An admin sets forwarding on a mailbox. A user, or an attacker who took over the account,
+      makes an Inbox rule. A mail flow rule redirects or blind copies. And the outbound spam policy decides whether any of
+      that is allowed to leave at all. Microsoft's own advice is to set automatic forwarding to off, explicitly.
+
+  - id: collect-code
+    type: code
+    heading: "Read everything, change nothing"
+    lang: powershell
+    code: |
+      $raw = @(Get-EXOMailbox -RecipientTypeDetails UserMailbox, SharedMailbox -ResultSize Unlimited -Properties $props)
+      $rules = @(Get-InboxRule -Mailbox $upn -ErrorAction Stop | ForEach-Object {
+    narration: >
+      The audit uses the Exchange Online module's fast cmdlets for mailboxes, statistics and permissions, and Get Inbox Rule
+      for every mailbox. It also reads the mail flow rules, the outbound spam policies and the accepted domains. Every call
+      is a get. If one mailbox cannot be read, the audit says so in the report instead of pretending it is clean.
+
+  - id: gotcha
+    type: code
+    heading: "The gotcha: what counts as outside?"
+    lang: powershell
+    short: gotcha
+    code: |
+      # An ExternalRelay domain is accepted but delivered to another mail system, so it counts as external.
+      if ($type -eq 'ExternalRelay') { continue }
+    narration: >
+      Here is the gotcha. Outside does not simply mean a domain that is not yours. Your tenant can accept mail for a
+      domain and relay it to another mail system. That is an external relay domain, and forwarding to it leaves your
+      organization. So the script treats only authoritative and internal relay domains as inside, and anything else as outside.
+
+  - id: audit-screen
+    type: screen
+    heading: "The audit, on the real tenant"
+    image: screens/audit.jpg
+    bar: "PowerShell on the lab Windows desktop (lab tenant, masked)"
+    demo: >
+      Setup (demo.md): seed the leaks in the lab (forwarding to an example.com address on riley.demo, an Inbox rule on taylor.demo, a disabled mail flow
+      rule that blind copies), then ./Invoke-ExchangeAdmin.ps1 -OutFile ./audit.lab.md. Show the findings table, the severity totals and the
+      "Fix plan: 0" line. Rewrite the narration to the real findings. Mask the tenant domain.
+    narration: >
+      Here is the audit on the lab tenant. Each finding has a severity, the mailbox or rule it belongs to, and what was
+      found. Forwarding to an outside address is high. An Inbox rule that is switched off is only low, but it is still
+      listed. A mail flow rule that is disabled is medium, because one click turns it on. And the fix plan is empty, because
+      nothing may be fixed until you allow it.
+
+  - id: policy-bullets
+    type: bullets
+    heading: "The outbound policy has the last word"
+    bullets:
+      - "Off: external forwarding is blocked, the sender gets an NDR"
+      - "Automatic: behaves differently from tenant to tenant"
+      - "On: forwarding is allowed"
+      - "A block in a mail flow rule or remote domain still wins"
+    narration: >
+      The outbound spam policy has the last word. Off blocks automatic external forwarding, and the sender gets a
+      non delivery report. On allows it. Automatic changed in twenty twenty one: new tenants got off, but a tenant that was
+      already using it can still behave like on. So the audit flags both on and automatic, and Microsoft's advice is to set
+      the value explicitly.
+
+  - id: fix-code
+    type: code
+    heading: "Remove it, record it first"
+    lang: powershell
+    short: fix
+    code: |
+      Set-Mailbox -Identity $p.Mailbox -ForwardingSmtpAddress $null -ErrorAction Stop
+      ConvertTo-Json -InputObject @($rollback.ToArray()) -Depth 5 | Set-Content -LiteralPath $RollbackFile -Encoding utf8
+    narration: >
+      Removing mailbox forwarding is one Set Mailbox with the forwarding address set to null. Right after each removal,
+      the old address and the keep a copy setting go into a rollback file. Before it touches a mailbox, the function reads
+      it again and skips it if the forwarding changed since the audit. It supports what if, and it only fixes the rules
+      you list in the config.
+
+  - id: fix-screen
+    type: screen
+    heading: "Preview, remove, restore"
+    image: screens/fix.jpg
+    bar: "PowerShell + Exchange admin center (lab tenant, masked)"
+    demo: >
+      Setup (demo.md): exchange.lab.json with fix.allowedRules set to MailboxForwardingExternal. Run -Mode Fix -RollbackFile ./rollback.lab.json -WhatIf (nothing happens),
+      then without -WhatIf and confirm Yes only for riley.demo. Open the mailbox in the Exchange admin center to show forwarding gone, then -Mode Restore
+      and show it back. Rewrite the narration to the real mailbox. Mask the address.
+    narration: >
+      First with what if. It lists what it would remove, and nothing changes. Then for real, and it asks before each
+      mailbox. We answer yes for one lab mailbox only. In the Exchange admin center the forwarding is gone, and the audit no
+      longer lists it. Then restore reads the rollback file, and the forwarding is back, unless the mailbox has a new
+      forwarding address by then. In that case it leaves it alone.
+
+  - id: shared-bullets
+    type: bullets
+    heading: "Shared mailboxes: three things to know"
+    bullets:
+      - "No licence needed up to 50 GB"
+      - "Over 50 GB needs Exchange Online Plan 2"
+      - "Block sign-in for the account behind it"
+      - "Delegates need their own licensed mailbox"
+    narration: >
+      Shared mailboxes have rules of their own. Up to fifty gigabytes they need no licence. Over fifty, they need Exchange
+      Online Plan 2, and before that they stop sending first, then receiving. Every shared mailbox has an account behind it,
+      and Microsoft says to block sign in for it and keep it blocked. And the people who use it need their own licensed
+      mailbox. The audit checks all of this.
+
+  - id: shared-code
+    type: code
+    heading: "A shared mailbox, declared in a file"
+    lang: powershell
+    code: |
+      $p = @{ Shared = $true; Name = $display; DisplayName = $display; Alias = $a.Mailbox; ErrorAction = 'Stop' }
+      New-Mailbox @p | Out-Null
+      'AddFullAccess' { Invoke-EARetry -Count $tries -DelaySeconds $RetrySeconds -Script { Add-MailboxPermission -Identity $a.Mailbox -User $a.User -AccessRights FullAccess -InheritanceType All -AutoMapping $true -ErrorAction Stop | Out-Null } }
+    narration: >
+      You describe the shared mailboxes you want in a Jason file, with the delegates who get full access and send as.
+      The script compares that with what exists and plans only the difference. So running it twice does nothing the second
+      time. It never converts a user mailbox. A mailbox it just created may not be visible to the permission cmdlets for a
+      moment, so only those grants are retried.
+
+  - id: trace-code
+    type: code
+    heading: "Message trace, inside its limits"
+    lang: powershell
+    code: |
+      $p = @{ StartDate = $Start; EndDate = $End; ResultSize = $Top }
+      $rows = @(Get-MessageTraceV2 @p)
+    narration: >
+      Message trace uses Get Message Trace version two. Microsoft's documentation says it looks back ninety days, returns
+      at most ten days per query, and has no paging. So the wrapper refuses a longer window before it asks, and warns when
+      the result hits your limit, because the list may be cut off.
+
+  - id: shared-screen
+    type: screen
+    heading: "Create it, send a message, trace it"
+    image: screens/shared.jpg
+    bar: "PowerShell + Outlook on the web (lab tenant, masked)"
+    demo: >
+      Setup (demo.md): shared-mailboxes.lab.json with one shared mailbox and sam.demo as delegate. Run -Mode SyncSharedMailboxes -WhatIf, then for real, then again
+      ("Already as declared"). In Outlook on the web as sam.demo open the shared mailbox and send a message to alex.demo, then -Mode Trace -SenderAddress for the shared mailbox.
+      Rewrite the narration to the real names. Mask the addresses.
+    narration: >
+      Here is the shared mailbox from the file. What if first, then for real, and then a second run that says it is already
+      as declared. In Outlook on the web, our delegate opens the shared mailbox and sends a message. A few minutes later the
+      trace shows it, with the status, the recipient and the trace id.
+
+  - id: tests
+    type: code
+    heading: "Sixty five tests, no tenant"
+    lang: text
+    code: |
+      $ Invoke-Pester ./tests
+      Describing Get-EAInventory (fake tenant)
+        [+] collects with read cmdlets only
+      Describing Invoke-EAForwardingFix and Restore-EAForwarding (fake tenant)
+        [+] -WhatIf sends no write and creates no rollback file
+      Describing Shared mailboxes from a file (fake tenant)
+        [+] applies the plan, and a second run has nothing left to do (idempotent)
+
+      Tests Passed: 65, Failed: 0, Skipped: 0
+    narration: >
+      Sixty five Pester tests run without a tenant, against a fake Exchange. They prove that the audit only reads, that
+      what if sends nothing, that the shipped config fixes nothing, that a second sync does nothing, and that the trace
+      refuses a window Microsoft's service would not accept.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      Code, tests and the shot list are on GitHub, and the complete Exchange Online guide is on dev lad log dot com. That
+      completes the series so far. Thanks for watching.
