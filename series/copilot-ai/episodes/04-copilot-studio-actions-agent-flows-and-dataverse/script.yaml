@@ -1,0 +1,228 @@
+# DEVLADLOG Copilot & AI - episode 04 (draft: screen scenes need the recording described in demo.md)
+episode: 4
+slug: copilot-studio-actions-agent-flows-and-dataverse
+series_label: "COPILOT & AI"
+series_name: "DEVLADLOG Copilot & AI"
+file_prefix: "copilot-ai"
+title: "Copilot Studio: Actions, Agent Flows and Dataverse"
+subtitle: "Let the agent file a real record, and know what it costs"
+voice: am_michael
+thumbnail_text: "AGENT FLOWS\nDATAVERSE\nTOOLS"
+youtube:
+  title: "Copilot Studio Tools, Agent Flows and Dataverse: File a Real Record with an Agent | DEVLADLOG Copilot & AI #4"
+  tags: [Copilot Studio, agent flows, Copilot Studio tools, Dataverse, Dataverse MCP server, Power Fx, generative orchestration, Copilot Credits, Power Platform, PowerShell]
+next_episode: "Copilot in Power Apps"
+sources:
+  - "https://learn.microsoft.com/microsoft-copilot-studio/advanced-flow-create"
+  - "https://learn.microsoft.com/microsoft-copilot-studio/flow-agent"
+  - "https://learn.microsoft.com/microsoft-copilot-studio/flows-overview"
+  - "https://learn.microsoft.com/microsoft-copilot-studio/advanced-power-fx"
+  - "https://learn.microsoft.com/power-apps/maker/data-platform/data-platform-mcp"
+  - "https://learn.microsoft.com/microsoft-copilot-studio/requirements-messages-management"
+
+scenes:
+  - id: hook
+    type: title
+    heading: "An agent that does things"
+    sub: "Tools, agent flows and a Dataverse table"
+    short: hook
+    narration: >
+      Last time our agent answered questions. Now Contoso wants it to file the vendor request itself. That means a
+      Dataverse table, an agent flow, a tool the agent can call, and a few rules that must never be left to a language
+      model. And at the end, what one request really costs. Welcome to Dev Lad Log, Copilot and A I.
+
+  - id: plan
+    type: bullets
+    heading: "Who decides what"
+    bullets:
+      - "The model: understands the request, asks for missing values"
+      - "Power Fx in the topic: validation and approval tier"
+      - "Agent flow: writes the row, returns the number"
+      - "Dataverse: autonumber, choices, security"
+    narration: >
+      Here is the split. The language model understands the request and asks for what is missing. Rules that must be
+      exact, like who approves a vendor, live in Power Fx. An agent flow writes the row, and Dataverse owns the request
+      number. Learn says the same: keep deterministic logic and guardrails inside the topic.
+
+  - id: table-code
+    type: code
+    heading: "The table, as code"
+    lang: powershell
+    code: |
+      @{
+          SchemaName        = 'mgl_RequestNumber'
+          IsPrimaryName     = $true
+          AutoNumberFormat  = 'VR-{SEQNUM:4}'   # VR-0001, VR-0002 ...
+          FormatName        = @{ Value = 'Text' }
+          MaxLength         = 100               # room to grow
+      }
+      # then 6 columns: vendor, category (choice), annual cost (money),
+      # justification, approval tier, status (choice)
+      Install-VendorRequestTable -OrgUrl $org -AccessToken $token `
+          -SolutionUniqueName MGLabVendorDesk
+    narration: >
+      The table is defined in code, through the Dataverse web A P I, inside a solution. The primary column is an
+      autonumber, so the agent never invents a request number. Learn warns to leave room in the max length, because
+      the sequence keeps growing. The function skips the table if it already exists.
+
+  - id: table-screen
+    type: screen
+    heading: "The table in Dataverse"
+    image: screens/table.jpg
+    bar: "Power Apps · Tables · Vendor Request · DEV"
+    demo: "Terminal: after signing in with Connect-AzAccount, run Install-VendorRequestTable with -WhatIf first (the 'What if' lines for the table and six columns), then for real. Then the browser at make.powerapps.com as labadmin, environment DEV, Solutions > MGLabVendorDesk > Vendor Request > Columns: Request Number (autonumber), Vendor Name, Category, Estimated Annual Cost, Justification, Approval Tier, Status. Mask the org URL."
+    narration: >
+      First a dry run with what if, then the real thing. In the maker portal the table is inside our solution, with an
+      autonumber request number, a choice for the category, money for the cost, and a status the approver will change
+      later.
+
+  - id: formulas
+    type: code
+    heading: "Rules in Power Fx"
+    lang: text
+    code: |
+      If(
+          Topic.EstimatedAnnualCost >= 25000,
+          "Finance director, after a security review",
+          If(
+              Topic.EstimatedAnnualCost >= 5000,
+              "Procurement manager",
+              "Team lead"
+          )
+      )
+    narration: >
+      This is the approval rule from last episode's policy, as a Power Fx formula. Twenty five thousand euros and above
+      needs the finance director and a security review. Five thousand and above, the procurement manager. Anything
+      else, the team lead. It goes into a set variable node in the topic.
+
+  - id: tests
+    type: code
+    heading: "Run the formulas before the agent does"
+    lang: text
+    code: |
+      $ dotnet test PowerFxRules.Tests --logger "console;verbosity=normal"
+        Passed ApprovalTier_follows_the_policy_thresholds(cost: 5000,
+               expected: "Procurement manager")
+        Passed ApprovalTier_follows_the_policy_thresholds(cost: 25000,
+               expected: "Finance director, after a security review")
+        Passed ValidateRequest_reports_problems_in_a_fixed_order
+        Passed Credits_match_the_customer_support_example_of_Learn
+      Passed!  - Failed: 0, Passed: 27, Skipped: 0, Total: 27
+    narration: >
+      The formulas are plain text files, and the open source Power Fx interpreter runs them in unit tests. We test the
+      boundaries, exactly five thousand and exactly twenty five thousand, the validation messages, and the money
+      format with a comma. Twenty seven tests. A mistake here is a wrong approver, not a typo.
+
+  - id: flow-screen
+    type: screen
+    heading: "The agent flow"
+    image: screens/agent-flow.jpg
+    bar: "Copilot Studio · Agent flow · Create vendor request"
+    demo: "Copilot Studio as labadmin, DEV: Tools > Add tool > Agent flow (Create new). The designer with the trigger 'When an agent calls the flow' with text inputs VendorName, Category, Justification and number input EstimatedAnnualCost plus text ApprovalTier; the Microsoft Dataverse action 'Add a new row' on the Vendor Request table with the fields mapped; the 'Respond to the agent' action with outputs RequestNumber and a status text. Open the response action Settings > Networking and show Asynchronous response OFF. Publish. Mask the org URL."
+    narration: >
+      The agent flow. Copilot Studio gives us the trigger, when an agent calls the flow, and the response action. We add
+      the inputs, a Dataverse add a new row action, and return the request number. In the response settings,
+      asynchronous response is off, because the agent waits for the answer.
+
+  - id: topic-screen
+    type: screen
+    heading: "A topic around the tool"
+    image: screens/topic.jpg
+    bar: "Copilot Studio · Topics · File a vendor request"
+    demo: "Same agent (Contoso Vendor Desk) with generative orchestration on: Topics > Add a topic > From blank, named 'File a vendor request' with a trigger description for the orchestrator ('Use when the user wants to onboard or request a new vendor. Collects vendor name, category, estimated yearly cost and justification, files the request and returns the request number and the approver. Do not use for policy questions.'). Show the four topic inputs with descriptions, the Set variable value nodes using the Power Fx formulas (ValidateRequest, ApprovalTier), the Condition on the validation message, the 'Add a tool' node for the flow Create vendor request, and the output set with the ConfirmationMessage formula. Also open Code editor for one second, then close it."
+    narration: >
+      The flow goes inside a topic. The topic description tells the orchestrator when to use it, and what not to use it
+      for. Each input has a description, so the agent asks for what is missing. Then two set variable nodes run the
+      formulas, a condition stops on a validation message, the flow runs as a tool node, and the topic returns the
+      confirmation as an output.
+
+  - id: chat
+    type: screen
+    heading: "File a request by talking"
+    image: screens/chat.jpg
+    bar: "Copilot Studio · Test your agent · labadmin"
+    short: live
+    demo: "Test panel: 'We need to onboard Northwind Print for contract printing, about 4,200 euros a year. We print contracts for clients.' The agent may ask for a missing value; the tool call is visible in the activity map; the answer names a request number like VR-0001 and the approver Team lead. If the real wording or tier differs, keep it and fix the narration."
+    narration: >
+      Now the real thing. We tell the agent we want to onboard Northwind Print, about four thousand two hundred euros a
+      year, for printing contracts. It asks for anything missing, calls the tool, and answers with a request number and
+      the approver, the team lead. In the test chat none of this is billed.
+
+  - id: row
+    type: screen
+    heading: "The row is really there"
+    image: screens/row.jpg
+    bar: "PowerShell · Get-VendorRequest · Dataverse"
+    demo: "Terminal on the lab laptop: Get-VendorRequest -OrgUrl $org -AccessToken $token -Top 3 | Format-Table. Visible: RequestNumber VR-0001, Vendor Northwind Print, Category Printing, AnnualCost formatted with the currency, ApprovalTier Team lead, Status Submitted. Then the same row in the maker portal table view. Mask the org URL."
+    narration: >
+      And the proof. A read back from the Dataverse web A P I shows the same row, with the category label and the
+      formatted amount. The status is submitted, the tier is team lead, and the number came from Dataverse, not from the
+      model.
+
+  - id: gotcha
+    type: bullets
+    heading: "Gotcha: not every flow can be a tool"
+    bullets:
+      - "Trigger: When an agent calls the flow"
+      - "Action: Respond to the agent, asynchronous off"
+      - "Answer within 100 seconds; publish first"
+      - "Dataverse environment, not Dataverse for Teams"
+    short: gotcha
+    narration: >
+      The gotcha. A flow only shows up in the tool list if it has the agent trigger and a respond action, it must be
+      published, the response must not be asynchronous, and it should answer inside one hundred seconds. It also needs a
+      real Dataverse environment. Dataverse for Teams does not support agent flows as tools.
+
+  - id: mcp-screen
+    type: screen
+    heading: "Reading with the Dataverse MCP server"
+    image: screens/mcp.jpg
+    bar: "Copilot Studio · Tools · Microsoft Dataverse MCP Server"
+    demo: "Add tool > Model Context Protocol > Microsoft Dataverse MCP Server (Add to agent). Test panel: 'How many vendor requests have the status Submitted?'. Record the real answer and which MCP tool the activity map shows (Learn lists read_query among the tools). If the tool is not offered or the environment blocks it, say so: Power Platform admin center > environment > Settings > Features > Dataverse Model Context Protocol."
+    narration: >
+      For reading, there is a second route. The Dataverse model context protocol server is a ready made tool with
+      tools like read query and search data. It is on by default for Copilot Studio. Use it for questions, and keep the
+      agent flow for writes you want to control.
+
+  - id: cost
+    type: code
+    heading: "What one request costs"
+    lang: csharp
+    code: |
+      // Copilot Credits, standard harness (Learn: Billing rates)
+      public const double AgentAction = 5;
+      public const double AgentFlowActionsPer100 = 13;
+      public const double UsdPerCredit = 0.01;
+
+      // one request: 1 agent action + 3 flow actions
+      // (trigger, Add a new row, Respond to the agent)
+      // 5 + 3 x 0.13 = 5.39 credits = US$0.054
+      // 1,000 requests a month: about US$54
+    narration: >
+      And the cost. In a published agent, one tool call is an agent action, five Copilot Credits, and every agent flow
+      action is thirteen credits per hundred. One request is about five point four credits, a bit over five cents.
+      A thousand requests a month is about fifty four dollars. That is an estimate: check the consumption report after
+      a real run. People who chat with the agent under their own
+      Microsoft 365 Copilot licence are not charged for it.
+
+  - id: recap
+    type: bullets
+    heading: "Five rules"
+    bullets:
+      - "Rules that must be exact go in Power Fx, and get tests"
+      - "Let Dataverse generate numbers and keys"
+      - "Write topic and tool descriptions for the orchestrator"
+      - "Check the flow rules before you wonder why it is missing"
+      - "Estimate credits before you publish"
+    narration: >
+      Five rules. Exact rules go in Power Fx, with tests. Let Dataverse generate numbers. Write topic and tool descriptions for
+      the orchestrator, not for people. Check the flow requirements first when a tool is missing. And estimate credits
+      before you publish. Next time: Copilot in Power Apps.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The table script, the formulas, the tests and the credit estimator are on GitHub, and the Microsoft Learn pages
+      are in the description. This was Dev Lad Log, Copilot and A I, by Momento Galático.

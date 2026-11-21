@@ -1,0 +1,231 @@
+# DEVLADLOG Copilot & AI - episode 03 (draft: screen scenes need the recording described in demo.md)
+episode: 3
+slug: copilot-studio-your-first-agent-with-sharepoint-kn
+series_label: "COPILOT & AI"
+series_name: "DEVLADLOG Copilot & AI"
+file_prefix: "copilot-ai"
+title: "Copilot Studio: Your First Agent with SharePoint Knowledge"
+subtitle: "Build it, break it, test it with a real test set"
+voice: am_michael
+thumbnail_text: "FIRST AGENT\nSHAREPOINT\nKNOWLEDGE"
+youtube:
+  title: "Copilot Studio: Your First Agent with SharePoint Knowledge, Limits and Evaluation | DEVLADLOG Copilot & AI #3"
+  tags: [Copilot Studio, Microsoft Copilot Studio, SharePoint knowledge source, generative answers, agent evaluation, Copilot Credits, security trimming, Microsoft 365, Power Platform, Python]
+next_episode: "Copilot Studio: Actions, Agent Flows and Dataverse"
+sources:
+  - "https://learn.microsoft.com/microsoft-copilot-studio/knowledge-add-sharepoint"
+  - "https://learn.microsoft.com/microsoft-copilot-studio/requirements-quotas"
+  - "https://learn.microsoft.com/troubleshoot/power-platform/copilot-studio/knowledge/sharepoint-no-response"
+  - "https://learn.microsoft.com/microsoft-copilot-studio/analytics-agent-evaluation-create"
+  - "https://learn.microsoft.com/microsoft-copilot-studio/requirements-messages-management"
+  - "https://learn.microsoft.com/microsoft-copilot-studio/billing-licensing"
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Your first Copilot Studio agent"
+    sub: "SharePoint knowledge, and what it silently refuses to read"
+    short: hook
+    narration: >
+      Contoso's vendor office answers the same questions every day. Who approves this vendor? How long do we take to
+      pay? In this episode we build an agent that answers from the real policy documents in SharePoint, we find out
+      why it sometimes says nothing at all, and we test it with a proper test set. Welcome to Dev Lad Log, Copilot and
+      A I.
+
+  - id: plan
+    type: bullets
+    heading: "What we build"
+    bullets:
+      - "Contoso Vendor Desk: answers from five policy documents"
+      - "Knowledge source: a SharePoint site, read as the signed-in user"
+      - "Two libraries: Policies and Restricted"
+      - "Code: build, check and test-set tooling"
+    narration: >
+      The Contoso Vendor Desk answers from five policy documents in a SharePoint site. One library is open to the
+      team, one is restricted. And because documents fail in quiet ways, we also write a small checker, and a test set
+      generator, so the agent is tested before anyone relies on it.
+
+  - id: licence
+    type: bullets
+    heading: "What it costs to try"
+    bullets:
+      - "Trial licence: build and test in the test chat"
+      - "Publishing needs a licence and credits"
+      - "Test chat answers are not billed"
+      - "Generative answer: 2 Copilot Credits"
+    narration: >
+      First, the money. The Copilot Studio trial licence lets you build and test, but not publish. Chatting in the
+      test panel is not billed. Once published, a classic answer costs one Copilot Credit, a generative answer two,
+      and tenant graph grounding ten. Pay as you go is one cent per credit. Users with a Microsoft 365 Copilot
+      licence are not charged for those answers.
+
+  - id: build
+    type: code
+    heading: "Documents as code"
+    lang: text
+    code: |
+      $ python -m kbpack build --out out/docs
+      Policies/vendor-onboarding-policy.docx  37,232 bytes
+      Policies/vendor-payment-terms.docx  36,799 bytes
+      Policies/vendor-security-requirements.docx
+      Policies/vendor-renewals-and-offboarding.docx
+      Restricted/vendor-negotiation-playbook-restricted.docx
+
+      # every source starts with a title heading, so the subject
+      # is in the text, not only in the file name
+    narration: >
+      The policies are Markdown files with a title and a few question and answer pairs. One command turns them into
+      real Word documents, one folder per library. Each starts with a title heading, because Learn says an agent
+      cannot answer questions that name a file. The subject has to be in the text.
+
+  - id: check
+    type: code
+    heading: "Check before you upload"
+    lang: text
+    code: |
+      $ python -m kbpack check ./incoming
+      Files checked: 5
+        [ERROR] big-catalogue.pdf: 9.0 MB is above the 7.0 MB limit.
+        [ERROR] old-intranet-page.aspx: classic pages are not used
+        [ERROR] training.mp4: '.mp4' is not a supported type
+        [ERROR] travel-policy.docx: Password-protected Office file:
+                it can show as Ready and still return 'no response'
+      Result: 4 error(s) -> NOT READY
+    narration: >
+      Here is the checker on a folder of problems. A nine megabyte pdf: without a Microsoft 365 Copilot licence in
+      the tenant, the limit is seven. A classic aspx page, which is ignored. A video, which is not a supported type.
+      And a password protected document, which Learn says can show as ready and still return no response.
+      Every message names its Learn page.
+
+  - id: site-code
+    type: code
+    heading: "Restricted means restricted"
+    lang: powershell
+    code: |
+      New-PnPSite -Type CommunicationSite -Title $SiteTitle `
+                  -Url $siteUrl -Owner $OwnerUpn
+      foreach ($lib in 'Policies', 'Restricted') {
+          New-PnPList -Title $lib -Url $lib -Template DocumentLibrary
+      }
+      # do not copy the inherited permissions
+      Set-PnPList -Identity 'Restricted' -BreakRoleInheritance `
+                  -CopyRoleAssignments:$false -ClearSubScopes
+      Set-PnPListPermission -Identity 'Restricted' `
+                            -User $RestrictedUserUpn -AddRole 'Read'
+    narration: >
+      A pnp script creates the site and the two libraries. For Restricted it breaks inheritance and does not copy the
+      old permissions, so only one named user can read it. Pnp needs your own Entra app registration for sign in, and
+      the script takes it as a parameter. Nothing is stored in the code.
+
+  - id: create-agent
+    type: screen
+    heading: "Create the agent"
+    image: screens/create-agent.jpg
+    bar: "Copilot Studio · Create agent · Overview"
+    demo: "Browser on the lab tenant, signed in as labadmin at copilotstudio.microsoft.com, environment DEV. The create-agent flow (standard experience: the 'New experience' toggle OFF if it is offered) with the description 'Answer Contoso employees' questions about vendor onboarding, payment terms, security requirements and renewals. Use only the knowledge sources.' and then the agent Overview page named Contoso Vendor Desk with its instructions visible. Mask the tenant and email domain."
+    narration: >
+      In Copilot Studio we describe the agent in plain words, and it drafts the name and the instructions. We name it
+      Contoso Vendor Desk and tell it to answer only from its knowledge. Instructions are the cheapest thing to
+      change, so we will come back to them.
+
+  - id: add-knowledge
+    type: screen
+    heading: "SharePoint as knowledge"
+    image: screens/add-knowledge.jpg
+    bar: "Copilot Studio · Knowledge · Add knowledge · SharePoint"
+    demo: "Same agent: Knowledge > Add knowledge > SharePoint (the option in the Featured section). The Policies library URL pasted (domain masked), a name and a detailed description filled in, then the knowledge list showing the source as Ready. Then the agent's Generative AI settings page with Web Search and 'Use general knowledge' turned OFF."
+    narration: >
+      We add the Policies library by its address, with a name and a good description, because the orchestrator reads
+      the description. Then we turn off web search and general knowledge. Without that, the agent happily answers
+      from the open web when the documents are silent, and you would never know.
+
+  - id: ask
+    type: screen
+    heading: "Ask a policy question"
+    image: screens/ask.jpg
+    bar: "Copilot Studio · Test your agent · labadmin"
+    short: live
+    demo: "Test your agent panel as labadmin: 'Who has to approve a new vendor that costs 12,000 euros a year?'. The answer says the procurement manager approves vendors between 5,000 and 24,999 euros a year, with a citation to vendor-onboarding-policy. If the answer is different or empty, record it and say so: do not retake until it works."
+    narration: >
+      Now a real question. Who approves a vendor that costs twelve thousand euros a year? The procurement manager, with
+      a citation to the onboarding policy. The agent read a Word document in SharePoint, as the signed in user, and
+      showed where the answer came from.
+
+  - id: trimmed
+    type: screen
+    heading: "Gotcha: no error, just no answer"
+    image: screens/trimmed.jpg
+    bar: "Copilot Studio · Test your agent · sam.demo vs labadmin"
+    short: gotcha
+    demo: "Same question in the test panel twice: 'What discount does Contoso aim for when it negotiates a hosting renewal?'. First as sam.demo, who has no access to the Restricted library: the agent does not answer (record the real wording). Then as labadmin, who has Read on it: the answer is 12 percent. Capture the sign-in switch between the two takes."
+    narration: >
+      And the gotcha. The same question, asked as two users. Sam has no access to the restricted library, and the agent
+      does not raise an error. It behaves as if the document does not exist. Learn confirms it: missing permissions
+      give no results and no exception. That is good security, and a confusing support call.
+
+  - id: limits
+    type: bullets
+    heading: "Why an agent says nothing"
+    bullets:
+      - "Permissions: no Read, no result, no error"
+      - "Index: new files must reach Microsoft Search first"
+      - "Only the top three search results are used"
+      - "Encrypted or password files: Ready, but no answer"
+      - "Restricted SharePoint Search blocks the source"
+    narration: >
+      So when the agent says nothing, check five things. Permissions. Whether the file is in the search index yet, by
+      searching a unique word in SharePoint, with a reindex if you are in a hurry. The agent only summarises the top
+      three search results. Encrypted files. And Restricted SharePoint Search, which blocks the source entirely.
+
+  - id: testset
+    type: code
+    heading: "A test set from the same source"
+    lang: text
+    code: |
+      $ python -m kbpack testset --docs out/docs --out out/eval
+      vendor-desk-testset.csv: 11 questions
+      vendor-desk-restricted.csv: 1 question(s)
+
+      Question,Expected response
+      "Who has to approve a new vendor that costs 12,000 euros a year?",
+      "The procurement manager approves vendors between 5,000 and
+       24,999 euros a year."
+      # up to 100 questions, each up to 1,000 characters
+    narration: >
+      Now the test set. The same files that hold the policy hold the question and the expected answer, so they cannot
+      drift apart: a test fails if an expected fact is not in the document. The csv uses the header Copilot Studio
+      expects, with at most one hundred questions of one thousand characters. Two questions are deliberately out of
+      scope.
+
+  - id: eval
+    type: screen
+    heading: "Evaluate the agent"
+    image: screens/evaluation.jpg
+    bar: "Copilot Studio · Evaluation · vendor-desk-testset.csv"
+    demo: "Agent > Evaluation > New evaluation > Single responses > Import: drag out/eval/vendor-desk-testset.csv. Review data set, test methods General quality plus Compare meaning (pass score as the default), run as labadmin. Show the results page with per-question pass/fail and the two out-of-scope questions. Record the real scores; do not retake to improve them."
+    narration: >
+      We import the file as a single response evaluation, pick general quality and compare meaning, and run it as the
+      signed in user, because the test uses that person's access to the knowledge. Then we read the failures, change
+      the instructions or the source, and run the same set again.
+
+  - id: recap
+    type: bullets
+    heading: "Five rules"
+    bullets:
+      - "Check the files before you upload them"
+      - "Turn off web and general knowledge if answers must come from your documents"
+      - "Test as the people who will use it"
+      - "Silence usually means permissions, index or protection"
+      - "Keep a test set next to the content"
+    narration: >
+      Five rules. Check the files before you upload them. Turn off web and general knowledge when answers must come
+      from your documents. Test as the people who will use the agent. Treat silence as a permissions, index or
+      protection problem. And keep a test set next to the content. Next time: actions, agent flows and Dataverse.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The tooling, the policy documents and the tests are on GitHub, and the Microsoft Learn pages are in the
+      description. This was Dev Lad Log, Copilot and A I, by Momento Galático.
