@@ -1,0 +1,84 @@
+// Episode 8: the contract, written first. Compiled once in ProjectRequests.Grpc (messages, service base class
+// and client), referenced by the API (server) and the CLI (client).
+syntax = "proto3";
+
+option csharp_namespace = "ProjectRequests.Grpc";
+
+package projectrequests.v1;
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/wrappers.proto";
+
+service Requests {
+  // Unary: one request, one reply. NOT_FOUND if the id doesn't exist.
+  rpc GetRequest (GetRequestMessage) returns (RequestReply);
+
+  // Server streaming: the server writes one message per request, the client reads them as they arrive.
+  rpc ListRequests (ListRequestsMessage) returns (stream RequestReply);
+
+  // Client streaming: the client sends many new requests on one call, the server answers once at the end.
+  rpc ImportRequests (stream NewRequestMessage) returns (ImportReply);
+}
+
+message GetRequestMessage {
+  int32 id = 1;
+}
+
+message ListRequestsMessage {
+  string department = 1;          // "" = all departments (scalars can't be null)
+}
+
+// Protobuf has no decimal: units + nanos, the format Learn documents for .NET (12345.6789 -> 12345, 678900000).
+message DecimalValue {
+  int64 units = 1;
+  sfixed32 nanos = 2;             // same sign as units
+}
+
+// Enums need a zero value: it's what an unset field reads as. C# drops the prefix: Priority.Standard.
+enum Priority {
+  PRIORITY_UNSPECIFIED = 0;
+  PRIORITY_STANDARD = 1;
+  PRIORITY_HIGH = 2;
+}
+
+enum RequestStatus {
+  REQUEST_STATUS_UNSPECIFIED = 0;
+  REQUEST_STATUS_SUBMITTED = 1;
+  REQUEST_STATUS_APPROVED = 2;
+  REQUEST_STATUS_REJECTED = 3;
+}
+
+message RequestReply {
+  int32 id = 1;
+  string title = 2;
+  DecimalValue budget = 3;
+  string department = 4;
+  string requested_by = 5;
+  google.protobuf.StringValue justification = 6;   // wrapper: a string that can be null
+  Priority priority = 7;
+  RequestStatus status = 8;
+  google.protobuf.Timestamp created_at = 9;        // UTC only
+  google.protobuf.StringValue decided_by = 10;
+  google.protobuf.Timestamp decided_at = 11;       // message field: null when not decided
+  string version = 12;                             // Guid as text
+}
+
+message NewRequestMessage {
+  string title = 1;
+  DecimalValue budget = 2;
+  string requested_by = 3;
+  string department_code = 4;
+  google.protobuf.StringValue justification = 5;
+}
+
+message ImportReply {
+  int32 received = 1;
+  repeated int32 created_ids = 2;
+  repeated ImportError errors = 3;
+}
+
+message ImportError {
+  int32 row = 1;                  // 1-based position in the stream
+  string field = 2;
+  string message = 3;
+}

@@ -1,0 +1,306 @@
+# DEVLADLOG .NET — episode 07 (draft; screens are captured on the lab laptop, see demo.md)
+episode: 7
+slug: signalr-real-time-communication
+series_label: ".NET"
+series_name: "DEVLADLOG .NET"
+file_prefix: "net"
+title: "SignalR Real-Time Communication"
+subtitle: "A live board, groups, reconnects, and what scale-out breaks"
+voice: am_michael
+thumbnail_text: "SIGNALR\nLIVE BOARD\nNO POLLING"
+youtube:
+  title: "ASP.NET Core SignalR in .NET 10: Live Updates, Groups and Reconnects Done Right | DEVLADLOG .NET #7"
+  tags: [SignalR, ASP.NET Core SignalR, real-time, WebSockets, .NET 10, C#, Blazor WebAssembly, hubs, IHubContext, groups, automatic reconnect, Azure SignalR Service, CORS]
+sources:
+  - https://www.devladlog.com/articles/dotnet/2026-05-12-signalr-real-time-communication-complete-guide-2026/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "SignalR Real-Time Communication"
+    sub: "The server talks first"
+    short: hook
+    narration: >
+      Someone approves a request, and every screen that shows it changes, right now. No refresh button, no polling
+      every five seconds. That's SignalR. Today our project requests API learns to push, to a live board in the
+      browser and to a console on an approver's desk. And we'll break it on purpose, twice. Welcome to DEVLADLOG
+      dot net.
+
+  - id: plan
+    type: bullets
+    heading: "What we're building"
+    bullets:
+      - "A strongly typed hub in the API: /hubs/requests"
+      - "Push after every committed write: created, updated"
+      - "Department groups: watch everything, or just Finance"
+      - "One client library: Blazor WebAssembly board and a console watcher"
+      - "24 new tests with a real hub and a real client"
+    narration: >
+      The plan. A hub in the existing API. The endpoints push an event after every successful write. Clients can
+      watch all departments or just one, using groups. One small client library serves both the Blazor live board
+      and a console app. And every bit of it is tested against a real hub, in memory.
+
+  - id: hub
+    type: code
+    heading: "A strongly typed hub"
+    lang: csharp
+    code: |
+      // Contracts/Live.cs (condensed): shared by the server and every client
+      public interface IRequestsClient { Task RequestCreated(RequestDto request); Task RequestUpdated(RequestDto request); }
+
+      public sealed class RequestsHub(ILogger<RequestsHub> logger) : Hub<IRequestsClient>
+      {
+          public async Task<string> Watch(string? department, RequestsDbContext db)
+          {
+              var group = string.IsNullOrWhiteSpace(department) ? AllGroup : await GroupForKnownAsync(department, db);
+              if (Context.Items.TryGetValue(GroupKey, out var old) && old is string previous && previous != group)
+                  await Groups.RemoveFromGroupAsync(Context.ConnectionId, previous);
+              await Groups.AddToGroupAsync(Context.ConnectionId, group);
+              Context.Items[GroupKey] = group;            // a new hub instance per call: no state in fields
+              return group;
+          }
+      }
+    narration: >
+      The hub derives from hub of I requests client, so the server can only call methods that interface declares.
+      A typo is a compile error, not a silent no-op. Watch puts the connection in one group: all, or one
+      department. Learn is clear that a new hub instance handles every call, so the current group lives in the
+      connection's items, never in a field.
+
+  - id: push
+    type: code
+    heading: "Push from the endpoints, after the commit"
+    lang: csharp
+    code: |
+      // RequestEndpoints.Create
+      await db.SaveChangesAsync(ct);                        // INSERT ... RETURNING "Id"
+      var dto = AsDto(entity);
+      await events.CreatedAsync(dto, ct);                   // only after the write succeeded
+      return TypedResults.Created($"/api/requests/{entity.Id}", dto);
+
+      // SignalRRequestEvents: IHubContext, never a hub instance
+      public sealed class SignalRRequestEvents(IHubContext<RequestsHub, IRequestsClient> hub, ...) : IRequestEvents
+      {
+          public Task CreatedAsync(RequestDto request, CancellationToken ct) =>
+              SendAsync(request, c => c.RequestCreated(request));
+          // SendAsync: hub.Clients.Groups("all", "dept:" + request.Department), failures logged, never a 500
+      }
+    narration: >
+      Outside the hub, you send through I hub context. The endpoints call it only after save changes succeeds, so
+      a rejected write pushes nothing. Each connection is in exactly one group, so sending to all plus the
+      department never delivers twice. And if a push fails, we log it. The data is already committed. SignalR is a
+      notification, not a transaction.
+
+  - id: feed
+    type: code
+    heading: "The client: reconnect, then rejoin"
+    lang: csharp
+    code: |
+      _connection = new HubConnectionBuilder()
+          .WithUrl(new Uri(apiBaseAddress, RequestsHubContract.Path))
+          .AddJsonProtocol(o => o.PayloadSerializerOptions.Converters.Add(new JsonStringEnumConverter()))
+          .WithAutomaticReconnect()                         // waits 0, 2, 10, 30 seconds, then gives up
+          .Build();
+
+      _connection.On<RequestDto>(nameof(IRequestsClient.RequestCreated), r => Created?.Invoke(r));
+      _connection.On<RequestDto>(nameof(IRequestsClient.RequestUpdated), r => Updated?.Invoke(r));
+
+      _connection.Reconnected += async _ =>
+      {
+          await _connection.InvokeAsync<string>(RequestsHubContract.Watch, Department);   // groups are gone
+          await SetState(FeedState.Connected);
+          Resubscribed?.Invoke();                            // "you missed events: reload"
+      };
+    narration: >
+      On the client, one hub connection with automatic reconnect. By default it retries after zero, two, ten and
+      thirty seconds. Handlers are registered before we start. And look at the reconnected handler. A reconnect is a
+      brand new connection, with a new I D, and the server has forgotten its groups. So we call watch again, and
+      tell the page to reload what it missed.
+
+  - id: board
+    type: code
+    heading: "The live board: connect first, then load"
+    lang: razor
+    code: |
+      @page "/live"
+      @rendermode InteractiveWebAssembly
+      @implements IAsyncDisposable
+
+      // Not OnInitializedAsync: that also runs during prerendering, on the server. OnAfterRender doesn't.
+      protected override async Task OnAfterRenderAsync(bool firstRender)
+      {
+          if (!firstRender) return;
+          feed = FeedFactory.Create();
+          feed.Created += r => OnEvent("created", r);
+          feed.Resubscribed += () => _ = InvokeAsync(ReloadAsync);
+          await feed.StartAsync(department: null);   // connect FIRST...
+          await ReloadAsync();                       // ...then load: an event in between is merged, not lost
+      }
+    narration: >
+      The board is a WebAssembly page, so the browser itself holds the connection to the API. We connect in on after
+      render, because that never runs during prerendering, so the server never opens a connection it would throw
+      away. And we connect before loading the list, so an event that lands in between is merged instead of lost.
+
+  - id: livescreen
+    type: screen
+    heading: "Submit here, it appears there"
+    image: screens/live-board.jpg
+    bar: "Browser · localhost:5180/requests/new and localhost:5180/live · DevTools WS"
+    demo: >
+      Lab laptop, API + Web running (demo.md). Two browser windows side by side: left /requests/new, right /live
+      with DevTools Network filtered to WS, the hubs/requests?id=... WebSocket selected, Messages pane. Right page
+      shows "SignalR: connected · watching all departments". Submit "Data platform", IT, 80000 on the left: on the
+      right a highlighted row appears at the top and a frame shows type 1, target RequestCreated, with "priority":
+      "High". Nothing to mask (localhost, contoso.com people).
+    narration: >
+      Here it is. Submit on the left. On the right, the row appears before I can move the mouse. In the WebSocket
+      frames, one message: target request created, the request as J SON, priority high, written as a word.
+
+  - id: json
+    type: code
+    heading: "Gotcha one: SignalR has its own JSON settings"
+    lang: csharp
+    code: |
+      // Server: ConfigureHttpJsonOptions does NOT apply to the hub protocol
+      services.AddSignalR()
+          .AddJsonProtocol(o => o.PayloadSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
+
+      // Test: a client WITHOUT the converter, binding RequestDto
+      raw.On<RequestDto>(nameof(IRequestsClient.RequestCreated), typed.Add);
+      var sent = await CreateAsync(_factory, "FIN");
+      Assert.Equal(sent.Id, (await control.NextAsync()).Id);   // the configured client got it
+      await Task.Delay(500, Ct);
+      Assert.True(typed.IsEmpty);                              // this one silently dropped it
+      Assert.Equal(HubConnectionState.Connected, raw.State);   // no exception, still connected
+    narration: >
+      Our REST API already sends enums as strings. The hub didn't, because configure H T T P J SON options doesn't
+      apply to SignalR. It has its own add J SON protocol, on the server and on the dot net client. Worse, our test
+      shows what a mismatched client does: it drops the message, logs it, and stays connected. No exception
+      anywhere. Configure both sides.
+
+  - id: groupscreen
+    type: screen
+    heading: "Groups: Finance only"
+    image: screens/watcher-groups.jpg
+    bar: "Windows Terminal · ProjectRequests.Watcher --department FIN"
+    demo: >
+      Terminal running: dotnet run -- --department FIN (src/ProjectRequests.Watcher). Beside it the browser. Create
+      an IT request on /requests/new: nothing in the terminal. Create "Laptop refresh", FIN, 12000: a cyan NEW line.
+      Open /requests/<id>, click Approve: a green UPDATED line "Approved by sam.approver@contoso.com", and the live
+      board row turns Approved at the same time.
+    narration: >
+      Groups in action. This console watches Finance only. An I T request: nothing. A Finance request: there it is.
+      Approve it in the browser, and the console and the board update together.
+
+  - id: reconnectscreen
+    type: screen
+    heading: "Stop the server. Start it again."
+    image: screens/reconnect.jpg
+    bar: "API terminal Ctrl+C · watcher · live board"
+    short: reconnect
+    demo: >
+      Three panes: API terminal, watcher terminal, /live. Ctrl+C the API: watcher prints "connection: Reconnecting",
+      board shows "connection lost, reconnecting…". Wait about 5 s, dotnet run --launch-profile http again. Within
+      the next retry (10 s attempt) watcher prints "reconnected as <new id>, watching FIN again", board shows
+      connected and "reconnected: reloading the list". Create a FIN request: it arrives on both.
+    narration: >
+      Now break it. Stop the API. Both clients say reconnecting. Start it again, and at the next retry they're back,
+      with a new connection I D. Learn says group membership isn't preserved when a connection reconnects. Without
+      that watch call in the reconnected handler, this console would be connected and deaf. Our tests prove it with
+      a plain connection: reconnected, zero messages.
+
+  - id: cors
+    type: code
+    heading: "CORS for a hub is not CORS for an API"
+    lang: csharp
+    code: |
+      // Learn: specific origins, GET + POST + DELETE (long polling cleanup), credentials allowed
+      services.AddCors(o => o.AddPolicy("signalr", policy => policy
+          .WithOrigins(config.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [])
+          .WithMethods("GET", "POST", "DELETE")
+          .AllowAnyHeader()
+          .AllowCredentials()));
+
+      app.MapHub<RequestsHub>("/hubs/requests").RequireCors("signalr");   // REST keeps last episode's policy
+
+      // HubException: the only exception message that reaches the client
+      throw new HubException($"Unknown department '{department}'.");
+    narration: >
+      The board runs on port fifty-one eighty, the hub on fifty-two oh seven. Learn lists what SignalR needs: get,
+      post and delete, and credentials allowed, even without authentication, for sticky sessions. That's looser than
+      our REST policy, so it gets its own named policy, on the hub endpoint only. And only a hub exception's message
+      reaches the client. Anything else is a generic error.
+
+  - id: scaleout
+    type: code
+    heading: "Gotcha two: two servers, two islands"
+    lang: csharp
+    code: |
+      [Fact]
+      public async Task A_write_handled_by_another_instance_is_not_pushed()
+      {
+          using var instanceB = RequestsApiFactory.ForExistingDatabase(_factory.DatabasePath);
+          var (_, created, _) = await WatchAsync(null);                   // connected to instance A
+
+          var viaB = await CreateAsync(instanceB, "FIN", title: "Written on B");
+          var viaA = await CreateAsync(_factory, "FIN", title: "Written on A");
+
+          Assert.Equal(viaA.Id, (await created.NextAsync()).Id);          // B's request never arrived
+          Assert.Equal(viaB.Id + 1, viaA.Id);                             // ...same database, though
+      }
+    short: scaleout
+    narration: >
+      The trap that waits for your first scale-out. Two instances, one database. A client on instance A never hears
+      about a write handled by instance B, because connections and groups live in each process. Learn's answer is a
+      backplane. Azure SignalR Service is the recommendation on Azure, and the app doesn't need sticky sessions.
+      Redis works too, but still needs them.
+
+  - id: scalescreen
+    type: screen
+    heading: "Instance B writes, the board on A stays quiet"
+    image: screens/scale-out.jpg
+    bar: "Second API instance on :5217 · same requests.db"
+    demo: >
+      Start a second API: dotnet run --launch-profile http -- --urls http://localhost:5217 (same folder, same
+      requests.db). In pwsh: Invoke-RestMethod -Method Post http://localhost:5217/api/requests with a FIN request
+      "Written on B". The /live board (connected to 5207) and the watcher show nothing. Press F5 on /live: the row
+      is there. Stop the second instance.
+    narration: >
+      Live: a second instance on port fifty-two seventeen. Post to it. The board stays quiet. Refresh, and the row
+      was in the database all along.
+
+  - id: tests
+    type: screen
+    heading: "A real hub, a real client, in memory"
+    image: screens/tests.jpg
+    bar: "VS Code terminal · dotnet test"
+    demo: >
+      VS Code terminal in the episode folder: Clear-Host; dotnet test. In frame: both test apps passed, total 101,
+      succeeded 100, skipped 1 (episode 5's opt-in SQL Server test). Optional: Testing view with LiveUpdatesTests
+      expanded (10 tests). Compare deploy/tests.output.txt.
+    narration: >
+      All of it runs in dotnet test. The SignalR tests use the real hub and the real client, over the test server's
+      WebSocket client. One test even restarts the API under two connected clients. A hundred and one tests, one
+      skipped: the SQL Server test from episode five.
+
+  - id: takeaways
+    type: bullets
+    heading: "Take this with you"
+    bullets:
+      - "Hub<T>, and IHubContext to push from anywhere else"
+      - "Configure AddJsonProtocol on both sides"
+      - "Reconnect = new connection: rejoin groups, reload state"
+      - "SignalR doesn't queue: missed while away means missed"
+      - "More than one server: a backplane, or Azure SignalR Service"
+    narration: >
+      To recap. Strongly typed hubs, and I hub context everywhere else. The same J SON settings on both ends. After
+      a reconnect, rejoin your groups and reload, because SignalR doesn't keep what you missed. And the moment you
+      run two servers, add a backplane.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The hub, the live board, the watcher and all hundred and one tests are on GitHub, and the full guide is on
+      devladlog dot com. Next time: g R P C services. Subscribe so you don't miss it. This was DEVLADLOG dot net,
+      by Momento Galático.

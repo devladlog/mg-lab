@@ -1,0 +1,134 @@
+@page "/live"
+@rendermode InteractiveWebAssembly
+@implements IAsyncDisposable
+@inject IRequestsApi Api
+@inject IRequestsFeedFactory FeedFactory
+
+@*
+    Episode 7: runs in the browser and holds a SignalR connection to the API's hub (not to this web app).
+    The server pushes RequestCreated / RequestUpdated; nothing polls.
+*@
+
+<PageTitle>Live board</PageTitle>
+
+<h1>Live board</h1>
+<p class="render-info">Rendered by: <strong>@RendererInfo.Name</strong> · interactive: <strong>@RendererInfo.IsInteractive</strong></p>
+
+<p id="connection" class="connection @state.ToString().ToLowerInvariant()">SignalR: <strong>@StateText</strong></p>
+
+<label>Department
+    <select id="department" value="@department" @onchange="ChangeDepartmentAsync" disabled="@(state != FeedState.Connected)">
+        <option value="">All departments</option>
+        <option value="FIN">Finance</option>
+        <option value="IT">Information Technology</option>
+        <option value="OPS">Operations</option>
+    </select>
+</label>
+
+@if (error is not null)
+{
+    <p id="feed-error" class="error">@error</p>
+}
+
+<table id="board">
+    <thead><tr><th>#</th><th>Title</th><th>Dept.</th><th class="num">Budget</th><th>Priority</th><th>Status</th></tr></thead>
+    <tbody>
+        @foreach (var r in board.Requests)
+        {
+            <tr class="@(board.Highlighted.Contains(r.Id) ? "live" : null)">
+                <td><a href="requests/@r.Id">@r.Id</a></td>
+                <td>@r.Title</td>
+                <td>@r.Department</td>
+                <td class="num">@r.Budget.ToString("N0")</td>
+                <td>@r.Priority</td>
+                <td class="status @r.Status.ToString().ToLowerInvariant()">@r.Status</td>
+            </tr>
+        }
+    </tbody>
+</table>
+
+<h2>Events</h2>
+<ol id="events" reversed>
+    @foreach (var line in events)
+    {
+        <li>@line</li>
+    }
+</ol>
+
+@code {
+    private readonly BoardState board = new();
+    private readonly List<string> events = [];
+    private IRequestsFeed? feed;
+    private FeedState state = FeedState.Disconnected;
+    private string department = "";
+    private string? error;
+
+    private string StateText => !RendererInfo.IsInteractive ? "waiting for the page to become interactive" : state switch
+    {
+        FeedState.Connected => $"connected · watching {(department == "" ? "all departments" : department)}",
+        FeedState.Connecting => "connecting…",
+        FeedState.Reconnecting => "connection lost, reconnecting…",
+        _ => "disconnected",
+    };
+
+    // Not OnInitializedAsync: that also runs during prerendering, on the server. OnAfterRender doesn't.
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+            return;
+
+        feed = FeedFactory.Create();
+        feed.Created += r => OnEvent("created", r);
+        feed.Updated += r => OnEvent("updated", r);
+        feed.StateChanged += s => _ = InvokeAsync(() => { state = s; StateHasChanged(); });
+        feed.Resubscribed += () => _ = InvokeAsync(async () => { Log("reconnected: reloading the list"); await ReloadAsync(); });
+
+        try
+        {
+            await feed.StartAsync(department: null);   // connect FIRST...
+            await ReloadAsync();                       // ...then load: an event in between is merged, not lost
+        }
+        catch (Exception ex)
+        {
+            error = $"Live updates unavailable: {ex.Message}";
+            StateHasChanged();
+        }
+    }
+
+    private void OnEvent(string what, RequestDto r) => _ = InvokeAsync(() =>
+    {
+        if (Matches(r) && board.Apply(r))
+            Log($"#{r.Id} {what} · {r.Department} · {r.Priority} · {r.Status}");
+        StateHasChanged();
+    });
+
+    private async Task ChangeDepartmentAsync(ChangeEventArgs e)
+    {
+        department = e.Value?.ToString() ?? "";
+        await feed!.WatchAsync(department);            // server side: leave the old group, join the new one
+        await ReloadAsync();
+    }
+
+    private async Task ReloadAsync()
+    {
+        var all = await Api.ListAsync();
+        board.Clear();
+        board.Load(all.Where(Matches));
+        StateHasChanged();
+    }
+
+    private bool Matches(RequestDto r) => department == "" || r.Department == department;
+
+    private void Log(string line)
+    {
+        events.Insert(0, $"{DateTime.Now:HH:mm:ss} {line}");
+        if (events.Count > 8)
+            events.RemoveAt(events.Count - 1);
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (feed is not null)
+            await feed.DisposeAsync();                 // closes the connection when the user leaves the page
+    }
+}

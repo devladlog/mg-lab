@@ -1,0 +1,44 @@
+# pwsh deploy/smoke.ps1  (API running on 5207 + 5208 with an empty database, SDK 10.0.115, Grpc.Net.Client 2.85.0)
+
+== 1. A SignalR watcher for FIN (episode 7), to see gRPC writes arrive on the live board
+watcher connected
+
+== 2. Client streaming: import sample-import.csv (7 lines: 3 good, 1 bad number, 3 rejected by the server)
+line 4: skipped, budget 'abc' is not a number
+server received 6 row(s), created 3: [1, 2, 3]
+line 5: DepartmentCode: Unknown department 'XYZ'.
+line 6: Justification: A justification is required for budgets of 250,000 or more.
+line 7: RequestedBy: The RequestedBy field is not a valid e-mail address.
+exit code (3 = some rows had errors): 3
+
+== 3. Server streaming: list all, then FIN only
+#1 OPS Badge readers                      30,000  Standard Submitted
+#2 IT  Data platform                      80,000  High     Submitted
+#3 FIN Standing desks                     18,000  Standard Submitted
+3 request(s)
+#3 FIN Standing desks                     18,000  Standard Submitted
+1 request(s)
+
+== 4. Unary: get 2, get 99 (NotFound), get 0 (InvalidArgument)
+#2 IT  Data platform                      80,000  High     Submitted
+   justification: Replaces the old reporting server, saves licence costs
+gRPC error: NotFound - Request 99 not found.
+gRPC error: InvalidArgument - Id must be a positive number.
+
+== 5. Same data over REST: GET /api/requests
+REST returns 3 request(s)
+
+== 6. What the watcher saw (the FIN row, pushed by the gRPC service through SignalR)
+06:25:54 connection: Connecting
+06:25:54 connection: Connected
+06:25:54 connected to http://localhost:5207/ as HRdT8lM30e6P6bYshzNWIw, watching FIN (Ctrl+C to stop)
+06:25:56 NEW     #3 FIN Standing desks                     18,000  Standard Submitted
+Watcher got the FIN import row: True
+Watcher got an IT row:          False   (expected False: other group)
+
+== 7. Wrong port: a gRPC client on the HTTP/1.1 endpoint, and HTTP/1.1 on the gRPC endpoint
+gRPC error: Internal - Error starting gRPC call. HttpRequestException: The HTTP/2 server closed the connection. HTTP/2 error code 'HTTP_1_1_REQUIRED' (0xd). (HttpProtocolError) HttpProtocolException: The HTTP/2 server closed the connection. HTTP/2 error code 'HTTP_1_1_REQUIRED' (0xd). (HttpProtocolError)
+HTTP/1.1 request to the HTTP/2-only port: 400
+
+== 8. A deadline that cannot be met (1 ms)
+gRPC error: DeadlineExceeded - 

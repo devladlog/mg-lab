@@ -1,0 +1,85 @@
+@page "/requests/{Id:int}"
+@rendermode InteractiveServer
+@inject IRequestsApi Api
+@inject ILogger<RequestDetail> Logger
+
+<PageTitle>Request @Id</PageTitle>
+
+<p class="render-info">Rendered by: <strong>@RendererInfo.Name</strong> · interactive: <strong>@RendererInfo.IsInteractive</strong></p>
+
+@if (Request is null)
+{
+    <p>Request @Id was not found.</p>
+}
+else
+{
+    <h1>#@Request.Id · @Request.Title</h1>
+    <dl>
+        <dt>Department</dt><dd>@Request.Department</dd>
+        <dt>Budget</dt><dd>@Request.Budget.ToString("N0") (@Request.Priority)</dd>
+        <dt>Requested by</dt><dd>@Request.RequestedBy</dd>
+        <dt>Status</dt><dd id="status" class="status @Request.Status.ToString().ToLowerInvariant()">@Request.Status</dd>
+        @if (Request.DecidedBy is not null)
+        {
+            <dt>Decided by</dt><dd>@Request.DecidedBy</dd>
+        }
+    </dl>
+
+    @if (Request.Status == RequestStatus.Submitted)
+    {
+        <label>Decided by <input id="decided-by" type="email" @bind="decidedBy" /></label>
+        @* Click handlers run on the server: the browser sends the event over the SignalR circuit. *@
+        <button id="approve" @onclick="() => DecideAsync(true)" disabled="@(!RendererInfo.IsInteractive)">Approve</button>
+        <button id="reject" @onclick="() => DecideAsync(false)" disabled="@(!RendererInfo.IsInteractive)">Reject</button>
+    }
+
+    @if (problem is not null)
+    {
+        <p id="problem" class="error">@problem <button @onclick="ReloadAsync">Reload</button></p>
+    }
+}
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    /// <summary>
+    /// .NET 10: persisted during prerendering and restored when the circuit starts, so the API is called once
+    /// per page load instead of twice (prerender + interactive render).
+    /// </summary>
+    [PersistentState]
+    public RequestDto? Request { get; set; }
+
+    private string decidedBy = "sam.approver@contoso.com";
+    private string? problem;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (Request is null)
+        {
+            Logger.LogInformation("Loading request {Id} from the API ({Renderer})", Id, RendererInfo.Name);
+            Request = await Api.GetAsync(Id);
+        }
+    }
+
+    private async Task DecideAsync(bool approve)
+    {
+        problem = null;
+        var result = await Api.DecideAsync(Id, new DecisionRequest
+        {
+            Approve = approve,
+            DecidedBy = decidedBy,
+            Version = Request!.Version,          // "approve what you saw": a stale version gets a 409
+        });
+
+        if (result.Succeeded)
+            Request = result.Value;
+        else
+            problem = result.Problem;
+    }
+
+    private async Task ReloadAsync()
+    {
+        problem = null;
+        Request = await Api.GetAsync(Id);
+    }
+}

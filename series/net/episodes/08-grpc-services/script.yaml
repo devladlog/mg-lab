@@ -1,0 +1,297 @@
+# DEVLADLOG .NET — episode 08 (draft; screens are captured on the lab laptop, see demo.md)
+episode: 8
+slug: grpc-services
+series_label: ".NET"
+series_name: "DEVLADLOG .NET"
+file_prefix: "net"
+title: "gRPC Services"
+subtitle: "Contract first: unary, streaming, deadlines and the wrong port"
+voice: am_michael
+thumbnail_text: "gRPC\nSTREAMING\nDEADLINES"
+youtube:
+  title: "gRPC in ASP.NET Core (.NET 10): Streaming, Deadlines, Retries and the Port Trap | DEVLADLOG .NET #8"
+  tags: [gRPC, gRPC .NET, ASP.NET Core gRPC, Protobuf, HTTP/2, Kestrel, streaming, deadlines, retries, Grpc.Net.Client, .NET 10, C#, SignalR, microservices]
+sources:
+  - https://www.devladlog.com/articles/dotnet/2026-05-16-grpc-services-complete-guide-2026/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "gRPC Services"
+    sub: "Write the contract first"
+    short: hook
+    narration: >
+      Last time the server pushed to browsers. This time a program talks to our API, and neither side writes a
+      single line of serialization code. gRPC. A contract file, generated clients, streaming in both directions,
+      and a couple of traps that only show up when you run it for real. Welcome to DEVLADLOG dot net.
+
+  - id: plan
+    type: bullets
+    heading: "What we're building"
+    bullets:
+      - "requests.proto: the contract, written first"
+      - "Three calls: unary, server streaming, client streaming"
+      - "Same database, same rules as REST, second port"
+      - "A console client with deadlines and retries"
+      - "32 new tests, then the same API on real Kestrel"
+    narration: >
+      The plan. One proto file defines the service. The API gets a second front door, on its own port, with the
+      same database and the same validation as REST. A console client calls it with deadlines and retries.
+      Thirty-two new tests, and then all of it on real Kestrel.
+
+  - id: proto
+    type: code
+    heading: "The contract comes first"
+    lang: protobuf
+    code: |
+      // requests.proto (condensed): messages, service base class and client are generated from this
+      service Requests {
+        rpc GetRequest (GetRequestMessage) returns (RequestReply);                // unary
+        rpc ListRequests (ListRequestsMessage) returns (stream RequestReply);     // server streaming
+        rpc ImportRequests (stream NewRequestMessage) returns (ImportReply);      // client streaming
+      }
+      // Protobuf has no decimal: units and nanos, the format Learn documents
+      message DecimalValue { int64 units = 1; sfixed32 nanos = 2; }
+      message RequestReply {
+        int32 id = 1;
+        DecimalValue budget = 3;
+        google.protobuf.StringValue justification = 6;   // wrapper: a string that can be null
+        google.protobuf.Timestamp decided_at = 11;       // message field: null until set
+      }
+    narration: >
+      The proto file is the contract, and the server and client code are generated from it. Three call shapes.
+      Unary, one message each way. Server streaming, many replies. Client streaming, many requests, one answer.
+      Protobuf has no decimal type, so the budget travels as units and nanos, the format Learn documents. And a
+      plain string can't be null, so the optional justification uses the string value wrapper.
+
+  - id: service
+    type: code
+    heading: "Unary and server streaming"
+    lang: csharp
+    code: |
+      public override async Task<RequestReply> GetRequest(GetRequestMessage request, ServerCallContext context)
+      {
+          var dto = await db.Requests.Where(r => r.Id == request.Id).Select(RequestEndpoints.ToDto)
+              .FirstOrDefaultAsync(context.CancellationToken);
+          return dto?.ToReply() ?? throw new RpcException(new Status(StatusCode.NotFound, $"Request {request.Id} not found."));
+      }
+
+      public override async Task ListRequests(ListRequestsMessage request,
+          IServerStreamWriter<RequestReply> responseStream, ServerCallContext context)
+      {
+          await foreach (var dto in query.OrderBy(r => r.Id).Select(RequestEndpoints.ToDto).AsAsyncEnumerable()
+                             .WithCancellation(context.CancellationToken))
+              await responseStream.WriteAsync(dto.ToReply(), context.CancellationToken);   // one message per row
+      }
+    narration: >
+      The service derives from the generated base class. Not found is not an H T T P four oh four. It's a status
+      code, not found, sent in the trailers, and the client sees an R P C exception. The streaming method writes one
+      message per row, and every awaited call gets the call's cancellation token, so a client that goes away stops
+      the work.
+
+  - id: import
+    type: code
+    heading: "Client streaming reuses the REST rules"
+    lang: csharp
+    code: |
+      // ImportRequests (condensed)
+      await foreach (var message in requestStream.ReadAllAsync(context.CancellationToken))
+      {
+          var row = ++reply.Received;
+          var input = message.ToCreateRequest();            // the same input model POST /api/requests validates
+          if (!Validator.TryValidateObject(input, new ValidationContext(input), results, true))
+              { /* add errors with this row number */ continue; }      // a bad row doesn't stop the import
+
+          var (created, errors) = await RequestEndpoints.CreateCoreAsync(input, db, clock, events, ct);
+          if (created is not null) reply.CreatedIds.Add(created.Id);   // creation code shared with REST,
+      }                                                                // including last episode's SignalR push
+      return reply;                                                    // one answer, at the end
+    narration: >
+      Client streaming. The service reads rows as they arrive, runs the same data annotation rules the REST
+      endpoint uses, and calls the same creation code. That code also does last episode's SignalR push, so
+      imported requests show up on the live board. A bad row is reported with its position, and doesn't stop
+      the rest. The single reply comes when the client says it's done.
+
+  - id: kestrel
+    type: code
+    heading: "gRPC needs HTTP/2: its own port"
+    lang: json
+    code: |
+      // appsettings.Development.json
+      "Kestrel": { "Endpoints": {
+        "Rest": { "Url": "http://localhost:5207", "Protocols": "Http1" },
+        "Grpc": { "Url": "http://localhost:5208", "Protocols": "Http2" }
+      } }
+
+      // Program.cs
+      builder.Services.AddGrpc(o =>
+      {
+          o.EnableDetailedErrors = builder.Environment.IsDevelopment();   // can leak details: dev only
+          o.Interceptors.Add<CancellationStatusInterceptor>();
+      });
+      app.MapGrpcService<RequestsGrpcService>();
+    narration: >
+      gRPC needs HTTP/2. Without T L S, Learn says the endpoint must be HTTP/2 only, because an endpoint offering
+      both can't negotiate, and calls fail. So development gets two ports. Fifty-two oh seven for REST and SignalR,
+      fifty-two oh eight for gRPC. In production you'd use T L S. Detailed errors stay a development switch,
+      because Learn warns they can leak sensitive information.
+
+  - id: callsscreen
+    type: screen
+    heading: "Import, list, get: three call shapes"
+    image: screens/cli-calls.jpg
+    bar: "Windows Terminal · requests-cli against localhost:5208"
+    short: calls
+    demo: >
+      Lab laptop, API running (demo.md). Terminal in src/ProjectRequests.Cli. Run: dotnet run -- import
+      sample-import.csv (shows line 4 skipped, server received 6 created 3, three line errors), then list, list
+      --department FIN, get 2, get 99. In frame: the three created ids, the rejected lines named by file line number,
+      and "gRPC error: NotFound - Request 99 not found." Nothing to mask.
+    narration: >
+      Real calls. A seven line C S V goes through client streaming. Three rows are created. One line never leaves
+      the client, because the budget isn't a number. Three are rejected by the server, each named by its line in
+      the file. Then list streams the rows as they arrive, and get ninety-nine comes back not found.
+
+  - id: livescreen
+    type: screen
+    heading: "gRPC writes reach the live board"
+    image: screens/import-live.jpg
+    bar: "Terminal import · browser localhost:5180/live · FIN watcher"
+    demo: >
+      Three panes: the browser on http://localhost:5180/live (connected, watching all departments), the FIN watcher
+      terminal from episode 7 (dotnet run -- --department FIN in src/ProjectRequests.Watcher), and the CLI terminal.
+      Run dotnet run -- import sample-import.csv. In frame: the board gains three rows (OPS, IT, FIN) while the FIN
+      watcher prints only the FIN one, "NEW #3 FIN Standing desks". Nothing to mask.
+    narration: >
+      And since the import uses the same creation code, last episode's live board lights up. Three new rows in the
+      browser. The Finance watcher gets only the Finance one. gRPC wrote it, SignalR announced it.
+
+  - id: wrongport
+    type: screen
+    heading: "Gotcha: the wrong port"
+    image: screens/wrong-port.jpg
+    bar: "Windows Terminal · requests-cli --address http://localhost:5207"
+    short: wrongport
+    demo: >
+      Terminal in src/ProjectRequests.Cli. Run: dotnet run -- --address http://localhost:5207 get 1. In frame: the
+      error "gRPC error: Internal - Error starting gRPC call. HttpRequestException: The HTTP/2 server closed the
+      connection. HTTP/2 error code 'HTTP_1_1_REQUIRED'". Then curl.exe --http1.1 -o NUL -w "%{http_code}"
+      http://localhost:5208/healthz which prints 400. Then the right port: dotnet run -- get 1 works.
+    narration: >
+      The trap everyone hits once. Point the client at the REST port, and you don't get a friendly message. You get
+      internal, and the H T T P two server closed the connection, error code H T T P one point one required. The
+      port speaks only H T T P one. Send H T T P one to the gRPC port, and you get a four hundred. Two ports, two
+      protocols. Same thing, backwards.
+
+  - id: decimal
+    type: code
+    heading: "Gotcha: money is not a double"
+    lang: csharp
+    code: |
+      public partial class DecimalValue   // generated half: Units, Nanos
+      {
+          public static implicit operator decimal(DecimalValue v) => v.Units + v.Nanos / 1_000_000_000m;
+          public static implicit operator DecimalValue(decimal value)
+          {
+              var units = decimal.ToInt64(value);                          // truncates toward zero
+              var nanos = decimal.ToInt32((value - units) * 1_000_000_000m);   // same sign as units
+              return new DecimalValue(units, nanos);
+          }
+      }
+      // Test: 12,345.67 survives the wire
+      Assert.Equal(12_345, stored.Budget.Units);
+      Assert.Equal(670_000_000, stored.Budget.Nanos);
+    narration: >
+      Back to the budget. Nine decimal places, no rounding, thanks to a small partial class with two implicit
+      operators. The test checks twelve thousand three hundred forty-five sixty-seven comes back exactly. The
+      catch, and Learn says it too: other languages have to know this format, so a shared contract needs it
+      documented.
+
+  - id: retries
+    type: code
+    heading: "Deadlines and retries"
+    lang: csharp
+    code: |
+      var retryReads = new RetryPolicy
+      {
+          MaxAttempts = 3, InitialBackoff = TimeSpan.FromMilliseconds(200), MaxBackoff = TimeSpan.FromSeconds(2),
+          BackoffMultiplier = 2, RetryableStatusCodes = { StatusCode.Unavailable },
+      };
+      ServiceConfig = new ServiceConfig { MethodConfigs =
+      {
+          new MethodConfig { Names = { new MethodName { Service = ServiceName, Method = "GetRequest" } }, RetryPolicy = retryReads },
+          new MethodConfig { Names = { new MethodName { Service = ServiceName, Method = "ListRequests" } }, RetryPolicy = retryReads },
+          // nothing for ImportRequests: a retried import could create the rows twice
+      } }
+      // every call: a deadline is a UTC time, and there is no default one
+      await client.GetRequestAsync(request, deadline: DateTime.UtcNow.Add(timeout), cancellationToken: ct);
+    narration: >
+      Deadlines and retries. A deadline is a U T C time, and there is no default, so without one a call can wait
+      forever. Retries are configured once, on the channel, for status unavailable. We list only the two reads.
+      Import gets no policy, because retrying it could create the same requests twice. Learn adds that a call
+      that already received headers is committed, and streaming reads don't retry after the first message.
+
+  - id: deadlinescreen
+    type: screen
+    heading: "Unavailable and DeadlineExceeded"
+    image: screens/deadline.jpg
+    bar: "Windows Terminal · requests-cli · deadline and a stopped server"
+    demo: >
+      Terminal in src/ProjectRequests.Cli. First: dotnet run -- --deadline 0.001 list. In frame: "gRPC error:
+      DeadlineExceeded". Then Ctrl+C the API terminal and run dotnet run -- get 1. In frame (after about a second and
+      a half, the retries): "gRPC error: Unavailable - Error connecting to subchannel." Restart the API afterwards.
+    narration: >
+      A one millisecond deadline: deadline exceeded, immediately. Now stop the server and ask for a request. The
+      client tries three times with backoff, then gives up with unavailable. Both are statuses you can switch on,
+      not stack traces to parse.
+
+  - id: browser
+    type: bullets
+    heading: "gRPC and the browser, SignalR and gRPC"
+    bullets:
+      - "Browsers can't make HTTP/2 gRPC calls: gRPC-Web"
+      - "gRPC-Web: no client or bidirectional streaming"
+      - "Blazor WebAssembly stays on REST and SignalR here"
+      - "Broadcast to many clients: SignalR, not gRPC"
+      - "Services talking to services: gRPC"
+    narration: >
+      So where does it fit? Browsers can't make the H T T P two calls gRPC needs, so Blazor WebAssembly would need
+      gRPC-Web, which drops client and bidirectional streaming. Our board stays on REST and SignalR. And Learn
+      says it plainly: for broadcasting to many clients, use SignalR. gRPC is for services talking to services.
+
+  - id: tests
+    type: screen
+    heading: "A real gRPC client, in memory"
+    image: screens/tests.jpg
+    bar: "VS Code terminal · dotnet test"
+    demo: >
+      VS Code terminal in the episode folder: Clear-Host; dotnet test. In frame: both test apps passed, total 133,
+      succeeded 132, skipped 1 (episode 5's opt-in SQL Server test). Optional: Testing view with GrpcServiceTests,
+      CliTests and CancellationStatusInterceptorTests expanded. Compare deploy/tests.output.txt.
+    narration: >
+      All of it runs in dotnet test. The real client against the real service, over the test server. Statuses,
+      streams, the decimal, the deadline, even a fake outage to count retries. A hundred and thirty-three tests,
+      one skipped, the SQL Server one from episode five.
+
+  - id: takeaways
+    type: bullets
+    heading: "Take this with you"
+    bullets:
+      - "Contract first: one proto file, generated server and client"
+      - "Plain http: an HTTP/2-only port. Otherwise TLS"
+      - "Statuses, not HTTP codes: NotFound, Unavailable, DeadlineExceeded"
+      - "Always a deadline; retry only what is safe to repeat"
+      - "Pass the call's cancellation token to everything"
+    narration: >
+      To recap. The contract comes first. Plain H T T P means an H T T P two only port. Errors are statuses, so
+      catch the R P C exception. Always set a deadline, and retry only what's safe to repeat. And pass the call's
+      cancellation token to everything you await.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The proto file, the service, the client and all hundred and thirty-three tests are on GitHub, and the full
+      guide is on devladlog dot com. Next time: performance optimization. Subscribe so you don't miss it. This was
+      DEVLADLOG dot net, by Momento Galático.

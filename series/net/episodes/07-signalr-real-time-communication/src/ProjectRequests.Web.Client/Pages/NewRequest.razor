@@ -1,0 +1,98 @@
+@page "/requests/new"
+@rendermode InteractiveWebAssembly
+@inject IRequestsApi Api
+
+<PageTitle>New request</PageTitle>
+
+<h1>New project request</h1>
+<p class="render-info">Rendered by: <strong>@RendererInfo.Name</strong> · interactive: <strong>@RendererInfo.IsInteractive</strong></p>
+
+<EditForm Model="Model" OnValidSubmit="SubmitAsync">
+    <DataAnnotationsValidator />
+    <ValidationSummary />
+
+    <label>Title <InputText @bind-Value="Model.Title" /></label>
+    <label>Requested by <InputText @bind-Value="Model.RequestedBy" type="email" /></label>
+    <label>Department
+        <InputSelect @bind-Value="Model.DepartmentCode">
+            <option value="">(choose)</option>
+            <option value="FIN">Finance</option>
+            <option value="IT">Information Technology</option>
+            <option value="OPS">Operations</option>
+        </InputSelect>
+    </label>
+    <label>Budget <input id="budget" type="number" min="1" step="0.01" @bind="Model.Budget" @bind:event="oninput" /></label>
+
+    @* Same PriorityRules class as the API, running in the browser: no request to the server while you type. *@
+    <p id="preview" class="preview @Preview.ToString().ToLowerInvariant()">
+        Priority: <strong>@Preview</strong>
+        @if (PriorityRules.NeedsJustification(Model.Budget))
+        {
+            <span> · a justification is required from @PriorityRules.JustificationThreshold.ToString("N0")</span>
+        }
+    </p>
+
+    <label>Justification <InputTextArea @bind-Value="Model.Justification" /></label>
+
+    <button type="submit" disabled="@(!RendererInfo.IsInteractive || submitting)">Submit</button>
+</EditForm>
+
+@if (created is not null)
+{
+    <p id="created" class="ok">Request <a href="requests/@created.Id">#@created.Id</a> created · @created.Priority priority.</p>
+}
+@if (apiError is not null)
+{
+    <div id="api-error" class="error">
+        <p>@apiError.Problem</p>
+        <ul>
+            @foreach (var (field, messages) in apiError.Errors)
+            {
+                foreach (var message in messages)
+                {
+                    <li>@field: @message</li>
+                }
+            }
+        </ul>
+    </div>
+}
+
+@code {
+    private CreateProjectRequest Model = new();
+
+    private Priority Preview => PriorityRules.Classify(Model.Budget);
+    private RequestDto? created;
+    private ApiResult<RequestDto>? apiError;
+    private bool submitting;
+
+    // Runs only after the browser-side checks passed: DataAnnotations + IValidatableObject (justification rule),
+    // the same checks the API runs again on its side.
+    private async Task SubmitAsync()
+    {
+        submitting = true;
+        created = null;
+        apiError = null;
+        try
+        {
+            var result = await Api.CreateAsync(Model);
+            if (result.Succeeded)
+            {
+                created = result.Value;
+                Model = new();
+            }
+            else
+            {
+                apiError = result;
+            }
+        }
+        catch (HttpRequestException ex)
+        {
+            // In the browser a CORS refusal or an unreachable API both surface here ("TypeError: Failed to fetch").
+            apiError = new ApiResult<RequestDto>(null, $"Could not reach the API: {ex.Message}", new Dictionary<string, string[]>());
+        }
+        finally
+        {
+            submitting = false;
+        }
+    }
+}

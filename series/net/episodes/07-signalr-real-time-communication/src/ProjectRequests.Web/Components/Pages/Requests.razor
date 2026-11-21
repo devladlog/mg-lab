@@ -1,0 +1,45 @@
+@page "/"
+@page "/requests"
+@attribute [StreamRendering]
+@inject IRequestsApi Api
+
+@* No @rendermode: static server-side rendering. HTML only, no circuit, no WebAssembly download. *@
+
+<PageTitle>Project requests</PageTitle>
+
+<h1>Project requests</h1>
+<p class="render-info">Rendered by: <strong>@RendererInfo.Name</strong> · interactive: <strong>@RendererInfo.IsInteractive</strong></p>
+
+@if (requests is null)
+{
+    <p><em>Loading requests…</em></p>   @* streamed first; the table replaces it in the same response *@
+}
+else if (requests.Count == 0)
+{
+    <p>No requests yet. <a href="requests/new">Create one</a>.</p>
+}
+else
+{
+    <table>
+        <thead><tr><th>#</th><th>Title</th><th>Dept.</th><th class="num">Budget</th><th>Priority</th><th>Status</th></tr></thead>
+        <tbody>
+            @foreach (var r in requests)
+            {
+                <tr>
+                    <td><a href="requests/@r.Id">@r.Id</a></td>
+                    <td>@r.Title</td>
+                    <td>@r.Department</td>
+                    <td class="num">@r.Budget.ToString("N0")</td>
+                    <td>@r.Priority</td>
+                    <td class="status @r.Status.ToString().ToLowerInvariant()">@r.Status</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private IReadOnlyList<RequestDto>? requests;
+
+    protected override async Task OnInitializedAsync() => requests = await Api.ListAsync();
+}
