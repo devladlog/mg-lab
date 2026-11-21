@@ -63,10 +63,10 @@ scenes:
       measure 'Sales YTD' = TOTALYTD([Sales Amount], 'Date'[Date])
 
       measure 'Sales Last 3 Months' =
-          VAR LastDate = MAX('Date'[Date])
-          VAR FirstDate = EOMONTH(LastDate, -3) + 1
+          VAR PeriodEnd = MAX('Date'[Date])
+          VAR PeriodStart = EOMONTH(PeriodEnd, -3) + 1
           RETURN
-              CALCULATE([Sales Amount], DATESBETWEEN('Date'[Date], FirstDate, LastDate))
+              CALCULATE([Sales Amount], DATESBETWEEN('Date'[Date], PeriodStart, PeriodEnd))
     narration: >
       Year to date is one function. For the last three months we make the boundary explicit: the last date in context,
       and the day after the end of the month three months back. For June that's the first of April to the thirtieth of

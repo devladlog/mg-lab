@@ -41,9 +41,9 @@ Sales YoY %         = VAR CurrentSales = [Sales Amount]
                       VAR PriorSales = [Sales PY]
                       RETURN IF(NOT ISBLANK(CurrentSales), DIVIDE(CurrentSales - PriorSales, PriorSales))
 Sales YTD           = TOTALYTD([Sales Amount], 'Date'[Date])
-Sales Last 3 Months = VAR LastDate = MAX('Date'[Date])
-                      VAR FirstDate = EOMONTH(LastDate, -3) + 1
-                      RETURN CALCULATE([Sales Amount], DATESBETWEEN('Date'[Date], FirstDate, LastDate))
+Sales Last 3 Months = VAR PeriodEnd = MAX('Date'[Date])
+                      VAR PeriodStart = EOMONTH(PeriodEnd, -3) + 1
+                      RETURN CALCULATE([Sales Amount], DATESBETWEEN('Date'[Date], PeriodStart, PeriodEnd))
 Sales by Ship Date  = CALCULATE([Sales Amount], USERELATIONSHIP(Sales[Ship Date], 'Date'[Date]))
 Product Rank        = IF(NOT ISBLANK([Sales Amount]), RANKX(ALL('Product'[Product]), [Sales Amount]))
 % of Category       = DIVIDE([Sales Amount], CALCULATE([Sales Amount], ALLEXCEPT('Product', 'Product'[Category])))
