@@ -25,6 +25,13 @@ All demos are recorded for real. Use these shared resources before asking for ne
   and estimated cost for the recording window, and deletes the resource group in tear-down. Prefer free tiers. A €30/month budget
   ("mglab-monthly") emails alerts at 50%, 80%, 100% and forecast 100%.
 
+## Dev services
+- Azure DevOps: existing organization `devladlog` (connected to the lab directory). Demos create their own private
+  project and delete it afterwards. Microsoft-hosted pipelines need the org's billing linked to the lab Azure
+  subscription (free grant: 1 job, 1,800 min/month); until then use a self-hosted agent on a lab VM.
+- GitHub: the same account/organization used for github.com/devladlog/mg-lab. Throwaway demo repos are created and
+  deleted inside the episode.
+
 ## Local Hyper-V lab (on the recording laptop, built by `lab/hyperv/Start-MGLab.ps1`)
 Internal NAT network `10.20.0.0/24`, host = `10.20.0.1`, domain `lab.contoso.com` (NetBIOS `CONTOSO`).
 

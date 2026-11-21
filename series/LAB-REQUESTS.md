@@ -12,7 +12,7 @@ Not VMs, but missing from `series/LAB.md` and needed by existing demo.md files:
 
 | Item | Needed by | Notes |
 |---|---|---|
-| Azure DevOps organization connected to the lab tenant, private project `contoso-platform`, linked to the lab subscription for billing | azure #3 | Free tier; hosted parallelism needs the billing link |
+| ~~Azure DevOps organization~~ existing org `devladlog` is used; billing link to the lab subscription pending (owner) | azure #3 | Free grant applies once billing is linked |
 | Power Automate Premium for `labadmin` (trial, if the process mining trial in `DEV` doesn't include premium connectors) | deep-dive #1, power-automate #4 | HTTP connector is premium |
 | ~~Copilot Studio trial for `labadmin` and `sam.demo`~~ **done 21 Nov**: Copilot Studio viral trial licence assigned | deep-dive #2 | |
-| Lab GitHub account | developer-tools #1 | public throwaway repo, created and deleted in the episode |
+| ~~Lab GitHub account~~ decided: the same GitHub account as the mg-lab repo | developer-tools #1 | public throwaway repo, created and deleted in the episode |
