@@ -1,0 +1,262 @@
+# DEVLADLOG Code - episode 11 (draft; screens are local captures on the recording laptop, see demo.md)
+episode: 11
+slug: modern-language-features
+series_label: "CODE"
+series_name: "DEVLADLOG Code"
+file_prefix: "programming-languages"
+title: "Modern language features"
+subtitle: "One job, four languages: TypeScript, C#, Python, PowerShell"
+voice: am_michael
+thumbnail_text: "SAME JOB\n4 LANGUAGES\nSAME OUTPUT"
+youtube:
+  title: "Modern Language Features in TypeScript, C# 14, Python 3.13 and PowerShell 7.6 (Real Demo) | DEVLADLOG Code #11"
+  tags: [TypeScript, Node.js, type stripping, C# 14, .NET 10, file-based apps, Python 3.13, PEP 695, PowerShell 7.6, pattern matching, modern language features, Pester, pytest, xUnit]
+sources:
+  - https://www.devladlog.com/articles/programming-languages/2025-07-09-modern-language-features-complete-guide-2025/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Modern language features"
+    sub: "One job, four languages, one output"
+    short: hook
+    narration: >
+      Every language ships new features every year. Which ones are worth your team's time? In this episode we give
+      the same small job to four languages: TypeScript, C sharp, Python and PowerShell. Same input, same rules, and
+      the output has to match, character for character. Welcome to DEVLADLOG Code. Everything you see ran for real on the recording laptop, and the code is in the
+      repository.
+
+  - id: plan
+    type: bullets
+    heading: "The job: a request digest"
+    bullets:
+      - "Input: thirteen project requests in JSON"
+      - "Rules from the earlier episodes: 50,000 euros is High, 250,000 goes to the Board"
+      - "Zero or negative budgets are rejected"
+      - "Output: totals, routes, departments, top three, review batches"
+      - "One golden file: expected/digest.txt"
+    narration: >
+      The job is a digest of project requests, the same fictional Contoso scenario as the earlier episodes. Thirteen
+      requests in JSON. Fifty thousand euros or more is high priority, two hundred and fifty thousand goes to the
+      board, and zero or negative budgets are rejected. Each language has to print exactly the same twenty three
+      lines, checked against one golden file. That makes the comparison fair: any difference you see is a language
+      feature, not a different job.
+
+  - id: ts-code
+    type: code
+    heading: "TypeScript: Node runs the file"
+    lang: typescript
+    code: |
+      const departments = Map.groupBy(accepted, (r) => r.department)
+        .entries()
+        .map(([department, items]) => ({
+          department,
+          count: items.length,
+          cents: items.reduce((sum, r) => sum + r.cents, 0),
+        }))
+        .toArray()
+        .toSorted((a, b) => b.cents - a.cents || a.department.localeCompare(b.department, "en"));
+
+      const largest = accepted
+        .toSorted((a, b) => b.cents - a.cents || a.code.localeCompare(b.code, "en"))
+        .values()
+        .take(3)
+        .toArray();
+    narration: >
+      TypeScript first. Node twenty two runs dot t s files directly: it strips the types and runs what is left. No
+      build step. The collection code is plain modern JavaScript: Map group by, iterator helpers like map and take,
+      and to sorted, which returns a new array instead of mutating the old one. Type checking is a separate step,
+      with the TypeScript compiler, and the compiler options only allow syntax that can be erased, so what Node
+      strips is exactly what you wrote.
+
+  - id: ts-run
+    type: screen
+    heading: "No build step"
+    image: screens/node-ts.jpg
+    bar: "VS Code · node src/ts/main.ts"
+    demo: >
+      VS Code, dark theme, font 18 pt or larger. Editor on src/ts/digest.ts at the Map.groupBy block; integrated
+      terminal below. Run "node src/ts/main.ts samples/requests.json" and then "npx tsc -p tsconfig.json" (silent,
+      exit code 0). The terminal must show the digest (Contoso request digest ... review batches of 4). Mask the
+      explorer root and the window title.
+    narration: >
+      Here it is in VS Code. Node runs the file, the digest prints. And the compiler, with erasable syntax only,
+      checks the types and says nothing, which is what you want. Node documents this type stripping as experimental, so pin your Node version.
+
+  - id: cs-code
+    type: code
+    heading: "C#: a file-based app"
+    lang: csharp
+    code: |
+      #:project Contoso.Digest/Contoso.Digest.csproj
+      #:property PublishAot=false
+
+      using Contoso.Digest;
+
+      if (args is not [var path])
+      {
+          Console.Error.WriteLine("usage: dotnet run digest.cs -- <requests.json>");
+          return 2;
+      }
+
+      var digest = DigestBuilder.Build(DigestBuilder.Parse(File.ReadAllText(path)));
+      Console.Out.Write(DigestBuilder.Render(digest));
+      return 0;
+    narration: >
+      C sharp fourteen on dot net ten. The entry point is a file based app: one dot c s file, no project file. A
+      hash colon directive references the library, and the list pattern checks that we got exactly one argument. Run
+      it with dot net run and the file name. When it outgrows one file, dot net can convert it into a normal
+      project.
+
+  - id: cs-lib
+    type: code
+    heading: "C#: strict JSON, no GroupBy"
+    lang: csharp
+    code: |
+      private static readonly JsonSerializerOptions Strict = new(JsonSerializerOptions.Web)
+      {
+          RespectNullableAnnotations = true,
+          RespectRequiredConstructorParameters = true,
+          AllowDuplicateProperties = false,
+      };
+
+      var counted = accepted.CountBy(r => r.Route).ToDictionary();
+
+      var departments = accepted
+          .AggregateBy(r => r.Department, (Count: 0, Cents: 0L), (total, r) => (total.Count + 1, total.Cents + r.Cents))
+          .OrderByDescending(kv => kv.Value.Cents)
+          .ThenBy(kv => kv.Key, StringComparer.Ordinal)
+    narration: >
+      In the library, the JSON options are strict. A missing property, a null in a non nullable string, or a
+      duplicate property is an error, not a silent default. Those switches are recommended for new applications. And count by and aggregate by, from dot net nine, group
+      and total without allocating a group per key.
+
+  - id: cs-run
+    type: screen
+    heading: "dotnet run digest.cs"
+    image: screens/csharp-file-app.jpg
+    bar: "Terminal · dotnet run src/cs/digest.cs"
+    demo: >
+      Terminal, dark theme, font 18 pt or larger, prompt shortened to "$ ". Run "dotnet --version" (10.0.1xx) and then
+      "dotnet run src/cs/digest.cs -- samples/requests.json". The first run builds, so wait; if it shows build
+      lines, run it a second time and capture that one. Visible: the whole digest from "Contoso request digest" to
+      the third review batch.
+    narration: >
+      And the run. A single file, built and executed by the dot net host, and the same digest. The first run builds
+      it, the next ones start straight away. No project file, no template, and still the same digest.
+
+  - id: py-code
+    type: code
+    heading: "Python 3.13: types that read well"
+    lang: python
+    code: |
+      class RawRequest(TypedDict):
+          code: ReadOnly[str]
+          budget: ReadOnly[Decimal]
+
+      type Outcome = Accepted | Rejected  # PEP 695 type alias (3.12)
+
+      for outcome in outcomes:
+          match outcome:
+              case Accepted(request):
+                  accepted.append(request)
+              case Rejected():
+                  rejected.append(outcome)
+
+      batches = tuple(tuple(r.code for r in chunk) for chunk in batched(accepted, BATCH_SIZE, strict=False))
+    narration: >
+      Python three point thirteen. A typed dictionary with read only keys. The type statement for aliases, and
+      generic functions without type variable boilerplate. Pattern matching on dataclasses. And itertools batched,
+      with the strict flag spelled out. Budgets are decimals, parsed straight from the JSON, so forty nine thousand
+      nine hundred ninety nine euros and ninety nine cents stays exact. The deprecated float helper is still there on purpose, so the demo can show why.
+
+  - id: ps-code
+    type: code
+    heading: "PowerShell 7.6: classes and null operators"
+    lang: powershell
+    code: |
+      enum Route {
+          TeamLead
+          Finance
+          Board
+      }
+
+      # Ternary operator (PowerShell 7): condition ? if-true : if-false
+      return $Cents -ge $script:BoardCents ? [Route]::Board : ($Cents -ge $script:HighPriorityCents ? [Route]::Finance : [Route]::TeamLead)
+
+      # ?[] and ?. are null-conditional (PowerShell 7.1+); @($null).Count would be 1, not 0.
+      $group = ${byRoute}?[[string] $route]
+      $routes[[string] $route] = ${group}?.Count ?? 0
+    narration: >
+      PowerShell seven point six, which is the long term servicing release built on dot net ten. Enums and classes,
+      the ternary operator, and the null conditional operators. We hit a real trap here: wrapping a null in an
+      array and counting it gives one, not zero. The null conditional version gives zero. Both are covered by Pester tests.
+
+  - id: tests
+    type: bullets
+    heading: "Four test suites, one golden file"
+    bullets:
+      - "TypeScript: node:test, 11 tests, plus the type check"
+      - "C#: xUnit, 16 tests"
+      - "Python: pytest, 16 tests, ruff and mypy strict"
+      - "PowerShell: Pester, 17 tests"
+      - "Every suite compares against expected/digest.txt"
+    narration: >
+      Each language has its own test suite: eleven tests in TypeScript, sixteen in C sharp, sixteen in Python with
+      ruff and strict mypy, and seventeen in Pester. They all share the boundary tests for fifty thousand and
+      two hundred and fifty thousand euros, the rounding tests, and every suite compares its output with the same golden file.
+
+  - id: conformance
+    type: screen
+    heading: "Same input, same output"
+    image: screens/conformance.jpg
+    bar: "Terminal · demo/conformance.ps1"
+    short: conformance
+    demo: >
+      Terminal in the repo folder of this episode. Run "pwsh demo/conformance.ps1". Visible: the toolchain block (node,
+      dotnet, python, pwsh versions) and the four [ok] lines, each "23 lines, identical to expected/digest.txt",
+      then "All four languages print the same digest." Reference: demo/expected-output.txt.
+    narration: >
+      One script runs all four and compares the output with the golden file. TypeScript, C sharp, Python, PowerShell:
+      twenty three lines each, identical. Different languages, the same answer.
+
+  - id: gotchas
+    type: screen
+    heading: "Where it bites"
+    image: screens/gotchas.jpg
+    bar: "Terminal · demo/gotchas.ps1"
+    short: gotcha
+    demo: >
+      Terminal running "pwsh demo/gotchas.ps1". Visible: section 1 with ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX and the
+      tsc error TS1294; section 2 with "Reflection-based serialization has been disabled for this application";
+      section 3 with the five 0.29 times 100 lines: 28 in TypeScript, C sharp and Python, 29 in PowerShell. Scroll
+      so the three section headings stay visible.
+    narration: >
+      Three honest gotchas. One: an enum is not erasable syntax, so Node refuses the file, and the compiler flags it
+      the same way. Two: file based apps target native ahead of time compilation by default, which turns off
+      reflection based JSON until you set publish A O T to false. Three: nought point two nine times one hundred is
+      twenty eight in TypeScript, C sharp and Python, and twenty nine in PowerShell, because a PowerShell cast
+      rounds. Use decimals.
+
+  - id: recap
+    type: bullets
+    heading: "Five rules"
+    bullets:
+      - "Adopt features that remove code, not ones that add cleverness"
+      - "Keep one golden output across languages and runtimes"
+      - "Make the boundary strict: JSON, nullability, required fields"
+      - "Use decimals or integer cents for money, never floats"
+      - "Pin versions and re-run the tests after every upgrade"
+    narration: >
+      Five rules. Adopt features that remove code, not ones that add cleverness. Keep one golden output. Make the
+      boundary strict. Use decimals or integer cents for money. And pin your versions, then re-run the tests after
+      every upgrade.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The four implementations, the sixty tests and the demo scripts are on GitHub, and the full guide is on
+      devladlog dot com. Links are in the description. Next time, more DEVLADLOG Code. Subscribe so you don't miss
+      it. This was DEVLADLOG Code, by Momento Galático.

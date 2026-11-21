@@ -1,0 +1,57 @@
+$ pwsh demo/conformance.ps1
+Toolchain
+  node       v22.23.5
+  dotnet     10.0.115
+  python     Python 3.13.18
+  pwsh       7.6.0
+
+[ok]   TypeScript  node src/ts/main.ts            23 lines, identical to expected/digest.txt
+[ok]   C#          dotnet run src/cs/digest.cs    23 lines, identical to expected/digest.txt
+[ok]   Python      python src/py/digest.py        23 lines, identical to expected/digest.txt
+[ok]   PowerShell  pwsh src/ps/digest.ps1         23 lines, identical to expected/digest.txt
+
+All four languages print the same digest.
+
+$ pwsh demo/gotchas.ps1
+== 1. enum is not erasable syntax
+$ node demo/ts/uses-enum.ts
+SyntaxError [ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX]: TypeScript enum is not supported in strip-only mode
+  code: 'ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX'
+$ npx tsc -p demo/ts/tsconfig.json
+demo/ts/uses-enum.ts(2,6): error TS1294: This syntax is not allowed when 'erasableSyntaxOnly' is enabled.
+
+== 2. file-based apps target native AOT by default
+$ dotnet run demo/cs/no-aot-flag.cs -- samples/requests.json
+Unhandled exception. System.InvalidOperationException: Reflection-based serialization has been disabled for this application. Either use the source generator APIs or explicitly configure the 'JsonSerializerOptions.TypeInfoResolver' property.
+(the same file with #:property PublishAot=false is src/cs/digest.cs, and it works)
+
+== 3. the same expression, 0.29 * 100, in four languages
+TypeScript: Math.trunc(0.29 * 100) = 28, Math.round = 29
+C#:         (long)(0.29 * 100) = 28
+Python:     int(0.29 * 100) = 28
+Python:     Decimal('0.29') -> 29 cents (exact)
+Python:     to_cents_float(0.29) = 28
+<repo>/demo/py/float_cents.py:12: DeprecationWarning: floats cannot hold 49999.99 exactly; parse JSON with parse_float=Decimal
+PowerShell: [long](0.29 * 100) = 29, [Math]::Truncate = 28
+
+$ npm test   (node --test "tests/ts/*.test.ts")
+# tests 11
+# suites 7
+# pass 11
+# fail 0
+
+$ npx tsc -p tsconfig.json   (TypeScript 7.0.2)
+typecheck ok
+
+$ dotnet test ModernFeatures.slnx -m:1
+Passed!  - Failed:     0, Passed:    16, Skipped:     0, Total:    16, Duration: 1 s - Contoso.Digest.Tests.dll (net10.0)
+
+$ python -m pytest -q
+16 passed in 0.47s
+
+$ ruff check . && mypy src/py tests/py
+All checks passed!
+Success: no issues found in 2 source files
+
+$ Invoke-Pester -Path tests/ps
+Tests Passed: 17, Failed: 0
