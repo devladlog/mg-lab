@@ -57,3 +57,13 @@ folder and extension (`screens/live-run.jpg` -> `live-run`).
 - Write **only** `record.json` files in the episode folders you are given. No other file edits, no git, no browser, no
   sign-ins, no cloud calls. Run `python3 /home/claude/mglab/mg-lab/series/tools/rec/check_record.py <folders>` and fix every
   error before handing back.
+
+## Lessons from the Windows Server 1 pilot
+- Never restart a lab VM with `Restart-VM` (it is a hard reset: recent registry and feature changes are lost). Restart from
+  inside the guest: `Invoke-Command -VMName X -Credential $cred { Restart-Computer -Force }`, then wait for the Hyper-V
+  heartbeat (`Get-VMIntegrationService -VMName X -Name Heartbeat`) to be `OK`.
+- Deleting an AD user leaves its SID orphaned in local groups (shown as `S-1-5-21-...` and it breaks
+  `Get-LocalGroupMember`). Remove group members **before** deleting the user, use `net localgroup ... /add|/delete`,
+  and clean orphaned SIDs at the start of `prepare`.
+- Print the state the scene depends on at the end of `prepare` (it lands in recordings\transcript.txt), so a wrong set-up
+  is visible before anything is recorded.
