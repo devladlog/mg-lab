@@ -1,0 +1,263 @@
+# DEVLADLOG SharePoint — episode 04 (draft: screens to be captured in the lab tenant, see demo.md)
+episode: 4
+slug: document-management
+series_label: "SHAREPOINT"
+series_name: "DEVLADLOG SharePoint"
+file_prefix: "sharepoint"
+title: "Document management, as code"
+subtitle: "Content types, document sets, a filing plan and a library audit"
+voice: am_michael
+thumbnail_text: "REQUIRED\nISN'T\nFILLED IN"
+youtube:
+  title: "SharePoint Document Management: Content Types, Document Sets, Audit | DEVLADLOG SharePoint #4"
+  tags: [SharePoint, SharePoint Online, document management, content types, document sets, metadata, document ID, PnP PowerShell, Pester, Microsoft 365]
+sources:
+  - https://www.devladlog.com/articles/sharepoint/2026-03-18-document-management-complete-guide-2026/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Required isn't filled in"
+    sub: "Content types, document sets, a filing plan and an audit"
+    short: hook
+    narration: >
+      You marked a column as required, so every document has it. Except it doesn't. Microsoft documents that uploads
+      to a modern library don't prompt for required columns. In this episode we build the Contoso supplier library as
+      code, file documents with their metadata before they're uploaded, and audit what's really there. Welcome to
+      DEVLADLOG SharePoint.
+
+  - id: problems
+    type: bullets
+    heading: "How document management fails"
+    bullets:
+      - "Files with no real content type"
+      - "Required metadata nobody entered"
+      - "Contracts that expired in a folder nobody opens"
+      - "Check-outs that lock a file for weeks"
+      - "Content type IDs that don't match between sites"
+    narration: >
+      Document management fails quietly. Files with no real content type. Required metadata nobody entered. Contracts
+      that expired in a folder nobody opens. Check-outs that lock a file for weeks. And content types that look the
+      same on two sites but have different I Ds. We'll handle each one.
+
+  - id: ctids
+    type: bullets
+    heading: "Content type IDs encode the family tree"
+    bullets:
+      - "Item 0x01, Document 0x0101, Document Set 0x0120D520"
+      - "Child = parent + two hex digits, never 00"
+      - "Or parent + 00 + a GUID"
+      - "Built-in parent? Use the GUID form"
+      - "Unique per site collection, max 1,024 characters"
+    narration: >
+      Content type I Ds encode the family tree. Item is zero x zero one, document is zero x zero one zero one. A child
+      is its parent's I D plus two hex digits, which can't be double zero, or plus double zero and a G U I D. For
+      children of built-in types, Learn recommends the G U I D form, so a future built-in type can never collide with
+      yours. And an I D can be at most one thousand and twenty-four characters.
+
+  - id: design
+    type: code
+    heading: "The design: IDs written down"
+    lang: json
+    code: |
+      { "name": "Purchasing Document", "id": "0x010100D5F0B586695B489A84366F90C59E9249",
+        "parent": "Document",
+        "fields": [ { "name": "Supplier", "required": true },
+                    { "name": "PurchDepartment", "required": true } ] },
+      { "name": "Contract", "id": "0x010100D5F0B586695B489A84366F90C59E924901",
+        "parent": "Purchasing Document",
+        "fields": [ { "name": "ContractNumber", "required": true },
+                    { "name": "ExpiryDate", "required": true } ] },
+      { "name": "Supplier File", "id": "0x0120D52000B08AC01561CF4CE2A32DBC7238C4ED67",
+        "parent": "Document Set",
+        "documentSet": { "allowedContentTypes": ["Contract", "Invoice"],
+                         "sharedFields": ["Supplier"] } }
+    narration: >
+      Here's the design. A purchasing document base type: document, plus double zero and a G U I D. Contract and
+      invoice append zero one and zero two, and inherit supplier and department. And a supplier file document set that
+      holds contracts and invoices, with supplier shared. The I Ds are written down, so every site gets the same ones.
+
+  - id: rule
+    type: code
+    heading: "Learn's rules, in twenty lines"
+    lang: powershell
+    code: |
+      if ($Id -notmatch '^0x([0-9A-Fa-f]{2})+$') { New-MgFinding 'DM001' ... }
+      if ($Id.Length -gt 1024)                   { New-MgFinding 'DM002' ... }
+      if (-not $Id.StartsWith($ParentId, 'OrdinalIgnoreCase')) { New-MgFinding 'DM003' ... }
+      $suffix = $Id.Substring($ParentId.Length)
+      if ($suffix.Length -eq 2) {
+          if ($suffix -eq '00') { New-MgFinding 'DM004' 'Error' ... }
+          elseif ($ParentId -in $script:BuiltInContentTypes.Values) {
+              New-MgFinding 'DM005' 'Warning' $Target "Use parent + '00' + GUID..."
+          }
+      }
+      elseif ($suffix -notmatch '^00[0-9A-Fa-f]{32}$') { New-MgFinding 'DM004' ... }
+    narration: >
+      The I D rules fit in twenty lines. Pairs of hex digits after zero x. At most a thousand and twenty-four
+      characters. It must start with the parent's I D. Then either two digits that aren't double zero, or double zero
+      and thirty-two digits of G U I D. The tests use Learn's own example I Ds.
+
+  - id: lint
+    type: code
+    heading: "Lint the legacy design"
+    lang: text
+    code: |
+      $ ./Invoke-DocumentManagement.ps1 -DesignPath ./bad/legacy-documents.json
+      ERROR   DM001  content type 'Statement of Work'
+                     '0x0101Contract' isn't a content type ID ...
+      ERROR   DM004  content type 'Change Request'
+                     The two hexadecimal digits after the parent ID can't be '00'.
+      ERROR   DM008  content type 'Project Folder'
+                     Document set content type, but the Document Sets site collection feature is off.
+      WARNING DM010  library 'Project Documents'
+                     Require check-out is on: a checked-out document is locked ...
+      WARNING DM013  library 'Project Documents' / Project Document
+                     Required field 'ProjectCode' has no default value and no filing rule sets it ...
+      8 error(s), 7 warning(s)
+    narration: >
+      A legacy design with the classic mistakes. An I D with the word contract in it. A double zero suffix. A document
+      set without the document sets feature. Required check-out, which locks documents so nobody can co-author them.
+      And a required field nothing will ever fill. Eight errors, seven warnings.
+
+  - id: plan
+    type: code
+    heading: "A filing plan: the name knows the metadata"
+    lang: json
+    code: |
+      { "library": "Supplier Documents", "folderContentType": "Supplier File",
+        "rules": [
+          { "name": "contract", "contentType": "Contract", "folder": "{Supplier}",
+            "match":
+      "^CTR-(?<ContractNumber>\\d{4}-\\d{4}) (?<Supplier>.+?)(?: until (?<ExpiryDate>\\d{4}-\\d{2}-\\d{2}))?\\.(txt|pdf|docx)$" },
+          { "name": "invoice", "contentType": "Invoice", "folder": "{Supplier}",
+            "match": "^INV-(?<InvoiceNumber>\\d+) (?<Supplier>.+?) (?<InvoiceDate>...)..." } ] }
+    narration: >
+      Next, the filing plan. Each rule is a regular expression whose named groups are field names. A contract number,
+      the supplier, the expiry date. The supplier also picks the document set. Department isn't in the name, so the
+      library gives it a default value.
+
+  - id: filing
+    type: code
+    heading: "Decide before you upload"
+    lang: text
+    code: |
+      Filing plan: ./sample-files
+      Ready       CTR-2025-0107 Tailspin Toys until 2026-11-21.txt   Contract -> Tailspin Toys
+      Ready       CTR-2026-0042 Fabrikam until 2026-12-31.txt        Contract -> Fabrikam
+      Incomplete  CTR-2026-0050 Adventure Works.txt                  Contract -> Adventure Works
+                  Missing required: ExpiryDate.
+      Ready       INV-10021 Fabrikam 2026-11-11.txt                  Invoice -> Fabrikam
+      Invalid     INV-10023 Northwind Traders 2026-13-01.txt         Invoice -> Northwind Traders
+                  '2026-13-01' isn't a date (yyyy-MM-dd) for InvoiceDate.
+      Unmatched   scan_0001.txt
+                  No filing rule matches the name.
+    short: filing
+    narration: >
+      Run it on a folder of files, before anything is uploaded. Five are ready. One contract has no expiry date, so
+      it's incomplete. One invoice has month thirteen, so it's invalid. And a scan nobody renamed matches nothing.
+      Only ready files are uploaded, each with its content type and metadata, into its supplier's document set.
+
+  - id: tests
+    type: code
+    heading: "31 Pester tests, real PnP signatures"
+    lang: text
+    code: |
+      $ Invoke-Pester ./tests -Output Detailed
+      Describing Content type IDs (Learn rules)
+        [+] accepts Learn's own examples
+        [+] 1,024 characters is the maximum
+      Describing Resolve-MgFilingPlan (nine sample files, today = 2026-12-01)
+        [+] files five, flags one incomplete, one invalid, two unmatched
+      Describing Tenant functions (PnP cmdlets mocked)
+        [+] is idempotent: when everything exists it adds nothing
+        [+] files the ready documents into one document set per supplier, ...
+      Tests Passed: 31, Failed: 0, Skipped: 0
+    narration: >
+      Thirty-one Pester tests: the I D rules with Learn's examples, the filing plan on nine sample files with a fixed
+      date, the audit rules at their boundaries, and provisioning and filing with the real p n p cmdlets mocked.
+
+  - id: provision
+    type: screen
+    heading: "Provisioned in the lab tenant"
+    image: screens/provision.jpg
+    bar: "PowerShell 7 · Invoke-DocumentManagement.ps1"
+    demo: >
+      Terminal (dark theme, font 18+) after running Invoke-DocumentManagement.ps1 with -SiteUrl, -ClientId,
+      -FilesPath ./src/sample-files -IncludeIncomplete against the episode 3 Purchasing site. Visible: "No findings",
+      EnableFeature DocumentSets / DocumentId, AddColumn x8, AddContentType x4, AddFieldLink rows, DocSetAllowed,
+      DocSetShared, CreateLibrary, AddListCT, RemoveListCT Document, DefaultValue, then AddDocumentSet and Upload rows.
+      Mask the tenant host and client id.
+    narration: >
+      Against the lab tenant. Both features, eight site columns, four content types with their exact I Ds, the
+      document set, and the library with the generic document type removed. Then the filing: a document set per
+      supplier, and each file uploaded with its content type and metadata.
+
+  - id: library
+    type: screen
+    heading: "One document set per supplier"
+    image: screens/library.jpg
+    bar: "Contoso Purchasing · Supplier Documents"
+    demo: >
+      Browser: Supplier Documents library showing the four Supplier File document sets (Adventure Works, Fabrikam,
+      Northwind Traders, Tailspin Toys), then (same scene if possible) inside Fabrikam: the contract and the invoice
+      with Content type, Contract number, Expiry date, Department columns, and the New menu offering Contract and
+      Invoice only. Mask tenant URL and avatar.
+    narration: >
+      In the library, one document set per supplier. Inside Fabrikam, the contract and the invoice, each with its
+      content type and metadata, and the department filled in by the library default. The new menu offers contract
+      and invoice, and nothing generic.
+
+  - id: gotcha
+    type: bullets
+    heading: "The gotcha: required isn't filled in"
+    bullets:
+      - "Modern library uploads don't prompt for required columns"
+      - "Files arrive without the metadata you required"
+      - "Cover every required field: default or filing rule"
+      - "Then audit what really arrived"
+    short: gotcha
+    narration: >
+      The gotcha. A required column feels like a guarantee. But Microsoft documents that uploading to a modern library
+      doesn't prompt for required columns, so files arrive without them. Required is a wish. Make sure every required
+      field has a default value or a filing rule, and then audit what actually arrived.
+
+  - id: audit
+    type: screen
+    heading: "Audit what's really there"
+    image: screens/audit.jpg
+    bar: "PowerShell 7 · Invoke-DocumentManagement.ps1 -Audit"
+    demo: >
+      Terminal: drag "scan_0001.txt" into the library root in the browser first, then run Invoke-DocumentManagement.ps1
+      -DesignPath ./src/docmgmt/supplier-documents.json -Audit -SiteUrl -ClientId. Visible: DA001 (Adventure Works
+      contract: ExpiryDate empty), DA001 x3 on scan_0001.txt (it became a Contract, the default, with Supplier,
+      ContractNumber and ExpiryDate empty; Department filled by the default), DA005
+      (Tailspin Toys expired), DA004 (Fabrikam expiring), and DA006 if any file has no document ID yet. Mask tenant
+      host and client id.
+    narration: >
+      Then the audit reads every item in the library. The Adventure Works contract has no expiry date. The scan someone
+      dragged in became a contract, the default type, with no supplier and no contract number. The Tailspin Toys
+      contract has expired, and Fabrikam's expires within sixty days. A to-do list, not a surprise at renewal time.
+
+  - id: recap
+    type: bullets
+    heading: "Five rules"
+    bullets:
+      - "Write content type IDs down: 00 + GUID under built-ins"
+      - "No generic Document type in a typed library"
+      - "Every required field: a default or a filing rule"
+      - "Don't require check-out where people co-author"
+      - "Audit the library, not the design"
+    narration: >
+      Five rules. Write your content type I Ds down, with double zero and a G U I D under built-in types. No generic
+      document type in a typed library. Every required field gets a default or a filing rule. Don't require check-out
+      where people co-author. And audit the library, not just the design. Next episode: permissions and governance.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The module, the designs, the filing plan and the Pester tests are on GitHub, and the full guide is on devladlog
+      dot com. Links are in the description. Subscribe for episode five, permissions and governance. This was DEVLADLOG
+      SharePoint, by Momento Galático.

@@ -1,0 +1,263 @@
+# DEVLADLOG AI — episode 04. Code scenes are real excerpts from infra/, src/ and tests/.
+# Screen scenes: capture per demo.md. Their narration describes what is on screen without quoting live numbers;
+# after recording, add the real values where marked TODO.
+episode: 4
+slug: document-intelligence-forms
+series_label: "AI"
+series_name: "DEVLADLOG AI"
+file_prefix: "ai"
+title: "Document Intelligence: invoices in, decisions out"
+subtitle: "Prebuilt invoice model, confidence routing, policy checks, layout to Markdown"
+voice: am_michael
+thumbnail_text: "INVOICES IN\nDECISIONS\nOUT"
+youtube:
+  title: "Azure Document Intelligence: Invoice Extraction, Confidence Routing, Human Review | DEVLADLOG AI #4"
+  tags: [Azure AI Document Intelligence, prebuilt invoice model, document processing, OCR, human in the loop, confidence score, layout model, Markdown, RAG, Python, Bicep, intelligent document processing]
+sources:
+  - https://www.devladlog.com/articles/ai/2026-06-04-document-intelligence-complete-guide-2026/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Invoices in, decisions out"
+    sub: "And a human only when it matters"
+    short: hook
+    narration: >
+      Extracting text from an invoice is the easy part. The hard part is deciding what to do with it: pay it, send
+      it back, or ask a person to look. Today we turn supplier invoices into decisions, and we let the model's own
+      confidence decide when a human is needed. Welcome to DEVLADLOG AI.
+
+  - id: problem
+    type: bullets
+    heading: "Contoso finance, every morning"
+    bullets:
+      - "Supplier invoices arrive as scans and photos"
+      - "Policy: Contoso VAT, supplier VAT, date, tax amount"
+      - "Wrong company or duplicate: reject"
+      - "Unsure or inconsistent: a person reviews"
+      - "Everything else: straight through"
+    narration: >
+      Contoso's finance team gets supplier invoices as scans and phone photos. The expenses policy we indexed in
+      episode three says an invoice must show Contoso's VAT number, the supplier's VAT number, the date and the tax.
+      Invoices for another company, or duplicates, are rejected. Anything uncertain goes to a person. The rest goes
+      straight through.
+
+  - id: arch
+    type: diagram
+    heading: "The intake pipeline"
+    nodes: ["Invoice", "Analyze", "Rules", "Route"]
+    labels: ["PNG, JPEG, PDF", "prebuilt-invoice", "policy + maths", "approve · review · reject"]
+    narration: >
+      The pipeline is short. A file goes to Azure Document Intelligence with the prebuilt invoice model. We map the
+      fields it returns, with their confidence, run our policy and arithmetic rules, and route each invoice to
+      approve, review or reject.
+
+  - id: analyze
+    type: code
+    heading: "Analyze: one call, one long-running operation"
+    lang: python
+    code: |
+      def analyze_file(client, path, *, model_id="prebuilt-invoice", locale="en-US", polling_interval=None):
+          kwargs = {"locale": locale}
+          if polling_interval is not None:
+              kwargs["polling_interval"] = polling_interval
+          with open(path, "rb") as f:
+              poller = client.begin_analyze_document(model_id, f, **kwargs)
+          result = poller.result()
+          return result.as_dict() if hasattr(result, "as_dict") else dict(result)
+
+      client = DocumentIntelligenceClient(endpoint, DefaultAzureCredential())
+    narration: >
+      The client uses Default Azure Credential, so there are no keys: the resource has local auth disabled and our
+      user has the Cognitive Services User role. Analyze is a long running operation. The SDK posts the bytes, gets
+      an operation location back, and polls it until the result is ready.
+
+  - id: fields
+    type: code
+    heading: "Typed fields, each with a confidence"
+    lang: python
+    code: |
+      def field_value(f):
+          t = f.get("type")
+          if t == "currency":
+              cur = f.get("valueCurrency") or {}
+              return _money(cur.get("amount")), cur.get("currencyCode")
+          if t == "date":
+              v = f.get("valueDate")
+              return (date.fromisoformat(v) if v else None), None
+          if t == "number":
+              v = f.get("valueNumber")
+              return (None if v is None else Decimal(str(v))), None
+          if t == "string":
+              return f.get("valueString"), None
+    narration: >
+      Every field comes back typed. Totals are currency objects with an amount and a currency code, dates are real
+      dates, and every field carries a confidence between zero and one. We convert money to decimals immediately,
+      because floating point is not how you compare totals.
+
+  - id: field-json
+    type: screen
+    heading: "What the model actually returns"
+    image: screens/field-json.jpg
+    bar: "VS Code · results/01-fabrikam-clean.json"
+    demo: "VS Code with results/01-fabrikam-clean.json (saved by --save-json), folded to documents[0].fields.InvoiceTotal: type currency, valueCurrency {amount, currencyCode EUR}, content, confidence, boundingRegions with the pixel polygon."
+    narration: >
+      This is a saved result for the clean Fabrikam invoice. Here is the invoice total field: its type, the amount
+      and currency, the text as printed, the confidence, and the polygon where it was found on the page.
+
+  - id: decide
+    type: code
+    heading: "Reject only what you are sure of"
+    lang: python
+    code: |
+      customer_vat = normalise_tax_id(inv.value("CustomerTaxId"))
+      if (customer_vat and customer_vat != CONTOSO_VAT
+              and inv.confidence("CustomerTaxId") >= thresholds["CustomerTaxId"]):
+          reject.append(f"billed to VAT {inv.value('CustomerTaxId')}, not Contoso")
+
+      for name in REQUIRED:
+          if inv.value(name) in (None, ""):
+              review.append(f"{name} not found")
+      for name, minimum in thresholds.items():
+          if inv.value(name) not in (None, "") and inv.confidence(name) < minimum:
+              review.append(f"{name} confidence {inv.confidence(name):.2f} < {minimum:.2f}")
+      if None not in (sub, tax, total) and abs(sub + tax - total) > TOLERANCE:
+          review.append(f"subtotal {sub} + tax {tax} != total {total}")
+    short: decide
+    narration: >
+      Here is the most important design rule. We only reject on facts we are sure of: a customer VAT number that is
+      not Contoso's, read with high confidence, or a duplicate. A missing field, a low confidence, or totals that
+      don't add up could be a reading error, so those go to a person, never to the bin.
+
+  - id: thresholds
+    type: bullets
+    heading: "Where the thresholds come from"
+    bullets:
+      - "Confidence: an estimate between 0 and 1"
+      - "Learn: pick thresholds from a pilot on your documents"
+      - "Example in the transparency note: 0.80"
+      - "We start stricter for money and IDs: 0.90"
+      - "Re-tune when suppliers or templates change"
+    narration: >
+      Where do the thresholds come from? Microsoft's transparency note for Document Intelligence says to run a pilot
+      on your own documents and pick the thresholds from it, with zero point eight as an example. We start stricter,
+      zero point nine, for amounts and identifiers. These are starting points, to tune on real data.
+
+  - id: run
+    type: screen
+    heading: "Five invoices, three decisions"
+    image: screens/run.jpg
+    bar: "Terminal · python -m invoice_intake.process"
+    demo: "Terminal: PYTHONPATH=src python -m invoice_intake.process samples/0*.png --endpoint $DOCINTEL --save-json results/ — the table with file, vendor, total, total confidence, decision and reasons for the five samples, and the approve/review/reject counts."
+    narration: >
+      Now the real run on five fictional invoices. The clean one is approved. The catering invoice whose printed
+      total doesn't match its subtotal plus VAT goes to review. The one billed to another company is rejected, and
+      so is the second copy of the Fabrikam invoice.
+    # TODO after recording: say what happened to the faded Adventure Works scan (approved or review, and why).
+    # The narration assumes 02 -> review, 03 -> reject, 05 -> reject. If 03 came back as review (CustomerTaxId read
+    # below 0.90), that is the rule working: change the sentence to say so instead of re-recording.
+
+  - id: overlay
+    type: screen
+    heading: "Show the reviewer where to look"
+    image: screens/overlay.jpg
+    bar: "Image viewer · *-overlay.png"
+    demo: "The overlay produced by python -m invoice_intake.overlay for the invoice that went to review (preferably the faded 04 scan, otherwise 02): green boxes for fields above threshold, amber for any below, labels with field name and confidence."
+    narration: >
+      For the reviewer, we draw what the model read straight onto the document: one box per field, using the
+      polygon from the result, green above the threshold and amber below. The person checks the flagged values
+      instead of re-typing the whole invoice.
+
+  - id: gotcha
+    type: code
+    heading: "The gotcha: the free tier reads two pages"
+    lang: python
+    code: |
+      # Learn, service limits, Free (F0): max 2 pages per analysis, 4 MB per file,
+      # 1 analyze request and 1 get request per second.
+      # A total printed on page 3 simply isn't in the result.
+
+      def test_missing_required_policy_field_goes_to_review():
+          d = decide(to_invoice(analyze_result(sample("01"), drop=("CustomerTaxId",))))
+          assert d.outcome == "review" and "CustomerTaxId not found" in d.reasons
+    short: gotcha
+    narration: >
+      Here is the honest gotcha. The free tier is great for a demo, but it only processes the first two pages of a
+      document, and it allows one analyze request per second. A three page invoice with the total on page three
+      just comes back without a total. That is why a missing field is never treated as an empty value: it goes
+      to review.
+
+  - id: layout
+    type: screen
+    heading: "Bonus: scans become Markdown for RAG"
+    image: screens/layout.jpg
+    bar: "Terminal · python -m invoice_intake.layout"
+    demo: "Terminal: PYTHONPATH=src python -m invoice_intake.layout samples/contoso-expenses-policy.png --endpoint $DOCINTEL — the Markdown output with # and ## headings, then the list of sections with their sizes."
+    narration: >
+      One more model. Prebuilt layout can return any scan as Markdown, with headings and tables preserved. Here, a
+      scanned page of the expenses policy comes back with its headings intact, ready to be split into sections.
+    # TODO after recording: confirm the headings came back as # / ## in this run; if not, say so honestly.
+
+  - id: sections
+    type: code
+    heading: "Same shape as the episode three index"
+    lang: python
+    code: |
+      def markdown_sections(markdown):
+          markdown = _FIGURE_OR_COMMENT.sub("", markdown)  # page numbers, page breaks, figures
+          path, out, body, current = [], [], [], None
+          for line in markdown.splitlines():
+              m = _HEADING.match(line)
+              if m:
+                  if current is not None and "\n".join(body).strip():
+                      out.append((current, "\n".join(body).strip()))
+                  path = path[: len(m.group(1)) - 1] + [m.group(2)]
+                  current, body = " > ".join(path), []
+              else:
+                  body.append(line)
+    narration: >
+      And this function splits that Markdown on headings, keeping the full heading path and dropping page numbers,
+      page breaks and figures, which the layout model writes as HTML comments and figure tags. That is exactly the
+      shape our episode three chunker indexes, so paper policies can join the HR bot's knowledge.
+
+  - id: tests
+    type: code
+    heading: "26 tests, no cloud needed"
+    lang: text
+    code: |
+      $ python -m pytest tests -q
+      ..........................                             [100%]
+      26 passed
+
+      test_sdk_and_cli.py        real Document Intelligence SDK vs a local stub:
+                                 bytes POST, Operation-Location polling, failures
+      test_fields_and_decide.py  every routing rule, all five samples
+      test_samples_and_overlay   input limits, overlay colours by threshold
+      test_bicep.py              keyless single-service resource + role
+    narration: >
+      Twenty six tests run in seconds without any cloud resource. The real Document Intelligence SDK runs against a
+      local stub, including the long running operation and a failed analysis. Every routing rule is tested on the
+      five samples, and the Bicep is checked for a keyless resource.
+
+  - id: recap
+    type: bullets
+    heading: "Five rules for document intake"
+    bullets:
+      - "Prebuilt model first; custom only when it falls short"
+      - "Money as decimals, totals checked in code"
+      - "Reject only confident facts"
+      - "Low confidence or missing: a human, with boxes"
+      - "Know your tier's page and rate limits"
+    narration: >
+      Five rules. Start with a prebuilt model, and go custom only when it falls short. Treat money as decimals and
+      check the totals in code. Reject only on confident facts. Send low confidence and missing fields to a person,
+      with boxes showing where to look. And know your tier's page and rate limits.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The intake code, the sample generator and the tests are on GitHub, and the complete guide with four deeper
+      articles is on devladlog dot com. Links are in the description. Next time: AI agents and orchestration. This
+      was DEVLADLOG AI, by Momento Galático.

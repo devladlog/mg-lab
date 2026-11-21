@@ -1,29 +1,281 @@
-# DEVLADLOG SharePoint — episode 01 (stub: write the scenes after building the demo)
+# DEVLADLOG SharePoint — episode 01 (draft: screens to be captured in the lab tenant, see demo.md)
 episode: 1
 slug: lists-libraries-best-practices
 series_label: "SHAREPOINT"
 series_name: "DEVLADLOG SharePoint"
 file_prefix: "sharepoint"
-title: "Lists & Libraries Best Practices"
-subtitle: "Built for real, in a lab tenant"
+title: "Lists & libraries best practices, as code"
+subtitle: "Lint, provision and audit with PnP PowerShell"
 voice: am_michael
-thumbnail_text: "LISTS & LIBRARIES BEST PRACTICES"
+thumbnail_text: "DESIGN FOR\nITEM 5,001\nLISTS AS CODE"
 youtube:
-  title: "Lists & Libraries Best Practices (Real Demo) | DEVLADLOG SharePoint #1"
-  tags: []
+  title: "SharePoint Lists & Libraries Best Practices: Lint, Provision, Audit | DEVLADLOG SharePoint #1"
+  tags: [SharePoint, SharePoint Online, Microsoft Lists, list view threshold, indexed columns, PnP PowerShell, Pester, Microsoft 365, information architecture]
 sources:
   - https://www.devladlog.com/articles/sharepoint/2026-03-22-lists-libraries-best-practices-complete-guide-2026/
+
 scenes:
   - id: hook
     type: title
-    heading: "Lists & Libraries Best Practices"
-    sub: "Built for real, in a lab tenant"
+    heading: "Design for item 5,001"
+    sub: "Lists and libraries as code: lint, provision, audit"
     short: hook
     narration: >
-      TODO
+      Most SharePoint list problems are designed in on day one, and only show up at item five thousand and one.
+      In this episode the list design is a JSON file. We lint it against the limits that actually bite, provision it
+      with p n p PowerShell, and audit the live list with the same rules. Welcome to DEVLADLOG SharePoint.
+
+  - id: threshold
+    type: bullets
+    heading: "5,000 is per query, not per list"
+    bullets:
+      - "A list holds up to 30 million items"
+      - "A view query may touch at most 5,000"
+      - "Filter first on an indexed column"
+      - "Adding an index: only while the list is under 20,000"
+      - "So indexes are a day-one decision"
+    short: threshold
+    narration: >
+      First, the number everyone gets wrong. A list can hold thirty million items. The five thousand limit is the list
+      view threshold, and it applies to each query. So a big list is fine, as long as every view filters first on an
+      indexed column and returns fewer than five thousand rows. And adding or removing an index is limited to lists
+      under twenty thousand items. Indexes are a day-one decision.
+
+  - id: limits
+    type: bullets
+    heading: "The other limits that bite"
+    bullets:
+      - "12 lookup or person columns per view"
+      - "No breaking inheritance above 100,000 items"
+      - "Unique permissions: 5,000 recommended, 50,000 supported"
+      - "Paths up to 400 characters"
+      - "Fewer than 100 versions: not recommended"
+    narration: >
+      A few more from Microsoft Learn. Twelve lookup or person columns per view. You can't break permission
+      inheritance on a list with more than one hundred thousand items. Unique permissions: five thousand recommended,
+      fifty thousand supported. Paths up to four hundred characters. And keeping fewer than one hundred versions isn't
+      recommended.
+
+  - id: design
+    type: code
+    heading: "The design is a JSON file"
+    lang: json
+    code: |
+      { "title": "Purchase Requests", "template": "GenericList",
+        "expectedItems": 60000,
+        "versioning": { "enabled": true, "majorVersions": 100 },
+        "fields": [
+          { "internalName": "RequestStatus", "displayName": "Status",
+            "type": "Choice", "indexed": true,
+            "choices": ["New", "Approved", "Ordered", "Closed", "Rejected"] },
+          { "internalName": "DueDate", "displayName": "Due date",
+            "type": "DateTime", "dateOnly": true, "indexed": true } ],
+        "views": [
+          { "title": "Open requests", "expectedRows": 1500,
+            "filters": [ { "field": "RequestStatus", "op": "Neq", "value": "Closed" } ] } ] }
+    narration: >
+      Here's the design for a fictional Contoso purchase requests list. We say how big it will get: sixty thousand
+      items. Every column has a clean internal name and a friendly display name. The columns we filter on are indexed
+      from the start. And each view records roughly how many rows its filter returns.
+
+  - id: lint
+    type: code
+    heading: "Lint before anything exists"
+    lang: text
+    code: |
+      $ pwsh ./src/Invoke-ListDesign.ps1 -DesignPath ./src/designs/bad-design.json
+      ERROR   LD006  Legacy Requests
+                     Plans to break inheritance on a list with 150000 items ...
+      ERROR   LD010  Legacy Requests / By vendor
+                     13 lookup/person columns (including Created By and Modified By) ...
+      ERROR   LD012  Legacy Requests / All Items
+                     No filter on a list expected to hold 150000 items ...
+      ERROR   LD013  Legacy Requests / Big ones
+                     First filter column 'Amount' isn't indexed ...
+      ERROR   LD014  Legacy Requests / By vendor
+                     First filter column 'Vendor' is an indexed Lookup ...
+      WARNING LD003  Request Status
+                     ... SharePoint encodes it (e.g. 'Request_x0020_Status') ...
+      9 error(s), 4 warning(s)
+    narration: >
+      Now the bad design, with every classic mistake in one file. The linter needs no tenant. Unfiltered views on a
+      big list, a first filter on a column without an index, broken inheritance that can't happen at this size, and
+      a column called Request Status that SharePoint will store as Request underscore x zero zero two zero
+      underscore Status. Nine errors, four warnings, before anyone clicks New list.
+
+  - id: rule
+    type: code
+    heading: "One rule, straight from the docs"
+    lang: powershell
+    code: |
+      if ($items -gt $L.ListViewThreshold) {
+          if ($filters.Count -eq 0) {
+              New-MgFinding 'LD012' 'Error' $name $vt "No filter on a list expected to hold $items items..."
+          } else {
+              $first   = $filters[0].field
+              $indexed = [bool](Get-MgProp $byName[$first] 'indexed' $false)
+              if (-not $indexed) {
+                  New-MgFinding 'LD013' 'Error' $name $vt "First filter column '$first' isn't indexed..."
+              } elseif ($types[$first] -in 'Lookup', 'LookupMulti') {
+                  New-MgFinding 'LD014' 'Error' $name $vt "First filter column '$first' is an indexed Lookup..."
+              }
+          }
+      }
+    narration: >
+      Each rule is a few lines of PowerShell. For a list that will pass five thousand items, every view needs a filter,
+      the first filter column must be indexed, and it can't be a lookup. Learn's field schema says an indexed lookup
+      column does not keep a view under the threshold. Fourteen rules like this, each one tied to a documented limit
+      or a stated house rule.
+
+  - id: fieldxml
+    type: code
+    heading: "Clean internal names, index on creation"
+    lang: xml
+    code: |
+      <Field Type="Choice" Format="Dropdown"
+             Name="RequestStatus" StaticName="RequestStatus" DisplayName="Status"
+             Required="TRUE" Indexed="TRUE">
+        <CHOICES>
+          <CHOICE>New</CHOICE><CHOICE>Approved</CHOICE><CHOICE>Ordered</CHOICE>
+          <CHOICE>Closed</CHOICE><CHOICE>Rejected</CHOICE>
+        </CHOICES>
+        <Default>New</Default>
+      </Field>
+
+      # Add-PnPFieldFromXml -List 'Purchase Requests' -FieldXml $xml
+    narration: >
+      Provisioning turns each column into field X M L. The internal name is clean, the display name is friendly, and
+      Indexed is true at creation, so we never need to add an index to a list that's already big. Then
+      Add p n p field from X M L creates it.
+
+  - id: caml
+    type: code
+    heading: "Views: the indexed filter goes first"
+    lang: xml
+    code: |
+      <Where>
+        <And>
+          <Neq><FieldRef Name='RequestStatus' /><Value Type='Choice'>Closed</Value></Neq>
+          <Eq><FieldRef Name='Requester' />
+              <Value Type='Integer'><UserID Type='Integer' /></Value></Eq>
+        </And>
+      </Where>
+      <OrderBy><FieldRef Name='DueDate' Ascending='TRUE' /></OrderBy>
+
+      # Add-PnPView -List $title -Title 'My open requests' -Fields $fields -Query $query -RowLimit 100 -Paged
+    narration: >
+      Views are generated as CAML. The indexed status filter comes first, then the current user, written as user I D.
+      Days ahead become today with an offset. Add p n p view creates the view, and on a second run, set p n p view
+      updates it. The whole script is safe to re-run, and supports what if.
+
+  - id: tests
+    type: code
+    heading: "31 Pester tests, real PnP signatures"
+    lang: text
+    code: |
+      $ Invoke-Pester ./tests -Output Detailed
+      Describing Test-MgListDesign
+        [+] finds every planted problem in the bad design
+        [+] a filter that returns 5,000 rows is fine; 5,001 is not
+        [+] counts Created By and Modified By towards the 12 lookup columns
+      Describing Invoke-MgListProvisioning (PnP cmdlets mocked)
+        [+] creates lists, columns, versioning and views on an empty site
+        [+] is idempotent: only adds the missing index and updates existing views
+        [+] -WhatIf changes nothing but still reports the plan
+      Tests Passed: 31, Failed: 0, Skipped: 0
+    narration: >
+      Thirty-one Pester tests cover the rules, their boundaries, the X M L and the CAML. The provisioning tests mock the
+      real p n p cmdlets, and Pester copies their parameter metadata, so a wrong parameter name fails the build, not
+      the demo.
+
+  - id: provision
+    type: screen
+    heading: "Provisioned in the lab tenant"
+    image: screens/provision.jpg
+    bar: "PowerShell 7 · Invoke-ListDesign.ps1"
+    demo: >
+      Terminal (dark theme, font 18+) after running Invoke-ListDesign.ps1 with -SiteUrl, -ClientId, -SeedItems 40 against
+      the lab site. Visible: "Lint ... No findings", the provisioning log (CreateList, SetVersioning, AddField ... indexed,
+      AddView and RemoveView rows for both lists), "Seeded 40 items into 'Purchase Requests'", and the two "Audit (live)" blocks with
+      "No findings". Mask the tenant host in the SiteUrl and the client id.
+    narration: >
+      Against the lab tenant. The design lints clean, the script creates the list and the library, sets versioning,
+      adds ten columns and five views, and removes the unfiltered All Items view SharePoint creates by default. Then it
+      seeds forty fictional requests and audits what's really there. No findings.
+
+  - id: indexes
+    type: screen
+    heading: "Indexes exist before the data does"
+    image: screens/indexed-columns.jpg
+    bar: "Purchase Requests · List settings · Indexed columns"
+    demo: >
+      Browser: Purchase Requests > Settings > List settings > Indexed columns. Show the four indexed columns
+      (Status, Requester, Department, Due date). Then (same scene, if possible) the Contracts library settings >
+      Versioning settings showing automatic version history limits. Mask tenant URL and account avatar.
+    narration: >
+      In list settings, the four indexed columns are there before the list has any real data. On the contracts library,
+      versioning uses automatic version history limits, which Microsoft recommends for libraries.
+
+  - id: view
+    type: screen
+    heading: "Filtered views, friendly names"
+    image: screens/open-requests.jpg
+    bar: "Microsoft Lists · Purchase Requests · My open requests"
+    demo: >
+      Browser: the Purchase Requests list, "My open requests" view selected, showing seeded items (fictional titles,
+      Alex Demo as requester), with the view picker open showing Open requests / My open requests / Due in 7 days.
+      Mask tenant URL and user photo.
+    narration: >
+      The views users see. Open requests, my open requests, due in seven days. Friendly column names on screen, clean
+      internal names underneath, and every view filtered first on an indexed column.
+
+  - id: gotcha
+    type: bullets
+    heading: "The gotcha: hidden lookup columns"
+    bullets:
+      - "Created By and Modified By are person columns"
+      - "They count towards the 12 joins per view"
+      - "Ten people columns plus two built-ins: blocked"
+      - "An indexed Lookup is no filter strategy either"
+    short: gotcha
+    narration: >
+      The gotcha. A view with ten person and lookup columns looks safe under the limit of twelve. But Created By and
+      Modified By are person columns too, and they count. Add one more column and the view is blocked. And an indexed
+      lookup column won't keep you under the threshold either. Filter first on something else.
+
+  - id: audit
+    type: screen
+    heading: "Audit a list you didn't build"
+    image: screens/audit.jpg
+    bar: "PowerShell 7 · Invoke-ListDesign.ps1 -AuditList"
+    demo: >
+      Terminal: after provisioning src/designs/audit-demo.json with -Force, run Invoke-ListDesign.ps1 -AuditList
+      "Legacy Requests" -ExpectedItems 60000. Show the live findings: LD012 on "All Items" (the default view SharePoint
+      created) and "Everything", LD013 on "Big ones" (first filter on Amount, not indexed). Mask tenant host and client id.
+    narration: >
+      The audit works on lists you didn't build. Point it at an existing list, say how big it will get, and it reads
+      the columns, indexes and view queries from the tenant and runs the same rules. Here: unfiltered views, including
+      the All Items view SharePoint creates by default, and a view filtered on a column with no index.
+
+  - id: recap
+    type: bullets
+    heading: "Five rules"
+    bullets:
+      - "Size every list: expected items, expected rows per view"
+      - "Index the filter columns on day one"
+      - "Clean internal names, friendly display names"
+      - "Count every lookup and person column, built-ins too"
+      - "Lint, provision and audit with the same rules"
+    narration: >
+      Five rules. Size every list and every view. Index the filter columns on day one. Clean internal names, friendly
+      display names. Count every lookup and person column, built-ins too. And lint, provision and audit with the same
+      rules. Next episode, we format this exact list with JSON.
+
   - id: outro
     type: outro
     heading: "Code on GitHub, guides on devladlog.com"
     sub: "github.com/devladlog/mg-lab"
     narration: >
-      TODO
+      The module, both designs and the Pester tests are on GitHub, and the full guide is on devladlog dot com. Links
+      are in the description. Subscribe for episode two, JSON formatting. This was DEVLADLOG SharePoint, by Momento
+      Galático.

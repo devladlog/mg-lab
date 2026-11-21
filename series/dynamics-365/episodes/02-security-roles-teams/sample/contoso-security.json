@@ -1,0 +1,66 @@
+{
+  "_comment": "Fictional Contoso security model for DEVLADLOG Dynamics 365 #2. No real people or tenant identifiers.",
+  "business_units": [
+    {"id": "bu-contoso", "name": "Contoso", "parent": null},
+    {"id": "bu-sales", "name": "Sales", "parent": "bu-contoso"},
+    {"id": "bu-sales-pt", "name": "Sales Portugal", "parent": "bu-sales"},
+    {"id": "bu-finance", "name": "Finance", "parent": "bu-contoso"}
+  ],
+  "tables": {
+    "mgl_projectrequest": {"ownership": "user"},
+    "mgl_costcenter": {"ownership": "organization"}
+  },
+  "roles": [
+    {"id": "r-requester", "name": "Project Requester", "business_unit": "bu-contoso", "inherited": true,
+     "privileges": {
+       "mgl_projectrequest": {"Create": "User", "Read": "User", "Write": "User", "Append": "User", "AppendTo": "User"},
+       "mgl_costcenter": {"Read": "Organization"}
+     }},
+    {"id": "r-approver", "name": "Project Approver", "business_unit": "bu-contoso", "inherited": true,
+     "privileges": {
+       "mgl_projectrequest": {"Read": "ParentChild", "Write": "BusinessUnit", "Append": "BusinessUnit", "AppendTo": "BusinessUnit"},
+       "mgl_costcenter": {"Read": "Organization"}
+     }},
+    {"id": "r-finance-controller", "name": "Finance Controller", "business_unit": "bu-contoso", "inherited": true,
+     "privileges": {
+       "mgl_projectrequest": {"Read": "Organization"},
+       "mgl_costcenter": {"Read": "Organization", "Write": "Organization"}
+     }},
+    {"id": "r-pmo-team", "name": "PMO Team Member", "business_unit": "bu-contoso", "inherited": false,
+     "privileges": {
+       "mgl_projectrequest": {"Create": "User", "Read": "User", "Write": "User", "Append": "User", "AppendTo": "User", "Assign": "User"}
+     }},
+    {"id": "r-bulk-cleanup", "name": "Bulk Cleanup", "business_unit": "bu-contoso", "inherited": true,
+     "privileges": {
+       "mgl_projectrequest": {"Read": "Organization", "Delete": "Organization"}
+     }}
+  ],
+  "users": [
+    {"id": "u-alex", "name": "Alex Demo", "business_unit": "bu-sales-pt", "roles": ["r-requester"]},
+    {"id": "u-gil", "name": "Gil Sample", "business_unit": "bu-sales-pt", "roles": ["r-requester"]},
+    {"id": "u-bruno", "name": "Bruno Example", "business_unit": "bu-sales", "roles": []},
+    {"id": "u-carla", "name": "Carla Test", "business_unit": "bu-finance", "roles": ["r-finance-controller"]},
+    {"id": "u-diego", "name": "Diego Demo", "business_unit": "bu-sales-pt", "roles": []},
+    {"id": "u-eva", "name": "Eva Placeholder", "business_unit": "bu-sales-pt", "roles": []},
+    {"id": "u-filipe", "name": "Filipe Contoso", "business_unit": "bu-finance", "roles": ["r-bulk-cleanup"]}
+  ],
+  "teams": [
+    {"id": "t-pmo", "name": "PMO Lisbon", "type": "owner", "business_unit": "bu-sales-pt",
+     "roles": ["r-pmo-team"], "members": ["u-diego"]},
+    {"id": "t-approvers", "name": "Sales Approvers (Entra group)", "type": "entra-security", "business_unit": "bu-sales",
+     "roles": ["r-approver"], "members": ["u-bruno"]},
+    {"id": "t-dealroom", "name": "PR-0004 deal room", "type": "access", "business_unit": "bu-sales-pt",
+     "roles": [], "members": ["u-alex", "u-eva"]}
+  ],
+  "records": [
+    {"table": "mgl_projectrequest", "id": "PR-0001", "owner": {"type": "user", "id": "u-alex"}},
+    {"table": "mgl_projectrequest", "id": "PR-0002", "owner": {"type": "team", "id": "t-pmo"}},
+    {"table": "mgl_projectrequest", "id": "PR-0003", "owner": {"type": "user", "id": "u-bruno"}},
+    {"table": "mgl_projectrequest", "id": "PR-0004", "owner": {"type": "user", "id": "u-gil"}},
+    {"table": "mgl_projectrequest", "id": "PR-0005", "owner": {"type": "user", "id": "u-carla"}},
+    {"table": "mgl_costcenter", "id": "CC-100", "owner": {"type": "organization", "id": ""}}
+  ],
+  "shares": [
+    {"record": "PR-0004", "principal": {"type": "team", "id": "t-dealroom"}, "rights": ["Read", "Write", "Append"]}
+  ]
+}

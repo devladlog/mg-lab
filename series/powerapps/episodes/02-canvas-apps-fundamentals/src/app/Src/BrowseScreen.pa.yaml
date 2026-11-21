@@ -1,0 +1,77 @@
+Screens:
+  BrowseScreen:
+    Properties:
+      Fill: =RGBA(245, 246, 250, 1)
+    Children:
+      - lblTitle:
+          Control: Label
+          Properties:
+            Text: ="Equipment Desk"
+            X: =24
+            Y: =24
+            Width: =Parent.Width - 48
+            Height: =48
+            Size: =24
+            FontWeight: =FontWeight.Semibold
+      - txtSearch:
+          Control: Classic/TextInput
+          Properties:
+            Default: =""
+            HintText: ="Search asset tag or name"
+            X: =24
+            Y: =88
+            Width: =Parent.Width - 48
+            Height: =48
+      - tglAvailableOnly:
+          Control: Classic/Toggle
+          Properties:
+            Default: =true
+            X: =24
+            Y: =148
+            Width: =96
+            Height: =40
+      - lblAvailableOnly:
+          Control: Label
+          Properties:
+            Text: ="Available only"
+            X: =128
+            Y: =148
+            Width: =200
+            Height: =40
+      - galEquipment:
+          Control: Gallery
+          Properties:
+            # Delegable to Dataverse: Filter, StartsWith (text), =, ||, &&, Sort on one column.
+            Items: |-
+              =Sort(
+                  Filter(
+                      Equipment,
+                      (StartsWith('Asset tag', txtSearch.Text) || StartsWith(Name, txtSearch.Text))
+                          && (!tglAvailableOnly.Value || Status = 'Status (Equipment)'.Available)
+                  ),
+                  'Asset tag'
+              )
+            OnSelect: =Navigate(LendScreen, ScreenTransition.Cover)
+            TemplateSize: =88
+            X: =0
+            Y: =200
+            Width: =Parent.Width
+            Height: =Parent.Height - 200
+          Children:
+            - lblItemTitle:
+                Control: Label
+                Properties:
+                  Text: =ThisItem.'Asset tag' & " · " & ThisItem.Name
+                  X: =24
+                  Y: =12
+                  Width: =Parent.TemplateWidth - 48
+                  Height: =32
+                  FontWeight: =FontWeight.Semibold
+            - lblItemDetail:
+                Control: Label
+                Properties:
+                  Text: =Text(ThisItem.Category) & " · " & Text(ThisItem.Status)
+                  X: =24
+                  Y: =44
+                  Width: =Parent.TemplateWidth - 48
+                  Height: =28

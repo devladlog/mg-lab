@@ -1,0 +1,290 @@
+# DEVLADLOG .NET — episode 04 (draft; screens are captured in the lab, see demo.md)
+episode: 4
+slug: dependency-injection-di-containers
+series_label: ".NET"
+series_name: "DEVLADLOG .NET"
+file_prefix: "net"
+title: "Dependency Injection on .NET 10"
+subtitle: "Lifetimes, captive dependencies, keyed services, options that fail fast"
+voice: am_michael
+thumbnail_text: "DI LIFETIMES\nTHE CAPTIVE\nDBCONTEXT"
+youtube:
+  title: "Dependency Injection in .NET 10: Lifetimes, Captive Dependencies, Keyed Services | DEVLADLOG .NET #4"
+  tags: [dependency injection, .NET 10, ASP.NET Core, C#, service lifetimes, captive dependency, scope validation, keyed services, options pattern, ValidateOnStart, BackgroundService, IServiceScopeFactory, FakeTimeProvider, EF Core]
+sources:
+  - https://www.devladlog.com/articles/dotnet/2026-05-08-dependency-injection-di-containers-complete-guide-2026/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Dependency Injection on .NET 10"
+    sub: "One wrong lifetime, and production serves yesterday's data"
+    short: hook
+    narration: >
+      Here's a bug that passes every test on your laptop. In production, the app starts fine, and then quietly
+      serves data that's no longer true. The cause is one line of dependency injection: a singleton holding on to a
+      DB context. Today we build a background feature the right way, and catch that bug before it ships. Welcome to
+      DEVLADLOG dot net.
+
+  - id: plan
+    type: bullets
+    heading: "What we're building"
+    bullets:
+      - "Episode 3's API gets a digest of requests waiting for a decision"
+      - "A background worker sends it on a timer"
+      - "Channel picked by configuration: log or webhook"
+      - "Bad settings stop the app at startup"
+      - "Built-in container only, every rule pinned by a test"
+    narration: >
+      We take the project requests API from episode three and add a digest: every request still waiting for a
+      decision, grouped by department. A background worker sends it on a timer, to a channel chosen in
+      configuration. Bad settings stop the app at startup. All with the built-in container.
+
+  - id: lifetimes
+    type: code
+    heading: "Three lifetimes, one experiment"
+    lang: csharp
+    code: |
+      services.AddTransient<TransientProbe>()     // new instance every time it's asked for
+              .AddScoped<ScopedProbe>()           // one per scope = one per HTTP request
+              .AddSingleton<SingletonProbe>()     // one for the whole app
+              .AddScoped<ProbeConsumer>();        // depends on all three + the DbContext
+
+      app.MapGet("/diagnostics/lifetimes", (TransientProbe t, ScopedProbe s, SingletonProbe g,
+              RequestsDbContext db, ProbeConsumer consumer) =>
+          TypedResults.Ok(new LifetimeReport(
+              new LifetimeIds(t.Id, s.Id, g.Id, db.ContextId.InstanceId.ToString("N")[..8]),
+              consumer.Ids)));
+    narration: >
+      Three identical classes, registered three ways. The endpoint asks for all three, and so does a scoped consumer.
+      Each instance gets a random I D, and we also print the DB context's instance I D. Add DB context registers it
+      as scoped, so it should behave exactly like the scoped probe.
+
+  - id: lifetimesscreen
+    type: screen
+    heading: "What the container actually hands out"
+    image: screens/lifetimes.jpg
+    bar: "Terminal · deploy/local-demo.sh step 1 against localhost"
+    demo: >
+      Terminal running ./deploy/local-demo.sh against http://localhost:5207 (dotnet run, Development). Visible: the two
+      JSON lines of step 1. Highlight: transient differs between endpoint and consumer; scoped and dbContext equal
+      within a line but different between the two lines; singleton identical everywhere. Nothing to mask.
+    narration: >
+      Two requests. Transient: different for the endpoint and the consumer. Scoped: shared inside the request, new
+      in the next one. And the DB context follows the scoped one exactly. Singleton: the same everywhere, for the
+      life of the app.
+
+  - id: captive
+    type: code
+    heading: "The captive DbContext"
+    lang: csharp
+    code: |
+      // the anti-pattern: a singleton that takes a scoped service in its constructor
+      public sealed class CaptiveRequestReader(RequestsDbContext db)
+      {
+          public Task<ProjectRequest?> FindAsync(int id) => db.Requests.FindAsync(id).AsTask();
+      }
+      services.AddSingleton<CaptiveRequestReader>();
+
+      // Production (simplified from LifetimeTests): the host starts. Approve request 1 via the API, then:
+      var viaApi = await client.GetAsync("/api/requests/1");     // "Approved"   (new DbContext)
+      var captive = await reader.FindAsync(1);                   // Submitted    (same DbContext, forever)
+    short: captive
+    narration: >
+      Now the bug from the hook. A singleton that takes the DB context in its constructor. The singleton is created
+      once, so it keeps the first DB context forever. We approve a request through the API, and ask both. The API,
+      with a fresh context, says approved. The captive one says submitted, because its change tracker hands back the
+      object it already has. No exception. Just wrong data.
+
+  - id: validation
+    type: code
+    heading: "Development catches it. Production doesn't."
+    lang: text
+    code: |
+      services.BuildServiceProvider(new ServiceProviderOptions
+      {
+          ValidateScopes = true,      // on by default in Development
+          ValidateOnBuild = true,     // on by default in Development (since .NET 9)
+      });
+
+      AggregateException: Some services are not able to be constructed ...
+        InvalidOperationException: Cannot consume scoped service
+        'ProjectRequests.Api.Data.RequestsDbContext' from singleton
+        'ProjectRequests.Api.Tests.CaptiveRequestReader'.
+
+      // In Production both are off: the host starts, and the bug ships.
+    narration: >
+      The container can catch this. Validate scopes and validate on build are on by default in development, so
+      the app refuses to start with this exact message. In production they're off, for performance, and the app
+      starts happily. That's why we have three tests: the message, the development host refusing to start, and the
+      production host serving stale data.
+
+  - id: worker
+    type: code
+    heading: "A BackgroundService that respects scopes"
+    lang: csharp
+    code: |
+      public sealed class DigestWorker(IServiceScopeFactory scopes,
+          IOptionsMonitor<NotificationOptions> options,    // singleton-safe; IOptionsSnapshot is scoped
+          TimeProvider clock, ILogger<DigestWorker> logger) : BackgroundService
+      {
+          public async Task<PendingDigest> RunOnceAsync(CancellationToken ct)
+          {
+              await using var scope = scopes.CreateAsyncScope();     // new scope = new DbContext
+              var digest = await scope.ServiceProvider
+                  .GetRequiredService<PendingDigestBuilder>().BuildAsync(ct);
+              if (digest.Lines.Count > 0)
+                  await scope.ServiceProvider.GetRequiredService<INotificationChannel>().SendAsync(digest, ct);
+              return digest;
+          }
+      }
+    narration: >
+      A hosted service is a singleton too. So the worker never takes the DB context. It takes the scope factory, and
+      creates one async scope per run: a fresh DB context, disposed afterwards. Options come from options monitor,
+      because options snapshot is scoped. And the timer runs on an injected time provider, so tests can control time.
+
+  - id: keyed
+    type: code
+    heading: "Keyed services: pick the channel by name"
+    lang: csharp
+    code: |
+      services.AddKeyedSingleton<INotificationChannel, LogNotificationChannel>("log");
+
+      services.AddHttpClient<WebhookNotificationChannel>(c => c.Timeout = TimeSpan.FromSeconds(10));
+      services.AddKeyedTransient<INotificationChannel>("webhook",
+          (sp, _) => sp.GetRequiredService<WebhookNotificationChannel>());   // typed client: short-lived
+
+      // "the" channel = whichever key the configuration names, resolved per scope
+      services.AddScoped<INotificationChannel>(sp => sp.GetRequiredKeyedService<INotificationChannel>(
+          sp.GetRequiredService<IOptionsSnapshot<NotificationOptions>>().Value.Channel));
+    narration: >
+      Two implementations of one interface, told apart by a key. That's keyed services, since dot net eight. The
+      webhook channel is a typed HTTP client, which is meant to be short-lived, so its key is transient and never
+      captured by the worker. A scoped registration then resolves whichever key the configuration names.
+
+  - id: options
+    type: code
+    heading: "Options that fail fast"
+    lang: csharp
+    code: |
+      public sealed class NotificationOptions : IValidatableObject
+      {
+          [Required, AllowedValues("log", "webhook")] public string Channel { get; set; } = "log";
+          public Uri? WebhookUrl { get; set; }
+          [Range(0, 90)] public int StaleAfterDays { get; set; } = 3;
+
+          public IEnumerable<ValidationResult> Validate(ValidationContext _) { /* webhook needs an https URL */ }
+      }
+
+      services.AddOptions<NotificationOptions>()
+          .Bind(config.GetSection(NotificationOptions.Section))
+          .ValidateDataAnnotations()       // attributes + IValidatableObject
+          .ValidateOnStart();              // checked when the host starts, not when the digest first runs
+    narration: >
+      Settings are an options class with validation attributes and one cross-field rule: the webhook channel needs
+      an h t t p s URL. Validate on start runs all of it when the host starts. Without it, a typo would surface at
+      three in the morning, when the first digest runs.
+
+  - id: startupscreen
+    type: screen
+    heading: "A bad setting, caught at startup"
+    image: screens/startup-validation.jpg
+    bar: "Terminal · Notifications__Channel=webhook dotnet run"
+    demo: >
+      Terminal: cd src/ProjectRequests.Api && Notifications__Channel=webhook dotnet run --launch-profile http.
+      Visible: "fail: Microsoft.Extensions.Hosting.Internal.Host[11] Hosting failed to start" and
+      "OptionsValidationException: DataAnnotation validation failed for 'NotificationOptions' members: 'WebhookUrl'
+      with the error: 'Notifications:WebhookUrl must be an absolute https URL when Channel is 'webhook'.'", then the
+      prompt back (echo $? shows 134). See deploy/startup-validation.output.txt. Nothing to mask.
+    narration: >
+      Let's try it. Switch the channel to webhook with an environment variable, and forget the URL. The host refuses
+      to start, and the log says exactly which setting is wrong and why. A failed deploy is much cheaper than a
+      silent worker.
+
+  - id: tests
+    type: code
+    heading: "Tests swap services, not code"
+    lang: csharp
+    code: |
+      var clock = new FakeTimeProvider(DateTimeOffset.UtcNow);
+      var channel = new RecordingChannel();
+      await using var factory = new RequestsApiFactory(services: s =>
+      {
+          s.AddSingleton<TimeProvider>(clock);                         // last registration wins
+          s.AddKeyedSingleton<INotificationChannel>("log", channel);   // keyed too
+      });
+
+      await client.PostAsJsonAsync("/api/requests", NewRequest("OPS", 12_000m));
+      clock.Advance(TimeSpan.FromDays(4));                             // one tick of the worker's timer
+      await channel.WaitForDigestAsync();
+
+      // dotnet test -m:1  ->  Passed: 39, Failed: 0
+    narration: >
+      Because everything comes from the container, tests just register replacements. The last registration wins,
+      keyed or not. A fake time provider replaces the clock, a recording channel replaces the log. Advance four days,
+      and the real worker, on its real timer, sends the digest. Thirty-nine tests, about four seconds.
+
+  - id: gotchas
+    type: bullets
+    heading: "Three things that bit us"
+    bullets:
+      - "OrderBy after new DigestLine(...) couldn't be translated"
+      - "FakeTimeProvider: advance 4 days on a 1-day timer, get 4 digests"
+      - "One exception in a BackgroundService stops the whole host"
+    short: gotcha
+    narration: >
+      Three honest gotchas. Our digest query sorted after projecting into a record, and EF Core couldn't translate
+      it. Sort before the projection. Advancing a fake clock four days on a one-day timer gave us four digests, not
+      one. And since dot net six, an unhandled exception in a background service stops the whole host. One failed
+      webhook would take the API down, so every run is caught and logged. We removed that catch, and a test failed.
+
+  - id: azurelog
+    type: screen
+    heading: "The worker, live on App Service"
+    image: screens/azure-log-stream.jpg
+    bar: "Azure portal · App Service · Log stream"
+    demo: >
+      Azure portal, the web app > Monitoring > Log stream (or terminal: az webapp log tail). Visible: every minute
+      "Digest worker run: 2 pending request(s)", then "Digest: 2 request(s) waiting more than 0 day(s) for a decision",
+      "FIN: 1 request(s), 12,000 total" and "OPS: ...". Run ./deploy/local-demo.sh steps 2 and 3 against the app first
+      (step 1 prints "not available: Development only"). Mask the app name and subscription.
+    narration: >
+      Deployed to App Service on the free tier. In the log stream, every minute, the worker runs in its own scope,
+      finds the two pending requests and sends the digest to the log channel. Same code, same container rules.
+
+  - id: azurebreak
+    type: screen
+    heading: "Break the configuration on purpose"
+    image: screens/azure-validation.jpg
+    bar: "Azure portal · App Service · Log stream after changing an app setting"
+    demo: >
+      Run ./deploy/deploy-appservice.sh break (sets Notifications__Channel=webhook, the app restarts). Log stream shows
+      the container start, then "Hosting failed to start" and the OptionsValidationException for WebhookUrl; the site
+      returns an error page. Then ./deploy/deploy-appservice.sh fix and show "Digest worker run" again. Mask app name.
+    narration: >
+      Now break it in Azure. Change one app setting to webhook, without a URL. The app restarts and refuses to start,
+      and the log stream says why. Put the setting back, and the worker is running again.
+
+  - id: recap
+    type: bullets
+    heading: "Five rules"
+    bullets:
+      - "Never inject a scoped service into a singleton"
+      - "Background work: IServiceScopeFactory, one scope per run"
+      - "IOptionsMonitor in singletons, ValidateOnStart always"
+      - "Keyed services before a third-party container"
+      - "Third-party container: only for property injection, child containers, conventions"
+    narration: >
+      Five rules. Never inject a scoped service into a singleton. Background work gets the scope factory and one
+      scope per run. Singletons read options through options monitor, and every options class validates on start.
+      Try keyed services before reaching for another container. And bring a third-party container only for what
+      Learn lists: property injection, child containers, convention-based registration and the like.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The API, the thirty-nine tests and the deploy script are on GitHub, and the full guide is on devladlog dot
+      com. Next time: testing with x unit and N unit. Subscribe so you don't miss it. This was DEVLADLOG dot net, by
+      Momento Galático.

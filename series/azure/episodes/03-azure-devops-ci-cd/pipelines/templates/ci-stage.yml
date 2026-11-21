@@ -1,0 +1,59 @@
+# CI: everything that can be checked without Azure. The same script runs on a laptop (see README).
+stages:
+  - stage: ci
+    displayName: Build and test
+    jobs:
+      - job: build_test
+        displayName: Tests, guardrails, Bicep lint, PSRule, package
+        steps:
+          - checkout: self
+            fetchDepth: 1
+
+          - task: UseDotNet@2
+            displayName: .NET 10 SDK
+            inputs:
+              packageType: sdk
+              version: 10.x
+
+          - task: UsePythonVersion@0
+            displayName: Python 3.12
+            inputs:
+              versionSpec: '3.12'
+
+          - bash: |
+              set -euo pipefail
+              python -m pip install --quiet pytest==9.1.1 pyyaml==6.0.3
+              # Standalone Bicep CLI, pinned (the episode 2 guardrail tests call `bicep` directly)
+              curl -sSLo bicep https://github.com/Azure/bicep/releases/download/v0.49.2/bicep-linux-x64
+              chmod +x bicep && sudo mv bicep /usr/local/bin/bicep && bicep --version
+            displayName: Tools (pytest, Bicep CLI)
+
+          - pwsh: |
+              Install-Module PSRule.Rules.Azure -RequiredVersion 1.47.0 -Scope CurrentUser -Force -Repository PSGallery
+            displayName: PSRule for Azure
+
+          - bash: $(pipelineDir)/pipelines/scripts/ci.sh "$(Build.ArtifactStagingDirectory)"
+            displayName: ci.sh (tests, guardrails, lint, PSRule, publish probe)
+
+          - task: PublishTestResults@2
+            displayName: Publish pytest results
+            condition: succeededOrFailed()
+            inputs:
+              testResultsFormat: JUnit
+              testResultsFiles: '$(Build.ArtifactStagingDirectory)/test-results/*.xml'
+              mergeTestResults: true
+              testRunTitle: pytest (pipeline contract, what-if gate, guardrails)
+
+          - task: PublishTestResults@2
+            displayName: Publish xUnit results
+            condition: succeededOrFailed()
+            inputs:
+              testResultsFormat: VSTest
+              testResultsFiles: '$(Build.ArtifactStagingDirectory)/test-results/*.trx'
+              testRunTitle: ReadinessProbe xUnit
+
+          - task: PublishPipelineArtifact@1
+            displayName: Publish probe package
+            inputs:
+              targetPath: $(Build.ArtifactStagingDirectory)/probe
+              artifact: probe

@@ -1,0 +1,293 @@
+# DEVLADLOG Dev Tools — episode 02. Code excerpts and terminal output are real (src/, tests/).
+# The three `screen` scenes are recorded later in VS Code on a desktop: see demo.md.
+episode: 2
+slug: vs-code-extensions
+series_label: "DEV TOOLS"
+series_name: "DEVLADLOG Dev Tools"
+file_prefix: "developer-tools"
+title: "VS Code extensions for a whole team"
+subtitle: "Recommend, audit, control, and build your own"
+voice: am_michael
+thumbnail_text: "ONE VS CODE\nFOR THE\nWHOLE TEAM"
+youtube:
+  title: "VS Code Extensions for Teams: Recommend, Audit, Lock Down, Build Your Own | DEVLADLOG Dev Tools #2"
+  tags: [VS Code, Visual Studio Code, VS Code extensions, extensions.json, workspace settings, extension development, TypeScript, vsce, Conventional Commits, DevTools]
+sources:
+  - https://www.devladlog.com/articles/developer-tools/2025-11-25-vs-code-extensions-complete-guide-2025/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "One VS Code for the whole team"
+    sub: "Recommend, audit, control, and build your own"
+    short: hook
+    narration: >
+      Five developers, five different VS Codes. Two formatters fighting over the same file, a linter only half the team
+      has, and an extension nobody remembers installing. In this episode we fix that with files in the repo, a small
+      audit script, the security controls VS Code gives you, and a small extension we build ourselves in TypeScript.
+      Welcome to DEVLADLOG Dev Tools.
+
+  - id: plan
+    type: bullets
+    heading: "What we'll set up"
+    bullets:
+      - "Workspace recommendations in .vscode/extensions.json"
+      - "Workspace settings: one formatter per language"
+      - "An audit script for onboarding and checks"
+      - "Control: publisher trust and extensions.allowed"
+      - "Our own extension when nothing fits"
+    narration: >
+      Here's the plan. Workspace recommendations, so everyone gets the same extensions. Workspace settings, so every
+      language has exactly one formatter. An audit script that checks a machine and installs what's missing. The
+      security controls VS Code gives you. And, when nothing in the marketplace fits, our own extension.
+
+  - id: recommendations
+    type: code
+    heading: "Recommendations live in the repo"
+    lang: json
+    code: |
+      {
+        // Shown to everyone who opens this folder
+        "recommendations": [
+          "editorconfig.editorconfig",
+          "dbaeumer.vscode-eslint",
+          "esbenp.prettier-vscode",
+          "ms-python.python",
+          "ms-dotnettools.csdevkit",
+          "ms-azuretools.vscode-bicep",
+          "github.vscode-github-actions",
+        ],
+        "unwantedRecommendations": [
+          "ms-vscode.vscode-typescript-tslint-plugin", // replaced by ESLint here
+        ],
+      }
+    narration: >
+      Dot vscode slash extensions dot json. Each entry is publisher dot name. Keep it to what this repository needs,
+      not personal favourites. Unwanted recommendations tells VS Code never to suggest something for this workspace.
+      Notice the comments and trailing commas. This is JSON with comments, and that will matter in a minute.
+
+  - id: recommendedview
+    type: screen
+    heading: "What a new developer sees"
+    image: screens/recommended.jpg
+    bar: "VS Code · Extensions · @recommended"
+    demo: >
+      VS Code with a fresh profile (no extensions), folder src/team-setup opened for the first time. Capture the
+      notification "Do you want to install the recommended extensions..." bottom right, and the Extensions view with
+      the filter @recommended showing the WORKSPACE RECOMMENDATIONS group with the seven extensions.
+    narration: >
+      Open the folder for the first time and VS Code asks whether to install the recommended extensions. In the
+      extensions view, the at recommended filter shows them grouped as workspace recommendations. One click, same
+      tools as everyone else.
+
+  - id: settings
+    type: code
+    heading: "Settings that travel with the code"
+    lang: json
+    code: |
+      {
+        "editor.formatOnSave": true,
+        "files.eol": "\n",
+
+        // Language-specific formatters, so two formatters never fight over a file
+        "[typescript]": { "editor.defaultFormatter": "esbenp.prettier-vscode" },
+        "[json]":       { "editor.defaultFormatter": "esbenp.prettier-vscode" },
+
+        // Built-in Git extension: warn at the same 72 characters as the commit-msg hook
+        "git.inputValidation": true,
+        "git.inputValidationSubjectLength": 72,
+
+        // Our own extension: the scopes this repo uses
+        "mgCommit.scopes": ["api", "orders", "infra", "ci", "docs"],
+      }
+    narration: >
+      Next to it, workspace settings. They override user settings for this folder only. Format on save, L F line
+      endings, and a default formatter per language, so two extensions never fight over the same file. The built-in
+      Git extension can validate the commit box: we set it to seventy-two characters, the same limit as the hook from
+      episode one.
+
+  - id: audit
+    type: code
+    heading: "Recommendations suggest. A script checks."
+    lang: text
+    code: |
+      $ python3 tools/ext_audit.py
+        ok        editorconfig.editorconfig@0.17.4
+        ok        dbaeumer.vscode-eslint@3.0.16
+        ok        esbenp.prettier-vscode@11.0.0
+        ok        ms-python.python@2026.1.0
+        MISSING   ms-dotnettools.csdevkit
+        MISSING   ms-azuretools.vscode-bicep
+        MISSING   github.vscode-github-actions
+        UNWANTED  ms-vscode.vscode-typescript-tslint-plugin  (installed; the team asked not to use it)
+      4/7 recommended installed, 3 missing, 1 unwanted              # exit code 1
+
+      $ python3 tools/ext_audit.py --install
+        # one call: code --install-extension A --install-extension B --install-extension C
+    narration: >
+      A recommendation is only a suggestion. The audit script compares code dash dash list extensions with the file,
+      and exits with an error if something is missing or unwanted. With dash dash install it installs the missing ones
+      in a single call. It never uninstalls anything. That's the developer's decision.
+
+  - id: jsonc
+    type: code
+    heading: "Gotcha: VS Code's own file isn't JSON"
+    lang: text
+    code: |
+      >>> json.load(open(".vscode/extensions.json"))
+      json.decoder.JSONDecodeError: Expecting property name enclosed in double quotes:
+      line 2 column 2 (char 3)
+
+      # and a regex that strips // comments also eats "https://contoso.com"
+
+      def strip_jsonc(text):      # walks the text, skips comments only OUTSIDE strings,
+          ...                     # then removes trailing commas
+      assert json.loads(strip_jsonc('{"url": "https://a//b", // c\n "y": [1,2,],}')) \
+             == {"url": "https://a//b", "y": [1, 2]}
+    short: gotcha
+    narration: >
+      Here's what bit us. VS Code creates extensions dot json with a comment at the top, so the first json dot load
+      fails. The quick fix, a regular expression that deletes everything after two slashes, also deletes half of every
+      U R L. The script walks the text, skips comments only outside strings, and drops trailing commas. Tests cover
+      both cases.
+
+  - id: control
+    type: bullets
+    heading: "Keep extensions under control"
+    bullets:
+      - "Extensions run with the same permissions as VS Code"
+      - "1.97+: confirm trust the first time you install from a publisher"
+      - "1.96+: extensions.allowed, or the AllowedExtensions policy"
+      - "Blocked but already installed: disabled, not removed"
+      - "Profiles: code --profile \"Web Development\" per stack"
+    narration: >
+      Now security. The VS Code docs are clear: extensions have the same permissions as VS Code itself. Since version
+      one ninety-seven, VS Code asks you to trust a publisher the first time you install from it. Since one ninety-six,
+      the extensions allowed setting, or the Allowed Extensions policy pushed by device management, blocks everything
+      not on the list. Already installed ones get disabled. And profiles keep each stack's extensions apart.
+
+  - id: manifest
+    type: code
+    heading: "Nothing fits? Build it: the manifest"
+    lang: json
+    code: |
+      "engines": { "vscode": "^1.100.0" },
+      "extensionDependencies": ["vscode.git"],
+      "main": "./out/extension.js",
+      "contributes": {
+        "commands": [{ "command": "mgCommit.compose", "title": "Compose Conventional Commit",
+                       "category": "MG", "icon": "$(edit)" }],
+        "menus": { "scm/title": [{ "command": "mgCommit.compose",
+                                   "when": "scmProvider == git", "group": "navigation" }] },
+        "configuration": { "properties": {
+          "mgCommit.types":  { "type": "array", "default": ["feat", "fix", "docs", "..."] },
+          "mgCommit.scopes": { "type": "array", "default": [] } } }
+      }
+      // no "activationEvents": since 1.74 a contributed command activates the extension
+    narration: >
+      Our hook from episode one rejects bad commit messages. Nicer if the editor helps you write good ones. No
+      marketplace extension matched our exact rules, so we built one. The manifest contributes one command, a pencil
+      button in the source control title bar for Git, and two settings. No activation events: since version one
+      seventy-four, a contributed command is enough.
+
+  - id: extension
+    type: code
+    heading: "Four questions, then the commit box"
+    lang: typescript
+    code: |
+      const type = await vscode.window.showQuickPick(types, { title: "Commit type (1/4)" });
+      if (!type) return;
+      const scope = await pickScope(scopes);
+      // ...breaking change? (3/4)
+      const subject = await vscode.window.showInputBox({
+        title: "Subject (4/4)",
+        validateInput: (value) => validateSubject({ type, scope, breaking: isBreaking, subject: value }),
+      });
+      if (subject === undefined) return;
+
+      const header = buildHeader({ type, scope, breaking: isBreaking, subject });
+      repo.inputBox.value = replaceHeader(repo.inputBox.value, header);   // keeps your body
+
+      // repo comes from the built-in Git extension's API:
+      // vscode.extensions.getExtension<GitExtension>("vscode.git").exports.getAPI(1)
+    narration: >
+      The command asks four questions: type, scope, breaking change, and subject. The subject box validates while you
+      type, using rules from a pure module with no V S code import. Then it writes the header into the commit box
+      through the built-in Git extension's A P I, and keeps any body you already wrote.
+
+  - id: tests
+    type: code
+    heading: "Tested and packaged, no VS Code needed"
+    lang: text
+    code: |
+      $ npm test                       # tsc + node --test
+      ok 4 - validateSubject: counts the WHOLE header, scope and ! included
+      ok 6 - checkMessage: same verdicts as the episode 1 hook
+      ok 13 - @types/vscode is not newer than engines.vscode
+      # tests 15  # pass 15  # fail 0
+
+      $ python3 -m pytest -q tests     # audit script + TypeScript vs Python parity
+      13 passed in 0.37s
+
+      $ npx vsce package
+       DONE  Packaged: mg-commit-0.1.0.vsix (8 files, 6.89 KB)
+      # with @types/vscode 1.146 and engines ^1.100:
+       ERROR  @types/vscode ^1.146.0 greater than engines.vscode ^1.100.0.
+    narration: >
+      Fifteen Node tests, plus a parity test that feeds thirty messages to both the TypeScript rules and the Python
+      hook and checks they agree. Then v s c e package builds a seven kilobyte V S I X. One more gotcha: install the
+      latest types package without raising the engine version, and packaging fails. The types must not be newer than
+      the oldest VS Code you support.
+
+  - id: validate
+    type: screen
+    heading: "Validation while you type"
+    image: screens/validate.jpg
+    bar: "VS Code · Extension Development Host · MG: Compose Conventional Commit"
+    demo: >
+      Extension Development Host (F5 from src/mg-commit) with a sample repo that has a staged change. Command
+      Palette > "MG: Compose Conventional Commit" (or the pencil icon in the Source Control title bar): pick feat,
+      scope orders, No. In the subject box type "Added paging." and capture the red validation message
+      "Start with a lower-case verb..." ; then a long subject showing "Header is 7x/72 characters: shorten the subject".
+    narration: >
+      Press F five and the extension runs in a development host. Feat, orders, not breaking. Type added paging with a
+      capital and a period, and the box tells you to start with a lower case verb. Type too much, and it counts the
+      whole header against seventy-two characters, scope included.
+
+  - id: commitbox
+    type: screen
+    heading: "A message the hook accepts"
+    image: screens/commitbox.jpg
+    bar: "VS Code · Source Control · repo with the episode 1 hooks"
+    short: live
+    demo: >
+      Same window, Source Control view: the commit box now shows "feat(orders): add paging" above a body line the
+      developer had typed before ("Uses cursor paging.") which was kept. Commit, then the integrated terminal with
+      `git log --oneline -1` showing the commit, in a repo where the episode 1 commit-msg hook is installed.
+    narration: >
+      The header lands in the commit box, above the body that was already there. Commit. In this repository the hook
+      from episode one is installed, and it accepts the message, because both sides use the same rules, and a test
+      proves it.
+
+  - id: recap
+    type: bullets
+    heading: "Five rules"
+    bullets:
+      - "Recommend in .vscode/extensions.json, short and per repo"
+      - "One formatter per language in workspace settings"
+      - "Check machines with a script, not with hope"
+      - "Trust publishers deliberately; allow-list in managed fleets"
+      - "Build small extensions: pure logic, tested, packaged"
+    narration: >
+      Five rules. Recommend extensions in the repo, and keep the list short. One formatter per language in workspace
+      settings. Check machines with a script, not with hope. Trust publishers deliberately, and use an allow list on
+      managed machines. And when you build your own, keep the logic pure, tested and packaged.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The workspace files, the audit script and the extension are on GitHub, and the complete guide is on devladlog dot
+      com. Links are in the description. Next time: dev containers, so the whole toolchain travels with the repo too.
+      Subscribe so you don't miss it. This was DEVLADLOG Dev Tools, by Momento Galático.

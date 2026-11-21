@@ -1,0 +1,26 @@
+{
+  "site": "Contoso Projects (legacy)",
+  "features": { "documentSets": false, "documentId": true },
+  "contentTypeHub": true,
+  "siteColumns": [
+    { "internalName": "ProjectCode", "displayName": "Project code", "type": "Text", "id": "f2660f0c-7510-4faa-9cd8-405f782887a3" },
+    { "internalName": "Client", "displayName": "Client", "type": "Text" }
+  ],
+  "contentTypes": [
+    { "name": "Project Document", "id": "0x010105", "parent": "Document",
+      "fields": [ { "name": "ProjectCode", "required": true } ] },
+    { "name": "Statement of Work", "id": "0x0101Contract", "parent": "Document", "fields": [] },
+    { "name": "Change Request", "id": "0x01010500", "parent": "Project Document",
+      "fields": [ { "name": "PONumber", "required": true } ] },
+    { "name": "Project Report", "id": "0x0100A33D9AD9805788419BDAAC2CCB37509F01", "parent": "Project Document", "fields": [] },
+    { "name": "Project Document", "id": "0x010100A33D9AD9805788419BDAAC2CCB37509F", "parent": "Document", "fields": [] },
+    { "name": "Project Folder", "id": "0x0120D52000A33D9AD9805788419BDAAC2CCB37509F", "parent": "Document Set",
+      "documentSet": { "allowedContentTypes": ["Project Document", "Meeting Minutes"], "sharedFields": ["ProjectCode"] } }
+  ],
+  "libraries": [
+    { "title": "Project Documents", "url": "ProjectDocuments",
+      "contentTypes": ["Project Document", "Project Folder"], "defaultContentType": "Statement of Work",
+      "requireCheckout": true,
+      "defaultValues": [ { "field": "Client", "value": "Contoso" }, { "field": "Region", "value": "EMEA" } ] }
+  ]
+}

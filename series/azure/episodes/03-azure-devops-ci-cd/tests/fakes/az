@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# Fake Azure CLI for the deploy.sh tests: logs every call, answers the few commands deploy.sh uses.
+echo "az $*" >> "${FAKE_LOG:?}"
+case "$1 $2 $3" in
+  "deployment group what-if")
+    [[ -n "${FAKE_WHATIF_FAIL:-}" ]] && { echo "ERROR: what-if failed" >&2; exit 1; }
+    cat "${FAKE_WHATIF:?}" ;;
+  "deployment group create") echo "app-contoso-lab-0000" ;;
+  "deployment group show")   echo "https://app-contoso-lab-0000.example.invalid/healthz" ;;
+  "webapp deploy --resource-group") echo '{"status": "fake"}' ;;
+  *) echo "fake az: unexpected command: $*" >&2; exit 64 ;;
+esac

@@ -1,0 +1,17 @@
+// Customers with more than 1,000 of sales, with and without context transition
+DEFINE
+    MEASURE Sales[Customers Over 1K (no transition)] =
+        COUNTROWS(
+            FILTER(
+                VALUES('Customer'[CustomerKey]),
+                'Customer'[CustomerKey] <> -1
+                    && SUMX(Sales, Sales[Quantity] * Sales[Unit Price]) > 1000
+            )
+        )
+EVALUATE
+SUMMARIZECOLUMNS(
+    'Date'[Year],
+    "Customers Over 1K", [Customers Over 1K],
+    "Without transition", [Customers Over 1K (no transition)]
+)
+ORDER BY 'Date'[Year]

@@ -1,0 +1,270 @@
+# DEVLADLOG Azure — episode 03. Draft script: code scenes are real excerpts from pipelines/, src/ and tests/,
+# screen scenes are captured by the recorder following demo.md.
+episode: 3
+slug: azure-devops-ci-cd
+series_label: "AZURE"
+series_name: "DEVLADLOG Azure"
+file_prefix: "azure"
+title: "A pipeline that knows when to stop"
+subtitle: "Azure Pipelines, workload identity, what-if gate, approvals"
+voice: am_michael
+thumbnail_text: "A PIPELINE\nTHAT KNOWS\nWHEN TO STOP"
+youtube:
+  title: "Azure DevOps CI/CD with Bicep: What-If Gate, Approvals, No Secrets | DEVLADLOG Azure #3"
+  tags: [Azure DevOps, Azure Pipelines, CI/CD, YAML pipelines, Bicep, what-if, workload identity federation, environments, approvals, DevOps]
+sources:
+  - https://www.devladlog.com/articles/azure/2026-01-08-azure-devops-cicd-complete-guide-2026/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "A pipeline that knows when to stop"
+    sub: "Tests, a what-if gate and an approval that comes at the right time"
+    short: hook
+    narration: >
+      Most pipelines are very good at one thing: going. Push to main and five minutes later production has changed,
+      whether you meant it or not. In this episode we ship last episode's workload with Azure Pipelines, and we teach
+      the pipeline when to stop: failing tests, a risky change, or a human who hasn't said yes yet. Welcome to
+      DEVLADLOG Azure.
+
+  - id: plan
+    type: diagram
+    heading: "Four stages, one YAML file"
+    nodes: ["CI", "Lab", "Plan", "Prod"]
+    labels: ["tests + package", "deploy, no approval", "what-if + gate", "approval first"]
+    narration: >
+      Here's the plan. One YAML pipeline with four stages. CI runs every check we can run without Azure. Lab deploys
+      automatically. Then a plan stage runs a what-if against production and nothing else. And production deploys
+      only after a person approves. Pull requests run CI only.
+
+  - id: identity
+    type: bullets
+    heading: "No secrets in the pipeline"
+    bullets:
+      - "One service connection per environment"
+      - "Workload identity federation: no client secret to rotate"
+      - "Scoped to one resource group each"
+      - "Contributor plus role assignment rights, with a condition"
+    narration: >
+      First, how the pipeline signs in to Azure. Each environment gets its own Azure Resource Manager service
+      connection using workload identity federation, which is Microsoft's recommended option, because there's no
+      secret to store or rotate. Each one is scoped to a single resource group. Our template also creates role
+      assignments, so on top of Contributor the identity gets role assignment rights, limited by a condition to the
+      two data roles it needs.
+
+  - id: stages
+    type: code
+    heading: "The pipeline file"
+    lang: yaml
+    code: |
+      trigger:
+        branches: { include: [main] }
+      pr: none        # Azure Repos: PR validation is a branch policy
+
+      parameters:
+        - name: acceptProtectedChanges
+          type: boolean
+          default: false
+
+      stages:
+        - template: templates/ci-stage.yml
+        - template: templates/deploy-stage.yml   # lab
+        - template: templates/plan-stage.yml     # prod_plan
+        - template: templates/deploy-stage.yml   # prod
+    narration: >
+      The pipeline file is short, because the stages are templates. Notice pr none. With Azure Repos, a pr trigger in
+      YAML is ignored; pull request validation is a branch policy. And there's one runtime parameter, accept protected
+      changes, which you'll see in a minute.
+
+  - id: ci
+    type: code
+    heading: "CI is one script you can run at home"
+    lang: bash
+    code: |
+      step "1. pipeline contract (templates, stages, service connections)"
+      python3 -m pipeline_contract pipelines/azure-pipelines.yml --approval-env contoso-prod
+      step "2. pytest: pipeline contract + what-if gate + scripts"
+      step "3. pytest: architecture guardrails on the compiled Bicep"
+      step "4. Bicep lint"
+      step "5. xUnit: readiness probe"
+      step "6. PSRule for Azure (Well-Architected rules)"
+      step "7. package the probe"
+
+      $ ci.sh /tmp/ci-out
+      44 passed ... 15 passed ... Passed: 7
+      lab  pass 118  fail 0     prod  pass 123  fail 0
+    narration: >
+      The CI stage calls one script, and the same script runs on my laptop. It checks the pipeline itself, runs
+      forty-four tests for this episode and the fifteen guardrail tests from last time, lints the Bicep, runs the
+      x unit tests, runs PSRule for Azure on both environments, and packages the probe app as a pipeline artifact.
+      About thirty seconds here.
+
+  - id: deploy
+    type: code
+    heading: "A deployment job, on an environment"
+    lang: yaml
+    code: |
+      - deployment: deploy
+        environment: ${{ parameters.environment }}
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - checkout: self    # deployment jobs don't check out the repo
+                - task: AzureCLI@2
+                  inputs:
+                    azureSubscription: ${{ parameters.serviceConnection }}
+                    scriptType: bash
+                    scriptPath: $(pipelineDir)/pipelines/scripts/deploy.sh
+    narration: >
+      Deployments use a deployment job that targets an Azure DevOps environment, so every run shows up in that
+      environment's history. Two details. A deployment job doesn't check out your repository by default, so we add
+      checkout self. And the service connection comes from a template parameter, because it has to be known when the
+      pipeline compiles. A runtime variable won't do.
+
+  - id: approvals
+    type: bullets
+    heading: "Approvals run before the stage"
+    short: approvals
+    bullets:
+      - "Approvals live on the environment, not in YAML"
+      - "All checks pass before the stage starts"
+      - "So the what-if gets its own stage"
+      - "The approver reads it, then says yes"
+    narration: >
+      Now the part most pipelines get wrong. Approvals aren't in the YAML. They're set on the environment by its
+      owner. And Azure Pipelines evaluates every check before the stage starts. So if your what-if runs inside the
+      production stage, the approver signs off before it even exists. That's why the plan is its own stage, and the
+      approver reads its summary first.
+
+  - id: gate
+    type: code
+    heading: "What-if as a gate"
+    lang: text
+    code: |
+      $ az deployment group what-if ... --no-pretty-print > whatif.json
+      $ python -m whatif_gate --whatif whatif.json --policy gate-policy.json
+
+      ## What-if gate: rg-contoso-lab: BLOCKED
+      | Modify | Microsoft.Storage/storageAccounts/stcontosolab0000 |
+
+      - block: protected change properties.networkAcls.defaultAction: "Allow" -> "Deny"
+      - block: protected change properties.publicNetworkAccess: "Enabled" -> "Disabled"
+
+      gate said no (exit 1): nothing was deployed
+    narration: >
+      Every deployment starts with what-if in JSON. A small Python gate reads it. Deletes are always blocked. Changes to
+      protected properties, like network access, keys, firewall rules or role assignments, stop the run too. Here
+      someone opened the storage account in the portal, and the pipeline would close it again. That might be right,
+      but a human decides. Re-run with accept protected changes, and it's recorded in the run.
+
+  - id: contract
+    type: code
+    heading: "The pipeline has tests too"
+    lang: python
+    code: |
+      def test_S3_prod_without_a_plan_stage(copy):
+          d, edit = copy
+          edit("azure-pipelines.yml", "dependsOn: [prod_plan]", "dependsOn: [lab]")
+          assert rules(check(d / "azure-pipelines.yml", {"contoso-prod"})) == ["S3"]
+
+      def test_K1_service_connection_from_a_runtime_variable(copy):
+          ...
+          assert rules(check(...)) == ["K1"]
+
+      $ python -m pytest tests -q
+      44 passed in 0.78s
+    narration: >
+      There's no local runner for Azure Pipelines YAML, so I wrote a contract checker. It expands the templates and
+      checks ten rules: parameters, stage order, a plan before production, checkout in deployment jobs, compile time
+      service connections, pinned task versions. Each rule has a test that breaks a copy of the pipeline on purpose.
+
+  - id: run
+    type: screen
+    heading: "The run: CI, lab, plan, waiting"
+    image: screens/pipeline-run.jpg
+    bar: "Azure DevOps · Pipelines · run summary"
+    demo: >
+      Run summary of a run on main: stages ci, lab and prod_plan green, prod showing "Waiting" with the review
+      button. Mask the organization and project names in the URL and the breadcrumb.
+    narration: >
+      Here's a real run on main. CI passed, lab deployed, the plan ran, and production is waiting for review.
+
+  - id: tests
+    type: screen
+    heading: "Every test, in the run"
+    image: screens/tests-tab.jpg
+    bar: "Azure DevOps · Pipelines · run · Tests"
+    demo: >
+      The Tests tab of the same run: total passed count for the pytest and xUnit runs (66 tests: 44 + 15 + 7), zero
+      failed, with the two test run titles visible.
+    narration: >
+      The test results are published with the run: sixty-six tests from pytest and x unit, so a red build tells you
+      which rule broke, not just that something did.
+
+  - id: approve
+    type: screen
+    heading: "The approver reads the plan first"
+    image: screens/approval.jpg
+    bar: "Azure DevOps · Pipelines · run · Extensions + Review"
+    demo: >
+      Split capture: left, the Extensions tab of the run showing the "What-if gate: rg-contoso-prod: GO" summary table;
+      right, the Review dialog for the contoso-prod approval with the Approve and Reject buttons. Mask user names
+      except the fictional approver.
+    narration: >
+      The approver opens the plan summary, sees exactly which resources will be created or modified, and only then
+      approves or rejects.
+
+  - id: history
+    type: screen
+    heading: "Who deployed what, and when"
+    image: screens/environment-history.jpg
+    bar: "Azure DevOps · Pipelines · Environments · contoso-prod"
+    demo: >
+      The contoso-prod environment: Deployments tab with at least one run listed, and the Approvals and checks tab
+      showing Approvals and Exclusive lock. Mask user names and organization.
+    narration: >
+      And the environment keeps the history: which run, which commit, approved by whom. The approval and the exclusive
+      lock are configured here, by the environment's owner.
+
+  - id: gotcha
+    type: code
+    heading: "Gotcha: the first run creates the environment"
+    lang: text
+    short: gotcha
+    code: |
+      environment: contoso-prod     # doesn't exist yet
+
+      Pipeline created in the web wizard  ->  environment created for you
+                                          ->  no approvals, no checks
+                                          ->  first run deploys to prod unguarded
+
+      Fix: create contoso-prod and its checks BEFORE you save the pipeline.
+      (A CI run from an external editor fails instead: "Environment not found")
+    narration: >
+      The gotcha. If your YAML names an environment that doesn't exist, and Azure Pipelines knows who you are, for
+      example you saved it in the web wizard, it creates the environment for you. With no approvals. The very first
+      run deploys straight to production. So create the environment and its checks before you save the pipeline.
+
+  - id: recap
+    type: bullets
+    heading: "Five rules"
+    bullets:
+      - "CI is a script you can run locally"
+      - "Secretless connections, one per environment"
+      - "What-if first; deletes and protected changes stop"
+      - "Approvals on environments, plan in its own stage"
+      - "Test the pipeline itself"
+    narration: >
+      Five rules. Make CI a script you can run locally. Use secretless service connections, one per environment.
+      Run what-if first and stop on deletes and protected changes. Put approvals on environments and give the plan its
+      own stage. And test the pipeline itself, because nobody else will.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The pipeline, the templates, the gate and the tests are on GitHub, and the complete guide is on devladlog dot
+      com. Next episode: security and identity with Entra ID, where we look at what that federated identity really is,
+      and protect an API without a single secret. This was DEVLADLOG Azure, by Momento Galático.

@@ -1,0 +1,18 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/sp/v2/column-formatting.schema.json",
+  "elmType": "div",
+  "style": {
+    "color": "=if(@currentField == '' || [$RequestStatus] == 'Closed' || [$RequestStatus] == 'Rejected', '', if(Number(@currentField) + 86400000 <= Number(@now), '#a4262c', if(Number(@currentField) <= Number(@now) + 604800000, '#8a6100', '')))",
+    "font-weight": "=if(@currentField != '' && [$RequestStatus] != 'Closed' && [$RequestStatus] != 'Rejected' && Number(@currentField) + 86400000 <= Number(@now), '600', '400')"
+  },
+  "children": [
+    {
+      "elmType": "span",
+      "style": { "display": "inline-block", "padding": "0 4px" },
+      "attributes": {
+        "iconName": "=if(@currentField != '' && [$RequestStatus] != 'Closed' && [$RequestStatus] != 'Rejected' && Number(@currentField) + 86400000 <= Number(@now), 'Warning', '')"
+      }
+    },
+    { "elmType": "span", "txtContent": "@currentField.displayValue" }
+  ]
+}

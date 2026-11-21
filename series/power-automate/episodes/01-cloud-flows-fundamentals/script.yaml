@@ -1,29 +1,271 @@
-# DEVLADLOG Power Automate — episode 01 (stub: write the scenes after building the demo)
+# DEVLADLOG Power Automate — episode 01 (draft: material built and tested locally, demo still to record)
 episode: 1
 slug: cloud-flows-fundamentals
 series_label: "POWER AUTOMATE"
 series_name: "DEVLADLOG Power Automate"
 file_prefix: "power-automate"
-title: "Cloud Flows Fundamentals"
-subtitle: "Built for real, in a lab tenant"
+title: "Cloud flows fundamentals"
+subtitle: "Triggers, actions, expressions, and a flow you can test"
 voice: am_michael
-thumbnail_text: "CLOUD FLOWS FUNDAMENTALS"
+thumbnail_text: "YOUR FLOW\nIS JUST\nJSON"
 youtube:
-  title: "Cloud Flows Fundamentals (Real Demo) | DEVLADLOG Power Automate #1"
-  tags: []
+  title: "Power Automate Cloud Flows Fundamentals: Triggers, Expressions, Tests | DEVLADLOG Power Automate #1"
+  tags: [Power Automate, cloud flows, Power Platform, trigger conditions, expressions, SharePoint, automated flow, scheduled flow, solutions, pac CLI]
 sources:
   - https://www.devladlog.com/articles/power-automate/2025-01-01-cloud-flows-fundamentals-complete-guide-2025/
+
 scenes:
   - id: hook
     type: title
-    heading: "Cloud Flows Fundamentals"
-    sub: "Built for real, in a lab tenant"
+    heading: "Cloud flows, fundamentals done right"
+    sub: "Triggers, actions, expressions, and a flow you can test"
     short: hook
     narration: >
-      TODO
+      Most cloud flows start the same way. Someone clicks through the designer, saves, and hopes. Then a test item
+      floods the inbox, an empty column fails a run at night, and nobody knows why. In this episode we build two real
+      flows for an IT request list, and we test them on a laptop before they ever touch the tenant.
+
+  - id: types
+    type: bullets
+    heading: "Three kinds of cloud flow"
+    bullets:
+      - "Automated: an event starts it"
+      - "Instant: someone presses a button"
+      - "Scheduled: a recurrence starts it"
+      - "One trigger, then actions, through connectors"
+      - "Everything else is configuration and expressions"
+    narration: >
+      Power Automate has three kinds of cloud flow. Automated flows start on an event, like a new list item.
+      Instant flows start when someone selects a button. Scheduled flows start on a recurrence. Every flow has exactly
+      one trigger, followed by actions, and connectors carry both to services like SharePoint and Outlook.
+
+  - id: plan
+    type: bullets
+    heading: "What we're building"
+    bullets:
+      - "An IT Requests list in SharePoint"
+      - "Automated flow: triage every new request"
+      - "High priority: alert on-call, four-hour target"
+      - "Scheduled flow: a weekday digest at eight"
+      - "Both inside a solution, both unit tested"
+    narration: >
+      Here's the plan. An IT Requests list in SharePoint. An automated flow triages each new request: high priority
+      alerts the on-call engineer and gets a four-hour target, everything else gets twenty-four hours. A scheduled flow
+      sends the service desk a digest every weekday at eight. Both live in a solution, and both have tests.
+
+  - id: list
+    type: screen
+    heading: "The list the flows watch"
+    image: screens/list.jpg
+    bar: "SharePoint · IT Helpdesk · IT Requests"
+    demo: >
+      SharePoint list "IT Requests" in the lab site, list view showing columns Title, Category, Priority, Status,
+      Due date, Created by. Three sample rows by Alex Demo: one High priority (Laptop won't boot before a client demo),
+      one Normal, one titled "[TEST] please ignore". Mask the tenant URL in the address bar.
+    narration: >
+      This is the list. Title, category, priority, status and a due date that the flow fills in. Notice the last row:
+      a test item, the kind every team creates while building. We don't want that one paging the on-call engineer.
+
+  - id: designer
+    type: screen
+    heading: "The automated flow in the designer"
+    image: screens/designer.jpg
+    bar: "Power Automate · Solutions · IT Requests · IT request intake"
+    demo: >
+      New designer, flow "IT request intake" opened from the IT Requests solution. Visible top to bottom: trigger
+      "When an IT request is created", Initialize SLA hours, Due date, condition "Is high priority" with
+      "Alert on-call engineer" in the True branch, "Mark as triaged", "Acknowledge requester".
+    narration: >
+      In the designer, the flow reads top to bottom. The SharePoint trigger, a variable for the target hours, a compose
+      for the due date, a condition that alerts on-call only for high priority, then update the item and acknowledge the
+      requester. We built it inside a solution from the start, so it uses connection references.
+
+  - id: trigger
+    type: code
+    heading: "A trigger condition: no run at all"
+    lang: json
+    code: |
+      "When_an_IT_request_is_created": {
+        "type": "OpenApiConnection",
+        "recurrence": { "interval": 5, "frequency": "Minute" },
+        "splitOn": "@triggerOutputs()?['body/value']",
+        "conditions": [
+          { "expression": "@not(startsWith(coalesce(triggerBody()?['Title'], ''), '[test]'))" }
+        ],
+        "inputs": {
+          "host": { "connectionName": "shared_sharepointonline", "operationId": "GetOnNewItems" },
+          "parameters": { "dataset": "https://contoso.sharepoint.com/sites/ITHelpdesk", "table": "IT Requests" }
+        }
+      }
+    short: trigger
+    narration: >
+      Here's the trigger in code view. The important part is the trigger condition. If the title starts with test in
+      brackets, the flow is not triggered at all. No run is logged and no actions are consumed. A condition inside the
+      flow would still start a run every time. And start with is not case sensitive, so capitals don't matter.
+
+  - id: expressions
+    type: code
+    heading: "Expressions: null-safe on purpose"
+    lang: json
+    code: |
+      "Initialize_SLA_hours": { "type": "InitializeVariable",
+        "inputs": { "variables": [ { "name": "slaHours", "type": "integer",
+          "value": "@if(equals(triggerBody()?['Priority']?['Value'], 'High'), 4, 24)" } ] } },
+
+      "Due_date": { "type": "Compose",
+        "runAfter": { "Initialize_SLA_hours": ["Succeeded"] },
+        "inputs": "@addHours(utcNow(), variables('slaHours'))" },
+
+      "Is_high_priority": { "type": "If",
+        "runAfter": { "Due_date": ["Succeeded"] },
+        "expression": { "and": [ { "equals": ["@triggerBody()?['Priority']?['Value']", "High"] } ] } }
+    narration: >
+      The rest is expressions. A choice column arrives as an object, so we read Priority, then Value. The question mark
+      before each bracket is the null ignore operator: if priority is empty, we get null instead of a failed run.
+      Variables can only be initialized at the top level, never inside a condition or a loop.
+
+  - id: solution
+    type: code
+    heading: "Export the solution: it's just files"
+    lang: text
+    code: |
+      $ pac solution unpack --zipfile ITRequests.zip --folder src/solution
+      Unmanaged Extract complete.
+
+      src/solution/
+        Other/Customizations.xml      # two connection references
+        Other/Solution.xml
+        Workflows/ITrequestintake-<id>.json          # the flow definition
+        Workflows/ITrequestsdailydigest-<id>.json
+        Workflows/*.json.data.xml                    # name, state, category 5 = cloud flow
+
+      $ pac solution pack --zipfile out/ITRequests.zip --folder src/solution
+      Packed Solution.
+    narration: >
+      Export the solution and unpack it with the Power Platform CLI. Each flow becomes a JSON file with its connection
+      references and its definition, the same workflow definition language that Azure Logic Apps uses. Pack it back
+      the same way. No sign-in needed for either step, so this runs in a pipeline.
+
+  - id: dryrun
+    type: code
+    heading: "Dry-run the flow before you save it"
+    lang: text
+    code: |
+      $ python -m flowkit run Workflows/ITrequestintake-*.json \
+          --trigger samples/it-request-normal.json --mocks samples/mocks-intake-ok.json
+        Initialize_SLA_hours    Succeeded
+        Due_date                Succeeded
+        Is_high_priority        Succeeded
+        Alert_on_call_engineer  Skipped
+        Mark_as_triaged         Succeeded
+        Acknowledge_requester   Succeeded
+      Run: Succeeded
+
+      $ python -m flowkit run ... --trigger samples/it-request-test.json
+      Run: Skipped (trigger condition is false: no run is created)
+    narration: >
+      Because it's just JSON, we can run it. Flowkit is a small Python harness in the repo. It evaluates the
+      expressions, follows the run after rules and calls mocks instead of SharePoint and Outlook. A normal request skips
+      the alert. A test item never starts a run. It's a test harness, not the real engine.
+
+  - id: tests
+    type: code
+    heading: "Forty-seven tests, two seconds"
+    lang: text
+    code: |
+      $ python -m pytest
+      tests/test_digest_flow.py ..          tests/test_expressions.py ....................
+      tests/test_intake_flow.py ......      tests/test_lint.py ..................
+      tests/test_solution_pack.py .
+      47 passed in 2.01s
+
+      def test_failed_update_stops_the_acknowledgement(intake):
+          run = run_flow(intake, sample("it-request-normal.json"), failing, now=NOW)
+          assert run.status_of("Mark_as_triaged") == "Failed"
+          assert run.status_of("Acknowledge_requester") == "Skipped"
+          assert run.status == "Failed"
+    narration: >
+      Forty-seven tests in two seconds. The expression tests use the examples from the Microsoft Learn functions
+      reference. The lint tests catch broken run after links, undeclared variables and connections, and timeouts past
+      thirty days. And the flow tests prove each branch, including what happens when the update fails.
+
+  - id: run-high
+    type: screen
+    heading: "The real run: high priority"
+    image: screens/run-high.jpg
+    bar: "Power Automate · IT request intake · Run history"
+    demo: >
+      Run details of a successful run for the High priority item: every action green, "Alert on-call engineer"
+      expanded showing the subject "HIGH priority IT request #<id>: Laptop won't boot before a client demo" and
+      Importance High. Next to it (or second capture) the SharePoint item with Status Triaged and Due date four hours
+      after creation. Mask mailbox addresses that are not contoso test users.
+    narration: >
+      Now the real thing. Alex creates a high priority request. A few minutes later the run appears, every step green.
+      The alert went out with high importance, and the item is triaged with a due date four hours out. Same branches
+      the tests predicted.
+
+  - id: skipped
+    type: screen
+    heading: "The test item: a skipped trigger check"
+    image: screens/all-runs-skipped.jpg
+    bar: "Power Automate · IT request intake · All runs"
+    short: gotcha
+    demo: >
+      Flow details, run history filtered to "All runs" (including trigger checks), showing a skipped trigger check at
+      the time the "[TEST] please ignore" item was created, and no run for it. If the list shows no skipped entry,
+      capture the run history showing only the two real runs.
+    narration: >
+      And the test item. There's no run for it, only a skipped trigger check under all runs. That's the gotcha: when a
+      flow doesn't fire, check the trigger conditions first. One more: an expression in a trigger's inputs, like
+      u t c now, is calculated once when you save, not on every run.
+
+  - id: digest
+    type: screen
+    heading: "The scheduled flow: one email at eight"
+    image: screens/digest.jpg
+    bar: "Outlook · IT requests digest"
+    demo: >
+      The digest email in the service desk test mailbox: subject "IT requests: N open, M overdue", body with the HTML
+      table (ID, Title, Priority, Due). Also acceptable: the run details of "IT requests daily digest" with the
+      Filter array output. Mask real addresses.
+    narration: >
+      The scheduled flow runs weekdays at eight, London time. It gets open items, filters the overdue ones by comparing
+      ticks rather than strings, and sends one table. On a day with nothing open, the condition is false and no email
+      goes out.
+
+  - id: limits
+    type: bullets
+    heading: "Limits worth knowing"
+    bullets:
+      - "A run lasts at most 30 days"
+      - "500 actions per flow, 8 levels of nesting"
+      - "No trigger for 90 days: may be turned off"
+      - "Failing continuously for 14 days: turned off"
+      - "Event triggers poll: give them a few minutes"
+    narration: >
+      A few limits from the Learn limits page. A run can last thirty days at most. A flow can hold five hundred
+      actions and eight levels of nesting. A flow that isn't triggered for ninety days might be turned off, unless the
+      owner has a premium licence. One that fails continuously for fourteen days is turned off. And event triggers
+      poll, so give them a few minutes.
+
+  - id: recap
+    type: bullets
+    heading: "Five habits"
+    bullets:
+      - "Build inside a solution, with connection references"
+      - "Filter in the trigger, not in the first action"
+      - "Use the question mark for anything optional"
+      - "Export, unpack, and keep the JSON in Git"
+      - "Test the branches before the tenant does"
+    narration: >
+      Five habits. Build inside a solution so you get connection references. Filter in the trigger, not in the first
+      action. Use the question mark for anything optional. Export, unpack and keep the JSON in Git. And test the
+      branches before the tenant tests them for you.
+
   - id: outro
     type: outro
     heading: "Code on GitHub, guides on devladlog.com"
     sub: "github.com/devladlog/mg-lab"
     narration: >
-      TODO
+      The solution, the samples, flowkit and all forty-seven tests are on GitHub, and the complete guide is on dev lad
+      log dot com. Next time: approval workflows, with timeouts and escalation. Subscribe so you don't miss it.

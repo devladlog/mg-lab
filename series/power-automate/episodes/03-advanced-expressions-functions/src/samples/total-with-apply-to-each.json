@@ -1,0 +1,63 @@
+{
+  "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+  "contentVersion": "1.0.0.0",
+  "triggers": {
+    "manual": {
+      "type": "Request",
+      "kind": "Button",
+      "inputs": {
+        "schema": {
+          "type": "object",
+          "properties": {
+            "rows": {
+              "type": "array"
+            }
+          }
+        }
+      }
+    }
+  },
+  "actions": {
+    "Initialize_total": {
+      "type": "InitializeVariable",
+      "runAfter": {},
+      "inputs": {
+        "variables": [
+          {
+            "name": "total",
+            "type": "float",
+            "value": 0
+          }
+        ]
+      }
+    },
+    "Apply_to_each_row": {
+      "type": "Foreach",
+      "runAfter": {
+        "Initialize_total": [
+          "Succeeded"
+        ]
+      },
+      "foreach": "@triggerBody()?['rows']",
+      "actions": {
+        "Add_amount": {
+          "type": "IncrementVariable",
+          "runAfter": {},
+          "inputs": {
+            "name": "total",
+            "value": "@items('Apply_to_each_row')?['amount']"
+          }
+        }
+      }
+    },
+    "Total": {
+      "type": "Compose",
+      "runAfter": {
+        "Apply_to_each_row": [
+          "Succeeded"
+        ]
+      },
+      "inputs": "@variables('total')"
+    }
+  }
+}

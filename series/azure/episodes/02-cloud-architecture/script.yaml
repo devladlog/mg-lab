@@ -1,0 +1,290 @@
+# DEVLADLOG Azure — episode 02. Draft script: code scenes are real excerpts from infra/, src/ and tests/,
+# screen scenes are captured by the recorder following demo.md.
+episode: 2
+slug: cloud-architecture
+series_label: "AZURE"
+series_name: "DEVLADLOG Azure"
+file_prefix: "azure"
+title: "Cloud Architecture you can test"
+subtitle: "Bicep, private endpoints, guardrails as tests, Azure Policy"
+voice: am_michael
+thumbnail_text: "CLOUD\nARCHITECTURE\nYOU CAN TEST"
+youtube:
+  title: "Azure Cloud Architecture as Code: Guardrail Tests, PSRule, Private Endpoints | DEVLADLOG Azure #2"
+  tags: [Azure, cloud architecture, Well-Architected Framework, Bicep, PSRule, Azure Policy, private endpoints, App Service, managed identity, infrastructure as code]
+sources:
+  - https://www.devladlog.com/articles/azure/2026-01-01-cloud-architecture-complete-guide-2026/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Cloud architecture you can test"
+    sub: "Decisions in code, guardrails in the pipeline, proof in Azure"
+    short: hook
+    narration: >
+      Most cloud architecture lives in a diagram that nobody tests. Six months later the storage account has a public
+      endpoint and nobody knows when that happened. In this episode the architecture is code, every decision has a test,
+      every exception has an expiry date, and Azure Policy blocks the rest. Welcome to DEVLADLOG Azure.
+
+  - id: pillars
+    type: bullets
+    heading: "Architecture is a set of trade-offs"
+    bullets:
+      - "Well-Architected: Reliability, Security, Cost Optimization"
+      - "... Operational Excellence, Performance Efficiency"
+      - "Every decision helps one pillar and costs another"
+      - "Write the decision down where a machine can check it"
+    narration: >
+      The Azure Well-Architected Framework has five pillars: reliability, security, cost optimization, operational
+      excellence and performance efficiency. Microsoft is clear that design decisions must be balanced across all of
+      them. Every choice helps one pillar and costs another. So the decision has to be written down somewhere a machine
+      can check it.
+
+  - id: plan
+    type: diagram
+    heading: "The reference workload"
+    nodes: ["Policy", "App", "Private", "Data"]
+    labels: ["guardrails first", "App Service", "endpoints + DNS", "no public access"]
+    narration: >
+      Here's the workload. Governance goes in first: two built-in Azure Policy assignments. Then a web app on App
+      Service with a user-assigned managed identity. It reaches a storage account and a key vault only through private
+      endpoints and private DNS zones. Both have public network access disabled. And every resource logs to one Log
+      Analytics workspace.
+
+  - id: profiles
+    type: code
+    heading: "One shape, two environments"
+    lang: bicep
+    code: |
+      var profiles = {
+        lab: {
+          planSku: 'B1',       planCapacity: 1, zoneRedundant: false
+          storageSku: 'Standard_LRS',   keyVaultPurgeProtection: false
+        }
+        prod: {
+          planSku: 'P1v3',     planCapacity: 2, zoneRedundant: true   // Premium v2-v4, two or more
+          storageSku: 'Standard_ZRS',   keyVaultPurgeProtection: true
+        }
+      }
+      var profile = profiles[environment]   // env/lab.bicepparam or env/prod.bicepparam
+    narration: >
+      Lab and production have the same shape. Only the values change, and they live in one place. Production gets a
+      Premium v3 plan with two instances and zone redundancy, which App Service requires: Premium v2 to v4 and at least
+      two instances. Zone-redundant storage and a key vault with purge protection. The lab gets one B1 instance, because
+      it's a lab.
+
+  - id: data
+    type: code
+    heading: "Data tier: private, keyless, logged"
+    lang: bicep
+    code: |
+      resource storage 'Microsoft.Storage/storageAccounts@2023-05-01' = {
+        properties: {
+          publicNetworkAccess: 'Disabled'
+          allowSharedKeyAccess: false
+          minimumTlsVersion: 'TLS1_2'
+          networkAcls: { defaultAction: 'Deny', bypass: 'None' }
+        }
+      }
+      resource blobEndpoint 'Microsoft.Network/privateEndpoints@2024-05-01' = {
+        properties: {
+          subnet: { id: peSubnetId }
+          privateLinkServiceConnections: [{ name: 'blob', properties: {
+            privateLinkServiceId: storage.id, groupIds: ['blob'] } }]
+        }
+      }   // + privateDnsZoneGroups -> privatelink.blob.<storage suffix>
+    narration: >
+      The storage account has public network access disabled and shared keys switched off. The only way in is a private
+      endpoint in its own subnet, registered in the private DNS zone privatelink dot blob. The key vault follows the same
+      pattern, with Azure role-based access control instead of access policies.
+
+  - id: identity
+    type: code
+    heading: "Least privilege, real health check"
+    lang: bicep
+    code: |
+      var roles = {
+        storageBlobDataReader: '2a2b9908-6ea1-4ae2-8e65-a410df84e7d1'
+        keyVaultSecretsUser:   '4633458b-17de-408a-b874-0445c86b69e6'
+      }
+      // assigned on the storage account and the vault, never on the resource group
+
+      siteConfig: {
+        linuxFxVersion: 'DOTNETCORE|10.0'
+        healthCheckPath: '/healthz'
+        ftpsState: 'Disabled'
+        minTlsVersion: '1.2'
+      }
+    narration: >
+      The app's identity gets two data roles, read blobs and read secrets, each scoped to one resource. And App Service
+      health check pings slash health z every minute. Microsoft's guidance is that this path should check the critical
+      dependencies and return a five hundred level code when they fail. So that's what our app does.
+
+  - id: probe
+    type: code
+    heading: "The probe: proves the private path from inside"
+    lang: csharp
+    code: |
+      public async Task<HealthCheckResult> CheckHealthAsync(HealthCheckContext context, CancellationToken ct)
+      {
+          using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+          cts.CancelAfter(options.Value.Timeout);                     // 5 s per dependency
+          try
+          {
+              await container.GetPropertiesAsync(cancellationToken: cts.Token);
+              return HealthCheckResult.Healthy($"container '{container.Name}' reachable");
+          }
+          catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
+          {
+              return HealthCheckResult.Unhealthy(Describe(ex));      // "HTTP 403 AuthorizationFailure"
+          }
+      }
+    narration: >
+      The app is a small dot net ten readiness probe. It reads the container's properties and one secret with the managed
+      identity. If that works, DNS resolved to the private endpoint, the network path is open and the role assignment is
+      in place. Seven x unit tests cover healthy, forbidden, hanging and misconfigured dependencies.
+
+  - id: guardrails
+    type: code
+    heading: "Guardrails as tests: the compiled template"
+    lang: python
+    code: |
+      def test_storage_is_private_and_keyless(of_type):
+          [st] = of_type("Microsoft.Storage/storageAccounts")
+          assert st["properties"]["publicNetworkAccess"] == "Disabled"
+          assert st["properties"]["allowSharedKeyAccess"] is False
+
+      def test_environment_profiles_differ_only_in_resilience(main_template):
+          prod = main_template["variables"]["profiles"]["prod"]
+          assert prod["zoneRedundant"] is True and prod["planCapacity"] >= 2
+
+      $ python -m pytest tests/guardrails -q
+      ...............                                        [100%]
+      15 passed in 7.36s
+    narration: >
+      Now the guardrails. Fifteen pytest tests read the compiled template, what Azure Resource Manager will actually
+      receive. Private and keyless data, least-privilege roles, tags everywhere, no hard-coded regions, diagnostics on
+      every service. I flipped public network access to enabled to check: the test fails in a second and a half.
+
+  - id: psrule
+    type: code
+    heading: "Well-Architected rules, pre-deploy"
+    lang: text
+    code: |
+      $ pwsh infra/Invoke-Guardrails.ps1          # PSRule for Azure, both parameter files
+      lab   pass  118   fail   0   suppressed   6
+              suppressed  Azure.AppService.PlanInstanceCount  asp-contoso-lab
+              suppressed  Azure.AppService.AvailabilityZone   asp-contoso-lab
+              suppressed  Azure.Storage.UseReplication        stcontosolab...
+              suppressed  Azure.KeyVault.PurgeProtect         kv-contoso-lab-...
+              ...
+      prod  pass  123   fail   0   suppressed   1
+              suppressed  Azure.Log.Replication               log-contoso-prod
+
+      # first prod run: 6 failures. Fixed: NSG lateral traversal (x2), private subnets,
+      #   ARR affinity; App Insights dropped (logs go to the workspace). Exception: log replication
+    narration: >
+      Then PSRule for Azure runs Well-Architected rules against both parameter files, locally, no sign-in. The first
+      production run had six failures. Five got fixed. The sixth, workspace replication, is a decision we
+      haven't made yet, so it's a written exception. The lab's six exceptions are the cost trade-offs we chose on purpose.
+
+  - id: policy
+    type: screen
+    heading: "Azure Policy says no"
+    image: screens/policy-deny.jpg
+    bar: "Terminal · infra/try-policy.sh"
+    short: policy
+    demo: >
+      Terminal running infra/try-policy.sh rg-contoso-arch westeurope after governance has been in place for at least
+      five minutes. Two blocks, each ending in a RequestDisallowedByPolicy error: the first names the allowed-locations
+      assignment, the second the require-workload-tag assignment, with our nonComplianceMessage text visible.
+    narration: >
+      Tests protect the template. Azure Policy protects the subscription from everything else. Governance is deployed
+      first, and a new assignment takes about five minutes to apply. Then a network security group in the wrong region is
+      refused, and one without the workload tag is refused too, with the message we wrote into the assignment.
+
+  - id: whatif
+    type: screen
+    heading: "What-if before every deployment"
+    image: screens/what-if.jpg
+    bar: "Terminal · az deployment group what-if"
+    demo: >
+      Output of the what-if step in infra/deploy.sh for env/lab.bicepparam on an empty group: the list of resources to
+      create (green +), ending with the summary line of how many resources will be created. Mask the subscription ID.
+    narration: >
+      The deploy script runs a what-if first, so you see every resource that will be created or changed before anything
+      happens. Then the deployment, then the probe app.
+
+  - id: private
+    type: screen
+    heading: "Inside: healthy. Outside: refused."
+    image: screens/private-proof.jpg
+    bar: "Terminal · infra/prove-private.sh"
+    demo: >
+      Output of infra/prove-private.sh: nslookup showing the privatelink CNAME for the blob endpoint, the az storage and
+      az keyvault calls from the laptop being refused, and finally curl /healthz returning status Healthy with both checks
+      Healthy. Blur account and vault names.
+    narration: >
+      Here's the proof. From my laptop, the storage account and the key vault both refuse the request, even though I'm
+      signed in with enough rights. From inside, the app's health endpoint says healthy for both, through the private
+      endpoints.
+
+  - id: visualizer
+    type: screen
+    heading: "The architecture, as Azure sees it"
+    image: screens/resource-visualizer.jpg
+    bar: "Azure portal · Resource group · Resource visualizer"
+    demo: >
+      Azure portal, the resource group, Resource visualizer: the app, plan, VNet, two private endpoints, storage, key
+      vault, DNS zones and workspace with their links. Mask subscription, tenant and resource-name suffixes.
+    narration: >
+      And this is the resource group in the portal's resource visualizer. Same boxes as the diagram, except this one was
+      drawn by Azure from what's actually deployed.
+
+  - id: gotcha
+    type: code
+    heading: "Gotcha: 78 suppressed results"
+    lang: yaml
+    short: gotcha
+    code: |
+      # First draft: one group, rules + environment only
+      spec:
+        rule: [Azure.AppService.PlanInstanceCount, Azure.Storage.UseReplication, ...]
+        if: { field: tags.environment, equals: lab }
+      # -> "suppressed 78": every rule, against every lab resource
+
+      # Fix: one group per resource type, and every group expires
+      spec:
+        expiresOn: '2027-06-30T00:00:00Z'
+        rule: [Azure.Storage.UseReplication]
+        if: { allOf: [ { field: type, equals: Microsoft.Storage/storageAccounts },
+                       { field: tags.environment, equals: lab } ] }
+    narration: >
+      The gotcha. My first exception file matched on the environment tag only. PSRule reported seventy-eight suppressed
+      results: every listed rule, against every lab resource, including ones that had nothing to do with it. A broad
+      exception hides the next real problem. Now each group targets one resource type, and every group expires. I
+      checked: with a past date, the rule fails again.
+
+  - id: recap
+    type: bullets
+    heading: "Five rules"
+    bullets:
+      - "Same shape in every environment; only values change"
+      - "Data behind private endpoints, identities with data roles"
+      - "Test the compiled template, run Well-Architected rules"
+      - "Exceptions are narrow, justified and expire"
+      - "Policy first, what-if always, prove it from outside"
+    narration: >
+      Five rules. Keep the same shape in every environment and change only the values. Put data behind private
+      endpoints and give identities narrow data roles. Test the compiled template and run Well-Architected rules before
+      you deploy. Make every exception narrow, justified and temporary. And deploy policy first, run what-if every time,
+      and prove isolation from the outside.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The Bicep, the guardrail tests, the PSRule exceptions and the probe app are on GitHub, and the complete guide is on
+      devladlog dot com. Next episode: Azure DevOps and CI CD, where these checks become a pipeline gate. Subscribe so you
+      don't miss it. This was DEVLADLOG Azure, by Momento Galático.

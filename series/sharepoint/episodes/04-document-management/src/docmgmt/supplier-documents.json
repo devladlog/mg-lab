@@ -1,0 +1,36 @@
+{
+  "site": "Contoso Purchasing",
+  "features": { "documentSets": true, "documentId": true },
+  "contentTypeHub": false,
+  "siteColumns": [
+    { "internalName": "Supplier",       "displayName": "Supplier",        "type": "Text",     "id": "b8675005-e237-4a69-9f20-58ba46a02c33" },
+    { "internalName": "PurchDepartment","displayName": "Department",      "type": "Choice",   "id": "a3bf8423-6af4-41c4-b7fd-d53150e67c83",
+      "choices": ["Purchasing", "Facilities", "IT", "Finance"] },
+    { "internalName": "ContractNumber", "displayName": "Contract number", "type": "Text",     "id": "7ad61803-1eb3-41aa-ab47-c7c889beb8b6" },
+    { "internalName": "ContractValue",  "displayName": "Contract value",  "type": "Currency", "id": "5467db35-26f8-40a4-bb34-b0cc120bc2d3" },
+    { "internalName": "ExpiryDate",     "displayName": "Expiry date",     "type": "DateTime", "id": "b22d05da-cfb6-46f5-bd57-c97101ff9a0a", "dateOnly": true },
+    { "internalName": "InvoiceNumber",  "displayName": "Invoice number",  "type": "Text",     "id": "87d2edbc-f21c-410d-8d96-ceaffca71dd7" },
+    { "internalName": "InvoiceDate",    "displayName": "Invoice date",    "type": "DateTime", "id": "bb94487e-36d9-48e3-af8e-d434009d12ca", "dateOnly": true },
+    { "internalName": "InvoiceAmount",  "displayName": "Amount",          "type": "Currency", "id": "fdab186f-28ab-4145-8c7a-6ae81551b87c" }
+  ],
+  "contentTypes": [
+    { "name": "Purchasing Document", "id": "0x010100D5F0B586695B489A84366F90C59E9249", "parent": "Document",
+      "description": "Base type for every purchasing document.",
+      "fields": [ { "name": "Supplier", "required": true }, { "name": "PurchDepartment", "required": true } ] },
+    { "name": "Contract", "id": "0x010100D5F0B586695B489A84366F90C59E924901", "parent": "Purchasing Document",
+      "fields": [ { "name": "ContractNumber", "required": true }, { "name": "ContractValue" }, { "name": "ExpiryDate", "required": true } ] },
+    { "name": "Invoice", "id": "0x010100D5F0B586695B489A84366F90C59E924902", "parent": "Purchasing Document",
+      "fields": [ { "name": "InvoiceNumber", "required": true }, { "name": "InvoiceDate", "required": true }, { "name": "InvoiceAmount" } ] },
+    { "name": "Supplier File", "id": "0x0120D52000B08AC01561CF4CE2A32DBC7238C4ED67", "parent": "Document Set",
+      "description": "One document set per supplier: contracts and invoices together, Supplier shared.",
+      "fields": [ { "name": "Supplier", "required": true } ],
+      "documentSet": { "allowedContentTypes": ["Contract", "Invoice"], "sharedFields": ["Supplier"] } }
+  ],
+  "libraries": [
+    { "title": "Supplier Documents", "url": "SupplierDocuments",
+      "contentTypes": ["Supplier File", "Contract", "Invoice"], "defaultContentType": "Contract",
+      "removeDocumentContentType": true,
+      "requireCheckout": false,
+      "defaultValues": [ { "field": "PurchDepartment", "value": "Purchasing" } ] }
+  ]
+}

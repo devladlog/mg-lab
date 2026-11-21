@@ -1,0 +1,283 @@
+# DEVLADLOG Power Automate — episode 02 (draft: material built and tested locally, demo still to record)
+episode: 2
+slug: approval-workflows-business-process
+series_label: "POWER AUTOMATE"
+series_name: "DEVLADLOG Power Automate"
+file_prefix: "power-automate"
+title: "Approval workflows that always finish"
+subtitle: "Sequential approvals, timeouts, escalation and fallbacks"
+voice: am_michael
+thumbnail_text: "THE APPROVAL\nTHAT NEVER\nCAME BACK"
+youtube:
+  title: "Power Automate Approvals: Sequential, Timeouts and Escalation, Tested | DEVLADLOG Power Automate #2"
+  tags: [Power Automate, approvals, approval workflow, sequential approval, timeout, escalation, run after, SharePoint, Power Platform, business process]
+sources:
+  - https://www.devladlog.com/articles/power-automate/2025-01-02-approval-workflows-complete-guide-2025/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "The approval that never came back"
+    sub: "Sequential approvals, timeouts, escalation, tested"
+    short: hook
+    narration: >
+      A purchase request goes out for approval. The manager is on holiday. Nothing happens for weeks, the run quietly
+      dies, and the requester never hears a thing. In this episode we build an approval flow that always finishes:
+      approved, rejected, or escalated to a human. And we test every path before anyone gets an email.
+
+  - id: blocks
+    type: bullets
+    heading: "The approval building blocks"
+    bullets:
+      - "Start and wait for an approval: create, notify, wait"
+      - "Create an approval plus Wait: for long-running cases"
+      - "First to respond, everyone must approve, custom, sequential"
+      - "Respond from Outlook, Teams or the action center"
+      - "Standard connector; approvals are stored in Dataverse"
+    narration: >
+      The building blocks. Start and wait for an approval creates the request, notifies approvers and pauses the run
+      until it's complete. Create an approval with wait for an approval splits that in two. The types are first to
+      respond, everyone must approve, custom responses, and sequential. Approvers answer from Outlook, Teams or the
+      action center. It's a standard connector, and approvals live in Dataverse.
+
+  - id: policy
+    type: bullets
+    heading: "The policy we're automating"
+    bullets:
+      - "Under 500 euros: approved automatically"
+      - "Otherwise the requester's manager decides"
+      - "5,000 and above: finance after the manager"
+      - "No answer in three days: escalate to purchasing"
+      - "No manager in Entra: purchasing approves"
+    narration: >
+      Here's the purchasing policy. Under five hundred euros is approved automatically. Otherwise the requester's
+      manager decides. From five thousand up, finance approves too, but only after the manager says yes. No answer in
+      three days escalates to the purchasing team. And if someone has no manager in Entra, purchasing approves instead.
+
+  - id: list
+    type: screen
+    heading: "Purchase requests in SharePoint"
+    image: screens/list.jpg
+    bar: "SharePoint · Purchasing · Purchase Requests"
+    demo: >
+      SharePoint list "Purchase Requests": columns Title, Amount (EUR), Justification, Status, Decision by, Decision
+      comments, Created by. Rows by Alex Demo: USB-C cables 120 (Approved, Policy: under 500 EUR), Ergonomic chairs
+      1800, Laptops for two new developers 12500 (Pending). Mask the tenant URL.
+    narration: >
+      The requests live in a SharePoint list. Amount is required, status starts as pending, and the flow writes back
+      who decided and why. The small one at the top was approved by policy in seconds. No human was bothered.
+
+  - id: approval
+    type: code
+    heading: "The approval action, with a timeout"
+    lang: json
+    code: |
+      "Manager_approval": {
+        "type": "OpenApiConnectionWebhook",
+        "runAfter": { "Manager_email": ["Succeeded"] },
+        "limit": { "timeout": "P3D" },
+        "inputs": {
+          "host": { "connectionName": "shared_approvals", "operationId": "StartAndWaitForAnApproval" },
+          "parameters": {
+            "approvalType": "Basic",
+            "WebhookApprovalCreationInput/title": "Manager approval: @{triggerBody()?['Title']} (@{triggerBody()?['Amount']} EUR)",
+            "WebhookApprovalCreationInput/assignedTo": "@outputs('Manager_email')",
+            "WebhookApprovalCreationInput/itemLink": "@triggerBody()?['{Link}']",
+            "WebhookApprovalCreationInput/enableReassignment": true
+          }
+        }
+      }
+    narration: >
+      This is Start and wait for an approval in code view, assigned to the manager we looked up. The line that matters is limit,
+      timeout, P three D: three days in ISO eight six oh one. Without it, the approval waits until the run hits its
+      thirty-day limit and times out with nobody told. Set it in the action's settings.
+
+  - id: fallback
+    type: code
+    heading: "No manager? Fall back, don't fail"
+    lang: json
+    code: |
+      "Get_manager": {
+        "type": "OpenApiConnection",
+        "inputs": { "host": { "operationId": "Manager_V2" },
+                    "parameters": { "id": "@triggerBody()?['Author']?['Email']", "$select": "mail,displayName" } }
+      },
+      "Manager_email": {
+        "type": "Compose",
+        "runAfter": { "Get_manager": ["Succeeded", "Failed"] },
+        "inputs": "@coalesce(body('Get_manager')?['mail'], variables('fallbackApprover'))"
+      }
+    narration: >
+      Get manager from Office three six five Users comes back with no manager found when Entra has no manager for
+      that person. So the next step runs after succeeded or failed, and coalesce picks the manager's mail, or the purchasing
+      team if there isn't one. A failed step that's handled doesn't stop the request.
+
+  - id: decision
+    type: code
+    heading: "One decision object, two stages"
+    lang: json
+    code: |
+      "Record_manager_response": { "type": "SetVariable", "runAfter": { "Manager_approval": ["Succeeded"] },
+        "inputs": { "name": "decision", "value": {
+          "outcome": "@body('Manager_approval')?['outcome']",
+          "by": "@{first(body('Manager_approval')?['responses'])?['responder']?['displayName']} (manager)",
+          "comments": "@{coalesce(first(body('Manager_approval')?['responses'])?['comments'], '')}" } } },
+
+      "Record_manager_timeout": { "type": "SetVariable", "runAfter": { "Manager_approval": ["TimedOut"] },
+        "inputs": { "name": "decision", "value": { "outcome": "TimedOut", "by": "Manager: no response within 3 days" } } },
+
+      "Needs_finance_approval": { "type": "If",
+        "runAfter": { "Record_manager_response": ["Succeeded", "Skipped"], "Record_manager_timeout": ["Succeeded", "Skipped"] },
+        "expression": { "and": [ { "equals": ["@variables('decision')?['outcome']", "Approve"] },
+                                 { "greaterOrEquals": ["@triggerBody()?['Amount']", 5000] } ] } }
+    narration: >
+      Each stage writes one decision object: outcome, who decided, and their comments. One step records a response,
+      another runs only when the approval timed out. The finance condition runs after either, and asks finance only
+      when the manager approved and the amount is five thousand or more. That's a sequential approval with a gate.
+
+  - id: switch
+    type: code
+    heading: "Approve, not Approved"
+    lang: json
+    code: |
+      "Route_decision": {
+        "type": "Switch",
+        "expression": "@variables('decision')?['outcome']",
+        "cases": {
+          "Approved":  { "case": "Approve",  "actions": { "Mark_approved": {}, "Notify_requester_approved": {} } },
+          "Rejected":  { "case": "Reject",   "actions": { "Mark_rejected": {}, "Notify_requester_rejected": {} } },
+          "Timed_out": { "case": "TimedOut", "actions": { "Mark_escalated": {}, "Notify_purchasing_team": {} } }
+        },
+        "default": { "actions": { "Unexpected_outcome": { "type": "Terminate",
+          "inputs": { "runStatus": "Failed", "runError": { "code": "UnexpectedOutcome" } } } } }
+      }
+    short: outcome
+    narration: >
+      A switch routes the decision. Watch the case values. The outcome of an approve or reject approval is Approve or
+      Reject, case sensitive. Not approved with a D. Get that wrong and every request falls through. That's why the
+      default case terminates the run as failed instead of doing nothing quietly.
+
+  - id: outlook
+    type: screen
+    heading: "The approver's side"
+    image: screens/approval-outlook.jpg
+    bar: "Outlook · Approval request"
+    demo: >
+      The actionable approval email in the manager test mailbox (Morgan Manager) for "Manager approval: Laptops for
+      two new developers (12500 EUR)": details with requester, amount, justification (markdown), the item link, and
+      Approve / Reject buttons with a comment box. Alternative: the same request in the Teams Approvals app.
+    narration: >
+      Here's what the manager sees. An actionable email with the amount, the justification, a link to the item, and
+      approve or reject with a comment. Approvers can answer the same request in Teams or in the action center.
+
+  - id: run-sequential
+    type: screen
+    heading: "Manager first, then finance"
+    image: screens/run-sequential.jpg
+    bar: "Power Automate · Purchase request approval · Run history"
+    demo: >
+      Run details for the 12,500 EUR request after both approvals: Manager approval and Finance approval green,
+      Record finance response green, Record finance timeout skipped (grey), Finance result green, Route decision →
+      Approve branch, Mark approved and Notify requester approved green.
+    narration: >
+      The run for the twelve thousand five hundred euro request. The manager approved, then finance approved, in that
+      order. The timeout steps are skipped, the switch took the approve branch, and the item now says approved by
+      finance, with the comment.
+
+  - id: bug
+    type: code
+    heading: "The bug: a handled timeout still fails the run"
+    lang: text
+    code: |
+      $ python -m flowkit run approval-without-join.json --trigger purchase-large.json \
+          --mocks mocks-large-finance-times-out.json
+        Manager_approval              Succeeded
+        Needs_finance_approval        Failed      <- the condition itself fails
+        Finance_approval              TimedOut
+        Record_finance_response       Skipped     <- last step of its branch
+        Record_finance_timeout        Succeeded   <- the handler ran
+        Route_decision                Skipped     <- nobody is told
+      Run: Failed
+
+      WARNING ...Record_finance_response: when 'Finance_approval' ends TimedOut, 'Record_finance_response'
+      is skipped and, as the last action of its branch, marks the scope Failed
+    short: gotcha
+    narration: >
+      Now the bug we hit in the dry run. Finance times out, the timeout handler runs, and still the whole condition
+      fails, the switch is skipped, and nobody is told. The rule is documented: a branch that ends with a skipped
+      action takes the status of the action before it. Here that's the timed out approval.
+
+  - id: fix
+    type: code
+    heading: "The fix: join the branches"
+    lang: json
+    code: |
+      "Finance_result": {
+        "type": "Compose",
+        "runAfter": {
+          "Record_finance_response": ["Succeeded", "Skipped"],
+          "Record_finance_timeout":  ["Succeeded", "Skipped"]
+        },
+        "inputs": "@variables('decision')"
+      }
+    narration: >
+      The fix is one step. A compose called finance result runs after both record steps, on succeeded or skipped. Now
+      every branch ends on something that succeeded, the condition succeeds, and the switch escalates. The linter in
+      the repo flags this pattern, so it can't come back unnoticed.
+
+  - id: tests
+    type: code
+    heading: "Every path, forty-two tests"
+    lang: text
+    code: |
+      $ python -m pytest
+      tests/test_approval_routing.py ............   tests/test_gotchas.py ...
+      tests/test_expressions.py ....................  tests/test_lint.py ......
+      tests/test_solution_pack.py .
+      42 passed in 2.41s
+
+      test_under_500_is_auto_approved_without_asking_anyone
+      test_5000_and_above_goes_to_finance_after_the_manager
+      test_no_response_in_three_days_escalates[manager] / [finance]
+      test_no_manager_in_entra_falls_back_to_the_purchasing_team
+      test_handled_timeout_can_still_fail_the_run_without_a_join
+    narration: >
+      Forty-two tests in under three seconds. Auto approval, manager only, manager then finance, rejections at either
+      stage, timeouts at either stage, no manager in Entra, a broken approval that must fail loudly, and both gotchas
+      reproduced on purpose. Mocked approvals, so nobody's inbox fills up.
+
+  - id: escalated
+    type: screen
+    heading: "Silence becomes an escalation"
+    image: screens/escalated.jpg
+    bar: "Power Automate · Purchase request approval · timed out run"
+    demo: >
+      Run details of a request where the manager approval timed out (lab copy with timeout PT5M): Manager approval
+      orange/timed out, Record manager timeout green, Route decision → TimedOut branch, Mark escalated and Notify
+      purchasing team green. Plus the high-importance escalation email in the purchasing test mailbox.
+    narration: >
+      And the case this episode is about. For the recording, the timeout is five minutes instead of three days. The
+      manager doesn't answer, the approval times out, the item is marked escalated, and purchasing gets a high
+      importance email with a link. The run succeeds, because the timeout was handled.
+
+  - id: recap
+    type: bullets
+    heading: "Approvals that always finish"
+    bullets:
+      - "Every approval gets a timeout, and a step for it"
+      - "Compare with Approve and Reject, exactly"
+      - "Handle a missing manager with a fallback"
+      - "Join branches after a handled failure"
+      - "Longer than 30 days: Create an approval and Dataverse"
+    narration: >
+      Five rules. Give every approval a timeout and a step that handles it. Compare with Approve and Reject, exactly.
+      Handle a missing manager with a fallback. Join branches after a handled failure. And if a decision can take
+      longer than thirty days, split it: create the approval in one flow and act on the response in another.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The solution, the samples and all forty-two tests are on GitHub, and the complete guide is on dev lad log dot
+      com. Next in the series: advanced expressions and functions. Subscribe so you don't miss it.

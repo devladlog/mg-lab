@@ -1,0 +1,107 @@
+Screens:
+  LendScreen:
+    Properties:
+      Fill: =RGBA(245, 246, 250, 1)
+    Children:
+      - lblHeader:
+          Control: Label
+          Properties:
+            Text: ="Lend " & galEquipment.Selected.'Asset tag'
+            X: =24
+            Y: =24
+            Width: =Parent.Width - 48
+            Height: =48
+            Size: =24
+            FontWeight: =FontWeight.Semibold
+      - lblDevice:
+          Control: Label
+          Properties:
+            Text: =galEquipment.Selected.Name & " · " & Text(galEquipment.Selected.Status)
+            X: =24
+            Y: =72
+            Width: =Parent.Width - 48
+            Height: =32
+      - txtEmail:
+          Control: Classic/TextInput
+          Properties:
+            Default: =""
+            HintText: ="alex.demo@contoso.com"
+            X: =24
+            Y: =120
+            Width: =Parent.Width - 48
+            Height: =48
+      - dpLoan:
+          Control: Classic/DatePicker
+          Properties:
+            DefaultDate: =Today()
+            X: =24
+            Y: =184
+            Width: =Parent.Width - 48
+            Height: =48
+      - dpDue:
+          Control: Classic/DatePicker
+          Properties:
+            DefaultDate: =DateAdd(Today(), DefaultLoanDays, TimeUnit.Days)
+            X: =24
+            Y: =248
+            Width: =Parent.Width - 48
+            Height: =48
+      - lblError:
+          Control: Label
+          Properties:
+            # First problem wins; empty text means the loan can be saved.
+            Text: |-
+              =With(
+                  { days: DateDiff(dpLoan.SelectedDate, dpDue.SelectedDate, TimeUnit.Days) },
+                  If(
+                      galEquipment.Selected.Status <> 'Status (Equipment)'.Available, "This device is not available.",
+                      IsBlank(txtEmail.Text), "Enter the borrower's email.",
+                      !IsMatch(txtEmail.Text, Match.Email), "That doesn't look like an email address.",
+                      days < 0, "The due date can't be before the loan date.",
+                      days > MaxLoanDays, "Loans are limited to " & MaxLoanDays & " days.",
+                      ""
+                  )
+              )
+            Color: =RGBA(168, 0, 0, 1)
+            X: =24
+            Y: =312
+            Width: =Parent.Width - 48
+            Height: =48
+      - btnLend:
+          Control: Classic/Button
+          Properties:
+            Text: ="Lend"
+            DisplayMode: =If(IsBlank(lblError.Text), DisplayMode.Edit, DisplayMode.Disabled)
+            # Two writes, the loan and then the device status. They are not one transaction, and ";" doesn't stop on
+            # an error, so each write gets its own IfError pair. The last argument runs only if both succeeded.
+            OnSelect: |-
+              =IfError(
+                  Collect(
+                      Loans,
+                      {
+                          Loan: galEquipment.Selected.'Asset tag' & " - " & First(Split(txtEmail.Text, "@")).Value & " - " & Text(dpLoan.SelectedDate, "yyyy-mm-dd"),
+                          Equipment: galEquipment.Selected,
+                          'Borrower email': txtEmail.Text,
+                          'Loan date': dpLoan.SelectedDate,
+                          'Due date': dpDue.SelectedDate
+                      }
+                  ),
+                  Notify("Could not save the loan: " & FirstError.Message, NotificationType.Error),
+                  Patch(Equipment, galEquipment.Selected, { Status: 'Status (Equipment)'.'On loan' }),
+                  Notify("Loan saved, but the device status wasn't updated: " & FirstError.Message, NotificationType.Warning),
+                  Notify("Loan saved: " & galEquipment.Selected.'Asset tag', NotificationType.Success);
+                  Back()
+              )
+            X: =24
+            Y: =376
+            Width: =(Parent.Width - 64) / 2
+            Height: =48
+      - btnCancel:
+          Control: Classic/Button
+          Properties:
+            Text: ="Cancel"
+            OnSelect: =Back()
+            X: =40 + (Parent.Width - 64) / 2
+            Y: =376
+            Width: =(Parent.Width - 64) / 2
+            Height: =48

@@ -1,0 +1,31 @@
+
+# Tokens: Alex is an employee, Sam has the Claims.Approve app role
+alex: eyJhbGciOiJIUzI1NiIsInR5...   sam: eyJhbGciOiJIUzI1NiIsInR5...
+
+# 1. No token -> 401
+HTTP/1.1 401 Unauthorized
+WWW-Authenticate: Bearer
+
+# 2. Invalid claim -> automatic 400 from [ApiController]
+{"type":"https://tools.ietf.org/html/rfc9110#section-15.5.1","title":"One or more validation errors occurred.","status":400,"errors":{"Amount":["The field Amount must be between 0.01 and 5000."],"Category":["The Category field does not equal any of the values specified in AllowedValuesAttribute."],"Currency":["Currency must be a three-letter ISO code, like EUR."],"IncurredOn":["The IncurredOn field is required."],"Description":["The field Description must be a string with a minimum length of 3 and a maximum length of 200."]},"traceId":"00-8cba3ce505b19d85ce5370bd97b4700e-6e7f3a7263a9feac-00"}
+<- HTTP 400
+
+# 3. Alex submits a claim -> 201 Created + Location
+HTTP/1.1 201 Created
+Location: http://localhost:5252/api/claims/1
+{"id":1,"description":"Train to Porto","amount":48.50,"currency":"EUR","incurredOn":"2026-11-21","category":"Travel","submittedBy":"alex.demo","status":"Submitted","submittedAt":"2026-11-21T03:35:39.7575178+00:00","approvedBy":null}
+
+# 4. Alex tries to approve -> 403 (no Claims.Approve role)
+{"type":"https://tools.ietf.org/html/rfc9110#section-15.5.4","title":"Forbidden","status":403,"traceId":"00-cb5ac72927386d26a80145e17203bbd8-2e8bb8b502616622-00"}
+<- HTTP 403
+
+# 5. Sam approves -> 200
+{"id":1,"description":"Train to Porto","amount":48.50,"currency":"EUR","incurredOn":"2026-11-21","category":"Travel","submittedBy":"alex.demo","status":"Approved","submittedAt":"2026-11-21T03:35:39.7575178+00:00","approvedBy":"sam.approver"}
+<- HTTP 200
+
+# 6. Sam approves again -> 409 problem details from the exception handler
+{"type":"https://tools.ietf.org/html/rfc9110#section-15.5.10","title":"Claim already approved.","status":409,"detail":"Claim 1 was approved by sam.approver.","traceId":"00-8d3b56f043ef88a70fed7eaf90f6ff1f-018e9c96a785f17d-00"}
+<- HTTP 409
+
+# 7. Five more submits -> 429: limit is 5 per user per minute, and the 400 from step 2 counted too
+201 201 201 429 429 

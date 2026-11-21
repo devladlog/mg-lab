@@ -1,0 +1,294 @@
+# DEVLADLOG Power Apps — episode 04. Draft: code scenes are real excerpts from src/ and tests/, screen scenes need the lab recording.
+episode: 4
+slug: dataverse-integration
+series_label: "POWER APPS"
+series_name: "DEVLADLOG Power Apps"
+file_prefix: "powerapps"
+title: "Dataverse integration: upsert in, changes out"
+subtitle: "Alternate keys, ExecuteMultiple and change tracking with the SDK for .NET"
+voice: am_michael
+thumbnail_text: "DATAVERSE\nUPSERT IN\nCHANGES OUT"
+youtube:
+  title: "Dataverse Integration in C#: Alternate Keys, Upsert, Change Tracking | DEVLADLOG Power Apps #4"
+  tags: [Dataverse, Power Apps, Dataverse SDK, ServiceClient, alternate keys, upsert, ExecuteMultiple, change tracking, RetrieveEntityChanges, C#, dotnet, data integration, Power Platform]
+sources:
+  - https://www.devladlog.com/articles/powerapps/2026-02-17-dataverse-integration-complete-guide-2026/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Two systems, one truth about every laptop"
+    sub: "Upsert in, changes out, and the bug that resets every loan"
+    short: hook
+    narration: >
+      Your apps know who borrowed the laptop. The asset register knows what the laptop is. Integrate them naively and
+      every night the import quietly marks every lent laptop as available again. In this episode we connect an external
+      system to Dataverse properly, with alternate keys, upserts and change tracking, in C sharp. Welcome to DEVLADLOG
+      Power Apps.
+
+  - id: plan
+    type: bullets
+    heading: "EquipmentSync: three commands"
+    bullets:
+      - "setup: alternate key on the asset tag, change tracking on"
+      - "import: upsert register rows by asset tag, in batches"
+      - "export: only what changed since last run, back to the register"
+      - "Dataverse SDK for .NET, ServiceClient, .NET 8"
+      - "47 tests against a fake that follows the documented behaviour"
+    narration: >
+      The Equipment table from episode one stays the shared truth. A small dot net console app, Equipment Sync, has three
+      commands. Setup prepares the table. Import upserts the nightly register export. Export sends back only what changed
+      since the last run, like a laptop that was lent in the phone app.
+
+  - id: key
+    type: code
+    heading: "An alternate key, and wait for it"
+    lang: csharp
+    code: |
+      await service.ExecuteAsync(new CreateEntityKeyRequest
+      {
+          EntityName = Equipment.Table,
+          EntityKey = new EntityKeyMetadata
+          {
+              SchemaName = Equipment.KeySchemaName,
+              DisplayName = new Label("Asset tag key", 1033),
+              KeyAttributes = [Equipment.AssetTag],
+          },
+      }, ct);
+
+      // then poll RetrieveEntityKeyRequest:
+      // Pending -> InProgress -> Active, or Failed (fix data, ReactivateEntityKey)
+    narration: >
+      The register doesn't know Dataverse IDs, it knows asset tags. So we make the asset tag an alternate key. The key is
+      backed by a database index that's built in the background, so setup polls until the status is active. If it fails,
+      it's usually duplicate tags already in the table: fix the data, then reactivate the key.
+
+  - id: key-screen
+    type: screen
+    heading: "The key, Active"
+    image: screens/alternate-key.jpg
+    bar: "Power Apps · Tables · Equipment · Keys"
+    demo: >
+      make.powerapps.com, DEV environment, Tables > Equipment > Keys: "Asset tag key" (contoso_assettagkey) with column
+      "Asset tag" and status Active. Optional cutaway: the terminal output of `dotnet run -- setup --enable-change-tracking`
+      showing "Alternate key contoso_assettagkey created", "Index status: ..." lines and "Alternate key index is Active."
+      Mask environment name and URL.
+    narration: >
+      Here it is in the maker portal: asset tag key, on the asset tag column, active. Behind it, the setup command you just
+      saw, printing the index status until it's ready.
+
+  - id: entity
+    type: code
+    heading: "Upsert by key: the key goes in KeyAttributes"
+    lang: csharp
+    code: |
+      var entity = new Entity(Equipment.Table, Equipment.AssetTag, row.AssetTag)
+      {
+          [Equipment.Name] = row.Name,
+          [Equipment.Category] = new OptionSetValue(Equipment.Categories[row.Category]),
+          [Equipment.SerialNumber] = row.SerialNumber,          // null clears it
+          [Equipment.PurchaseDate] = row.PurchaseDate?.ToDateTime(TimeOnly.MinValue, DateTimeKind.Unspecified),
+      };
+      if (StatusFromRegister(row) is { } status) entity[Equipment.Status] = new OptionSetValue(status);
+
+      new UpsertRequest { Target = entity }
+    narration: >
+      Each row becomes an upsert. The entity constructor takes the key name and value, so the tag lives in Key Attributes,
+      not in the attributes. Microsoft's guidance is explicit: don't repeat key values in the data, because on create the
+      data wins, even if it's different. If the tag exists, it's an update. If not, a create.
+
+  - id: batch
+    type: code
+    heading: "ExecuteMultiple: one bad row costs one row"
+    lang: csharp
+    code: |
+      var request = new ExecuteMultipleRequest
+      {
+          Settings = new ExecuteMultipleSettings { ContinueOnError = true, ReturnResponses = true },
+          Requests = new OrganizationRequestCollection(),
+      };
+      request.Requests.AddRange(requests);   // batch size 10 by default, 1,000 at most
+      var response = (ExecuteMultipleResponse)await service.ExecuteAsync(request, ct);
+
+      // per row: item.Fault != null -> Failed, else UpsertResponse.RecordCreated -> Created or Updated
+    narration: >
+      Why Execute Multiple and not Upsert Multiple, which is faster? On standard tables, one error in a bulk operation rolls
+      back the whole request. Execute Multiple runs each upsert in its own transaction, so with continue on error, a bad
+      row costs one row. And Microsoft recommends starting with small batches, ten, and letting service protection limits
+      tell you when to slow down. Service Client already handles those retries.
+
+  - id: dryrun
+    type: code
+    heading: "Reject locally, before the round trip"
+    lang: text
+    code: |
+      $ dotnet run -- import samples/asset-register.csv --dry-run
+      line 11 CT-51: rejected, asset tag 'CT-51' is not like CT-0042
+      line 12 CT-0515: rejected, purchase date '10/11/2026' is not yyyy-MM-dd
+      line 13 CT-0513: rejected, duplicate of line 9
+      Upsert contoso_equipment(contoso_assettag='CT-0311') contoso_name=Phone,
+             contoso_category=415000002, ..., contoso_status=415000002
+      9 rows to upsert in 1 batches of up to 10, 3 rejected.
+    narration: >
+      A dry run shows exactly what would be sent, without connecting. Three rows never leave the machine: a malformed tag,
+      a date in the wrong format, and a duplicate. The tag pattern also keeps out characters like slash and colon, which
+      Microsoft says break upserts by alternate key.
+
+  - id: gotcha
+    type: code
+    heading: "The trap: Upsert has no 'only on create'"
+    lang: csharp
+    short: gotcha
+    code: |
+      // register says "in_service" -> send NO status (Available vs On loan is the app's job)
+      internal static int? StatusFromRegister(AssetRow row) => row.RegisterStatus switch
+      {
+          "in_repair" => Equipment.InRepair,
+          "retired" => Equipment.Retired,
+          _ => null,
+      };
+
+      // pass 2: only rows the upsert CREATED get Available
+      if (upsert.RecordCreated && StatusFromRegister(row) is null) needsStatus.Add((row, upsert.Target.Id));
+
+      Passed  The_nightly_import_does_not_put_a_lent_laptop_back_to_Available
+    narration: >
+      Now the trap. New devices need a status, so the obvious move is to send available on every row. But upsert writes
+      every attribute on update too, so every night every lent laptop would become available again. Upsert has no only on
+      create. So the register sends status only for repair and retirement, and a second pass sets available just for the
+      rows that upsert created. A test pins it.
+
+  - id: import-screen
+    type: screen
+    heading: "Import, and the loan survives"
+    image: screens/import-run.jpg
+    bar: "Terminal · EquipmentSync import · Model-driven app · Equipment"
+    demo: >
+      Before: in the Equipment Desk phone app (episode 2) lend CT-0043 so its Status is "On loan". Then terminal:
+      `dotnet run -- import samples/asset-register.csv` showing "created N, updated M, failed 0, rejected 3 (... ExecuteMultiple
+      requests)" (first run: created 9 if the table was empty; with episode 1-3 data most rows are updates). Cut to the
+      model-driven app, Equipment view: CT-0512 "Laptop 16, docked" and CT-0513/CT-0514 present with Status Available,
+      CT-0311 In repair, CT-0400 Retired, and CT-0043 still "On loan". Mask environment, app user and URL.
+    narration: >
+      In the lab. The phone app lends laptop zero zero four three. Run the import: rows created and updated, three rejected.
+      In the model-driven app the new devices are there and available, the phone is in repair, the dock retired, and the
+      lent laptop is still on loan.
+
+  - id: tracking
+    type: code
+    heading: "Change tracking is a one-way switch"
+    lang: csharp
+    code: |
+      if (!allowEnable)
+          throw new InvalidOperationException("Change tracking is off for contoso_equipment. It can't be turned off "
+              + "again once enabled: re-run with --enable-change-tracking to confirm.");
+
+      await service.ExecuteAsync(new UpdateEntityRequest
+      {
+          Entity = new EntityMetadata { LogicalName = Equipment.Table, MetadataId = table.MetadataId, ChangeTrackingEnabled = true },
+      }, ct);
+      await service.ExecuteAsync(new PublishXmlRequest { ParameterXml = "..." }, ct);
+    narration: >
+      For the way back we need change tracking on the table. Microsoft's docs say once you enable it, you can't disable it.
+      So setup refuses unless you pass enable change tracking on purpose. A setup script shouldn't make irreversible changes
+      by default.
+
+  - id: changes
+    type: code
+    heading: "RetrieveEntityChanges: token in, token out"
+    lang: csharp
+    code: |
+      var request = new RetrieveEntityChangesRequest
+      {
+          EntityName = Equipment.Table,
+          Columns = new ColumnSet(Equipment.AssetTag, Equipment.Status),
+          PageInfo = new PagingInfo { Count = pageSize, PageNumber = 1, ReturnTotalRecordCount = false },
+          DataVersion = fullSync ? null : state.DataToken,
+      };
+      ...
+      if (!changes.MoreRecords) { state.DataToken = changes.DataToken; ... return; }   // token moves last
+      request.PageInfo.PageNumber++;
+      request.PageInfo.PagingCookie = changes.PagingCookie;
+    narration: >
+      Retrieve entity changes takes the token from the last run and returns only what changed since. No token means every
+      row, as new. Results are paged, with a paging cookie. And the token is saved only after the last page is written, so
+      a crash halfway means the next run simply repeats, instead of silently skipping changes.
+
+  - id: deletes
+    type: code
+    heading: "A deleted row is just an id"
+    lang: csharp
+    short: deletes
+    code: |
+      case RemovedOrDeletedItem { RemovedItem: var r }:
+          if (state.Tags.Remove(r.Id, out var oldTag))
+          {
+              csv.WriteLine($"{AssetRegisterCsv.Quote(oldTag)},,deleted");
+              deleted++;
+          }
+          else unknown++; // created and deleted between two runs: the register never knew it
+          break;
+
+      Passed  A_deleted_row_comes_back_as_an_id_and_the_state_supplies_the_tag
+    narration: >
+      Here's a detail that bites. A deleted row comes back as a reference with an ID, not the row. The register knows tags,
+      not Dataverse IDs. So the exporter remembers which tag each ID had from earlier runs. And a device created and deleted
+      between two runs still shows up as deleted, so we count it rather than send a blank tag.
+
+  - id: limits
+    type: bullets
+    heading: "Read this before you schedule it"
+    bullets:
+      - "Tokens expire: 7 days by default (ExpireChangeTrackingInDays)"
+      - "Expired token: stop and run --full, don't guess"
+      - "RetrieveEntityChanges needs organization-level Read"
+      - "App user: unlicensed, custom security role"
+      - "Exit code 2 when rows fail, so the scheduler notices"
+    narration: >
+      Before you schedule it. Change tracking tokens are kept for seven days by default, so a job that's been off for two
+      weeks must do a full sync, and our export stops and says so. The account needs organization level read on the table.
+      Run it as an application user: no licence, but a custom security role. And a non zero exit code when rows fail.
+
+  - id: tests
+    type: code
+    heading: "Forty-seven tests, no tenant"
+    lang: text
+    code: |
+      $ dotnet test EquipmentSync.Tests
+        Passed  First_import_creates_every_device_and_gives_new_ones_a_status
+        Passed  Running_it_again_updates_and_sends_no_status_fix_up
+        Passed  One_bad_row_does_not_sink_the_batch
+        Passed  Creates_the_key_and_waits_for_the_index_to_be_Active
+        Passed  Change_tracking_needs_an_explicit_opt_in_because_it_cant_be_undone
+        Passed  Pages_are_followed_with_the_paging_cookie_and_the_token_moves_only_at_the_end
+        Passed  An_expired_token_stops_with_advice_and_leaves_the_state_alone
+        Passed  Setup_import_and_export_work_together
+
+      Passed!  - Failed: 0, Passed: 47, Total: 47
+    narration: >
+      All of it is tested without a tenant. The code depends on the SDK's I Organization Service interface, and the tests
+      use an in-memory fake that follows the behaviour Microsoft documents for each message. It proves our logic, not the
+      service, which is why the lab run comes next.
+
+  - id: export-screen
+    type: screen
+    heading: "Only what changed"
+    image: screens/export-changes.jpg
+    bar: "Terminal · EquipmentSync export"
+    demo: >
+      Terminal: first `dotnet run -- export ./state.json ./changes.csv` (full sync: one line per device). Then set CT-0043 back to
+      Available in the model-driven app and lend CT-0107 in the phone app; run export again: output "changes: 2 new or updated, 0 deleted (0 unknown),
+      1 page(s)" and `cat changes.csv` showing "asset_tag,status,change", "CT-0043,Available,new_or_updated",
+      "CT-0107,On loan,new_or_updated". Optional: delete CT-0514 in the model-driven app and export again: "CT-0514,,deleted".
+      Mask environment and URL; never show the client secret or state.json token.
+    narration: >
+      And the way back. The first export is a full sync. Put one laptop back to available, lend a monitor in the phone
+      app, export again, and the file has exactly two lines. That's what the register gets every night: changes, not a full dump.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      Equipment Sync, the sample register file and all forty-seven tests are on GitHub, and the complete guide is on
+      devladlog dot com. Links are in the description. Next time: custom connectors. Subscribe so you don't miss it.

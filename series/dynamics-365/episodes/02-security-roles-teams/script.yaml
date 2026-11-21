@@ -1,0 +1,290 @@
+# DEVLADLOG Dynamics 365 — episode 02. Draft: screen scenes need the lab-tenant capture described in demo.md.
+episode: 2
+slug: security-roles-teams
+series_label: "DYNAMICS 365"
+series_name: "DEVLADLOG Dynamics 365"
+file_prefix: "dynamics-365"
+title: "Security Roles & Teams"
+subtitle: "Why a user can, or can't, see a record"
+voice: am_michael
+thumbnail_text: "WHO CAN\nSEE THIS\nRECORD?"
+youtube:
+  title: "Dataverse Security Roles and Teams: Why a User Can or Can't See a Record | DEVLADLOG Dynamics 365 #2"
+  tags: [Dataverse, Dynamics 365, security roles, teams, business units, access teams, Microsoft Entra group teams, Power Platform, RetrievePrincipalAccess, Python]
+sources:
+  - https://www.devladlog.com/articles/dynamics-365/2025-11-14-security-roles-teams-complete-guide-2025/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Who can see this record?"
+    sub: "Security roles, teams and business units, explained by code"
+    short: hook
+    narration: >
+      One user says she can't see a record that was shared with her. Another can read records in a business
+      unit he's not even in. Both are correct, and Dataverse can tell you why. In this episode we turn the
+      documented access rules into a small tool that explains every decision, check it against Dataverse
+      itself, and audit our roles for least privilege.
+
+  - id: blocks
+    type: bullets
+    heading: "The building blocks"
+    bullets:
+      - "Business units: a tree; every user and team belongs to one"
+      - "Security roles: privilege plus access level, per table"
+      - "Owner teams and Entra group teams: own records, have roles"
+      - "Access teams: no roles, no ownership; records are shared with them"
+      - "Roles add up: the least restrictive combination wins"
+    narration: >
+      Four building blocks. Business units form a tree, and every user and team belongs to exactly one. Security
+      roles combine a privilege, like read or write, with an access level, per table. Owner teams and Microsoft
+      Entra group teams can own records and hold roles. Access teams can't do either: you share records with
+      them. And roles add up. You get the least restrictive combination of everything you hold.
+
+  - id: levels
+    type: bullets
+    heading: "Access levels, from narrow to wide"
+    bullets:
+      - "User: records you own, or your team owns, or shared with you"
+      - "Business Unit: every record in your business unit"
+      - "Parent: Child: your business unit and everything below it"
+      - "Organization: everything"
+      - "Organization-owned tables: only Organization or None"
+    narration: >
+      The access level decides how far a privilege reaches. User means records you own, your team owns, or that
+      were shared with you. Business unit means everything in your business unit. Parent child adds every business
+      unit below yours. Organization means everything. Organization owned tables only have organization or none.
+
+  - id: checks
+    type: code
+    heading: "Two checks, in this order"
+    lang: python
+    code: |
+      def explain(m, user_id, record_id, privilege):
+          grants = grants_for(m, user, record.table, privilege)   # direct roles + team roles
+          d = Decision(False, privilege, privilege_check=bool(grants), grants=grants)
+          if not grants:
+              d.reasons.append(f"no role, direct or through a team, grants {privilege}")
+              return d                                   # 1. privilege check failed
+
+          _ownership(m, user, record, grants, d)          # 2. access check: any of
+          _role_access(m, record, grants, d)              #    ownership, role access by level,
+          _shared(m, user, record, privilege, d)          #    shared access
+          d.allowed = bool(d.paths)                       #    (hierarchy security: not modelled)
+          return d
+    narration: >
+      Microsoft documents exactly how access is decided, and the code follows it. First the privilege check: does
+      any role, direct or through a team, grant this privilege on this table at all? The access level doesn't
+      matter yet. Then the access check: ownership, role access by level, or sharing. Any one is enough, and the
+      tool lists every path it finds.
+
+  - id: model
+    type: code
+    heading: "A fictional Contoso, as data"
+    lang: json
+    code: |
+      "teams": [
+        {"name": "PMO Lisbon", "type": "owner", "business_unit": "bu-sales-pt",
+         "roles": ["r-pmo-team"], "members": ["u-diego"]},
+        {"name": "Sales Approvers (Entra group)", "type": "entra-security",
+         "business_unit": "bu-sales", "roles": ["r-approver"], "members": ["u-bruno"]},
+        {"name": "PR-0004 deal room", "type": "access", "business_unit": "bu-sales-pt",
+         "roles": [], "members": ["u-alex", "u-eva"]}
+      ],
+      "roles": [
+        {"name": "Project Approver", "inherited": true,
+         "privileges": {"mgl_projectrequest": {"Read": "ParentChild", "Write": "BusinessUnit"}}},
+        {"name": "PMO Team Member", "inherited": false, "privileges": {...}}
+      ]
+    narration: >
+      The model is plain JSON: business units, roles with their access levels, users, the three kinds of teams,
+      records of the Project Request table from episode one, and shares. You can write it by hand, like this
+      fictional Contoso, or export it from an environment, which we'll do in a minute.
+
+  - id: teambu
+    type: code
+    heading: "Team roles start at the team's business unit"
+    lang: text
+    code: |
+      $ python -m rolecheck explain --user "Bruno Example" --record PR-0001 --privilege Read
+      Bruno Example (Sales) -> mgl_projectrequest PR-0001 owned by Alex Demo (Sales Portugal)
+      ALLOWED: Read
+        + role access: role 'Project Approver' via team 'Sales Approvers (Entra group)'
+          at Parent: Child BU level; record's BU 'Sales Portugal' is 'Sales' or below it
+
+      $ python -m rolecheck explain --user "Bruno Example" --record PR-0001 --privilege Write
+      DENIED: Write
+        - role 'Project Approver' via team 'Sales Approvers (Entra group)' at Business Unit
+          level: covers 'Sales' only, record is in 'Sales Portugal'
+    narration: >
+      Bruno has no role of his own. He gets Project Approver from a Microsoft Entra group team in the Sales
+      business unit. Read is parent child, so it reaches Sales Portugal below it. Write is business unit level,
+      so it stops at Sales. Same user, same record, two different answers, and the tool says exactly why.
+
+  - id: roleeditor
+    type: screen
+    heading: "The same role in the security role editor"
+    image: screens/role-editor.jpg
+    bar: "Power Platform admin center · Security roles · Project Approver"
+    demo: >
+      Power Platform admin center → environment (lab DEV) → Settings → Users + permissions → Security roles →
+      Project Approver. Show the Project Request table row with Read = Parent: Child Business Unit and
+      Write/Append/Append To = Business Unit, and the role's Settings with "Member's privilege inheritance" set to
+      "Direct User (Basic) access level and Team privileges". Mask tenant and environment name.
+    narration: >
+      Here is that role in the lab. Read at parent child business unit, write at business unit. And note the
+      member's privilege inheritance setting. It matters a lot for teams, as we'll see next.
+
+  - id: teamonly
+    type: code
+    heading: "Team privileges only"
+    lang: text
+    code: |
+      $ python -m rolecheck explain --user "Diego Demo" --record PR-0002 --privilege Write
+      ... PR-0002 owned by PMO Lisbon (Sales Portugal)
+      ALLOWED: Write
+        + ownership: user is a member of owner team 'PMO Lisbon'; role 'PMO Team Member'
+          via team 'PMO Lisbon' (Team privileges only) at User level
+
+      $ python -m rolecheck explain --user "Diego Demo" --record PR-0001 --privilege Read
+      ... PR-0001 owned by Alex Demo (Sales Portugal)
+      DENIED: Read
+        privilege check: passed
+        - role 'PMO Team Member' via team 'PMO Lisbon' (Team privileges only) at User level:
+          only usable on records owned by that team
+    narration: >
+      Diego's only role comes from the owner team PMO Lisbon, and that role is set to team privileges only.
+      So he can work on records the team owns, but the same user level privilege does nothing for his own records
+      or anyone else's. Switch the role to direct user basic access level and team privileges, the default for
+      new roles, and his own records work too. There's a test for both settings.
+
+  - id: teamspage
+    type: screen
+    heading: "Owner, access and Entra group teams"
+    image: screens/teams.jpg
+    bar: "Power Platform admin center · Teams"
+    demo: >
+      Power Platform admin center → Settings → Users + permissions → Teams, filtered or sorted so these three are
+      visible with their Team type column: "PMO Lisbon" (Owner), "PR-0004 deal room" (Access) and, if an Entra
+      group was created for the lab, "Sales Approvers" (Microsoft Entra Security group). Mask tenant name and any
+      real user names; only the lab test users may appear.
+    narration: >
+      In the admin center the three team types sit side by side. Owner teams and group teams get roles. Group
+      team membership comes from Microsoft Entra ID. The access team has no roles at all, and that's the gotcha.
+
+  - id: gotcha
+    type: code
+    heading: "Gotcha: sharing doesn't replace a role"
+    lang: text
+    code: |
+      $ python -m rolecheck explain --user "Eva Placeholder" --record PR-0004 --privilege Read
+      Eva Placeholder (Sales Portugal) -> PR-0004 owned by Gil Sample (Sales Portugal)
+      DENIED: Read
+        privilege check: FAILED - no role grants it
+        - member only of teams without roles: teams that don't have roles give no privileges
+        - no role, direct or through a team, grants Read on mgl_projectrequest
+
+      $ python -m rolecheck explain --user "Alex Demo" --record PR-0004 --privilege Read
+      ALLOWED: Read
+        + shared access: record shared with PR-0004 deal room (Append, Read, Write)
+    short: gotcha
+    narration: >
+      Here's the classic support ticket. The record is shared with the deal room access team, and Eva is in that
+      team. She still can't open it. Sharing only counts after the privilege check, and Eva has no role that grants
+      read on this table at all. Alex is in the same team, holds a basic role, and gets in through the share.
+
+  - id: audit
+    type: code
+    heading: "Least-privilege audit, ready for a pipeline"
+    lang: text
+    code: |
+      $ python -m rolecheck audit
+      High   org-wide-destructive  role 'Bulk Cleanup': Delete at Organization level on
+                                   mgl_projectrequest (held by Filipe Contoso).
+      Medium no-privileges         user 'Eva Placeholder': no security role directly or
+                                   through a team (PR-0004 deal room).
+      Info   team-only-user        user 'Diego Demo': every role comes from teams with
+                                   'Team privileges only'.
+      3 finding(s), 1 high
+      $ echo $?
+      1
+    narration: >
+      The same model feeds an audit. Delete at organization level on a user owned table is high. A user with no
+      role at all is medium, because shares won't help her. The exit code is one when there's a high finding, so
+      you can run it in a pipeline after every solution change.
+
+  - id: apitrap
+    type: code
+    heading: "Export from Dataverse, avoiding one API trap"
+    lang: python
+    code: |
+      # RetrieveUserPrivileges returns only the Basic depth for privileges a user
+      # inherits through team membership, whatever the team's roles really grant.
+      # So: read each role's privileges WITH depth, and the memberships separately.
+
+      rp = api.get(f"RetrieveRolePrivilegesRole(RoleId={rid})")["RolePrivileges"]
+      for p in rp:      # {"Depth": "Deep", "PrivilegeName": "prvReadmgl_ProjectRequest", ...}
+          verb, table = parse_privilege_name(p["PrivilegeName"])   # prv + Verb + SchemaName
+          privs.setdefault(table, {})[verb] = DEPTH_FROM_API[p["Depth"]]
+
+      teams = api.get_all("teams?$select=teamid,name,teamtype,_businessunitid_value"
+                          "&$expand=teamroles_association($select=roleid),"
+                          "teammembership_association($select=systemuserid)")
+    short: apitrap
+    narration: >
+      To export the real model, there's a trap in the API. Retrieve user privileges looks perfect, but the docs
+      warn that for privileges inherited through a team it only reports the basic depth, whatever the team's role
+      really grants. So we read every role's privileges with their real depth, and the team memberships separately.
+
+  - id: verify
+    type: screen
+    heading: "Model versus Dataverse, live"
+    image: screens/verify.jpg
+    bar: "Terminal · python -m rolecheck export · verify"
+    demo: >
+      Terminal against the lab: `python -m rolecheck export --table mgl_projectrequest --out lab.json` (show only
+      the stderr summary line "exported N users, N teams, N roles, N records"), then
+      `python -m rolecheck verify --model lab.json --user "<test user 1>" --record <guid>` printing the table
+      privilege / model / dataverse with every row matching and "model matches Dataverse". Do it for one record the
+      user owns and one shared with an access team. Rewrite narration to the real result, including any row that
+      differs. Mask environment URL, GUIDs if desired, real UPNs.
+    narration: >
+      Against the lab, we export the model and ask Dataverse itself with retrieve principal access, for a test user
+      and a record. Each privilege, model on the left, Dataverse on the right. When they match, the explanation is
+      trustworthy. When they don't, the difference points to something the model doesn't cover.
+
+  - id: checkaccess
+    type: screen
+    heading: "Check access, in the app"
+    image: screens/check-access.jpg
+    bar: "Model-driven app · Project Request · Check access"
+    demo: >
+      Signed in as the lab test user, open the same Project Request record (PR-0004) in a model-driven app, command
+      bar → Check access. Show the panel with the access and how it was granted (expected: shared, through the access
+      team), matching the verify output. Mask tenant name and real user names.
+    narration: >
+      And the model driven app has a check access command that shows the same thing for one record. Use it for a
+      single ticket. Use the tool when you want every user, every record, and a pipeline that fails on bad roles.
+
+  - id: recap
+    type: bullets
+    heading: "Five rules"
+    bullets:
+      - "Privilege check first, then ownership, level or share"
+      - "Team roles are measured from the team's business unit"
+      - "Check Member's privilege inheritance on every team role"
+      - "Sharing never replaces a role"
+      - "Audit roles in a pipeline; verify against RetrievePrincipalAccess"
+    narration: >
+      Five rules. Privilege check first, then ownership, access level or a share. Team roles are measured from the
+      team's business unit. Check member's privilege inheritance on every role you give a team. Sharing never
+      replaces a role. And audit your roles in a pipeline, verified against Dataverse itself.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The tool, the fictional Contoso model and all thirty-three tests are on GitHub, and the complete guide to
+      security roles and teams is on devladlog dot com. Links are in the description. Subscribe so you don't miss
+      the next episode.

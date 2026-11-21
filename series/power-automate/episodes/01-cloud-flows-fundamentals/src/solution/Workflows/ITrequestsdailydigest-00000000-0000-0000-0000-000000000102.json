@@ -1,0 +1,110 @@
+{
+  "properties": {
+    "connectionReferences": {
+      "shared_sharepointonline": {
+        "runtimeSource": "embedded",
+        "connection": { "connectionReferenceLogicalName": "cts_sharedsharepointonline_itrequests" },
+        "api": { "name": "shared_sharepointonline" }
+      },
+      "shared_office365": {
+        "runtimeSource": "embedded",
+        "connection": { "connectionReferenceLogicalName": "cts_sharedoffice365_itrequests" },
+        "api": { "name": "shared_office365" }
+      }
+    },
+    "definition": {
+      "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+      "contentVersion": "1.0.0.0",
+      "parameters": {
+        "$connections": { "defaultValue": {}, "type": "Object" },
+        "$authentication": { "defaultValue": {}, "type": "SecureObject" }
+      },
+      "triggers": {
+        "Every_weekday_at_8": {
+          "type": "Recurrence",
+          "recurrence": {
+            "frequency": "Week",
+            "interval": 1,
+            "timeZone": "GMT Standard Time",
+            "schedule": {
+              "weekDays": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"],
+              "hours": ["8"],
+              "minutes": [0]
+            }
+          }
+        }
+      },
+      "actions": {
+        "Get_open_requests": {
+          "type": "OpenApiConnection",
+          "runAfter": {},
+          "inputs": {
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+              "connectionName": "shared_sharepointonline",
+              "operationId": "GetItems"
+            },
+            "parameters": {
+              "dataset": "https://contoso.sharepoint.com/sites/ITHelpdesk",
+              "table": "IT Requests",
+              "$filter": "Status ne 'Done'",
+              "$orderby": "DueDate asc",
+              "$top": 500
+            },
+            "authentication": "@parameters('$authentication')"
+          }
+        },
+        "Overdue_requests": {
+          "type": "Query",
+          "runAfter": { "Get_open_requests": ["Succeeded"] },
+          "inputs": {
+            "from": "@body('Get_open_requests')?['value']",
+            "where": "@less(ticks(coalesce(item()?['DueDate'], '9999-12-31T00:00:00Z')), ticks(utcNow()))"
+          }
+        },
+        "Any_open_requests": {
+          "type": "If",
+          "runAfter": { "Overdue_requests": ["Succeeded"] },
+          "expression": "@greater(length(body('Get_open_requests')?['value']), 0)",
+          "actions": {
+            "Open_requests_table": {
+              "type": "Table",
+              "runAfter": {},
+              "inputs": {
+                "from": "@body('Get_open_requests')?['value']",
+                "format": "HTML",
+                "columns": [
+                  { "header": "ID", "value": "@item()?['ID']" },
+                  { "header": "Title", "value": "@item()?['Title']" },
+                  { "header": "Priority", "value": "@item()?['Priority']?['Value']" },
+                  { "header": "Due (UTC)", "value": "@if(empty(item()?['DueDate']), '-', formatDateTime(coalesce(item()?['DueDate'], '1900-01-01T00:00:00Z'), 'yyyy-MM-dd HH:mm'))" }
+                ]
+              }
+            },
+            "Send_digest": {
+              "type": "OpenApiConnection",
+              "runAfter": { "Open_requests_table": ["Succeeded"] },
+              "inputs": {
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365",
+                  "connectionName": "shared_office365",
+                  "operationId": "SendEmailV2"
+                },
+                "parameters": {
+                  "emailMessage/To": "it-servicedesk@contoso.com",
+                  "emailMessage/Subject": "IT requests: @{length(body('Get_open_requests')?['value'])} open, @{length(body('Overdue_requests'))} overdue",
+                  "emailMessage/Body": "<p>Open requests on @{formatDateTime(utcNow(), 'dddd dd MMM')}:</p>@{body('Open_requests_table')}"
+                },
+                "authentication": "@parameters('$authentication')"
+              }
+            }
+          },
+          "else": { "actions": {} }
+        }
+      },
+      "outputs": {}
+    },
+    "templateName": ""
+  },
+  "schemaVersion": "1.0.0.0"
+}

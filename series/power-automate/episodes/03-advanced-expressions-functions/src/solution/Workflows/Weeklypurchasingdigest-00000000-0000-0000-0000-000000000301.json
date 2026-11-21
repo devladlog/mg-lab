@@ -1,0 +1,300 @@
+{
+  "properties": {
+    "connectionReferences": {
+      "shared_sharepointonline": {
+        "runtimeSource": "embedded",
+        "connection": {
+          "connectionReferenceLogicalName": "cts_sharedsharepointonline_purchasing"
+        },
+        "api": {
+          "name": "shared_sharepointonline"
+        }
+      },
+      "shared_office365": {
+        "runtimeSource": "embedded",
+        "connection": {
+          "connectionReferenceLogicalName": "cts_sharedoffice365_purchasing"
+        },
+        "api": {
+          "name": "shared_office365"
+        }
+      }
+    },
+    "definition": {
+      "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+      "contentVersion": "1.0.0.0",
+      "parameters": {
+        "$connections": {
+          "defaultValue": {},
+          "type": "Object"
+        },
+        "$authentication": {
+          "defaultValue": {},
+          "type": "SecureObject"
+        }
+      },
+      "triggers": {
+        "Every_Monday_at_7": {
+          "type": "Recurrence",
+          "recurrence": {
+            "frequency": "Week",
+            "interval": 1,
+            "timeZone": "GMT Standard Time",
+            "schedule": {
+              "weekDays": [
+                "Monday"
+              ],
+              "hours": [
+                "7"
+              ],
+              "minutes": [
+                0
+              ]
+            }
+          }
+        }
+      },
+      "actions": {
+        "Week_start_local": {
+          "type": "Compose",
+          "runAfter": {},
+          "inputs": "@addDays(startOfDay(convertFromUtc(utcNow(), 'GMT Standard Time')), -7)"
+        },
+        "Week_start_utc": {
+          "type": "Compose",
+          "runAfter": {
+            "Week_start_local": [
+              "Succeeded"
+            ]
+          },
+          "inputs": "@convertToUtc(outputs('Week_start_local'), 'GMT Standard Time', 'yyyy-MM-dd''T''HH:mm:ss''Z''')"
+        },
+        "Week_end_utc": {
+          "type": "Compose",
+          "runAfter": {
+            "Week_start_utc": [
+              "Succeeded"
+            ]
+          },
+          "inputs": "@convertToUtc(addDays(outputs('Week_start_local'), 7), 'GMT Standard Time', 'yyyy-MM-dd''T''HH:mm:ss''Z''')"
+        },
+        "Get_requests": {
+          "type": "OpenApiConnection",
+          "runAfter": {
+            "Week_end_utc": [
+              "Succeeded"
+            ]
+          },
+          "inputs": {
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+              "connectionName": "shared_sharepointonline",
+              "operationId": "GetItems"
+            },
+            "parameters": {
+              "dataset": "https://contoso.sharepoint.com/sites/Purchasing",
+              "table": "Purchase Requests",
+              "$filter": "Created ge '@{outputs('Week_start_utc')}' and Created lt '@{outputs('Week_end_utc')}'",
+              "$top": 5000
+            },
+            "authentication": "@parameters('$authentication')"
+          }
+        },
+        "Approved": {
+          "type": "Query",
+          "runAfter": {
+            "Get_requests": [
+              "Succeeded"
+            ]
+          },
+          "inputs": {
+            "from": "@body('Get_requests')?['value']",
+            "where": "@equals(item()?['Status']?['Value'], 'Approved')"
+          }
+        },
+        "Rows": {
+          "type": "Select",
+          "runAfter": {
+            "Approved": [
+              "Succeeded"
+            ]
+          },
+          "inputs": {
+            "from": "@body('Approved')",
+            "select": {
+              "reference": "PR-@{formatNumber(item()?['ID'], '00000')}",
+              "costCentre": "@if(and(startsWith(item()?['Title'], '[CC-'), greater(indexOf(item()?['Title'], ']'), 4)), toUpper(slice(item()?['Title'], 1, indexOf(item()?['Title'], ']'))), 'Unassigned')",
+              "item": "@trim(slice(item()?['Title'], add(indexOf(item()?['Title'], ']'), 1)))",
+              "requester": "@{item()?['Author']?['DisplayName']}",
+              "amount": "@item()?['Amount']",
+              "submitted": "@{convertFromUtc(item()?['Created'], 'GMT Standard Time', 'dd/MM/yyyy HH:mm')}"
+            }
+          }
+        },
+        "Has_requests": {
+          "type": "If",
+          "runAfter": {
+            "Rows": [
+              "Succeeded"
+            ]
+          },
+          "expression": {
+            "and": [
+              {
+                "greater": [
+                  "@length(body('Rows'))",
+                  0
+                ]
+              }
+            ]
+          },
+          "actions": {
+            "XML_source": {
+              "type": "Compose",
+              "runAfter": {},
+              "inputs": {
+                "root": {
+                  "row": "@body('Rows')"
+                }
+              }
+            },
+            "Total": {
+              "type": "Compose",
+              "runAfter": {
+                "XML_source": [
+                  "Succeeded"
+                ]
+              },
+              "inputs": "@xpath(xml(outputs('XML_source')), 'sum(/root/row/amount)')"
+            },
+            "Cost_centre_list": {
+              "type": "Select",
+              "runAfter": {
+                "Total": [
+                  "Succeeded"
+                ]
+              },
+              "inputs": {
+                "from": "@body('Rows')",
+                "select": "@item()?['costCentre']"
+              }
+            },
+            "By_cost_centre": {
+              "type": "Select",
+              "runAfter": {
+                "Cost_centre_list": [
+                  "Succeeded"
+                ]
+              },
+              "inputs": {
+                "from": "@sort(union(body('Cost_centre_list'), body('Cost_centre_list')))",
+                "select": {
+                  "costCentre": "@item()",
+                  "requests": "@xpath(xml(outputs('XML_source')), concat('count(/root/row[costCentre=\"', item(), '\"])'))",
+                  "total": "@xpath(xml(outputs('XML_source')), concat('sum(/root/row[costCentre=\"', item(), '\"]/amount)'))"
+                }
+              }
+            },
+            "Top_three": {
+              "type": "Compose",
+              "runAfter": {
+                "By_cost_centre": [
+                  "Succeeded"
+                ]
+              },
+              "inputs": "@take(reverse(sort(body('Rows'), 'amount')), 3)"
+            },
+            "Cost_centre_table": {
+              "type": "Table",
+              "runAfter": {
+                "Top_three": [
+                  "Succeeded"
+                ]
+              },
+              "inputs": {
+                "from": "@body('By_cost_centre')",
+                "format": "HTML",
+                "columns": [
+                  {
+                    "header": "Cost centre",
+                    "value": "@item()?['costCentre']"
+                  },
+                  {
+                    "header": "Requests",
+                    "value": "@item()?['requests']"
+                  },
+                  {
+                    "header": "Total (EUR)",
+                    "value": "@formatNumber(item()?['total'], '#,##0.00', 'en-US')"
+                  }
+                ]
+              }
+            },
+            "Top_three_table": {
+              "type": "Table",
+              "runAfter": {
+                "Cost_centre_table": [
+                  "Succeeded"
+                ]
+              },
+              "inputs": {
+                "from": "@outputs('Top_three')",
+                "format": "HTML",
+                "columns": [
+                  {
+                    "header": "Reference",
+                    "value": "@item()?['reference']"
+                  },
+                  {
+                    "header": "Item",
+                    "value": "@item()?['item']"
+                  },
+                  {
+                    "header": "Requester",
+                    "value": "@item()?['requester']"
+                  },
+                  {
+                    "header": "Amount (EUR)",
+                    "value": "@formatNumber(item()?['amount'], '#,##0.00', 'en-US')"
+                  },
+                  {
+                    "header": "Submitted (Lisbon)",
+                    "value": "@item()?['submitted']"
+                  }
+                ]
+              }
+            },
+            "Send_digest": {
+              "type": "OpenApiConnection",
+              "runAfter": {
+                "Top_three_table": [
+                  "Succeeded"
+                ]
+              },
+              "inputs": {
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365",
+                  "connectionName": "shared_office365",
+                  "operationId": "SendEmailV2"
+                },
+                "parameters": {
+                  "emailMessage/To": "finance-approvers@contoso.com",
+                  "emailMessage/Subject": "Approved purchases, week of @{formatDateTime(outputs('Week_start_local'), 'd MMMM yyyy')}: @{formatNumber(outputs('Total'), '#,##0.00', 'en-US')} EUR",
+                  "emailMessage/Body": "<p>@{length(body('Rows'))} approved purchase requests submitted between @{formatDateTime(outputs('Week_start_local'), 'dddd d MMMM')} and @{formatDateTime(addDays(outputs('Week_start_local'), 6), 'dddd d MMMM')} (Lisbon time).</p><h3>By cost centre</h3>@{body('Cost_centre_table')}<h3>Top three</h3>@{body('Top_three_table')}",
+                  "emailMessage/Importance": "Normal"
+                },
+                "authentication": "@parameters('$authentication')"
+              }
+            }
+          },
+          "else": {
+            "actions": {}
+          }
+        }
+      },
+      "outputs": {}
+    },
+    "templateName": ""
+  },
+  "schemaVersion": "1.0.0.0"
+}

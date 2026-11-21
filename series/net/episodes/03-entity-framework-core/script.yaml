@@ -1,0 +1,306 @@
+# DEVLADLOG .NET — episode 03 (draft; screens are captured in the lab, see demo.md)
+episode: 3
+slug: entity-framework-core
+series_label: ".NET"
+series_name: "DEVLADLOG .NET"
+file_prefix: "net"
+title: "Entity Framework Core 10"
+subtitle: "Migrations, concurrency, SQLite locally, Azure SQL in Azure"
+voice: am_michael
+thumbnail_text: "EF CORE 10\nNO LOST\nUPDATES"
+youtube:
+  title: "EF Core 10: Migrations, Concurrency Tokens, SQLite + Azure SQL (Real Demo) | DEVLADLOG .NET #3"
+  tags: [Entity Framework Core, EF Core 10, .NET 10, C#, migrations, optimistic concurrency, concurrency token, SQLite, Azure SQL Database, managed identity, Minimal APIs, xUnit, dotnet ef]
+sources:
+  - https://www.devladlog.com/articles/dotnet/2026-05-01-entity-framework-core-complete-guide-2026/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Entity Framework Core 10"
+    sub: "The approver approved 40,000. The database said 400,000."
+    short: hook
+    narration: >
+      An approver opens a request for forty thousand. While he reads it, the requester raises it to four
+      hundred thousand. The approver clicks approve. What got approved? In this episode we move our API to Entity
+      Framework Core ten, and make sure the answer is: nothing, until he has seen the new number. Welcome to
+      DEVLADLOG dot net.
+
+  - id: plan
+    type: bullets
+    heading: "What we're building"
+    bullets:
+      - "Episode 1's project requests API, now on EF Core 10"
+      - "SQLite on your laptop, Azure SQL Database in Azure"
+      - "Migrations for both providers, a reviewed SQL script for production"
+      - "Reads are projections: one SELECT, nothing tracked"
+      - "Writes carry a version: stale version, 409"
+    narration: >
+      In episode one, the API kept everything in memory, so every restart wiped the data. Today it gets a real
+      database. SQLite on your laptop and in the tests, Azure SQL Database in Azure, from the same model. Migrations
+      for both, reads as projections, and every write carries the version the user actually saw.
+
+  - id: model
+    type: code
+    heading: "The model, configured in one place"
+    lang: csharp
+    code: |
+      public void Configure(EntityTypeBuilder<ProjectRequest> e)
+      {
+          e.ToTable("ProjectRequests");
+          e.Property(r => r.Title).HasMaxLength(100).IsRequired();
+          e.Property(r => r.Budget).HasPrecision(18, 2);            // decimal(18,2) on SQL Server
+          e.Property(r => r.Priority).HasConversion<string>().HasMaxLength(16);
+          e.Property(r => r.Version).IsConcurrencyToken();          // UPDATE ... WHERE Id = @id AND Version = @v
+
+          e.HasOne(r => r.Department).WithMany(d => d.Requests)
+              .HasForeignKey(r => r.DepartmentId)
+              .OnDelete(DeleteBehavior.Restrict);                   // no cascade: requests are records
+
+          e.HasIndex(r => new { r.Status, r.Priority });            // 2nd migration: the list filters on these
+      }
+    narration: >
+      The mapping lives in entity type configuration classes, not attributes. Titles get a maximum length, the
+      budget is decimal eighteen comma two, enums are stored as readable strings, and deleting a department with
+      requests is refused. The version property is a concurrency token. Remember that one.
+
+  - id: providers
+    type: code
+    heading: "One model, two providers"
+    lang: csharp
+    code: |
+      var provider = config["Database:Provider"] ?? "Sqlite";
+      switch (provider)
+      {
+          case "SqlServer":
+              services.AddDbContext<RequestsDbContext>(o => o.UseSqlServer(connectionString,
+                  sql => sql.EnableRetryOnFailure()));          // transient Azure SQL errors are retried
+              break;
+          case "Sqlite":
+              services.AddDbContext<SqliteRequestsDbContext>(o => o.UseSqlite(connectionString));
+              services.AddScoped<RequestsDbContext>(sp => sp.GetRequiredService<SqliteRequestsDbContext>());
+              break;
+      }
+
+      // Same model, SQLite migrations (Migrations/Sqlite)
+      public sealed class SqliteRequestsDbContext(DbContextOptions<SqliteRequestsDbContext> options)
+          : RequestsDbContext(options);
+    narration: >
+      Migrations are provider specific, so Learn suggests one context type per provider. The SQLite context simply
+      derives from the main one. Configuration picks the provider, and the endpoints always ask for requests DB
+      context, whichever database is behind it. On SQL Server we also switch on retry on failure.
+
+  - id: migrations
+    type: code
+    heading: "Two migration sets, one reviewed script"
+    lang: bash
+    code: |
+      dotnet tool restore                                   # dotnet-ef 10.0.15, local manifest
+
+      dotnet dotnet-ef migrations add InitialCreate --context SqliteRequestsDbContext --output-dir Migrations/Sqlite
+      dotnet dotnet-ef migrations add InitialCreate --context RequestsDbContext       --output-dir Migrations/SqlServer
+
+      # local database
+      dotnet dotnet-ef database update --context SqliteRequestsDbContext
+
+      # production: an idempotent script someone can read before it runs
+      dotnet dotnet-ef migrations script --idempotent --context RequestsDbContext \
+        --output deploy/sqlserver-migrations.sql
+    narration: >
+      The EF tool is a local tool, pinned in the repo. Each migration is added twice, once per context. The SQL
+      Server set comes from a design-time factory, so no SQL Server is needed to create it. Locally, database update
+      builds the SQLite file. For Azure we generate an idempotent script that a human reviews, and that only applies
+      what's missing.
+
+  - id: projection
+    type: code
+    heading: "Reads: project, don't load"
+    lang: csharp
+    code: |
+      public static readonly Expression<Func<ProjectRequest, RequestDto>> ToDto = r => new RequestDto(
+          r.Id, r.Title, r.Budget, r.Department.Code, r.RequestedBy, r.Justification,
+          r.Priority, r.Status, r.CreatedAtUtc, r.DecidedBy, r.DecidedAtUtc, r.Version);
+
+      var query = db.Requests.AsQueryable();
+      if (priority is not null)
+          query = query.Where(r => r.Priority == priority);
+      if (!string.IsNullOrWhiteSpace(department))
+      {
+          var code = department.Trim().ToUpperInvariant();   // SQLite compares case-sensitively, SQL Server doesn't
+          query = query.Where(r => r.Department.Code == code);
+      }
+
+      return TypedResults.Ok(await query.OrderBy(r => r.Id).Select(ToDto).ToListAsync(ct));
+    narration: >
+      Every read uses one projection expression. Because the result isn't an entity, EF Core tracks nothing and
+      reads only these columns. Touching department dot code becomes a join, not a second query. And filters stay
+      composable, so the database does the work, not a loop in your API.
+
+  - id: sqllog
+    type: screen
+    heading: "The SQL EF Core actually sends"
+    image: screens/sql-log.jpg
+    bar: "Terminal · dotnet run (Development) with EF Core command logging"
+    demo: >
+      Split terminal. Left: dotnet run with the Development console log. Visible: the list query
+      "SELECT p.Id, p.Title, ... d.Code ... FROM ProjectRequests AS p INNER JOIN Departments AS d" and, further down,
+      "UPDATE ProjectRequests SET Budget = @p0, Justification = @p1, Priority = @p2, Version = @p3 WHERE Id = @p4
+      AND Version = @p5". Right: curl calls from local-demo.sh. Parameter values show as '?'. Nothing to mask.
+    narration: >
+      In development we log every command. Here's the list: one select, one inner join. And here's the budget
+      update. Only the columns that changed, plus the new version, and look at the where clause: the I D and the
+      version. Parameter values show as question marks, because sensitive data logging is off.
+
+  - id: concurrency
+    type: code
+    heading: "Approve what you saw, or nothing"
+    lang: csharp
+    code: |
+      db.Entry(entity).Property(r => r.Version).OriginalValue = clientVersion;   // what the CLIENT read
+      entity.Touch();                                                           // new Guid for this write
+
+      try
+      {
+          await db.SaveChangesAsync(ct);      // UPDATE ... WHERE "Id" = @id AND "Version" = @clientVersion
+          return TypedResults.Ok(AsDto(entity));
+      }
+      catch (DbUpdateConcurrencyException)
+      {
+          return TypedResults.Problem(
+              title: "The request changed since you read it.",
+              statusCode: StatusCodes.Status409Conflict);
+      }
+    short: concurrency
+    narration: >
+      Here's the fix for our hook. Loading a row and saving it only protects the milliseconds in between. The
+      approver looked at the screen for minutes. So the client sends back the version it read, and we hand that to
+      EF Core as the original value. If someone changed the row since, the update matches zero rows, EF Core throws,
+      and we answer four oh nine.
+
+  - id: lostupdate
+    type: screen
+    heading: "The lost update that didn't happen"
+    image: screens/lost-update.jpg
+    bar: "Terminal · deploy/local-demo.sh against localhost"
+    demo: >
+      Terminal running ./deploy/local-demo.sh against http://localhost:5207 on a fresh requests.db. Visible: step 2
+      "Sam sees budget 40000.0, version xxxxxxxx...", step 3 "priority High", step 4 "<- HTTP 409" with title
+      "The request changed since you read it.", step 5 the GET with budget 400000.0 then "<- HTTP 200" status
+      "Approved". Fictional names only (alex.demo, sam.approver @contoso.com).
+    narration: >
+      Let's play it. Alex submits forty thousand. Sam opens it and sees version A. Alex raises it to four hundred
+      thousand, which is now high priority. Sam clicks approve on version A: four oh nine. He reads it again, sees
+      the real number, and approves the current version. That's a decision he actually made.
+
+  - id: gotchas
+    type: bullets
+    heading: "Three things that bit us"
+    bullets:
+      - "Dates lost their Z: the database drops DateTime.Kind"
+      - "DateTimeOffset can't be ordered in SQLite: use DateTime UTC"
+      - "SQLite is case-sensitive, SQL Server isn't: normalise codes"
+    short: gotcha
+    narration: >
+      Three honest gotchas. Right after a post, created at ended with a Z. Read it back, and the Z was gone. The
+      database doesn't store date time kind, so one convention marks every date as U T C again. We used date time,
+      not date time offset, because SQLite can't order date time offsets in SQL. And SQLite compares text case
+      sensitively, SQL Server doesn't, so we normalise department codes.
+
+  - id: tests
+    type: code
+    heading: "Tests that catch the forgotten migration"
+    lang: text
+    code: |
+      [Fact]
+      public void SqlServer_migrations_match_the_model_without_a_SQL_Server()
+      {
+          using var db = SqlServerContext();
+          Assert.False(db.Database.HasPendingModelChanges());
+      }
+
+      // + the committed sqlserver-migrations.sql must equal IMigrator.GenerateScript(Idempotent)
+      // + every API test runs the real SQLite migrations on its own database file
+
+      $ dotnet test -m:1
+      Passed!  - Failed: 0, Passed: 26, Skipped: 0, Total: 26, Duration: 4 s
+    narration: >
+      The tests run on SQLite, and Learn is clear that's not the same as your production database, so we test what
+      we can without one. Has pending model changes catches a forgotten migration, for both providers. The committed
+      SQL script must match what EF Core generates. Twenty-six tests, about four seconds.
+
+  - id: azure
+    type: code
+    heading: "Azure SQL without a password"
+    lang: bash
+    code: |
+      az sql db create --name "$DB" --server "$SQL" --resource-group "$RG" \
+        --edition GeneralPurpose --family Gen5 --capacity 2 --compute-model Serverless \
+        --use-free-limit true --free-limit-exhaustion-behavior AutoPause -o none
+
+      az webapp identity assign --name "$APP" --resource-group "$RG" -o none
+      az webapp config connection-string set --name "$APP" --resource-group "$RG" -o none \
+        --connection-string-type SQLAzure --settings \
+        "Requests=Server=tcp:$SQL.database.windows.net,1433;Database=$DB;Authentication=Active Directory Default;Encrypt=True;"
+
+      -- in the database, as the Entra admin:
+      CREATE USER [contoso-requests-0000] FROM EXTERNAL PROVIDER;
+      ALTER ROLE db_datareader ADD MEMBER [contoso-requests-0000];
+      ALTER ROLE db_datawriter ADD MEMBER [contoso-requests-0000];
+    narration: >
+      In Azure, the database uses the free offer, set to pause at the monthly limit instead of billing. The web app
+      gets a managed identity, and the connection string says active directory default, so there's no password
+      anywhere. The app's database user can read and write data, nothing more. Schema changes go through the
+      reviewed script.
+
+  - id: azuresql
+    type: screen
+    heading: "The reviewed script, applied"
+    image: screens/azure-sql.jpg
+    bar: "Azure portal · SQL database · Query editor"
+    demo: >
+      Azure portal, SQL database "requests" > Query editor (preview), signed in with Microsoft Entra. The editor shows
+      the end of sqlserver-migrations.sql after Run: "Query succeeded". Below, the results of
+      SELECT MigrationId FROM __EFMigrationsHistory (two rows: ..._InitialCreate, ..._AddStatusPriorityIndex) and
+      SELECT * FROM Departments (FIN, IT, OPS). Mask the server name, subscription, and the signed-in account.
+    narration: >
+      In the portal's query editor, signed in with Entra ID, we run the idempotent script. Two migrations in the
+      history table, and the three departments from the model are there. Run it again and nothing changes. Then the
+      grant script for the app's identity.
+
+  - id: azuredemo
+    type: screen
+    heading: "Same story, Azure SQL behind it"
+    image: screens/azure-demo.jpg
+    bar: "Terminal · deploy/local-demo.sh against App Service"
+    demo: >
+      Terminal: curl https://<masked>/healthz returning "Healthy", then ./deploy/local-demo.sh https://<masked>.
+      Visible: step 1 "<- HTTP 201", step 4 "<- HTTP 409" "The request changed since you read it.", step 5 "<- HTTP 200"
+      "Approved", step 6 the summary with FIN totals. Then (second capture or cut) az webapp restart, and
+      curl https://<masked>/api/requests/<id> still returning the approved request. Mask the host name.
+    narration: >
+      And the same walk-through against App Service. Health is healthy, which includes a database check. Submit,
+      raise, stale approve: four oh nine. Fresh approve: two hundred. Restart the app and the data is still there,
+      which is the whole point of today.
+
+  - id: recap
+    type: bullets
+    heading: "Five rules"
+    bullets:
+      - "One context type per provider, one migration set each"
+      - "Production gets a reviewed, idempotent SQL script"
+      - "Read with projections; track only what you'll save"
+      - "Concurrency token = the version the client saw"
+      - "The app's identity reads and writes data, no schema rights"
+    narration: >
+      Five rules. One context type per provider, one migration set each. Production gets a reviewed, idempotent
+      script. Read with projections, and track only what you'll save. The concurrency token is the version the
+      client saw. And the app's identity reads and writes data, without schema rights.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The API, both migration sets, the twenty-six tests and the deploy scripts are on GitHub, and the full guide is
+      on devladlog dot com. Next time: dependency injection, and why the DB context is scoped. Subscribe so you
+      don't miss it. This was DEVLADLOG dot net, by Momento Galático.

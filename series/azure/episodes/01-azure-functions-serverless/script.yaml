@@ -1,29 +1,265 @@
-# DEVLADLOG Azure — episode 01 (stub: write the scenes after building the demo)
+# DEVLADLOG Azure — episode 01. Draft script: code scenes are real excerpts from src/ and infra/,
+# screen scenes are captured by the recorder following demo.md.
 episode: 1
 slug: azure-functions-serverless
 series_label: "AZURE"
 series_name: "DEVLADLOG Azure"
 file_prefix: "azure"
 title: "Azure Functions & Serverless"
-subtitle: "Built for real, in a lab tenant"
+subtitle: ".NET 10 isolated worker on Flex Consumption, no keys"
 voice: am_michael
-thumbnail_text: "AZURE FUNCTIONS & SERVERLESS"
+thumbnail_text: "AZURE FUNCTIONS\n.NET 10 + FLEX\nREAL DEMO"
 youtube:
-  title: "Azure Functions & Serverless (Real Demo) | DEVLADLOG Azure #1"
-  tags: []
+  title: "Azure Functions on .NET 10 + Flex Consumption: Queues, Retries, Poison | DEVLADLOG Azure #1"
+  tags: [Azure Functions, serverless, Flex Consumption, .NET 10, isolated worker, queue trigger, poison queue, managed identity, Bicep, xUnit, Azure]
 sources:
   - https://www.devladlog.com/articles/azure/2026-01-05-azure-functions-serverless-complete-guide-2026/
+
 scenes:
   - id: hook
     type: title
-    heading: "Azure Functions & Serverless"
-    sub: "Built for real, in a lab tenant"
+    heading: "Azure Functions, built for real"
+    sub: ".NET 10 isolated worker, Flex Consumption, zero storage keys"
     short: hook
     narration: >
-      TODO
+      Support for the in-process model of dot net Azure Functions ended on November tenth, twenty twenty-six. And dot net
+      ten doesn't run on the Linux Consumption plan at all. So today we build a serverless order intake the current way:
+      dot net ten, the isolated worker, Flex Consumption, and not a single storage key. Tested, deployed, and broken on
+      purpose. Welcome to DEVLADLOG Azure.
+
+  - id: when
+    type: bullets
+    heading: "When serverless fits"
+    bullets:
+      - "Event-driven work: HTTP calls, queue messages, timers"
+      - "Spiky or idle traffic: Flex Consumption scales to zero"
+      - "Short units of work you can retry"
+      - "Not for long synchronous requests: HTTP times out at 230 s"
+      - "Answer fast, do the work behind a queue"
+    narration: >
+      When does serverless fit? Event-driven work: HTTP calls, queue messages, timers. Spiky or mostly idle traffic,
+      because Flex Consumption scales to zero. Small units of work that are safe to retry. Not long synchronous requests:
+      an HTTP function that doesn't answer within two hundred and thirty seconds gets a timeout from the load balancer.
+      So answer fast, and do the real work behind a queue.
+
+  - id: plan
+    type: diagram
+    heading: "What we're building"
+    nodes: ["POST", "Queue", "Price", "Blob"]
+    labels: ["202 or 400", "orders", "retry x5", "orders-processed"]
+    narration: >
+      Here's the app. A client posts an order. The HTTP function validates it and answers two oh two accepted, or four
+      hundred with the errors. Valid orders go to a storage queue called orders. A queue-triggered function prices the
+      order and writes it as JSON to blob storage. If pricing fails, the runtime retries, and after five attempts the
+      message lands in a poison queue, where a third function raises an error.
+
+  - id: project
+    type: code
+    heading: "dot net 10 project, new build SDK"
+    lang: xml
+    code: |
+      <Project Sdk="Azure.Functions.Sdk/1.1.0">
+        <PropertyGroup>
+          <TargetFramework>net10.0</TargetFramework>
+          <Nullable>enable</Nullable>
+        </PropertyGroup>
+        <ItemGroup>
+          <PackageReference Include="Microsoft.Azure.Functions.Worker" Version="2.52.0" />
+          <!-- one extension package per binding (Microsoft.Azure.Functions.Worker.Extensions.*) -->
+          <PackageReference Include="...Extensions.Http.AspNetCore" Version="2.1.1" />
+          <PackageReference Include="...Extensions.Storage.Queues"  Version="5.5.5" />
+          <PackageReference Include="...Extensions.Storage.Blobs"   Version="6.8.2" />
+        </ItemGroup>
+      </Project>
+    narration: >
+      The project targets dot net ten with the new Azure dot Functions dot S D K as its project S D K. It replaces both
+      Microsoft dot NET dot S D K and the old worker S D K package, and defaults to Functions runtime version four. You
+      still reference the worker package, plus one extension package per binding: HTTP, queues and blobs.
+
+  - id: submit
+    type: code
+    heading: "One function, two outputs"
+    lang: csharp
+    code: |
+      [Function(nameof(SubmitOrder))]
+      public async Task<SubmitOrderOutput> Run(
+          [HttpTrigger(AuthorizationLevel.Function, "post", Route = "orders")] HttpRequest req)
+      {
+          // 415 for a non-JSON body, 400 for malformed JSON (both tested)
+          var errors = OrderRules.Validate(order);
+          if (errors.Count > 0)
+              return Reply(new BadRequestObjectResult(new { errors }));   // nothing queued
+
+          var message = new OrderMessage(Guid.NewGuid().ToString("N"), order!.CustomerId,
+              order.Lines, clock.GetUtcNow());
+          return new SubmitOrderOutput {
+              Result = new AcceptedResult((string?)null, new { orderId = message.OrderId }),
+              Messages = [message] };                 // -> [QueueOutput("orders")] array
+      }
+    narration: >
+      The HTTP function returns a custom type with two outputs. The property marked HTTP result is the response. The
+      property marked queue output is an array of messages: one element when the order is valid, empty otherwise, so a
+      bad request never reaches the queue. Validation lives in a pure class with no I O, which makes it trivial to test.
+
+  - id: process
+    type: code
+    heading: "The queue function: throw means retry"
+    lang: csharp
+    code: |
+      [Function(nameof(ProcessOrder))]
+      [BlobOutput("orders-processed/{OrderId}.json", Connection = "OrdersStorage")]
+      public string Run([QueueTrigger("orders", Connection = "OrdersStorage")] OrderMessage order,
+          FunctionContext context)
+      {
+          context.BindingContext.BindingData.TryGetValue("DequeueCount", out var attempt);
+          return Handle(order, attempt?.ToString() ?? "?");
+      }
+
+      // Handle(): Pricing.Price(order, catalog) throws UnknownSkuException for a SKU
+      // that isn't in the catalogue -> the runtime retries -> "orders-poison".
+      // Same order id = same blob name, so a retry overwrites instead of duplicating.
+    narration: >
+      The queue function binds the message straight to a record. The blob path uses the order I D from the message, so a
+      retry overwrites the same blob instead of creating a duplicate. That matters, because queue triggers are at least
+      once. If pricing throws, the runtime makes the message visible again and retries, up to five times by default.
+
+  - id: tests
+    type: code
+    heading: "Thirty-three tests, no host needed"
+    lang: text
+    code: |
+      $ dotnet test tests/OrderIntake.Tests
+        OrderRulesTests        16   shape, boundaries, duplicates
+        PricingTests            6   discount at exactly 500, unknown SKU throws
+        FunctionTests           6   202 + message, 400 + no message, 415
+        BindingContractTests    5   queue names, blob path, connection name
+
+      Passed!  - Failed: 0, Passed: 33, Skipped: 0, Total: 33, Duration: 146 ms
+
+      # function classes are plain classes: new SubmitOrder(clock, logger).Run(request)
+    narration: >
+      Thirty-three x unit tests run in well under a second, with no Functions host. Function classes are plain classes,
+      so the tests call run directly with a fake request and a fixed clock. Contract tests pin the queue names, the blob
+      path and the connection name, because a typo there compiles fine and only fails at runtime.
+
+  - id: local
+    type: screen
+    heading: "Running locally with Azurite"
+    image: screens/local-run.jpg
+    bar: "Terminal · func start + Azurite"
+    demo: >
+      Split terminal. Left: func start in src/OrderIntake, showing the three functions found (SubmitOrder http POST
+      api/orders, ProcessOrder, OrderPoison). Right: infra/smoke.sh http://localhost:7071 output with HTTP 202 then
+      HTTP 400 and its errors array. Azurite running in a third tab (not shown).
+    narration: >
+      Locally, Azurite emulates storage and func start runs the host. The host finds three functions. The smoke script
+      sends a valid order and gets two oh two with an order I D, then an invalid one and gets four hundred with every
+      error listed. One thing to know: locally, function keys aren't checked. In Azure they are.
+
+  - id: bicep
+    type: code
+    heading: "Flex Consumption in Bicep, no keys"
+    lang: bicep
+    code: |
+      sku: { tier: 'FlexConsumption', name: 'FC1' }               // plan
+      allowSharedKeyAccess: false                                 // storage account
+      functionAppConfig: {
+        deployment: { storage: { type: 'blobContainer', value: packageContainerUrl
+          authentication: { type: 'UserAssignedIdentity', userAssignedIdentityResourceId: identity.id } } }
+        scaleAndConcurrency: { maximumInstanceCount: 40, instanceMemoryMB: 2048 }
+        runtime: { name: 'dotnet-isolated', version: '10.0' }
+      }
+      AzureWebJobsStorage__accountName: storage.name              // host storage, identity
+      OrdersStorage__queueServiceUri: storage.properties.primaryEndpoints.queue
+      OrdersStorage__credential: 'managedidentity'                // bindings: own connection
+    narration: >
+      The infrastructure is one Bicep file. The plan is F C one, Flex Consumption. The storage account has shared keys
+      disabled, so everything goes through one user-assigned managed identity with data roles. Runtime and scale settings
+      live in function app config, not app settings. And the bindings use their own connection, orders storage, instead
+      of reusing the host's, which is what Microsoft Learn recommends for components other than the host.
+
+  - id: deployed
+    type: screen
+    heading: "Deployed: Flex Consumption, dot net 10"
+    image: screens/flex-overview.jpg
+    bar: "Azure portal · Function App · Overview"
+    demo: >
+      Azure portal, the function app Overview blade after infra/deploy.sh: Plan type Flex Consumption, Runtime .NET 10
+      isolated, the three functions listed. Mask subscription ID, tenant name and the random suffix in resource names.
+    narration: >
+      The deploy script runs a what-if, then the deployment, then publishes the app and pushes the zip with the Azure C L
+      I. The portal shows Flex Consumption, the dot net ten isolated runtime, and our three functions.
+
+  - id: blob
+    type: screen
+    heading: "202, then a priced order in blob storage"
+    image: screens/blob-output.jpg
+    bar: "Storage browser · orders-processed"
+    demo: >
+      Left: smoke.sh against the Azure URL with the function key, HTTP 202 and the orderId. Right: Storage browser,
+      container orders-processed, the blob named <orderId>.json opened: subtotal 538.98, discount 26.95, total 512.03.
+    narration: >
+      Now against Azure, this time with the function key in the x functions key header. Two oh two, and a second later
+      the priced order is in the orders processed container, named after the order I D. Two monitors and two keyboards:
+      subtotal five hundred and thirty-eight ninety-eight, five percent off, total five hundred and twelve oh three.
+
+  - id: poison
+    type: screen
+    heading: "Five attempts, then the poison queue"
+    image: screens/poison.jpg
+    bar: "Application Insights · traces"
+    short: poison
+    demo: >
+      Application Insights, Logs, query over traces for the unknown-SKU order: five "Pricing order ... attempt 1..5"
+      lines, then the OrderPoison error "failed 5 times and needs a human". Optionally the Storage browser showing the
+      message in orders-poison. Mask the app and workspace names.
+    narration: >
+      The third order is well formed, so the HTTP function accepts it, but the SKU isn't in the catalogue. The logs show
+      attempt one, two, three, four, five. Then the runtime moves the message to orders dash poison. Nobody watches a
+      poison queue by default, so our third function turns it into an error log you can alert on.
+
+  - id: gotcha
+    type: code
+    heading: "Gotcha: the binding that wouldn't bind"
+    lang: csharp
+    short: gotcha
+    code: |
+      // First draft: SDK type, to log the dequeue count
+      [BlobOutput("orders-processed/{OrderId}.json")]
+      public string Run([QueueTrigger("orders")] QueueMessage message)
+
+      // Microsoft Learn, binding expressions on JSON payloads:
+      //   "You can't use it with streams, clients, or other SDK types."
+
+      // Fix: bind a POCO, read the metadata from binding data
+      public string Run([QueueTrigger("orders")] OrderMessage order, FunctionContext context)
+      // ...and a test pins it:
+      Assert.Equal(typeof(OrderMessage), Param(typeof(ProcessOrder)).ParameterType);
+    narration: >
+      Here's the gotcha. My first draft bound the trigger to the S D K's queue message type, to log the dequeue count, and
+      used order I D in the blob path. It compiled, and the unit tests passed. But the docs on binding expressions are
+      clear: properties from a JSON payload can't be used with S D K types. So the trigger is now a plain record, the
+      dequeue count comes from binding data, and a test fails if anyone switches it back.
+
+  - id: recap
+    type: bullets
+    heading: "Five rules"
+    bullets:
+      - "Isolated worker on dot net 10; in-process support has ended"
+      - "Flex Consumption for new Linux apps"
+      - "Answer fast, queue the work, make retries idempotent"
+      - "Watch the poison queue"
+      - "Managed identity everywhere, keys disabled"
+    narration: >
+      Five rules. Use the isolated worker on dot net ten, because in-process support has ended. Pick Flex Consumption for
+      new Linux apps; the Linux Consumption plan retires in September twenty twenty-eight. Answer fast, queue the work and
+      make retries idempotent. Watch the poison queue. And use managed identity everywhere, with storage keys switched off.
+
   - id: outro
     type: outro
     heading: "Code on GitHub, guides on devladlog.com"
     sub: "github.com/devladlog/mg-lab"
     narration: >
-      TODO
+      The functions, tests, Bicep and the deploy and tear-down scripts are on GitHub, and the complete guide is on
+      devladlog dot com. Next episode: cloud architecture, with guardrails you can test. Subscribe so you don't miss it.
+      This was DEVLADLOG Azure, by Momento Galático.

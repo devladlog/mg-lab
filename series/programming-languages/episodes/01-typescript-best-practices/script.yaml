@@ -1,29 +1,273 @@
-# DEVLADLOG Code — episode 01 (stub: write the scenes after building the demo)
+# DEVLADLOG Code — episode 01 (draft; screens are local captures, see demo.md)
 episode: 1
 slug: typescript-best-practices
 series_label: "CODE"
 series_name: "DEVLADLOG Code"
 file_prefix: "programming-languages"
-title: "TypeScript Best Practices"
-subtitle: "Built for real, in a lab tenant"
+title: "TypeScript best practices the compiler enforces"
+subtitle: "Strict flags, Result types, brands, unions, lint, tests"
 voice: am_michael
-thumbnail_text: "TYPESCRIPT BEST PRACTICES"
+thumbnail_text: "TYPESCRIPT\nBEYOND\nSTRICT"
 youtube:
-  title: "TypeScript Best Practices (Real Demo) | DEVLADLOG Code #1"
-  tags: []
+  title: "TypeScript Best Practices Your Compiler Enforces: Brands, Unions, TS 7 | DEVLADLOG Code #1"
+  tags: [TypeScript, TypeScript 7, tsconfig, strict mode, noUncheckedIndexedAccess, exactOptionalPropertyTypes, discriminated unions, branded types, typescript-eslint, Vitest, Node.js]
 sources:
   - https://www.devladlog.com/articles/programming-languages/2026-06-07-typescript-best-practices-complete-guide-2026/
+
 scenes:
   - id: hook
     type: title
-    heading: "TypeScript Best Practices"
-    sub: "Built for real, in a lab tenant"
+    heading: "TypeScript best practices"
+    sub: "Enforced by the compiler, not by a wiki page"
     short: hook
     narration: >
-      TODO
+      Most TypeScript best practice lists are advice. Use strict. Avoid any. Handle errors. And then nobody checks.
+      In this episode every practice is something a tool enforces: the compiler, the linter or a test. Seven bugs
+      the compiler catches, three the linter catches, forty tests, and one surprise with TypeScript seven.
+      Welcome to DEVLADLOG Code.
+
+  - id: plan
+    type: bullets
+    heading: "What we're building"
+    bullets:
+      - "A project request intake, from untrusted JSON"
+      - "50,000 euros or more is High priority"
+      - "250,000 or more needs a justification"
+      - "You can't approve your own request"
+      - "Every rule checked by tsc, ESLint or Vitest"
+    narration: >
+      We're building a small project request intake. It reads untrusted JSON, validates it and runs a tiny approval
+      workflow. Fifty thousand euros or more is high priority. Two hundred and fifty thousand or more needs a
+      justification. And you can't approve your own request. The goal isn't the domain, it's how much of it the
+      tools check for us.
+
+  - id: tsconfig
+    type: code
+    heading: "tsconfig: strict is only the start"
+    lang: json
+    code: |
+      "types": ["node"],
+
+      // on by default since TypeScript 6.0, written out anyway
+      "strict": true,
+      // NOT part of strict:
+      "noUncheckedIndexedAccess": true,
+      "exactOptionalPropertyTypes": true,
+      "noImplicitOverride": true,
+      "noImplicitReturns": true,
+
+      "verbatimModuleSyntax": true,
+      "erasableSyntaxOnly": true,
+    narration: >
+      Start with the config. Strict is now on by default, but we write it out so the file means the same on any
+      version. The important part is what strict does not include. No unchecked indexed access and exact optional
+      property types are separate flags. Verbatim module syntax and erasable syntax only keep the output
+      predictable. And note types, node. We'll come back to that.
+
+  - id: errors
+    type: screen
+    heading: "Seven bugs, caught before runtime"
+    image: screens/demo-errors.jpg
+    bar: "Terminal · npm run demo:errors"
+    short: flags
+    demo: >
+      Terminal (dark theme, font 18 pt or larger) in the episode folder running npm run demo:errors. Visible: the
+      seven error lines for demo/unsafe.ts with TS1484, TS2532, TS2375, TS7006 (items), TS2345 (never), TS2322
+      (Euros) and TS1294 (enum). Reference: demo/expected-output.txt.
+    narration: >
+      Here's a file that would run fine as JavaScript. The compiler finds seven bugs. A lookup that may be undefined.
+      An optional field set to undefined on purpose. An implicit any. A missing case in a switch. A raw number used as
+      a budget. And an enum, which Node can't strip. Plain JavaScript would show you each of these at runtime, if at all.
+
+  - id: result
+    type: code
+    heading: "Failure is part of the signature"
+    lang: typescript
+    code: |
+      export type Result<T, E> =
+        | { readonly ok: true; readonly value: T }
+        | { readonly ok: false; readonly error: E };
+
+      export const ok = <T>(value: T): Result<T, never> => ({ ok: true, value });
+      export const err = <E>(error: E): Result<never, E> => ({ ok: false, error });
+    narration: >
+      For expected failures we don't throw, we return a result. It's a union: either ok with a value, or not ok with
+      an error. The caller can't read the value without checking ok first. The compiler enforces that. A try catch
+      never would. We still throw for programming errors, the things that should never happen.
+
+  - id: brands
+    type: code
+    heading: "Branded types: a number is not a budget"
+    lang: typescript
+    code: |
+      declare const brand: unique symbol;
+      export type Brand<T, Name extends string> = T & { readonly [brand]: Name };
+      export type Euros = Brand<number, "Euros">;
+
+      export function toEuros(amount: number): Result<Euros, string> {
+        if (!Number.isSafeInteger(amount)) return err("Budget must be a whole number of euros.");
+        if (amount <= 0) return err("Budget must be greater than zero.");
+        if (amount > MAX_BUDGET) return err(`Budget can't exceed ...`);
+        return ok(amount as Euros);
+      }
+    narration: >
+      Branded types. At runtime a budget is just a number. At compile time it's Euros, and the only way to get Euros
+      is through to euros, which validates it. So any function that takes Euros knows the value is already checked.
+      There's exactly one cast in this module, inside the constructor, and nowhere else.
+
+  - id: parse
+    type: code
+    heading: "unknown in, typed data or every error out"
+    lang: typescript
+    code: |
+      export function parseNewRequest(input: unknown): Result<NewRequest, FieldError[]> {
+        if (!isRecord(input)) return err([{ field: "(body)", message: "Expected a JSON object." }]);
+        const { title, budget, requestedBy, justification } = input;
+        ...
+        if (!euros.ok || !email.ok || errors.length > 0) return err(errors);
+
+        // exactOptionalPropertyTypes: omit the key, never set it to undefined
+        return ok({
+          title: cleanTitle, budget: euros.value, requestedBy: email.value,
+          ...(cleanJustification !== "" && { justification: cleanJustification }),
+        });
+      }
+    narration: >
+      At the boundary, data is unknown, not any. Parse new request narrows it step by step and collects every
+      problem, not just the first one. And look at the last line. With exact optional property types, we can't set
+      justification to undefined. We leave the key out. A test checks the key really is absent.
+
+  - id: union
+    type: code
+    heading: "A union for state, and assertNever"
+    lang: typescript
+    code: |
+      export type RequestState =
+        | { readonly kind: "draft" }
+        | { readonly kind: "submitted"; readonly submittedAt: Date }
+        | { readonly kind: "approved"; readonly approvedBy: Email; readonly approvedAt: Date }
+        | { readonly kind: "rejected"; readonly rejectedBy: Email; readonly reason: string };
+
+      export function describe(state: RequestState): string {
+        switch (state.kind) {
+          case "draft":     return STATE_LABEL.draft;
+          case "approved":  return `${STATE_LABEL.approved} by ${state.approvedBy}`;
+          ...
+          default:          return assertNever(state);
+        }
+      }
+    narration: >
+      The request state is a discriminated union. An approved request always has an approver. A draft never does.
+      No bag of optional fields. Every switch ends with assert never. If someone adds an archived state next year,
+      every switch that forgot it stops compiling.
+
+  - id: editor
+    type: screen
+    heading: "Add a state, find every switch"
+    image: screens/editor-never.jpg
+    bar: "VS Code · demo/unsafe.ts"
+    demo: >
+      VS Code, dark theme, demo/unsafe.ts open at the badge function (lines 22 to 33). Red squiggle under
+      assertNever(state) on line 31 with the hover tooltip visible: Argument of type '{ readonly kind: "rejected";
+      ... }' is not assignable to parameter of type 'never'. Problems panel open showing the other errors.
+    narration: >
+      This is what it looks like in the editor. The badge function forgot rejected. The error doesn't say something
+      went wrong. It says exactly which case: rejected is not assignable to never. Add the case and the squiggle goes
+      away. That's a refactoring tool you get for free.
+
+  - id: satisfies
+    type: code
+    heading: "as const satisfies"
+    lang: typescript
+    code: |
+      export const POLICY = {
+        highPriorityFrom: 50_000,
+        justificationFrom: 250_000,
+        currency: "EUR",
+      } as const satisfies {
+        readonly highPriorityFrom: number;
+        readonly justificationFrom: number;
+        readonly currency: "EUR";
+      };
+
+      export const STATE_LABEL = { draft: "Draft", submitted: "Waiting for approval",
+        approved: "Approved", rejected: "Rejected",
+      } as const satisfies Record<RequestState["kind"], string>;
+    narration: >
+      For configuration, as const satisfies. Satisfies checks the shape without widening the type, so a typo in a
+      key is an error, and the threshold keeps its literal type, fifty thousand. And the labels object must have one
+      entry per state. Add a state to the union, and this stops compiling until it has a label.
+
+  - id: lint
+    type: screen
+    heading: "Type-correct, still wrong: the linter"
+    image: screens/lint.jpg
+    bar: "Terminal · npm run demo:lint"
+    demo: >
+      Terminal running npm run demo:lint. Visible: three errors for demo/lint-me.ts with the rule names
+      @typescript-eslint/no-floating-promises (line 6), switch-exhaustiveness-check with Cases not matched:
+      "rejected" (line 10) and no-non-null-assertion (line 22), and the summary 3 problems.
+    narration: >
+      Some code type-checks and is still wrong. A write file nobody awaits, so its errors vanish. A switch that falls
+      through to unknown. A non-null assertion that is a promise you can't keep. Typescript E S lint with the strict
+      type checked config catches all three, because it uses the type information.
+
+  - id: gotcha
+    type: code
+    heading: "Gotcha: TypeScript 7 has no API (yet)"
+    short: gotcha
+    lang: json
+    code: |
+      // require("typescript") on 7.0.2  ->  { version, versionMajorMinor }  ... that's all
+      // typescript-eslint 8.73 peer:     typescript >=4.8.4 <6.1.0
+
+      "devDependencies": {
+        "@typescript/native": "npm:typescript@^7.0.2",            // tsc  -> 7.0, native
+        "typescript": "npm:@typescript/typescript6@^6.0.2",       // API + tsc6 for tools
+        "typescript-eslint": "^8.73.0"
+      }
+    narration: >
+      Now the surprise. TypeScript seven is the native port, and it's fast. But seven point oh ships no programmatic
+      API, so typescript-eslint can't run on it. Its peer range stops below six point one. The TypeScript team's own
+      answer: install both with n p m aliases. T s c runs seven, and every tool that imports typescript gets six.
+      And the other one: since six point oh, types defaults to empty. Our node types were installed, and process was
+      still unknown, until we added types node.
+
+  - id: ci
+    type: screen
+    heading: "One command for the pipeline"
+    image: screens/ci.jpg
+    bar: "Terminal · npm run ci"
+    demo: >
+      Terminal running npm run ci: the typecheck and lint steps with no output, then Vitest showing Test Files 5
+      passed and Tests 40 passed, then the build. Followed by npm run intake -- samples/requests.json showing three
+      OK lines (PR-2026-0001 High 75,000, PR-2026-0002 Standard 18,000, PR-2026-0003 High 300,000), two ERR lines
+      and "3 accepted, 2 rejected". Reference: demo/expected-output.txt.
+    narration: >
+      All of it runs with one command. Type check with TypeScript seven, lint with six, forty Vitest tests, build.
+      Some of those tests run the broken demo files and check they fail with exactly the errors we just showed. If
+      someone loosens the config, the tests go red. Then the real intake: three accepted, two rejected, with every
+      reason listed.
+
+  - id: recap
+    type: bullets
+    heading: "Five rules"
+    bullets:
+      - "Strict, plus noUncheckedIndexedAccess and exactOptionalPropertyTypes"
+      - "unknown at the boundary, Result for expected failures"
+      - "Brands for values that must be validated"
+      - "Unions for state, assertNever in every switch"
+      - "Type-aware lint and tests in one CI command"
+    narration: >
+      Five rules. Strict, plus the two flags strict doesn't include. Unknown at the boundary, and results for
+      expected failures. Brands for values that must be validated. Unions for state, with assert never in every
+      switch. And type-aware lint plus tests in one command your pipeline runs.
+
   - id: outro
     type: outro
     heading: "Code on GitHub, guides on devladlog.com"
     sub: "github.com/devladlog/mg-lab"
     narration: >
-      TODO
+      The project, the forty tests and both demo files are on GitHub, and the full guide is on devladlog dot com.
+      Links are in the description. Next time: advanced C sharp, the features worth using in dot net ten. Subscribe
+      so you don't miss it. This was DEVLADLOG Code, by Momento Galático.

@@ -1,0 +1,43 @@
+{
+  "name": "contoso-lab-ws2025",
+  "description": "Baseline for the Contoso lab: Windows Server 2025 (build 26100). IgnoreStoppedServices starts empty on purpose: fill it from your first run (see demo.md).",
+  "MinimumBuild": 26100,
+  "MinimumUbr": 0,
+  "PreferServerCore": true,
+  "MaxUptimeDays": 35,
+  "MaxDaysSinceLastUpdate": 45,
+  "MinFreePercent": 20,
+  "CriticalFreePercent": 10,
+  "IgnoreStoppedServices": [],
+  "ForbiddenFeatures": [
+    "FS-SMB1",
+    "Telnet-Client"
+  ],
+  "RequiredFeatures": [
+    {
+      "Server": "CON-DC*",
+      "Features": [
+        "AD-Domain-Services",
+        "DNS"
+      ]
+    },
+    {
+      "Server": "CON-FS*",
+      "Features": [
+        "FS-FileServer"
+      ]
+    }
+  ],
+  "BadTimeSources": [
+    "Local CMOS Clock",
+    "Free-running System Clock"
+  ],
+  "RdpAllowed": [
+    "CON-JUMP*"
+  ],
+  "AllowedLocalAdmins": [
+    "Administrator",
+    "Domain Admins",
+    "GG-Server-Admins"
+  ]
+}

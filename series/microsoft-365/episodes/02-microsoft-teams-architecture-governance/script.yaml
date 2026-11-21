@@ -1,0 +1,273 @@
+# DEVLADLOG Microsoft 365 — episode 02 (draft: code and tests are real; screen scenes still need the lab recording)
+episode: 2
+slug: microsoft-teams-architecture-governance
+series_label: "MICROSOFT 365"
+series_name: "DEVLADLOG Microsoft 365"
+file_prefix: "microsoft-365"
+title: "Microsoft Teams Architecture & Governance"
+subtitle: "One policy file: naming, owners, guests, lifecycle"
+voice: am_michael
+thumbnail_text: "TEAMS\nGOVERNANCE\nAS CODE"
+youtube:
+  title: "Teams Governance as Code with Graph and PowerShell (Real Demo) | DEVLADLOG Microsoft 365 #2"
+  tags: [Microsoft Teams, Teams governance, Microsoft 365 groups, naming policy, Microsoft Graph, PowerShell, Entra ID, guest access, Teams lifecycle, Pester]
+sources:
+  - https://www.devladlog.com/articles/office-365/2025-01-01-teams-architecture-complete-guide-2025/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Teams sprawl starts on day one"
+    sub: "Public by default, one owner, names nobody understands"
+    short: hook
+    narration: >
+      Teams sprawl starts on day one. A team created through the API is public unless you say otherwise. It has one
+      owner, until that person leaves. And its name tells nobody what it's for. In this episode we put Teams governance
+      in one policy file, and use it to preview names, create teams, audit every team, and configure the tenant.
+
+  - id: decisions
+    type: bullets
+    heading: "Decide before you scale"
+    bullets:
+      - "Who can create teams"
+      - "A naming convention, and blocked words"
+      - "How many owners a team needs"
+      - "Where guests are allowed"
+      - "When an inactive team gets reviewed"
+    narration: >
+      Microsoft's planning guidance says it plainly: decide your governance before you scale, because it's much easier
+      than fixing it afterwards. Who can create teams. What the naming convention is, and which words are blocked. How
+      many owners a team needs. Where guests are allowed. And when an inactive team gets reviewed.
+
+  - id: policy
+    type: code
+    heading: "One policy file"
+    lang: json
+    code: |
+      {
+        "naming": {
+          "prefixSuffix": "TEAM_[Department]_[GroupName]",
+          "blockedWords": ["Payroll", "CEO", "HR", "Confidential"]
+        },
+        "owners": { "minimum": 2 },
+        "visibility": { "default": "private" },
+        "guests": { "allowInPublicTeams": false },
+        "lifecycle": { "inactiveDays": 90, "reportPeriod": "D180" },
+        "creation": { "restrict": true, "allowedGroupId": "00000000-0000-0000-0000-000000000900" }
+      }
+    narration: >
+      Here's the whole policy. A naming convention with the creator's department as a prefix, and four blocked words.
+      At least two owners, so a team never depends on one person. Private by default. No guests in public teams. A
+      review after ninety days without activity. And team creation limited to one group.
+
+  - id: naming-facts
+    type: bullets
+    heading: "What the Entra naming policy actually does"
+    bullets:
+      - "Prefix and suffix: fixed text or user attributes like [Department]"
+      - "63 characters in total, including the group name"
+      - "Blocked words: not case-sensitive, no substring matching"
+      - "Up to 5,000 blocked words"
+      - "Needs Microsoft Entra ID P1 licences"
+    narration: >
+      The convention mirrors the Entra I D naming policy for Microsoft 365 groups. Prefixes and suffixes can be fixed
+      text or user attributes, like department or office. The whole name, prefix and suffix included, is limited to
+      sixty-three characters. Blocked words aren't case sensitive, and there's no substring matching, so class is fine
+      even if lass is blocked. And the feature needs Entra I D P1 licences.
+
+  - id: resolve
+    type: code
+    heading: "Preview the name before anything is created"
+    lang: powershell
+    code: |
+      foreach ($attr in $script:NamingAttributes) {
+          $token = "[$attr]"
+          if (-not $name.Contains($token)) { continue }
+          $value = [string](Get-TGProp $Creator $attr '')
+          if ([string]::IsNullOrWhiteSpace($value)) { $errors.Add("MissingAttribute:$attr") }
+          $name = $name.Replace($token, $value.Trim())
+      }
+      # Unsupported tokens such as [postalCode] stay as fixed text, like the service does.
+      $name = $name.Replace('[GroupName]', $RequestedName.Trim())
+
+      foreach ($w in Test-TeamsBlockedWord -Name $RequestedName -BlockedWords @($Policy.naming.blockedWords)) { $errors.Add("BlockedWord:$w") }
+      if ($name.Length -gt $script:MaxNameLength) { $errors.Add("TooLong:$($name.Length)") }
+    narration: >
+      Resolve team name applies the same rules locally. It substitutes the creator's attributes, flags a missing
+      department, keeps unsupported tokens as plain text like the service does, checks blocked words as whole words,
+      and enforces the sixty-three character limit. So a requester sees the final name, or the exact reason it's
+      rejected, before anything exists.
+
+  - id: default
+    type: code
+    heading: "Private unless you say otherwise"
+    lang: powershell
+    code: |
+      if ($owners.Count -lt $min) { throw "Policy requires at least $min owners; got $($owners.Count)." }
+      if (-not $Visibility) { $Visibility = $Policy.visibility.default }
+      [ordered]@{
+          'template@odata.bind' = "https://graph.microsoft.com/v1.0/teamsTemplates('standard')"
+          displayName           = $DisplayName
+          description           = $Description
+          visibility            = $Visibility
+          members               = @(foreach ($id in $owners) {
+                  [ordered]@{
+                      '@odata.type'     = '#microsoft.graph.aadUserConversationMember'
+                      roles             = @('owner')
+                      'user@odata.bind' = "https://graph.microsoft.com/v1.0/users('$id')"
+                  }
+              })
+      }
+    short: private
+    narration: >
+      Now the request body for post teams. The team resource documents its visibility default as public. So if a
+      script forgets that one property, every team it creates is open to the whole organization. Ours always sets it,
+      from the policy, and refuses to build a request with fewer owners than the policy requires. Duplicated IDs only
+      count once.
+
+  - id: async
+    type: code
+    heading: "202 Accepted, and an empty body"
+    lang: powershell
+    code: |
+      # 202 Accepted with an empty body: the only useful output is the Location header.
+      $resp = Invoke-MgGraphRequest -Method POST -Uri '/v1.0/teams' -Body ($body | ConvertTo-Json -Depth 6) `
+          -ContentType 'application/json' -OutputType HttpResponseMessage -ErrorAction Stop
+      $opUri = Resolve-TeamsOperationUri $resp.Headers.Location.OriginalString
+
+      do {
+          $op = Invoke-MgGraphRequest -Method GET -Uri $opUri -OutputType PSObject -ErrorAction Stop
+          $status = Get-TGProp $op 'status'
+          if ($status -in 'succeeded', 'failed') { break }
+          Start-Sleep -Seconds $PollSeconds
+      } while ([datetime]::UtcNow -lt $deadline)
+    narration: >
+      Creating a team is asynchronous. The API answers two oh two accepted, with an empty body and a location header
+      pointing to a teams async operation. So we ask for the raw H T T P response, follow that location, and poll until
+      the operation succeeds or fails. The new team's ID comes from the operation, not from parsing URLs.
+
+  - id: create
+    type: screen
+    heading: "WhatIf first, then the real team"
+    image: screens/create.jpg
+    bar: "PowerShell · Invoke-TeamsGovernance -NewTeam (lab tenant, masked)"
+    demo: >
+      Lab tenant. First: ./Invoke-TeamsGovernance.ps1 -NewTeam 'Budget 2027' -Department Finance -OwnerIds <alex>,<second
+      owner> -WhatIf (shows "Create private team with 2 owners" on target "TEAM_Finance_Budget 2027" and the JSON body).
+      Then the same without -WhatIf, ending with "TEAM_Finance_Budget 2027: Created <team id>". Then -NewTeam 'CEO office'
+      showing the rejection "BlockedWord:CEO". Mask user object IDs and the team ID.
+    narration: >
+      In the lab tenant, what if shows the final name, the visibility and both owners, without calling Graph. Run it
+      for real, and a few polls later the team exists. Ask for a team called C E O office, and it stops before any
+      request is sent, with the blocked word in the error.
+
+  - id: admincenter
+    type: screen
+    heading: "Private, two owners, on the convention"
+    image: screens/admin-center.jpg
+    bar: "Teams admin center · Teams · Manage teams"
+    demo: >
+      Teams admin center > Teams > Manage teams, filtered on TEAM_. Show TEAM_Finance_Budget 2027 with Privacy =
+      Private and the team's Members tab with exactly two owners. Mask user names except fictional lab users.
+    narration: >
+      In the Teams admin center, the new team is private, its name follows the convention, and it has the two owners
+      from the request. One more thing the docs warn about: if the team's SharePoint site hasn't provisioned after five
+      minutes, a call to get the files folder of the general channel triggers it.
+
+  - id: audit
+    type: screen
+    heading: "Audit every team against the same policy"
+    image: screens/audit.jpg
+    bar: "PowerShell · Invoke-TeamsGovernance -Audit (lab tenant, masked)"
+    demo: >
+      Lab tenant with the seeded teams from demo.md (one ownerless, one with a single owner, one public team with a
+      guest, one off-convention name). Run ./Invoke-TeamsGovernance.ps1 -Audit -OutFile ./teams-audit.md. Capture the
+      findings table. Rewrite narration numbers to match the screen.
+    narration: >
+      The audit reads every team, counts owners and guests from each member's roles, and joins last activity from the
+      Teams usage report. Then the same policy file judges them. An ownerless team is high. So is a guest in a public
+      team. A single owner is medium. Off convention names and inactive teams are low, as candidates for review.
+
+  - id: exempt
+    type: screen
+    heading: "The gotcha: admins skip the naming policy"
+    image: screens/exempt.jpg
+    bar: "Microsoft Entra admin center · Groups · Naming policy"
+    short: gotcha
+    demo: >
+      Entra admin center > Groups > Naming policy showing TEAM_[Department]_[GroupName] and the blocked words (after
+      -ApplyTenantPolicy). Then split screen: Alex Demo (no admin role) creating a team "CEO office" in Teams gets the
+      blocked-word error; the Global Administrator creating a Microsoft 365 group "CEO office" in the Entra admin center
+      succeeds without prefix. Mask tenant name. Delete the test group afterwards.
+    narration: >
+      Here's the gotcha. Global Administrator and User Administrator are exempt from the group naming policy. A normal
+      user gets the prefix and the blocked word error. The admin creates the same name, no prefix, no error. So if your
+      provisioning script runs as one of those roles, nothing enforces the convention except the script itself. That's
+      why ours resolves the name before it calls Graph.
+
+  - id: tenant
+    type: code
+    heading: "Push the same policy to the tenant"
+    lang: powershell
+    code: |
+      $v = [ordered]@{
+          PrefixSuffixNamingRequirement = $Policy.naming.prefixSuffix
+          CustomBlockedWordsList        = (@($Policy.naming.blockedWords) -join ',')
+      }
+      if ($Policy.creation.restrict) {
+          $v.EnableGroupCreation = 'false'
+          $v.GroupCreationAllowedGroupId = $Policy.creation.allowedGroupId
+      }
+      # Set-TeamsDirectoryPolicy: GET /groupSettings, merge into Group.Unified,
+      # PATCH it (or POST it from the template defaults). Supports -WhatIf.
+    narration: >
+      The last piece writes the same file to the tenant's group unified directory setting: the naming requirement, the
+      blocked words, and the creation restriction to one group. It merges into the existing values instead of
+      replacing them, and supports what if. Microsoft notes the creation restriction can take thirty minutes or more to
+      apply.
+
+  - id: tests
+    type: code
+    heading: "Thirty-nine tests, no tenant"
+    lang: text
+    code: |
+      $ Invoke-Pester ./tests
+      Describing Naming
+        [+] does not do substring matches (HRIS rollout)
+        [+] rejects names over 63 characters including prefix and suffix
+      Describing Create request
+        [+] is private by default, because the API default is public
+      Describing New-GovernedTeam (mocked Graph)
+        [+] posts, follows the Location header and returns the new team id
+      Describing Governance findings
+        [+] does not call every team inactive when the activity join fails (concealed report)
+      Describing Tenant directory policy
+        [+] PATCHes the existing setting (and only with -Confirm:$false, never on -WhatIf)
+
+      Tests Passed: 39, Failed: 0, Skipped: 0
+    narration: >
+      Thirty-nine Pester tests cover the naming rules and their edges, the request body, the async creation flow, the
+      inventory, every finding, and the tenant setting merge. One test matters more than it looks: if the usage report
+      is concealed, team IDs don't match, and the audit says so instead of calling every team inactive.
+
+  - id: recap
+    type: bullets
+    heading: "Five rules for Teams governance"
+    bullets:
+      - "One policy file, used everywhere"
+      - "Always set visibility: the API default is public"
+      - "At least two owners per team"
+      - "Admins are exempt from the naming policy: enforce it in the script too"
+      - "Audit on a schedule, review inactive teams"
+    narration: >
+      Five rules. Keep one policy file and use it everywhere. Always set visibility, because the API default is public.
+      Require at least two owners. Remember that admins are exempt from the naming policy, so enforce it in your
+      script too. And audit on a schedule, so inactive and ownerless teams get reviewed.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The module, the policy file and the tests are on GitHub, and the complete guide is on dev lad log dot com. Links
+      are in the description. Next in this series: the Microsoft 365 groups lifecycle. Subscribe so you don't miss it.

@@ -1,29 +1,285 @@
-# DEVLADLOG Dev Tools — episode 01 (stub: write the scenes after building the demo)
+# DEVLADLOG Dev Tools — episode 01. Code excerpts and terminal output are real (src/kit, tests).
+# The four `screen` scenes are recorded later in a throwaway GitHub repo: see demo.md.
 episode: 1
 slug: git-github-best-practices
 series_label: "DEV TOOLS"
 series_name: "DEVLADLOG Dev Tools"
 file_prefix: "developer-tools"
-title: "Git & GitHub Best Practices"
-subtitle: "Built for real, in a lab tenant"
+title: "Git & GitHub best practices, enforced"
+subtitle: "Hooks, CI and a ruleset that say the same thing"
 voice: am_michael
-thumbnail_text: "GIT & GITHUB BEST PRACTICES"
+thumbnail_text: "GIT RULES\nTHAT ACTUALLY\nGET ENFORCED"
 youtube:
-  title: "Git & GitHub Best Practices (Real Demo) | DEVLADLOG Dev Tools #1"
-  tags: []
+  title: "Git & GitHub Best Practices That Actually Get Enforced: Hooks, CI, Rulesets | DEVLADLOG Dev Tools #1"
+  tags: [Git, GitHub, git hooks, Conventional Commits, GitHub Actions, rulesets, branch protection, CODEOWNERS, secret scanning, DevTools]
 sources:
   - https://www.devladlog.com/articles/developer-tools/2025-11-28-git-github-best-practices-complete-guide-2025/
+
 scenes:
   - id: hook
     type: title
-    heading: "Git & GitHub Best Practices"
-    sub: "Built for real, in a lab tenant"
+    heading: "Best practices nobody can skip"
+    sub: "Local hooks, CI and a GitHub ruleset"
     short: hook
     narration: >
-      TODO
+      Every team has a Git best practices page. Feature branches, pull requests, good commit messages, no secrets in
+      the repo. And every team has a main branch full of commits called fix and updated stuff. In this episode we turn
+      that page into checks that actually run: on your laptop, in CI, and on GitHub itself. Welcome to DEVLADLOG Dev Tools.
+
+  - id: layers
+    type: bullets
+    heading: "Simple strategy, three layers"
+    bullets:
+      - "Feature branches, merged by pull request, main always green"
+      - "Layer 1: local hooks for fast feedback (skippable)"
+      - "Layer 2: CI runs the same checks on the server"
+      - "Layer 3: a ruleset makes those checks required"
+      - "One Python module behind all of it"
+    narration: >
+      The strategy is the one Microsoft Learn recommends: keep it simple. Feature branches for every change, merged
+      through pull requests, and a main branch that always builds. We enforce it in three layers. Local hooks give fast
+      feedback, but anyone can skip them. CI runs the same checks on the server. And a GitHub ruleset makes those
+      checks required. One small Python module sits behind all three.
+
+  - id: rules
+    type: code
+    heading: "The commit rule, in one regular expression"
+    lang: python
+    code: |
+      ALLOWED_TYPES = ("build", "chore", "ci", "docs", "feat", "fix",
+                       "perf", "refactor", "revert", "style", "test")
+      MAX_HEADER = 72
+
+      HEADER_RE = re.compile(
+          r"^(?P<type>[a-z]+)"                          # feat
+          r"(?:\((?P<scope>[a-z0-9][a-z0-9._/-]*)\))?"  # (api)
+          r"(?P<breaking>!)?"                           # ! = breaking change
+          r": (?P<subject>\S.*)$"                       # : add paging
+      )
+      # Messages Git writes for you pass through untouched:
+      PASSTHROUGH = ("Merge ", 'Revert "', "fixup! ", "squash! ", "amend! ")
+    narration: >
+      Commit messages follow Conventional Commits: a type, an optional scope, an exclamation mark for a breaking
+      change, then the subject. The header stays under seventy-two characters, so it fits in git log and the pull
+      request list. Merge, revert and fixup messages that Git writes for you pass straight through.
+
+  - id: badcommit
+    type: screen
+    heading: "The hook says no, and says why"
+    image: screens/badcommit.jpg
+    bar: "Terminal · demo repo · feature/orders-paging"
+    short: commit
+    demo: >
+      Terminal, dark theme, font 18 pt or larger, in the throwaway repo after `bash scripts/setup-dev.sh`.
+      Show the setup line "Hooks: .githooks | fetch.prune=true pull.ff=only", then on branch feature/orders-paging:
+      `git commit -m "updated stuff"` with the full rejection (header error, three examples, types list), then
+      `git commit -m "feat(orders): add paging"` succeeding with its short hash.
+    narration: >
+      After cloning, each developer runs setup dev once. Git doesn't copy hooks when you clone, so the script points
+      core dot hooks path at the versioned folder. Now commit with updated stuff. Rejected, with the reason and three
+      examples. Feat, orders, add paging. Accepted. The message is kept, so nothing is lost.
+
+  - id: staged
+    type: code
+    heading: "Scan what you commit, not what you see"
+    lang: python
+    code: |
+      def check_staged(cwd=None, max_bytes=None) -> list[Finding]:
+          for path in staged_paths(cwd):
+              size = int(git("cat-file", "-s", f":{path}", cwd=cwd).stdout or 0)
+              if size > max_bytes:
+                  findings.append(Finding(path, 0, f"{size:,} bytes, over the budget"))
+                  continue
+              blob = git("show", f":{path}", cwd=cwd).stdout   # the STAGED version
+              if b"\0" in blob[:8000]:
+                  continue                                    # binary
+              findings.extend(scan_text(path, blob.decode("utf-8", "replace")))
+
+      SECRET_PATTERNS = {"private key": ..., "GitHub token": ...,
+                         "storage account key": ..., "hard-coded password": ...}
+    narration: >
+      The pre-commit hook blocks commits on main, files over five megabytes, and obvious secrets: private keys,
+      GitHub tokens, storage account keys and hard-coded passwords. The detail that matters: it reads the staged
+      version of each file, with git show colon path. Fix a secret in the editor but forget to stage the fix, and the
+      commit is still blocked.
+
+  - id: secret
+    type: screen
+    heading: "A token never reaches the history"
+    image: screens/secret.jpg
+    bar: "Terminal · demo repo · pre-commit"
+    demo: >
+      Same terminal. `cat src/settings.py` showing a FAKE token line (generate it on the spot as "ghp_" plus 36
+      random characters; never a real token), `git add src/settings.py`, `git commit -m "feat: read token"` showing
+      "commit blocked - src/settings.py:1: GitHub token". Then `git switch main`, try a commit, show the
+      "you are on 'main'. Create a branch first" message.
+    narration: >
+      Here's a fake token in a settings file. Stage it, commit, blocked, with the file and the line. Switch to main
+      and try to commit there: blocked too, with the command to create a feature branch instead.
+
+  - id: tests
+    type: code
+    heading: "Fifty-four tests, real git commits"
+    lang: text
+    code: |
+      $ python3 -m pytest -v
+      tests/test_hooks_e2e.py::test_bad_message_is_rejected                       PASSED
+      tests/test_hooks_e2e.py::test_commit_on_main_is_blocked_after_the_first...  PASSED
+      tests/test_hooks_e2e.py::test_staged_secret_is_blocked_even_if_fixed_on...  PASSED
+      tests/test_hooks_e2e.py::test_oversized_file_is_blocked                     PASSED
+      tests/test_hooks_e2e.py::test_no_verify_bypasses_hooks_but_ci_scan_cat...   PASSED
+      tests/test_hooks_e2e.py::test_crlf_hook_breaks_and_gitattributes_preve...   PASSED
+      tests/test_github_config.py::test_every_action_is_pinned_to_a_full_com...   PASSED
+      tests/test_github_config.py::test_required_checks_match_the_workflow_j...   PASSED
+      tests/test_github_config.py::test_apply_ruleset_updates_by_name_when_i...   PASSED
+      ...
+      54 passed in 3.40s
+    narration: >
+      All of this is tested. Fifty-four pytest tests, and most of the interesting ones make real git commits in a
+      throwaway repository with an isolated home folder. Good messages, bad messages, a commit on main, a staged token,
+      a big file. The GitHub scripts run against a fake g h command that records every call. About three seconds.
+
+  - id: noverify
+    type: code
+    heading: "Gotcha: hooks are optional"
+    lang: text
+    code: |
+      $ git commit --no-verify -m "oops"          # skips pre-commit AND commit-msg
+      [feature/orders-paging 4c1d2e7] oops
+
+      # ...so CI runs the same module on the server:
+      $ python3 tools/repo_guard/cli.py scan-tree
+      ✗ 1 possible secret(s) in tracked files
+        - src/settings.py:1: GitHub token
+
+      $ python3 tools/repo_guard/cli.py title "oops"
+      ✗ PR title is not a Conventional Commit (squash merge uses it as the commit message)
+    short: gotcha
+    narration: >
+      Now the honest part. Local hooks are optional. Git commit dash dash no verify skips both of them, and the commit
+      goes in, token and all. So hooks are only the fast feedback layer. The same module runs in CI: scan tree checks
+      every tracked file, not just the diff, and the pull request title gets the commit rule. That's where the token
+      is caught.
+
+  - id: crlf
+    type: code
+    heading: "Gotcha two: one invisible character"
+    lang: text
+    code: |
+      $ git commit -m "feat: add b"
+      /usr/bin/env: 'python3\r': No such file or directory
+
+      # .gitattributes
+      * text=auto
+      .githooks/* text eol=lf
+      *.sh        text eol=lf
+      *.py        text eol=lf
+    narration: >
+      A second one we reproduced. Save a hook with Windows line endings and, on Linux or a Mac, the shebang asks for
+      python three followed by a carriage return. Every commit fails with a confusing error. Dot git attributes pins
+      hooks, shell scripts and Python files to L F, so every checkout gets them right.
+
+  - id: ci
+    type: code
+    heading: "CI: least privilege, pinned, no injection"
+    lang: yaml
+    code: |
+      permissions:
+        contents: read
+      jobs:
+        secret-scan:
+          name: secret-scan
+          steps:
+            - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+            - run: python3 tools/repo_guard/cli.py scan-tree
+        pr-title:
+          name: pr-title
+          if: github.event_name == 'pull_request'
+          steps:
+            - name: Conventional Commit PR title
+              env:
+                PR_TITLE: ${{ github.event.pull_request.title }}
+              run: python3 tools/repo_guard/cli.py title "$PR_TITLE"
+    narration: >
+      The workflow follows GitHub's security guidance. The token is read only. Actions are pinned to a full commit
+      S H A, not a tag that can move. And the pull request title, which anyone opening a pull request controls, goes
+      through an environment variable instead of being pasted into the script. A test fails the build if any run step
+      contains an expression.
+
+  - id: ruleset
+    type: code
+    heading: "The ruleset, as code"
+    lang: json
+    code: |
+      { "name": "protect-main", "enforcement": "active", "bypass_actors": [],
+        "conditions": { "ref_name": { "include": ["~DEFAULT_BRANCH"], "exclude": [] } },
+        "rules": [
+          { "type": "deletion" }, { "type": "non_fast_forward" },
+          { "type": "pull_request", "parameters": {
+              "allowed_merge_methods": ["squash"], "required_approving_review_count": 1,
+              "require_code_owner_review": true, "dismiss_stale_reviews_on_push": true,
+              "require_last_push_approval": true, "required_review_thread_resolution": true } },
+          { "type": "required_status_checks", "parameters": {
+              "strict_required_status_checks_policy": true,
+              "required_status_checks": [ {"context": "test"}, {"context": "secret-scan"},
+                                          {"context": "pr-title"} ] } } ] }
+
+      $ scripts/apply-ruleset.sh contoso/app     # POST, or PUT if a ruleset with this name exists
+    narration: >
+      Layer three is a repository ruleset, kept as JSON in the repo. It targets the default branch with no bypass.
+      No deletion, no force push. A pull request with one approval, code owners included, fresh approval after new
+      pushes, all threads resolved, squash only. And the three CI jobs are required. Apply ruleset creates it through
+      the REST API, or updates it by name.
+
+  - id: rulesetui
+    type: screen
+    heading: "Same rules, in the GitHub UI"
+    image: screens/ruleset.jpg
+    bar: "GitHub · Settings · Rules · Rulesets · protect-main"
+    demo: >
+      Browser, throwaway repo (repo owner masked) → Settings → Rules → Rulesets → protect-main, after running
+      scripts/configure-repo.sh and scripts/apply-ruleset.sh. Scroll so these are visible: Enforcement status Active,
+      Target "Default", Restrict deletions, Block force pushes, Require a pull request (1 approval, code owners,
+      dismiss stale, last push approval, conversation resolution, allowed merge method Squash), Require status checks
+      with test, secret-scan, pr-title.
+    narration: >
+      In the GitHub settings, the ruleset is active on the default branch, with exactly the rules from the file. Because
+      it lives in the repo, a change to the rules is itself a pull request, reviewed like any other code.
+
+  - id: pr
+    type: screen
+    heading: "The pull request can't merge until it's right"
+    image: screens/pr.jpg
+    bar: "GitHub · Pull request · feature/orders-paging"
+    demo: >
+      A PR from feature/orders-paging titled "updated orders" (not conventional). Bottom of the Conversation tab:
+      checks list with pr-title failed (red), test and secret-scan passed, "Review required", merge button disabled,
+      only "Squash and merge" offered. Then edit the title to "feat(orders): add paging", re-run, show pr-title green
+      and only the review missing.
+    narration: >
+      Here's a pull request titled updated orders. Tests pass, the secret scan passes, the title check fails, and a
+      review is required, so the merge button stays disabled. Rename it to feat, orders, add paging. The check goes
+      green. Because we squash, that title becomes the commit on main. Clean history, without asking anyone to rebase.
+
+  - id: recap
+    type: bullets
+    heading: "Five rules"
+    bullets:
+      - "Feature branches and pull requests; main always green"
+      - "Hooks for speed, CI for truth, rulesets for enforcement"
+      - "Scan the staged version; scan the whole tree in CI"
+      - "Read-only token, pinned actions, untrusted input via env"
+      - "Keep the rules in the repo, and test them"
+    narration: >
+      Five rules. Feature branches and pull requests, and a main branch that is always green. Hooks for speed, CI for
+      truth, rulesets for enforcement. Scan what is staged locally and the whole tree in CI. A read only token, pinned
+      actions, and untrusted input through environment variables. And keep the rules in the repo, with tests.
+
   - id: outro
     type: outro
     heading: "Code on GitHub, guides on devladlog.com"
     sub: "github.com/devladlog/mg-lab"
     narration: >
-      TODO
+      The kit, the ruleset and all fifty-four tests are on GitHub, and the complete guide is on devladlog dot com.
+      Links are in the description. Next time: VS Code extensions, including one we build ourselves that writes these
+      commit messages for you. Subscribe so you don't miss it. This was DEVLADLOG Dev Tools, by Momento Galático.

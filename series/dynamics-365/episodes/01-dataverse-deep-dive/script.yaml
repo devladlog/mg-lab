@@ -1,29 +1,292 @@
-# DEVLADLOG Dynamics 365 — episode 01 (stub: write the scenes after building the demo)
+# DEVLADLOG Dynamics 365 — episode 01. Draft: screen scenes need the lab-tenant capture described in demo.md.
 episode: 1
 slug: dataverse-deep-dive
 series_label: "DYNAMICS 365"
 series_name: "DEVLADLOG Dynamics 365"
 file_prefix: "dynamics-365"
 title: "Dataverse Deep Dive"
-subtitle: "Built for real, in a lab tenant"
+subtitle: "Schema as code, upsert by key, batches, paging and throttling"
 voice: am_michael
-thumbnail_text: "DATAVERSE DEEP DIVE"
+thumbnail_text: "DATAVERSE\nDEEP DIVE\nWEB API"
 youtube:
-  title: "Dataverse Deep Dive (Real Demo) | DEVLADLOG Dynamics 365 #1"
-  tags: []
+  title: "Dataverse Deep Dive: Tables as Code, Alternate Keys, Batch, API Limits | DEVLADLOG Dynamics 365 #1"
+  tags: [Dataverse, Dynamics 365, Power Platform, Dataverse Web API, alternate keys, upsert, OData batch, API limits, Python, Microsoft Dataverse]
 sources:
   - https://www.devladlog.com/articles/dynamics-365/2025-10-26-dataverse-deep-dive-complete-guide-2025/
+
 scenes:
   - id: hook
     type: title
     heading: "Dataverse Deep Dive"
-    sub: "Built for real, in a lab tenant"
+    sub: "Tables as code, upsert by key, batches and API limits"
     short: hook
     narration: >
-      TODO
+      Most Dataverse imports work fine on day one. On day two someone runs them again, and now every record
+      exists twice. In this episode we build a Dataverse table as code, load it with an import you can run a hundred
+      times, and handle the limits the platform puts on every API user. Everything runs locally with tests,
+      and then for real in our lab environment.
+
+  - id: plan
+    type: bullets
+    heading: "What we're building"
+    bullets:
+      - "Project Request table: columns, choice, lookup to Account"
+      - "An alternate key on the business code from the intake system"
+      - "An import that upserts by that key, in batches"
+      - "A paged report and a client that respects throttling"
+      - "41 pytest tests against an in-memory stand-in"
+    narration: >
+      Here's the plan. A Project Request table with a money column, a choice, a date and a lookup to Account.
+      An alternate key on the request code that comes from the intake system. An import that upserts by that key,
+      in batches. A paged report. And a small Python client that handles throttling, covered by forty-one tests.
+
+  - id: table
+    type: code
+    heading: "The table is a JSON document"
+    lang: python
+    code: |
+      def project_request_table():
+          return {
+              "@odata.type": ODATA + "EntityMetadata",
+              "SchemaName": "mgl_ProjectRequest",
+              "DisplayName": label("Project Request"),
+              "DisplayCollectionName": label("Project Requests"),
+              "OwnershipType": "UserOwned",   # can't be changed later
+              "IsActivity": False, "HasActivities": False, "HasNotes": True,
+              "ChangeTrackingEnabled": True,
+              "Attributes": [
+                  string_column("mgl_Name", "Name", 200, primary=True,
+                                required="ApplicationRequired"),
+              ],
+          }
+    narration: >
+      In the Web API, a table is a JSON document you post to entity definitions. The schema name carries the
+      publisher prefix, and the primary name column has to be in the same request. Two choices matter forever.
+      Ownership type can't be changed later, and user owned is what gives you security by owner and business unit.
+      And change tracking lets integrations ask what changed since their last sync.
+
+  - id: keys
+    type: code
+    heading: "A lookup and an alternate key"
+    lang: python
+    code: |
+      def account_relationship():
+          return {
+              "@odata.type": ODATA + "OneToManyRelationshipMetadata",
+              "SchemaName": "mgl_account_projectrequest",
+              "ReferencedEntity": "account", "ReferencedAttribute": "accountid",
+              "ReferencingEntity": "mgl_projectrequest",
+              "CascadeConfiguration": {"Delete": "RemoveLink", ...},
+              "Lookup": {"@odata.type": ODATA + "LookupAttributeMetadata",
+                         "SchemaName": "mgl_CustomerAccountId", ...},
+          }
+
+      def request_code_key():
+          return {"SchemaName": "mgl_RequestCodeKey",
+                  "KeyAttributes": ["mgl_requestcode"]}
+    narration: >
+      The lookup to Account is a one to many relationship, and the lookup column is created in the same call.
+      Delete is set to remove link, so deleting an account clears the lookup instead of deleting requests.
+      Then the alternate key: one column, the request code. A table can have up to ten of these.
+
+  - id: provision
+    type: screen
+    heading: "Provisioned in the lab, inside a solution"
+    image: screens/provision.jpg
+    bar: "Terminal · python -m dvlab provision"
+    demo: >
+      Terminal (dark, font 18+) running `python -m dvlab provision --env-url <lab env>` against the lab DEV
+      environment, solution MGLabDataverse. Must show: created table, the four columns, the lookup, the alternate
+      key, then at least one "key index status: Pending" or "InProgress" line followed by "Active" and
+      "ready: upsert by mgl_requestcode is safe now". Mask the environment URL.
+    narration: >
+      Every call carries the solution unique name header, so the table, columns and key land in our solution,
+      not the default one. And look at the end: the key isn't usable yet. Its index is built by a background job,
+      so the script polls until the status says active.
+
+  - id: maker
+    type: screen
+    heading: "Same table in the maker portal"
+    image: screens/maker-keys.jpg
+    bar: "Power Apps · Solutions · MG Lab Dataverse · Project Request · Keys"
+    demo: >
+      make.powerapps.com, Solutions, MGLabDataverse, Project Request table, Keys page showing "Request Code"
+      on mgl_requestcode, status Active. Optional second capture: the Columns page with Budget, Due Date,
+      Priority, Request Code, Customer Account. Mask tenant name and environment name in the header.
+    narration: >
+      In the maker portal it's an ordinary table with an ordinary key. The difference is that we can recreate
+      it in any environment from code, review it in a pull request, and never click through the designer twice.
+
+  - id: upsert
+    type: code
+    heading: "Upsert by alternate key"
+    lang: python
+    code: |
+      def upsert(self, entity_set, key, data, *, mode="upsert"):
+          headers = {}
+          if mode == "create-only":
+              headers["If-None-Match"] = "*"   # 412 if it already exists
+          elif mode == "update-only":
+              headers["If-Match"] = "*"        # 404 if it doesn't
+          body = {k: v for k, v in data.items() if k not in key}
+          url = f"{entity_set}{key_segment(key)}"
+          return self.request("PATCH", url, json=body, headers=headers)
+
+      key_segment({"mgl_requestcode": "PR-0001"})  # (mgl_requestcode='PR-0001')
+      key_segment({"mgl_requestcode": "PR/0019"})  # KeyValueError: contains /
+    narration: >
+      Upsert is a patch to a URL that names the record by its key. No header means create or update. If match
+      star means update only, and if none match star means create only. Key columns stay out of the body.
+      And one detail from the docs: key values containing a slash, a percent, an ampersand and a few others
+      break get and patch by key, so we refuse them before sending anything.
+
+  - id: gotcha
+    type: bullets
+    heading: "Gotcha: the key exists before it works"
+    bullets:
+      - "Creating the key returns at once; the index builds in the background"
+      - "Status: Pending, In Progress, Active, or Failed"
+      - "Upsert by key before Active: don't"
+      - "Failed? Fix duplicate data, then ReactivateEntityKey"
+      - "Same in solution imports: check the key after deploy"
+    short: gotcha
+    narration: >
+      Here's the gotcha. Creating an alternate key returns immediately, but the key isn't ready. Dataverse
+      builds a database index in the background, and the status goes from pending to in progress to active,
+      or to failed if existing rows already break the uniqueness. So poll before you upsert, and after
+      every deployment too. If it failed, fix the duplicates and reactivate the key.
+
+  - id: batch
+    type: code
+    heading: "Batches: one bad row doesn't block the rest"
+    lang: python
+    code: |
+      for row in rows:
+          try:
+              url = f"mgl_projectrequests{key_segment({'mgl_requestcode': row['request_code']})}"
+          except KeyValueError as e:
+              out(f"  SKIPPED {row['request_code']!r}: {e}")
+              continue
+          items.append(BatchItem("PATCH", url, _row_to_body(row)))
+          if len(items) == batch_size:
+              flush()   # POST $batch, no change set, Prefer: odata.continue-on-error
+
+      # A batch holds up to 1,000 requests. A change set inside it is one transaction.
+    narration: >
+      The import groups upserts into dollar batch requests. A batch holds up to a thousand requests. We don't
+      use a change set here, because a change set is all or nothing, and with continue on error one bad row
+      doesn't block the other ninety-nine. The tests cover both behaviours.
+
+  - id: import
+    type: screen
+    heading: "Run it twice: still eighteen records"
+    image: screens/import.jpg
+    bar: "Terminal · python -m dvlab import (run twice)"
+    demo: >
+      Same terminal, `python -m dvlab import --env-url <lab env>` run twice in a row. First run shows SKIPPED
+      'PR/0019', FAILED PR-0018 with the real server message for a budget below the minimum, and
+      "19/21 rows upserted into 18 records". Second run: same summary line. Then the Project Requests view in
+      the model-driven app (or `report`) showing 18 rows, no duplicates. Rewrite the narration if the real error
+      text differs. Mask the environment URL.
+    narration: >
+      In the lab, the first run skips the code with a slash, the server rejects the negative budget, and
+      eighteen records arrive, because one code appears twice in the file and simply updates. Run it again, and
+      we still have eighteen. That's what an alternate key buys you.
+
+  - id: paging
+    type: code
+    heading: "Paging: follow the next link, don't build it"
+    lang: python
+    code: |
+      prefer = f"odata.maxpagesize={page_size}"     # 5,000 is the maximum
+      url = f"{entity_set}?$select=...&$filter=mgl_budget ge 50000&$orderby=mgl_requestcode asc"
+      while url:
+          r = self.request("GET", url, headers={"Prefer": prefer})
+          payload = r.json()
+          yield payload.get("value", [])
+          url = payload.get("@odata.nextLink")      # use it as-is, same page size
+
+      # $skip isn't supported. Order by something unique, or pages can overlap.
+    narration: >
+      Reading is just as careful. Ask for a page size with the prefer header, up to five thousand rows. Then
+      follow the next link exactly as returned, with the same page size, until there isn't one. Dollar skip
+      isn't supported, and you should order by something unique, or the same row can show up on two pages.
+
+  - id: limits
+    type: code
+    heading: "Service protection limits, per user"
+    lang: text
+    code: |
+      Requests             6,000 in a 5-minute sliding window
+      Execution time       20 minutes combined in that window
+      Concurrent requests  52 or higher
+
+      HTTP 429 Too Many Requests
+      Retry-After: <seconds>
+
+      wait = float(retry_after) if retry_after else float(2 ** attempt)
+      self._sleep(wait)        # then send the same request again
+    short: limits
+    narration: >
+      Every API user has limits, evaluated per web server. By default, six thousand requests in a five minute
+      sliding window, twenty minutes of combined execution time, and fifty-two concurrent requests or more.
+      Go over and you get a four twenty-nine with a retry after header in seconds. Don't show that to users and
+      don't give up: wait exactly that long and retry. Batching doesn't dodge this, it moves you to the
+      execution time limit.
+
+  - id: report
+    type: screen
+    heading: "The paged report against the lab"
+    image: screens/report.jpg
+    bar: "Terminal · python -m dvlab report --page-size 5"
+    demo: >
+      `python -m dvlab report --env-url <lab env> --page-size 5`: "page 1: 5 rows", "page 2: 5 rows", priority
+      shown as the formatted label (High / Normal) coming from the
+      OData.Community.Display.V1.FormattedValue annotation, total "10 requests with budget >= 50,000".
+      Mask the environment URL.
+    narration: >
+      Against the lab, ten requests above fifty thousand, five per page, and the priority label comes from the
+      formatted value annotation, so we never hard code the choice labels in the report.
+
+  - id: tests
+    type: code
+    heading: "Forty-one tests, no tenant needed"
+    lang: text
+    code: |
+      $ python -m pytest -q tests
+      .........................................                       [100%]
+      41 passed in 0.15s
+
+      test_upsert_before_the_key_is_active_fails
+      test_create_only_and_update_only
+      test_paging_follows_next_link_verbatim_with_the_same_page_size
+      test_429_waits_for_retry_after_then_succeeds
+      test_changeset_is_all_or_nothing
+      test_import_is_idempotent_and_reports_bad_rows
+    narration: >
+      All of this is tested without a tenant. The client talks to an in-memory stand-in plugged into the HTTP
+      layer, so the same code path runs in CI. It's not Dataverse, and the demo in the lab is what proves the
+      real behaviour. But it catches regressions in seconds.
+
+  - id: recap
+    type: bullets
+    heading: "Five rules"
+    bullets:
+      - "Tables, columns and keys as code, inside a solution"
+      - "Upsert by alternate key, and wait until the key is Active"
+      - "Batches for throughput; change sets only when it must be atomic"
+      - "Follow nextLink as returned; order by something unique"
+      - "Honour Retry-After; never surface a 429 to users"
+    narration: >
+      Five rules. Define tables, columns and keys as code, inside a solution. Upsert by alternate key, and wait
+      until the key is active. Use batches for throughput, and change sets only when it really must be atomic.
+      Follow the next link as returned. And honour retry after.
+
   - id: outro
     type: outro
     heading: "Code on GitHub, guides on devladlog.com"
     sub: "github.com/devladlog/mg-lab"
     narration: >
-      TODO
+      The schema, the client, the stand-in and all forty-one tests are on GitHub, and the complete guide to
+      Dataverse is on devladlog dot com. Links are in the description. Next in this series: security roles and
+      teams, on this same table. Subscribe so you don't miss it.

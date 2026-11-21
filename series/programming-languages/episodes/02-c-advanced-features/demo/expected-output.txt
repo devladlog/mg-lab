@@ -1,0 +1,42 @@
+$ dotnet test AdvancedCSharp.slnx -m:1
+Passed!  - Failed:     0, Passed:    53, Skipped:     0, Total:    53, Duration: 122 ms - Contoso.Requests.Tests.dll (net10.0)
+
+$ dotnet run --project src/Contoso.Requests.Demo
+== Routing (property + relational patterns)
+  PR-2026-0001    18,000 EUR  Standard -> TeamLead  "Laptop refresh"
+  PR-2026-0002    75,000 EUR  High     -> Finance   "CRM rollout"
+  PR-2026-0003   300,000 EUR  High     -> Board     "New data platform"
+
+== Extension members (C# 14)
+  requests.TotalBudget          = 393,000 EUR
+  requests.HighPriority.Count() = 2
+  clock.Today                   = 2026-11-21
+  int[].Mean() via span         = 131
+
+== Workflow
+  OK      PR-2026-0003  Waiting for approval since 2026-11-21  approvals=[]
+  REFUSED You can't approve your own request.
+  OK      PR-2026-0003  Waiting for approval since 2026-11-21  approvals=[Finance]
+  OK      PR-2026-0003  Approved by alex.demo@contoso.com  approvals=[Finance, Board]
+  metrics: approved=1, last decision 10:00
+
+== Compound assignment (C# 14)
+  3 requests, total 393,000 EUR, largest 300,000 EUR
+
+== Span parsing without allocations
+  parsed 3 codes, allocated 0 bytes
+
+$ ./demo/expect-errors.sh
+== dotnet build demo/Gotchas (expected to fail)
+demo/Gotchas/FieldKeyword.cs(10,19): error CS9264: Non-nullable property 'Name' must contain a non-null value when exiting constructor. Consider adding the 'required' modifier, or declaring the proper
+demo/Gotchas/FieldKeyword.cs(12,16): error CS9258: In language version 14.0, the 'field' keyword binds to a synthesized backing field for the property. To avoid generating a synthesized backing field,
+demo/Gotchas/FieldKeyword.cs(13,16): error CS9258: In language version 14.0, the 'field' keyword binds to a synthesized backing field for the property. To avoid generating a synthesized backing field,
+demo/Gotchas/NotExhaustive.cs(9,61): error CS8509: The switch expression does not handle all possible values of its input type (it is not exhaustive). For example, the pattern '_' is not covered. [dem
+  ok   CS8509 switch over a 'closed' record hierarchy is not exhaustive
+  ok   CS9258 'field' now means the backing field, not the member
+  ok   CS9264 the new backing field is never initialised
+  ok   reassigning a primary constructor parameter compiles without a warning
+  ok   LinqClash.cs compiles without a warning
+== dotnet run --project demo/CSharp13
+  C# 13: [1, 2, 3].Average() = 2
+  ok   C# 13 binds values.Average() to LINQ (C# 14 picks the span extension: see the unit test)

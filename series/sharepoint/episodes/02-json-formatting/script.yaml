@@ -1,0 +1,267 @@
+# DEVLADLOG SharePoint — episode 02 (draft: screens to be captured in the lab tenant, see demo.md)
+episode: 2
+slug: json-formatting
+series_label: "SHAREPOINT"
+series_name: "DEVLADLOG SharePoint"
+file_prefix: "sharepoint"
+title: "JSON formatting you can test"
+subtitle: "Column and view formats in git, linted, previewed, applied with PnP"
+voice: am_michael
+thumbnail_text: "JSON\nFORMATTING\nTESTED"
+youtube:
+  title: "SharePoint JSON Column & View Formatting: Lint, Test, Apply with PnP | DEVLADLOG SharePoint #2"
+  tags: [SharePoint, column formatting, view formatting, JSON formatting, Microsoft Lists, PnP PowerShell, Python, pytest, Microsoft 365]
+sources:
+  - https://www.devladlog.com/articles/sharepoint/2026-04-13-json-formatting-complete-guide-2026/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "JSON formatting you can test"
+    sub: "In git, linted, previewed, applied with PnP"
+    short: hook
+    narration: >
+      Column formatting usually lives in one place: a text box in the browser, edited by whoever got there last. In
+      this episode the JSON lives in git. We lint it, preview it against sample rows, test it, and apply it with p n p
+      PowerShell, including two traps the JSON schema will never catch. Welcome to DEVLADLOG SharePoint.
+
+  - id: what
+    type: bullets
+    heading: "What formatting is, and isn't"
+    bullets:
+      - "Changes how values look, never the data"
+      - "Anyone who can manage views can apply it"
+      - "No script: predefined elements, styles, attributes"
+      - "Need real code? That's an SPFx field customizer"
+      - "Today: 4 column formats + 1 view format, episode 1's list"
+    narration: >
+      First, what it is. Formatting changes how values are displayed, never the data. Anyone who can create and manage
+      views can apply it. There's no script, only predefined elements, styles and attributes. If you need real code,
+      that's an SPFx field customizer. Today we format the purchase requests list from episode one: four columns and
+      one view.
+
+  - id: status
+    type: code
+    heading: "Status as a pill"
+    lang: json
+    code: |
+      {
+        "$schema": "https://developer.microsoft.com/json-schemas/sp/v2/column-formatting.schema.json",
+        "elmType": "div",
+        "attributes": {
+          "class": "=if(@currentField == 'Approved' || @currentField == 'Ordered',
+                    'sp-field-severity--good',
+                    if(@currentField == 'Rejected', 'sp-field-severity--blocked',
+                    if(@currentField == 'New', 'sp-field-severity--low', 'ms-fontColor-neutralSecondary')))"
+        },
+        "children": [
+          { "elmType": "span", "style": { "display": "inline-block", "padding": "0 4px" },
+            "attributes": { "iconName": "=if(@currentField == 'Rejected', 'ErrorBadge',
+                                         if(@currentField == 'New', 'Forward', 'CheckMark'))" } },
+          { "elmType": "span", "txtContent": "@currentField" }
+        ]
+      }
+    narration: >
+      The status column. An Excel style expression picks one of SharePoint's predefined severity classes: green for
+      approved and ordered, red for rejected, neutral for new, grey for closed. A Fluent icon goes in front, and the
+      value itself goes last. Same pattern as the samples on Microsoft Learn.
+
+  - id: duedate
+    type: code
+    heading: "Due date: overdue, due soon, or nothing"
+    lang: json
+    code: |
+      "color": "=if(@currentField == ''
+                  || [$RequestStatus] == 'Closed' || [$RequestStatus] == 'Rejected', '',
+                 if(Number(@currentField) + 86400000 <= Number(@now), '#a4262c',
+                 if(Number(@currentField) <= Number(@now) + 604800000, '#8a6100', '')))"
+
+      // 86,400,000 ms = one day: overdue only once the due day is over
+      // 604,800,000 ms = seven days: due soon
+      // [$RequestStatus] = another column, by internal name
+    narration: >
+      The due date reads another column, status, by its internal name, so closed requests never turn red. Dates are
+      milliseconds, so adding eighty six million four hundred thousand adds one day. Overdue means the due day is
+      over. Due within seven days turns amber. And an empty date stays plain, because the number of an empty value is
+      zero, which would be very overdue.
+
+  - id: dates
+    type: code
+    heading: "The date-only trap, in a test"
+    lang: python
+    code: |
+      def test_the_naive_comparison_flags_due_today_as_overdue(sample):
+          # [$DueDate] <= @now : a date-only value is midnight, so at 09:00 it's already "past"
+          row = only(sample["rows"]["Conference tickets"])          # due 1 Dec, now 1 Dec 09:00
+          naive = evaluate(parse_excel("=if([$DueDate] <= @now, '#ff0000', '')"),
+                           Context(row=row, now=sample["now"]))
+          assert naive == "#ff0000"
+
+      def test_due_today_is_due_soon_not_overdue(formats, sample):
+          node = col(formats, "due-date.column.json", "DueDate", sample["rows"]["Conference tickets"], sample)
+          assert node["style"]["color"] == "#8a6100"
+    short: dates
+    narration: >
+      Why add a day? The simplest overdue check compares the due date with now. But a date only column has no time
+      of day. On the due date itself, at nine in the morning, that comparison is already true, and a request due
+      today shows as overdue. Our test reproduces it, and proves the one-day version shows due soon instead.
+
+  - id: view
+    type: code
+    heading: "One view format: highlight the row"
+    lang: json
+    code: |
+      {
+        "$schema": "https://developer.microsoft.com/json-schemas/sp/view-formatting.schema.json",
+        "additionalRowClass": "=if([$DueDate] != '' && [$RequestStatus] != 'Closed'
+            && [$RequestStatus] != 'Rejected'
+            && Number([$DueDate]) + 86400000 <= Number(@now), 'sp-field-severity--severeWarning', '')"
+      }
+
+      // In a view format, @currentField always means Title. Use [$InternalName].
+    narration: >
+      The open requests view gets a view format. Additional row class highlights the whole row when a request is open
+      and overdue, and leaves the column formats in place. One detail from the docs: inside a view format, at current
+      field always means the title, so we name every column explicitly.
+
+  - id: lint
+    type: code
+    heading: "Lint what the schema can't see"
+    lang: text
+    code: |
+      $ python3 -m formatlint lint formats/bad/map.json
+      ERROR   FL006  due-date.column.json: reads [$RequestStatus] but view 'Due dates only' doesn't include it
+      ERROR   FL001  overdue-row.view.json: $schema should be a view-formatting schema
+      ERROR   FL004  overdue-row.view.json: style 'float' isn't allowed (float is no longer supported)
+      ERROR   FL003  overdue-row.view.json: attribute 'onclick' isn't allowed
+      ERROR   FL005  overdue-row.view.json: additionalRowClass: unknown function today() ...
+      ERROR   FL008  overdue-row.view.json: children[2].attributes.href: links must start with http://, ...
+      WARNING FL007  overdue-row.view.json: @currentField in a view format always means the Title field
+      10 error(s), 3 warning(s)
+    narration: >
+      The JSON schema checks structure, but an Excel style expression is just a string to it. So formatlint parses
+      every expression, and checks the rules from the syntax reference: allowed styles and attributes, known
+      functions, link protocols. There's no today function, by the way. It's at now. And the first error is the one
+      that bites in real life.
+
+  - id: tests
+    type: code
+    heading: "62 tests, Learn's own examples included"
+    lang: text
+    code: |
+      $ python3 -m pytest tests -q
+      ..............................................................   [100%]
+      62 passed in 1.41s
+
+      # test_expr.py     Excel style == the AST Learn shows, for Learn's own pairs
+      #                  documented results: indexOf('DogFood', 'F') == 3, length('') == 0 ...
+      # test_formats.py  what each format renders for six fictional rows
+      # test_lint.py     every rule fires on the bad examples, none on ours
+      # test_schema.py   Microsoft's published JSON schemas, downloaded and cached
+    narration: >
+      Sixty two tests. The parser turns Excel style into the syntax tree form, and for the pairs Learn shows in both
+      syntaxes, the trees match exactly. Documented results like index of dog food are tests too. And the formats are
+      validated against Microsoft's published schemas, which taught us something: Learn's own view sample doesn't pass
+      them strictly, so that part is checked by our parser instead.
+
+  - id: apply
+    type: code
+    heading: "Apply from git with PnP"
+    lang: powershell
+    code: |
+      & $python -m formatlint lint $MapPath | Out-Host
+      if ($LASTEXITCODE -ne 0) { throw 'formatlint found errors; nothing was applied.' }
+
+      foreach ($column in $map.columns.Keys) {
+          $json = Get-FormatJson $map.columns[$column]            # compact JSON
+          Set-PnPField -List $list -Identity $column -Values @{ CustomFormatter = $json }
+      }
+      foreach ($view in $map.views.Keys) {
+          $file = $map.views[$view].format
+          if (-not $file) { continue }
+          Set-PnPView -List $list -Identity $view -Values @{ CustomFormatter = (Get-FormatJson $file) }
+      }
+      # -WhatIf, -Export ./backup, -Reset
+    narration: >
+      Applying is a short p n p script. It runs the linter first and stops on any error. Then it sets the custom
+      formatter property on each field and view: the same property the formatting pane writes. Export saves what's
+      live, reset goes back to default rendering, and what if shows the plan. Six Pester tests cover it with the real
+      p n p signatures.
+
+  - id: before
+    type: screen
+    heading: "Before: plain values"
+    image: screens/before.jpg
+    bar: "Microsoft Lists · Purchase Requests · Open requests"
+    demo: >
+      Browser: Purchase Requests (from episode 1, seeded), view "Open requests", no formatting applied yet (run
+      Set-ListFormatting.ps1 -Reset first). At least one row overdue, one due today, one closed and one with no due date
+      should be visible (edit a few seeded items beforehand). Mask tenant URL and avatar.
+    narration: >
+      Here's the list from episode one, with no formatting. Every value looks the same, and nothing tells you which
+      requests are late.
+
+  - id: after
+    type: screen
+    heading: "After: one script run"
+    image: screens/after.jpg
+    bar: "Microsoft Lists · Purchase Requests · Open requests"
+    demo: >
+      Terminal first (optional, small inset): Set-ListFormatting.ps1 output "No findings." then 4 Column + 1 View rows.
+      Then the same browser view refreshed: status pills, red bold overdue date with warning icon, amber due-soon dates,
+      amount data bars, own requests in bold, overdue open rows highlighted. Capture the row due today: it must be amber,
+      not red (if it isn't, record what it shows and fix the README/script). Mask tenant URL and avatar.
+    narration: >
+      One script run later. Status pills, overdue dates in red with a warning icon, due soon in amber, the amount as a
+      data bar, my own requests in bold, and overdue rows highlighted. The request due today is amber, not red.
+
+  - id: pane
+    type: screen
+    heading: "Same JSON in the formatting pane"
+    image: screens/format-pane.jpg
+    bar: "Purchase Requests · Due date → Column settings → Format this column"
+    demo: >
+      Browser: Due date column header > Column settings > Format this column > Advanced mode, showing the JSON the
+      script applied (the color expression with 86400000 visible). Do not save anything from the pane.
+    narration: >
+      Open format this column and it's the same JSON from git. Anyone can still tweak it here, which is exactly why
+      export exists: pull what's live back into the repository before you overwrite it.
+
+  - id: inview
+    type: screen
+    heading: "The gotcha: fields must be in the view"
+    image: screens/not-in-view.jpg
+    bar: "Microsoft Lists · Purchase Requests · Due dates only (personal view)"
+    demo: >
+      Browser: create a personal view "Due dates only" with just Title and Due date (no Status). Show a Closed request
+      with an old due date. Capture how its due date renders now versus in "Open requests" (expected: the status check
+      can't read RequestStatus, so the closed item is no longer plain; record what actually happens and adjust the
+      narration). Delete the personal view afterwards.
+    short: inview
+    narration: >
+      Now the trap. Learn says references to other fields only work when those fields are in the same view. This
+      personal view shows the due date but not the status, so the format can't tell a closed request from an open
+      one. The format didn't change; the view did. That's why the map lists each view's fields, and the linter
+      flags it before it ships.
+
+  - id: recap
+    type: bullets
+    heading: "Five rules"
+    bullets:
+      - "Formats live in git and go through a script"
+      - "Lint the expressions, not just the schema"
+      - "Every field a format reads must be in every view that shows it"
+      - "Dates are milliseconds; date-only has no time of day"
+      - "In a view format, @currentField means Title"
+    narration: >
+      Five rules. Formats live in git and reach the list through a script. Lint the expressions, not just the schema.
+      Every field a format reads must be in every view that shows it. Dates are milliseconds, and date only has no
+      time of day. And in a view format, at current field means title.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The formats, formatlint and the tests are on GitHub, and the full guide is on devladlog dot com. Links are in the
+      description. Subscribe so you don't miss episode three. This was DEVLADLOG SharePoint, by Momento Galático.

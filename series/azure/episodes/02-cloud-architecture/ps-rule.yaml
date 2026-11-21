@@ -1,0 +1,18 @@
+# PSRule for Azure: Well-Architected Framework rules run against the Bicep parameter files (no Azure needed).
+# https://azure.github.io/PSRule.Rules.Azure/
+include:
+  module:
+    - PSRule.Rules.Azure
+
+configuration:
+  AZURE_BICEP_FILE_EXPANSION: true
+  AZURE_BICEP_PARAMS_FILE_EXPANSION: true
+  AZURE_BICEP_FILE_EXPANSION_TIMEOUT: 30
+  AZURE_PARAMETER_DEFAULTS:
+    probeSecretValue: 'not-a-real-secret'
+
+execution:
+  unprocessedObject: Ignore
+
+output:
+  culture: ['en-US']

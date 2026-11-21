@@ -1,0 +1,22 @@
+{
+  "description": "A 'legacy' list to provision with -Force and then audit live: it provisions cleanly but breaks two view rules.",
+  "lists": [
+    {
+      "title": "Legacy Requests",
+      "url": "Lists/LegacyRequests",
+      "template": "GenericList",
+      "expectedItems": 60000,
+      "versioning": { "enabled": true, "majorVersions": 500 },
+      "fields": [
+        { "internalName": "LegacyStatus", "displayName": "Status", "type": "Choice", "indexed": true,
+          "choices": ["New", "Done"] },
+        { "internalName": "Amount", "displayName": "Amount", "type": "Currency" }
+      ],
+      "views": [
+        { "title": "Everything", "rowLimit": 30, "fields": ["LinkTitle", "LegacyStatus", "Amount"] },
+        { "title": "Big ones", "rowLimit": 30, "fields": ["LinkTitle", "Amount"],
+          "filters": [ { "field": "Amount", "op": "Gt", "value": "10000" } ] }
+      ]
+    }
+  ]
+}

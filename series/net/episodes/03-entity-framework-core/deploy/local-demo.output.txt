@@ -1,0 +1,28 @@
+
+== 1. Alex submits a 40,000 request for Finance
+<- HTTP 201
+{"id":1,"title":"Laptop refresh","budget":40000,"department":"FIN","requestedBy":"alex.demo@contoso.com","justification":null,"priority":"Standard","status":"Submitted","createdAtUtc":"2026-11-21T04:04:53.6480081Z","decidedBy":null,"decidedAtUtc":null,"version":"6f589371-5969-43f9-b904-4bd482fad81c"}
+
+== 2. Sam (approver) opens it and sees version A
+<- HTTP 200
+{"id":1,"title":"Laptop refresh","budget":40000.0,"department":"FIN","requestedBy":"alex.demo@contoso.com","justification":null,"priority":"Standard","status":"Submitted","createdAtUtc":"2026-11-21T04:04:53.6480081Z","decidedBy":null,"decidedAtUtc":null,"version":"6f589371-5969-43f9-b904-4bd482fad81c"}
+   Sam sees budget 40000.0, version 6f589371...
+
+== 3. Meanwhile Alex raises the budget to 400,000 (with a justification)
+<- HTTP 200
+{"id":1,"title":"Laptop refresh","budget":400000,"department":"FIN","requestedBy":"alex.demo@contoso.com","justification":"Scope grew to all sites.","priority":"High","status":"Submitted","createdAtUtc":"2026-11-21T04:04:53.6480081Z","decidedBy":null,"decidedAtUtc":null,"version":"16a642c9-d6de-42cf-852c-42d276141981"}
+   new version 16a642c9..., priority High
+
+== 4. Sam clicks Approve on what he saw (version A)
+<- HTTP 409
+{"type":"https://tools.ietf.org/html/rfc9110#section-15.5.10","title":"The request changed since you read it.","status":409,"detail":"Read it again (GET) and retry with the new version.","traceId":"00-598eedd7def5a7922b21261b72dfcdbc-b0397797b83b3fd2-00"}
+
+== 5. Sam reads it again: 400,000, still Submitted. Approves the current version
+<- HTTP 200
+{"id":1,"title":"Laptop refresh","budget":400000.0,"department":"FIN","requestedBy":"alex.demo@contoso.com","justification":"Scope grew to all sites.","priority":"High","status":"Submitted","createdAtUtc":"2026-11-21T04:04:53.6480081Z","decidedBy":null,"decidedAtUtc":null,"version":"16a642c9-d6de-42cf-852c-42d276141981"}
+<- HTTP 200
+{"id":1,"title":"Laptop refresh","budget":400000.0,"department":"FIN","requestedBy":"alex.demo@contoso.com","justification":"Scope grew to all sites.","priority":"High","status":"Approved","createdAtUtc":"2026-11-21T04:04:53.6480081Z","decidedBy":"sam.approver@contoso.com","decidedAtUtc":"2026-11-21T04:04:54.1555707Z","version":"fbef881c-c6fe-45cb-9b6e-293151aa39ee"}
+
+== 6. Totals per department, computed by the database
+<- HTTP 200
+[{"department":"FIN","requests":1,"totalBudget":400000.0,"approvedBudget":400000.0},{"department":"IT","requests":0,"totalBudget":0.0,"approvedBudget":0.0},{"department":"OPS","requests":0,"totalBudget":0.0,"approvedBudget":0.0}]

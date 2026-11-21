@@ -1,0 +1,66 @@
+table Sales
+
+	/// Fine: DIVIDE, and the slash in the comment must not count.
+	measure 'Sales Amount' = SUMX(Sales, Sales[Quantity] * Sales[Unit Price])
+		formatString: #,0.00
+		displayFolder: Base
+
+	measure Margin = [Sales Amount] - SUMX(Sales, Sales[Quantity] * Sales[Unit Cost])
+		formatString: #,0.00
+
+	measure 'Margin Pct' = [Margin] / [Sales Amount]
+
+	measure 'Margin Share' = DIVIDE([Margin], [Sales Amount]) // margin / sales
+		formatString: 0.0%
+
+	measure Half = [Sales Amount] / 2
+		formatString: #,0.00
+
+	measure 'Sales YTD' = TOTALYTD([Sales Amount], Sales[Order Date])
+		formatString: #,0.00
+
+	measure Qty = SUM([Quantity])
+		formatString: #,0
+
+	measure Double = Sales[Sales Amount] * 2
+		formatString: #,0.00
+
+	measure 'Revenue PY' = CALCULATE([Revenue], SAMEPERIODLASTYEAR('Date'[Date]))
+		formatString: #,0.00
+
+	measure 'Ship Sales' = CALCULATE([Sales Amount], USERELATIONSHIP(Sales[Order Date], 'Date'[Date]))
+		formatString: #,0.00
+
+	measure 'Due Sales' = CALCULATE([Sales Amount], USERELATIONSHIP(Sales[Due Date], 'Date'[Date]))
+		formatString: #,0.00
+
+	column 'Order Date'
+		dataType: dateTime
+		isHidden
+		summarizeBy: none
+		sourceColumn: OrderDate
+
+	column 'Ship Date'
+		dataType: dateTime
+		isHidden
+		summarizeBy: none
+		sourceColumn: ShipDate
+
+	column Quantity
+		dataType: int64
+		isHidden
+		summarizeBy: none
+		sourceColumn: Quantity
+
+	column 'Unit Price'
+		dataType: decimal
+		isHidden
+		summarizeBy: none
+		sourceColumn: UnitPrice
+
+	column 'Unit Cost'
+		dataType: decimal
+		isHidden
+		summarizeBy: none
+		sourceColumn: UnitCost
+

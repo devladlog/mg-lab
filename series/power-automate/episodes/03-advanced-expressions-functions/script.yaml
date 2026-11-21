@@ -1,0 +1,285 @@
+# DEVLADLOG Power Automate — episode 03 (draft: material built and tested locally, demo still to record)
+episode: 3
+slug: advanced-expressions-functions
+series_label: "POWER AUTOMATE"
+series_name: "DEVLADLOG Power Automate"
+file_prefix: "power-automate"
+title: "One expression instead of a loop"
+subtitle: "Time zones, text parsing, sums and group by in a weekly digest"
+voice: am_michael
+thumbnail_text: "ONE EXPRESSION\nNO LOOP\nSAME TOTAL"
+youtube:
+  title: "Power Automate Expressions: Time Zones, xpath Sums, Group By, No Loops | DEVLADLOG Power Automate #3"
+  tags: [Power Automate, expressions, functions, xpath, convertFromUtc, formatNumber, Select, Filter array, cloud flows, Power Platform]
+sources:
+  - https://www.devladlog.com/articles/power-automate/2025-03-05-expressions-functions-complete-guide-2025/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "One expression instead of a loop"
+    sub: "Time zones, parsing, sums and group by, tested"
+    short: hook
+    narration: >
+      Finance wants a Monday email: last week's approved purchases, the total, the total per cost centre, and the
+      three biggest requests. Most flows do that with an apply to each, a variable and a dozen steps. We'll do it
+      with zero loops, a handful of expressions, and a test for every one of them.
+
+  - id: brief
+    type: bullets
+    heading: "What finance asked for"
+    bullets:
+      - "Last week, Monday to Monday, in Lisbon time"
+      - "Approved requests only, with a PR reference"
+      - "Total and total per cost centre"
+      - "The three biggest requests"
+      - "No email when nothing was approved"
+    narration: >
+      Here's the brief. Last week, Monday to Monday, in Lisbon time, not UTC. Approved requests only, each with a
+      reference number. The total, and the total per cost centre, which lives in the title, like C C forty-one
+      hundred in square brackets. The three biggest requests. And no email at all when nothing was approved.
+
+  - id: list
+    type: screen
+    heading: "The same purchase requests list"
+    image: screens/list.jpg
+    bar: "SharePoint · Purchasing · Purchase Requests"
+    demo: >
+      SharePoint list "Purchase Requests" (from episode 2) filtered to last week: titles with cost-centre prefixes
+      "[CC-4100] Laptops for two new developers" 12500, "[CC-4100] USB-C docking stations" 1800,
+      "[cc-2200] Ergonomic chairs for the support team" 4350.50, "Conference tickets" 950 (no prefix),
+      "[CC-3300] Monitor arms" 120, plus one Rejected and one Pending row. Status column visible. Mask the tenant URL.
+    narration: >
+      It's the purchase requests list from the approvals episode. Notice the messy parts: one cost centre is in lower
+      case, one title has no cost centre at all, and some requests aren't approved. The expressions have to cope with
+      all of that without failing the run.
+
+  - id: window
+    type: code
+    heading: "Last week, in Lisbon time"
+    lang: json
+    code: |
+      "Week_start_local": {
+        "type": "Compose",
+        "inputs": "@addDays(startOfDay(convertFromUtc(utcNow(), 'GMT Standard Time')), -7)"
+      },
+      "Week_start_utc": {
+        "type": "Compose",
+        "inputs": "@convertToUtc(outputs('Week_start_local'), 'GMT Standard Time', 'yyyy-MM-dd''T''HH:mm:ss''Z''')"
+      },
+      "Get_requests": { "parameters": {
+        "$filter": "Created ge '@{outputs('Week_start_utc')}' and Created lt '@{outputs('Week_end_utc')}'" } }
+    narration: >
+      First, the window. Convert from UTC gives us Lisbon wall clock time, with no offset. Start of day, minus seven
+      days: last Monday at midnight in Lisbon. Then convert to UTC turns that back into a real UTC time for the
+      SharePoint filter. Time zones are Windows names, so Lisbon is G M T standard time.
+
+  - id: title
+    type: code
+    heading: "Parse the title without failing"
+    lang: json
+    code: |
+      "costCentre": "@if(and(startsWith(item()?['Title'], '[CC-'),
+                             greater(indexOf(item()?['Title'], ']'), 4)),
+                         toUpper(slice(item()?['Title'], 1, indexOf(item()?['Title'], ']'))),
+                         'Unassigned')",
+
+      "item": "@trim(slice(item()?['Title'], add(indexOf(item()?['Title'], ']'), 1)))"
+
+      [CC-4100] Laptops     ->  CC-4100     Laptops
+      [cc-2200]   Chairs    ->  CC-2200     Chairs
+      Conference tickets    ->  Unassigned  Conference tickets
+      [CC-4100 Laptops      ->  Unassigned  [CC-4100 Laptops
+    narration: >
+      The cost centre. Starts with is not case sensitive, so lower case C C matches, and to upper normalizes it. The
+      item name uses slice from after the closing bracket. With no bracket, index of returns minus one, plus one is
+      zero, and slice returns the whole title. Substring would fail when the range is out of bounds. Slice just clamps.
+
+  - id: rows
+    type: code
+    heading: "Shape every row with one Select"
+    lang: json
+    code: |
+      "Rows": {
+        "type": "Select",
+        "inputs": {
+          "from": "@body('Approved')",
+          "select": {
+            "reference": "PR-@{formatNumber(item()?['ID'], '00000')}",
+            "requester": "@{item()?['Author']?['DisplayName']}",
+            "amount": "@item()?['Amount']",
+            "submitted": "@{convertFromUtc(item()?['Created'], 'GMT Standard Time', 'dd/MM/yyyy HH:mm')}"
+          }
+        }
+      }
+    narration: >
+      A filter array keeps the approved items, and one select shapes every row. Format number with five zeros turns
+      ID forty-one into P R zero zero zero four one. Submitted is shown in Lisbon time. And the property names are
+      camel case on purpose; you'll see why in a moment.
+
+  - id: designer
+    type: screen
+    heading: "The same Select in the designer"
+    image: screens/select-designer.jpg
+    bar: "Power Automate · Weekly purchasing digest · Edit"
+    demo: >
+      New designer, Rows (Select) action expanded in the Purchasing Reports solution: Map in key/value mode with
+      reference, costCentre, item, requester, amount, submitted; the expression editor open on costCentre showing the
+      if(and(startsWith(...)), toUpper(slice(...)), 'Unassigned') expression.
+    narration: >
+      In the designer it's the same select, in key and value mode. Long expressions are easier to read in code view,
+      but either way they're plain text, and that means we can test them.
+
+  - id: total
+    type: code
+    heading: "A sum without a loop"
+    lang: json
+    code: |
+      "XML_source": {
+        "type": "Compose",
+        "inputs": { "root": { "row": "@body('Rows')" } }
+      },
+      "Total": {
+        "type": "Compose",
+        "inputs": "@xpath(xml(outputs('XML_source')), 'sum(/root/row/amount)')"
+      }
+
+      <root>
+        <row><reference>PR-00041</reference><amount>12500</amount>...</row>
+        <row><reference>PR-00043</reference><amount>4350.5</amount>...</row>
+      </root>                                  sum(/root/row/amount) = 19720.5
+    short: xpath
+    narration: >
+      There's no sum function. But xml accepts an object with one root property, and an array becomes repeated
+      elements. So we wrap the rows in root, convert to XML, and ask xpath for sum of root, row, amount. One step,
+      nineteen thousand seven hundred and twenty euros fifty. Both parts are examples in the functions reference.
+
+  - id: groupby
+    type: code
+    heading: "Group by and top three"
+    lang: json
+    code: |
+      "By_cost_centre": {
+        "type": "Select",
+        "inputs": {
+          "from": "@sort(union(body('Cost_centre_list'), body('Cost_centre_list')))",
+          "select": {
+            "costCentre": "@item()",
+            "requests": "@xpath(xml(outputs('XML_source')), concat('count(/root/row[costCentre=\"', item(), '\"])'))",
+            "total": "@xpath(xml(outputs('XML_source')), concat('sum(/root/row[costCentre=\"', item(), '\"]/amount)'))"
+          }
+        }
+      },
+      "Top_three": { "type": "Compose", "inputs": "@take(reverse(sort(body('Rows'), 'amount')), 3)" }
+    narration: >
+      Group by. Union of a list with itself removes the duplicates, sort orders them, and a select runs an xpath per
+      cost centre, with a filter in square brackets. That's why the names are camel case: XML element names can't
+      contain spaces. The top three is take, reverse, sort by amount.
+
+  - id: count
+    type: code
+    heading: "Every action counts"
+    lang: text
+    code: |
+      tests/test_action_count.py
+
+      rows   apply to each + increment   xpath sum
+         1                 4 actions      1 action
+        25                28 actions      1 action
+       200               203 actions      1 action
+
+      Learn, limits page: requests are counted for all types of actions,
+      from initializing variables to a simple compose action.
+    narration: >
+      Why bother? Every action run is a Power Platform request, from initialize variable to a simple compose. A loop
+      over two hundred requests is over two hundred actions. The expression is one, with the same total. The test
+      runs both versions and compares.
+
+  - id: run-total
+    type: screen
+    heading: "The run, with no loop in it"
+    image: screens/run-total.jpg
+    bar: "Power Automate · Weekly purchasing digest · Run history"
+    demo: >
+      Run details of a manual test run: all actions green, no Apply to each anywhere. Total (Compose) expanded showing
+      the output 19720.5 (or the lab data's total), and By cost centre (Select) expanded showing the array with
+      costCentre, requests and total per cost centre.
+    narration: >
+      Here's a real run. No apply to each anywhere. Total shows the sum, and by cost centre shows one object per cost
+      centre, with the count and the total. Same numbers as the dry run.
+
+  - id: gotcha
+    type: code
+    heading: "The bug that only shows up in summer"
+    lang: text
+    code: |
+      Tempting:  formatDateTime(outputs('Week_start_local'), 'yyyy-MM-dd''T''HH:mm:ss''Z''')
+      Correct:   convertToUtc(outputs('Week_start_local'), 'GMT Standard Time', ...)
+
+                    January run              July run
+      tempting      2026-01-05T00:00:00Z     2026-07-06T00:00:00Z   <- an hour late
+      correct       2026-01-05T00:00:00Z     2026-07-05T23:00:00Z
+
+      July, tempting version:  PR-00046 (Mon 00:30) missing, PR-00047 (next Mon 00:30) included
+      test_a_z_suffix_doesnt_make_local_time_utc_in_summer   PASSED
+      test_the_same_mistake_is_invisible_in_winter           PASSED
+    short: gotcha
+    narration: >
+      Now the bug we wrote on purpose. Format the Lisbon midnight with a Z, and it looks like UTC, but it isn't. In
+      January Lisbon is on UTC, so every test passes. In July the window starts an hour late: Monday's first request
+      disappears, and next Monday's sneaks in. Always convert, never just add a Z.
+
+  - id: traps
+    type: bullets
+    heading: "Five more traps from the reference"
+    bullets:
+      - "formatNumber with C2 and no locale gives dollars"
+      - "substring fails out of range; slice clamps"
+      - "indexOf and startsWith ignore case; contains doesn't"
+      - "xml needs one root and element-friendly names"
+      - "8,192 characters per expression"
+    narration: >
+      A few more from the reference. Format number with C two and no locale gives dollars, because the default is
+      en U S. Substring fails out of range, slice doesn't. Index of and starts with ignore case, contains doesn't. XML
+      needs one root and valid element names. And an expression can be eight thousand one hundred ninety-two characters.
+
+  - id: tests
+    type: code
+    heading: "Eighty-one tests, two seconds"
+    lang: text
+    code: |
+      $ python -m pytest
+      81 passed in 2.54s
+
+      $ python -m flowkit eval "formatNumber(17.35, 'C2')"
+      $17.35
+      $ python -m flowkit eval "convertFromUtc('2026-07-13T06:00:00Z', 'GMT Standard Time', 'HH:mm')"
+      07:00
+      $ python -m flowkit run Weeklypurchasingdigest-*.json --mocks mocks-week-of-2026-07-06.json \
+          --now 2026-07-13T06:00:00Z
+      Run: Succeeded
+    narration: >
+      Eighty-one tests in under three seconds: the documented examples for every function we use, the digest end to
+      end with a fake SharePoint, both summer and winter, and the gotchas. And flowkit eval lets you try any
+      expression locally before you paste it into the designer.
+
+  - id: email
+    type: screen
+    heading: "Monday, seven in the morning"
+    image: screens/digest-email.jpg
+    bar: "Outlook · finance-approvers"
+    demo: >
+      The digest email in the finance-approvers test mailbox: subject "Approved purchases, week of 6 July 2026:
+      19,720.50 EUR" (or the lab week's values), first line with the count and the Monday-to-Sunday dates, the By cost
+      centre table and the Top three table with references, items, requesters, amounts and Lisbon times.
+    narration: >
+      And the result. One email, total in the subject, a table per cost centre and the top three, with Lisbon times.
+      Built with expressions you can read, test and trust in July as well as in January.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The solution, the samples, flowkit and all eighty-one tests are on GitHub, and the complete guide is on dev lad
+      log dot com. Next in the series: the HTTP connector and REST API patterns. Subscribe so you don't miss it.

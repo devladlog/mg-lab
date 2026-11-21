@@ -1,0 +1,299 @@
+# DEVLADLOG Code — episode 02 (draft; screens are local captures, see demo.md)
+episode: 2
+slug: c-advanced-features
+series_label: "CODE"
+series_name: "DEVLADLOG Code"
+file_prefix: "programming-languages"
+title: "Advanced C# you'll actually use"
+subtitle: "C# 14 on .NET 10: what helps, and where it bites"
+voice: am_michael
+thumbnail_text: "C# 14\nFEATURES\nTHAT BITE"
+youtube:
+  title: "Advanced C# 14 on .NET 10: Extension Members, field, Patterns, Spans (Real Demo) | DEVLADLOG Code #2"
+  tags: [C#, C# 14, .NET 10, extension members, field keyword, pattern matching, list patterns, records, generic math, Span, primary constructors, xUnit]
+sources:
+  - https://www.devladlog.com/articles/programming-languages/2026-06-03-c-advanced-features-complete-guide-2026/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Advanced C# you'll actually use"
+    sub: "C# 14 on .NET 10, and where it bites"
+    short: hook
+    narration: >
+      Advanced C# features make great conference slides. But which ones should you put in production code, and
+      which ones quietly change what your code does? In this episode we build a small library with C# fourteen on
+      dot net ten: records, patterns, extension members, spans. Fifty-three tests, and one line of code that calls a
+      different method after you upgrade. Welcome to DEVLADLOG Code.
+
+  - id: plan
+    type: bullets
+    heading: "What we're building"
+    bullets:
+      - "Same project request rules as episode 1"
+      - "50,000 euros or more is High priority"
+      - "250,000 or more goes to Finance, then the Board"
+      - "You can't approve your own request"
+      - "A library, a console demo, 53 xUnit tests"
+    narration: >
+      Same rules as the TypeScript episode, so you can compare. Fifty thousand euros or more is high priority. Two
+      hundred and fifty thousand or more needs a justification, and goes to Finance first and the Board last. You
+      can't approve your own request. One library, one console demo, fifty-three tests.
+
+  - id: guardrails
+    type: code
+    heading: "Guardrails first"
+    lang: xml
+    code: |
+      <!-- Directory.Build.props: every project in the folder -->
+      <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>       <!-- C# 14 by default -->
+        <Nullable>enable</Nullable>
+        <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+        <AnalysisLevel>latest-recommended</AnalysisLevel>
+        <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+      </PropertyGroup>
+    narration: >
+      Before any feature, the guardrails. One Directory dot Build dot props for every project: dot net ten, which
+      gives you C# fourteen by default. Nullable reference types. Recommended analyzers. And warnings as errors. Keep
+      that last one in mind, it matters later in this episode.
+
+  - id: records
+    type: code
+    heading: "Records, required, and the field keyword"
+    lang: csharp
+    code: |
+      public sealed record ProjectRequest
+      {
+          public required RequestCode Code { get; init; }
+
+          public required string Title
+          {
+              get;
+              init => field = string.IsNullOrWhiteSpace(value) || value.Trim().Length < 3
+                  ? throw new ArgumentException("Title must have at least 3 characters.")
+                  : value.Trim();
+          }
+
+          public required Euros Budget { get; init; }
+          public RequestState State { get; init; } = new RequestState.Draft();
+          public IReadOnlyList<Approval> Approvals { get; init; } = [];
+      }
+    narration: >
+      The request is a record. Required and init mean the caller must set these, and nobody can change them later.
+      New in C# fourteen: the field keyword. We validate and trim the title right in the accessor, without
+      declaring a backing field. Budget is not a decimal, it's a Euros value type. More on that in a minute.
+
+  - id: patterns
+    type: code
+    heading: "Patterns that read like the policy"
+    lang: csharp
+    code: |
+      public static Route RouteFor(ProjectRequest request) => request switch
+      {
+          { Budget.Amount: >= 250_000m } => Route.Board,
+          { Budget.Amount: >= 50_000m } or { Justification: not null } => Route.Finance,
+          _ => Route.TeamLead,
+      };
+
+      public static bool IsFullyApproved(ProjectRequest request) => (RouteFor(request), request.Approvals) switch
+      {
+          (Route.TeamLead, [_, ..]) => true,
+          (Route.Finance, [.., { Role: "Finance" }]) => true,
+          (Route.Board, [{ Role: "Finance" }, .., { Role: "Board" }]) => true,
+          _ => false,
+      };
+    narration: >
+      Pattern matching is where C# really shines. Property and relational patterns turn routing into a table you can
+      read next to the policy. And list patterns check the approval chain: for the Board route, the first approval
+      must be Finance and the last must be the Board, whatever sits in between.
+
+  - id: extensions
+    type: code
+    heading: "C# 14: extension members"
+    lang: csharp
+    code: |
+      public static class RequestExtensions
+      {
+          extension(IEnumerable<ProjectRequest> requests)
+          {
+              public Euros TotalBudget => requests.Aggregate(Euros.Zero, (sum, r) => sum + r.Budget);
+              public IEnumerable<ProjectRequest> HighPriority =>
+                  requests.Where(r => Rules.PriorityFor(r.Budget) == Priority.High);
+          }
+      }
+      public static class EurosExtensions
+      {
+          extension(Euros)
+          {
+              public static Euros FromThousands(decimal thousands) => new(thousands * 1_000m);
+          }
+      }
+    narration: >
+      The headline feature of C# fourteen: extension members. An extension block can now declare properties, so
+      requests dot total budget reads like it belongs to the collection. And static extension members appear on the
+      type itself: Euros dot from thousands. Old style extension methods keep working next to them.
+
+  - id: editor
+    type: screen
+    heading: "Extension properties in IntelliSense"
+    image: screens/editor-extension.jpg
+    bar: "VS Code · Program.cs"
+    demo: >
+      VS Code (C# Dev Kit), dark theme, src/Contoso.Requests.Demo/Program.cs. Cursor after "requests." on the
+      TotalBudget line with the completion list open, showing TotalBudget and HighPriority with the property icon.
+      Optional second capture: hover on clock.Today showing the extension property from TimeProviderExtensions.
+    narration: >
+      In the editor they show up as real properties, with the property icon, right next to the LINQ methods. Even on
+      a framework type: our time provider gets a today property. Small thing, but it makes call sites much easier to
+      read.
+
+  - id: math
+    type: code
+    heading: "Generic math and compound assignment"
+    lang: csharp
+    code: |
+      public static T Sum<T>(ReadOnlySpan<T> values)
+          where T : IAdditionOperators<T, T, T>, IAdditiveIdentity<T, T>
+      {
+          var total = T.AdditiveIdentity;
+          foreach (var value in values) total += value;
+          return total;
+      }
+
+      public sealed class BudgetTally
+      {
+          public void operator +=(ProjectRequest request)   // C# 14: mutate in place
+          {
+              Count++; Total += request.Budget;
+              if (request.Budget > Largest) Largest = request.Budget;
+          }
+      }
+    narration: >
+      Euros implements the generic math interfaces, so one Sum method works for int, decimal and Euros. And C#
+      fourteen lets a class define its own plus equals. Tally plus equals request updates the tally in place
+      instead of creating a new object every time. A test checks it's still the same instance.
+
+  - id: span
+    type: code
+    heading: "Parsing without allocating"
+    lang: csharp
+    code: |
+      public static bool TryParse(ReadOnlySpan<char> s, IFormatProvider? provider, out RequestCode result)
+      {
+          result = default;
+          if (s.Length != 12 || !s.StartsWith("PR-") || s[7] != '-') return false;
+          if (!int.TryParse(s.Slice(3, 4), NumberStyles.None, CultureInfo.InvariantCulture, out var year)) return false;
+          if (!int.TryParse(s.Slice(8, 4), NumberStyles.None, CultureInfo.InvariantCulture, out var number)) return false;
+          ...
+      }
+
+      // test: three codes from one string
+      var before = GC.GetAllocatedBytesForCurrentThread();
+      foreach (var range in text.Split(','))
+          if (RequestCode.TryParse(text[range], out _)) found++;
+      Assert.Equal(0, GC.GetAllocatedBytesForCurrentThread() - before);
+    narration: >
+      Request codes are parsed from a span. No substring, no split into strings, just slices. And we don't guess
+      about performance, we measure it. The test parses three codes out of one string and asserts zero bytes
+      allocated, using a counter the runtime already gives you.
+
+  - id: run
+    type: screen
+    heading: "The walk-through"
+    image: screens/demo-run.jpg
+    bar: "Terminal · dotnet run"
+    demo: >
+      Terminal (dark theme, font 18 pt or larger): dotnet run --project src/Contoso.Requests.Demo. Visible: the
+      routing table (TeamLead, Finance, Board), the extension member lines (TotalBudget 393,000 EUR), the workflow
+      with REFUSED "You can't approve your own request." then approvals [Finance] and [Finance, Board] -> Approved,
+      and the last line "parsed 3 codes, allocated 0 bytes". Reference: demo/expected-output.txt.
+    narration: >
+      Here's the console walk-through. Three requests routed to team lead, finance and board. The requester tries to
+      approve their own request: refused. Finance approves, still waiting. The board approves, and the list pattern
+      says done. And the parser: three codes, zero bytes.
+
+  - id: service
+    type: code
+    heading: "Primary constructors: parameters, not fields"
+    lang: csharp
+    code: |
+      public sealed class ApprovalService(TimeProvider time, IRequestStore store, ApprovalMetrics? metrics = null)
+      {
+          private readonly IRequestStore _store = store;   // must never change: copy to readonly
+
+          public DecisionResult Approve(RequestCode code, EmailAddress approver, string role)
+          {
+              ...
+              var withApproval = request with { Approvals = [.. request.Approvals, new Approval(...)] };
+              ...
+              if (final.State is RequestState.Approved) metrics?.Approved += 1;   // C# 14
+              metrics?.LastDecisionAt = now;
+          }
+      }
+    narration: >
+      The service uses a primary constructor. But those are parameters, not readonly fields. Any method can reassign
+      them, and the compiler won't say a word. So the store, which must never change, goes into a readonly field.
+      And metrics is optional: C# fourteen null-conditional assignment updates it only when it's there.
+
+  - id: gotcha
+    type: code
+    heading: "Gotcha: same line, different method"
+    short: gotcha
+    lang: csharp
+    code: |
+      namespace SpanMath {
+          public static class SpanAverage {
+              public static double Average(this ReadOnlySpan<int> values) => -1;
+          }
+      }
+
+      int[] values = [1, 2, 3];
+      values.Average();
+
+      // C# 13  ->  System.Linq.Enumerable.Average   = 2
+      // C# 14  ->  SpanMath.SpanAverage.Average     = -1     (no warning in either)
+    narration: >
+      Now the one that surprised us. We had our own Average extension over a read-only span, and LINQ imported as
+      usual. Compiled as C# thirteen, values dot average calls LINQ. Compiled as C# fourteen, it calls our span
+      method. Same source line, no warning, a different method. Microsoft documents it as a breaking change: span
+      overloads now apply in more places. If you mean LINQ, call Enumerable dot Average explicitly.
+
+  - id: gotchas
+    type: screen
+    heading: "Only warnings, unless you say so"
+    image: screens/gotchas.jpg
+    bar: "Terminal · demo/expect-errors.sh"
+    short: warnings
+    demo: >
+      Terminal running ./demo/expect-errors.sh. Visible: the error lines CS9264, CS9258 (twice) and CS8509 for
+      demo/Gotchas, the six "ok" checks, and "C# 13: [1, 2, 3].Average() = 2". Optional split: the same build with
+      -p:TreatWarningsAsErrors=false showing "Build succeeded" with warnings CS8509, CS9258, CS9264.
+    narration: >
+      More traps, in one script. A switch over every state of our closed record hierarchy: still not exhaustive,
+      because C# has no closed hierarchies. A class with a member called field: the accessor now means something
+      else. And here's the catch: all of these are only warnings by default. Without warnings as errors, the build
+      just succeeds.
+
+  - id: recap
+    type: bullets
+    heading: "Five rules"
+    bullets:
+      - "Warnings as errors, nullable on, analyzers at recommended"
+      - "Records and patterns for data and rules"
+      - "Extension members where they make call sites read better"
+      - "Measure allocations in tests, don't guess"
+      - "Re-run your tests after every language upgrade"
+    narration: >
+      Five rules. Warnings as errors, nullable on, recommended analyzers. Records and patterns for data and rules.
+      Extension members where they make call sites read better. Measure allocations in tests instead of guessing.
+      And re-run your whole test suite after every language upgrade, because the same source can bind differently.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The library, the fifty-three tests and the gotcha projects are on GitHub, and the full guide is on devladlog
+      dot com. Links are in the description. Next time: async and await patterns, done properly. Subscribe so you
+      don't miss it. This was DEVLADLOG Code, by Momento Galático.

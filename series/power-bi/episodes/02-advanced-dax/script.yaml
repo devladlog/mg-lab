@@ -1,0 +1,244 @@
+episode: 2
+slug: advanced-dax
+series_label: "POWER BI"
+series_name: "DEVLADLOG Power BI"
+file_prefix: "power-bi"
+title: "Advanced DAX"
+subtitle: "Time intelligence, context transition, ranking, with expected numbers"
+voice: am_michael
+thumbnail_text: "ADVANCED DAX\nTHAT YOU CAN\nTEST"
+youtube:
+  title: "Advanced DAX: Time Intelligence, Context Transition and RANKX, Tested | DEVLADLOG Power BI #2"
+  tags: [Power BI, DAX, advanced DAX, time intelligence, context transition, CALCULATE, RANKX, USERELATIONSHIP, DAX query view, TMDL]
+sources:
+  - https://www.devladlog.com/articles/power-bi/2025-01-02-advanced-dax-complete-guide-2025/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Your growth is minus one hundred percent"
+    sub: "Advanced DAX, with the numbers known in advance"
+    short: hook
+    narration: >
+      Your year over year measure says next year is down one hundred percent. Your top customers count says everyone
+      is a top customer. Both formulas look right. In this episode we write the DAX that people get wrong, time
+      intelligence, context transition and ranking, and we know the correct numbers before Power BI even opens.
+
+  - id: plan
+    type: bullets
+    heading: "What we're building"
+    bullets:
+      - "The star schema from episode 1, plus eight measures"
+      - "Five saved queries for DAX query view"
+      - "A Python reference with the expected result of each query"
+      - "dax-lint: format strings, references, DIVIDE, date columns"
+      - "Desktop only has to confirm the numbers"
+    narration: >
+      We start from the star schema of episode one and add eight measures. Five saved queries run them in DAX query
+      view. A Python reference computes what each query should return, straight from the CSV files. And dax lint checks
+      the measures before anyone opens Desktop. Desktop's only job is to confirm the numbers.
+
+  - id: py
+    type: code
+    heading: "Prior year and growth, with variables"
+    lang: text
+    code: |
+      measure 'Sales PY' = CALCULATE([Sales Amount], SAMEPERIODLASTYEAR('Date'[Date]))
+
+      measure 'Sales YoY %' =
+          VAR CurrentSales = [Sales Amount]
+          VAR PriorSales = [Sales PY]
+          RETURN
+              IF(NOT ISBLANK(CurrentSales), DIVIDE(CurrentSales - PriorSales, PriorSales))
+    narration: >
+      Prior year is CALCULATE with SAMEPERIODLASTYEAR on the date column of the marked date table, never a date column
+      from the fact table. Growth uses two variables and DIVIDE, which returns blank when the denominator is zero or
+      blank. And there's a guard on the current sales. Remember it, it's the gotcha later.
+
+  - id: ytd
+    type: code
+    heading: "Year to date and the last three months"
+    lang: text
+    code: |
+      measure 'Sales YTD' = TOTALYTD([Sales Amount], 'Date'[Date])
+
+      measure 'Sales Last 3 Months' =
+          VAR LastDate = MAX('Date'[Date])
+          VAR FirstDate = EOMONTH(LastDate, -3) + 1
+          RETURN
+              CALCULATE([Sales Amount], DATESBETWEEN('Date'[Date], FirstDate, LastDate))
+    narration: >
+      Year to date is one function. For the last three months we make the boundary explicit: the last date in context,
+      and the day after the end of the month three months back. For June that's the first of April to the thirtieth of
+      June, three whole calendar months, whatever their length.
+
+  - id: tiview
+    type: screen
+    heading: "Time intelligence in DAX query view"
+    image: screens/dax-time-intelligence.jpg
+    bar: "Power BI Desktop · DAX query view · 01 Time intelligence"
+    demo: "DAX query view, tab '01 Time intelligence' after Run. Result grid shows 12 rows 2025-01..2025-12. Check: 2025-01 Sales 40267.82, Sales PY 32659.46, YoY % 0.233, Last 3 Months 158840.78; 2025-02 Sales PY 57494.46; 2025-12 Sales YTD 967472.88. Highlight the January row."
+    narration: >
+      Here's the first saved query in DAX query view: every month of twenty twenty five. January, forty thousand in
+      sales, up twenty three percent on last year. Year to date ends the year at nine hundred sixty seven thousand.
+      Same numbers as the Python reference, to the cent.
+
+  - id: transition
+    type: code
+    heading: "Context transition: right and wrong"
+    lang: text
+    code: |
+      measure 'Customers Over 1K' =                      // in the model
+          COUNTROWS(FILTER(VALUES('Customer'[CustomerKey]),
+              'Customer'[CustomerKey] <> -1 && [Sales Amount] > 1000))
+
+      DEFINE                                             // in the query only
+          MEASURE Sales[Customers Over 1K (no transition)] =
+              COUNTROWS(FILTER(VALUES('Customer'[CustomerKey]),
+                  'Customer'[CustomerKey] <> -1
+                      && SUMX(Sales, Sales[Quantity] * Sales[Unit Price]) > 1000))
+    narration: >
+      Now context transition. FILTER walks the customers one row at a time. When you reference a measure in that row
+      context, DAX turns the current row into a filter automatically, so sales amount is that customer's sales. The
+      second version inlines the same SUMX. No measure, no transition. It's a query scoped measure, so the wrong version
+      never reaches the model.
+
+  - id: transitionview
+    type: screen
+    heading: "247 customers, or 300?"
+    image: screens/dax-context-transition.jpg
+    bar: "Power BI Desktop · DAX query view · 03 Context transition"
+    demo: "DAX query view, tab '03 Context transition' after Run. Two rows: 2024 | 244 | 300 and 2025 | 247 | 300. Highlight the 'Without transition' column."
+    short: transition
+    narration: >
+      The result. With context transition, two hundred forty seven customers bought more than a thousand in twenty
+      twenty five. Without it, three hundred, every known customer, because the inline SUMX sees the whole year's sales
+      for every single row. Same formula shape, completely different answer.
+
+  - id: rank
+    type: code
+    heading: "Ranking and share of category"
+    lang: text
+    code: |
+      measure 'Product Rank' =
+          IF(
+              NOT ISBLANK([Sales Amount]),
+              RANKX(ALL('Product'[Product]), [Sales Amount])
+          )
+
+      measure '% of Category' =
+          DIVIDE(
+              [Sales Amount],
+              CALCULATE([Sales Amount], ALLEXCEPT('Product', 'Product'[Category]))
+          )
+    narration: >
+      Ranking. RANKX over all product names, highest sales first, ties skip the next rank. Because the category filter
+      stays in place, products from other categories evaluate to blank and fall to the bottom, so this is a rank inside
+      the category. Share of category removes every product filter except category, with ALLEXCEPT.
+
+  - id: rankview
+    type: screen
+    heading: "Rank inside the category"
+    image: screens/dax-ranking.jpg
+    bar: "Power BI Desktop · DAX query view · 04 Ranking and share"
+    demo: "DAX query view, tab '04 Ranking and share' after Run. 19 rows ordered by Category then Rank. Check: Accessories / Rear Light Radar / 39228.90 / 1 / 0.301; Bikes / Enduro 300 / 175040.40 / 1 / 0.2243; Clothing / Jersey Aero / 25392.55 / 1 / 0.4471. Highlight where Rank restarts at 1 for Bikes."
+    narration: >
+      In twenty twenty five, the Enduro three hundred leads the bikes with twenty two percent of the category. The rank
+      starts again at one for every category, and the shares in each category add up to one hundred percent.
+
+  - id: ship
+    type: code
+    heading: "Role-playing date: sales by ship date"
+    lang: text
+    code: |
+      measure 'Sales by Ship Date' =
+          CALCULATE([Sales Amount], USERELATIONSHIP(Sales[Ship Date], 'Date'[Date]))
+
+      -- 05 Ship date (expected)
+      Year   By order date   By ship date
+      2024      894929.10      887920.62
+      2025      967472.88      969048.36
+      2026                       5433.00
+    narration: >
+      Episode one left an inactive relationship on the ship date. USE RELATIONSHIP switches it on for one measure only.
+      Orders placed at the end of the year ship in the next one, so twenty twenty six shows five thousand four hundred
+      in shipments and no orders at all. Which brings us to the gotcha.
+
+  - id: gotcha
+    type: screen
+    heading: "Gotcha: minus one hundred percent"
+    image: screens/dax-yoy-gotcha.jpg
+    bar: "Power BI Desktop · DAX query view · 02 YoY gotcha"
+    demo: "DAX query view, tab '02 YoY gotcha' after Run. Rows 2024, 2025, 2026. Check: 2025 YoY % naive 0.0811 and YoY % 0.0811; 2026 Sales blank, Sales PY 967472.88, YoY % naive -1, YoY % blank. Highlight the 2026 row."
+    short: gotcha
+    narration: >
+      The date table runs to the end of twenty twenty six because of those ship dates. So twenty twenty six has no sales
+      but it does have a prior year. The naive formula divides blank minus last year by last year, and in DAX blank acts
+      like zero in addition, so you get minus one hundred percent. The model measure checks for current sales first and
+      returns blank. Blank, not zero, so a visual that shows only growth simply leaves twenty twenty six out.
+
+  - id: reference
+    type: code
+    heading: "Expected numbers, before Desktop opens"
+    lang: python
+    code: |
+      def customers_over_1k(m, ctx):
+          n = 0
+          for c in m.customers:
+              if c == UNKNOWN_CUSTOMER:
+                  continue
+              v = sales_amount(m, replace(ctx, customer=c))   # context transition
+              if v is not BLANK and v > 1000:
+                  n += 1
+          return n or BLANK              # COUNTROWS of an empty table is BLANK
+
+      $ python3 -m pytest tests -q
+      40 passed in 1.87s
+    narration: >
+      How do we know the numbers in advance? Each measure has a plain Python twin that follows the documented
+      semantics: DIVIDE, blank arithmetic, the month end rule of SAMEPERIODLASTYEAR, RANKX ties. It writes the expected
+      result of every saved query, and forty tests keep it honest. It's not a DAX engine, it's a second opinion.
+
+  - id: lint
+    type: code
+    heading: "dax-lint catches the classics"
+    lang: text
+    code: |
+      $ cd tests/fixtures/bad-measures && dax-lint definition --queries queries
+        ERROR   DX005  [Revenue PY]: [Revenue] doesn't exist
+        ERROR   DX007  [Sales YTD]: TOTALYTD gets 'Sales[Order Date]';
+                       pass the marked date column 'Date'[Date]
+        ERROR   DX008  [Due Sales]: USERELATIONSHIP(Sales[Due Date], 'Date'[Date]) matches no relationship
+        ERROR   DX009  bad.dax: [Profit] doesn't exist
+        WARNING DX003  [Qty]: [Quantity] is a column; write 'Sales'[Quantity]
+        WARNING DX004  [Double]: Sales[Sales Amount] qualifies a measure; write [Sales Amount]
+        WARNING DX006  [Margin Pct]: uses '/' with a non-constant denominator; use DIVIDE()
+
+      5 error(s), 5 warning(s)          exit code 1
+    narration: >
+      And dax lint, built on the Tabular Object Model like star lint in episode one. Time intelligence on a fact table
+      date. USE RELATIONSHIP on a relationship that doesn't exist. Unqualified columns, qualified measures, a slash
+      where DIVIDE belongs, and a saved query pointing at a measure nobody created. Exit code one, the pipeline stops.
+
+  - id: recap
+    type: bullets
+    heading: "Five rules"
+    bullets:
+      - "Time intelligence on the marked date column, never the fact table"
+      - "Variables and DIVIDE; return BLANK, not zero"
+      - "Guard growth measures against periods with no sales"
+      - "Measures in row context transition; inline SUMX doesn't"
+      - "Know the expected numbers, lint the DAX, then open Desktop"
+    narration: >
+      Five rules. Time intelligence on the marked date column. Variables and DIVIDE, and return blank, not zero. Guard
+      growth measures against periods with no sales. Remember that a measure in row context transitions and inline code
+      doesn't. And know the expected numbers and lint the DAX before you open Desktop.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The measures, the saved queries, the Python reference and dax lint are on GitHub, and the complete guide to
+      advanced DAX is on dev lad log dot com. Links in the description. Subscribe so you don't miss the next episode.
+      This was DEVLADLOG Power BI, by Momento Galático.

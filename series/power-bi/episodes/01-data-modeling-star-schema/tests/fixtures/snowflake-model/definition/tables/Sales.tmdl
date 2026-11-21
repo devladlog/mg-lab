@@ -1,0 +1,28 @@
+table Sales
+
+	measure Total = SUM(Sales[Amount])
+
+	column ProductKey
+		dataType: int64
+		summarizeBy: sum
+		sourceColumn: ProductKey
+
+	column CustomerKey
+		dataType: int64
+		isHidden
+		summarizeBy: none
+		sourceColumn: CustomerKey
+
+	column OrderDate
+		dataType: dateTime
+		summarizeBy: none
+		sourceColumn: OrderDate
+
+	column Amount
+		dataType: decimal
+		sourceColumn: SalesAmount
+
+	partition Sales = m
+		mode: import
+		source = Csv.Document(File.Contents("C:\data\fact_sales.csv"))
+

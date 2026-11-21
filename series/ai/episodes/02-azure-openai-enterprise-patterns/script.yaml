@@ -1,0 +1,268 @@
+# DEVLADLOG AI — episode 02. Code scenes are real excerpts from infra/, src/ and tests/.
+# Screen scenes: capture per demo.md. Their narration describes what is on screen without quoting live numbers;
+# after recording, add the real values where marked TODO.
+episode: 2
+slug: azure-openai-enterprise-patterns
+series_label: "AI"
+series_name: "DEVLADLOG AI"
+file_prefix: "ai"
+title: "Azure OpenAI enterprise patterns: an AI gateway, keyless"
+subtitle: "Token budgets per team, failover across regions, no keys anywhere"
+voice: am_michael
+thumbnail_text: "AZURE OPENAI\nBEHIND A\nGATEWAY"
+youtube:
+  title: "Azure OpenAI Enterprise Patterns: AI Gateway, Token Limits, Failover, No Keys | DEVLADLOG AI #2"
+  tags: [Azure OpenAI, API Management, AI gateway, llm-token-limit, managed identity, Bicep, circuit breaker, Microsoft Foundry, enterprise AI, Python, generative AI]
+sources:
+  - https://www.devladlog.com/articles/ai/2026-06-03-azure-openai-enterprise-complete-guide-2026/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Ten teams, one model, zero keys"
+    sub: "Azure OpenAI behind an AI gateway"
+    short: hook
+    narration: >
+      One team calling one model deployment is a demo. Ten teams sharing it is a platform. Who used which tokens? What
+      happens when one app burns the quota for everyone, or a region starts throttling? And where are the keys? Today
+      we build the answer as code. Welcome to DEVLADLOG AI.
+
+  - id: problem
+    type: bullets
+    heading: "What the platform team needs"
+    bullets:
+      - "No Azure OpenAI keys in any app"
+      - "A token budget per team, enforced"
+      - "Token usage per team, in one place"
+      - "A second region when the first throttles"
+      - "Everything in Bicep, tested before deploy"
+    narration: >
+      Here's the list. No Azure OpenAI keys in any application. A token budget per team that's actually enforced.
+      Token usage per team in one place. A second region when the first one throttles. And all of it in Bicep,
+      tested before anything is deployed.
+
+  - id: arch
+    type: diagram
+    heading: "The AI gateway pattern"
+    nodes: ["App", "APIM", "AOAI 1", "AOAI 2"]
+    labels: ["team subscription key", "limits · metrics", "priority 1", "priority 2"]
+    narration: >
+      This is the pattern Microsoft documents as the AI gateway in Azure API Management. Each team's app calls the
+      gateway with its own subscription key. The gateway enforces limits, emits token metrics, and calls Azure OpenAI
+      with its own managed identity: a primary region first, and a secondary one when the primary is unavailable.
+
+  - id: keyless
+    type: code
+    heading: "Keyless Azure OpenAI accounts"
+    lang: bicep
+    code: |
+      resource account 'Microsoft.CognitiveServices/accounts@2025-06-01' = {
+        name: name
+        kind: 'OpenAI'
+        properties: {
+          customSubDomainName: name        // required for Entra ID auth
+          disableLocalAuth: true           // API keys stop working
+        }
+      }
+      resource inferenceRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = [for p in inferencePrincipals: {
+        properties: {
+          roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', openAiUserRoleId)
+          principalId: p.id
+          principalType: p.type            // 'ServicePrincipal' for the gateway identity
+        }
+      }]
+    narration: >
+      Both Azure OpenAI accounts set disable local auth to true, so keys simply stop working. The only identity with
+      the Cognitive Services OpenAI User role is the gateway's managed identity. Note principal type: without it, a
+      role assignment for an identity created in the same deployment can fail while Entra ID is still replicating it.
+
+  - id: pool
+    type: code
+    heading: "Two regions, a pool and a circuit breaker"
+    lang: bicep
+    code: |
+      failureCondition: {
+        count: 1
+        interval: 'PT10S'
+        statusCodeRanges: [ { min: 429, max: 429 }, { min: 500, max: 599 } ]
+      }
+      tripDuration: 'PT30S'
+      acceptRetryAfter: true
+
+      pool: {
+        services: [
+          { id: backendPrimary.id, priority: 1, weight: 1 }
+          { id: backendSecondary.id, priority: 2, weight: 1 }
+        ]
+      }
+    narration: >
+      Each region is a backend with a circuit breaker on four twenty nine and server errors. Learn has a specific
+      caution here: an Azure OpenAI four twenty nine can carry a very long retry after, so the breaker accepts it and
+      stops sending traffic to that region. The pool uses priorities, so the secondary only gets traffic when the
+      primary's breaker is open.
+
+  - id: policy
+    type: code
+    heading: "The gateway policy"
+    lang: xml
+    code: |
+      <llm-token-limit counter-key="@(context.Subscription.Id)"
+          tokens-per-minute="2000" token-quota="200000" token-quota-period="Monthly"
+          estimate-prompt-tokens="false"
+          remaining-tokens-header-name="x-gateway-remaining-tokens" ... />
+      <llm-emit-token-metric namespace="aoai-gateway">
+        <dimension name="Subscription ID" />
+        <dimension name="API ID" />
+      </llm-emit-token-metric>
+      <set-header name="api-key" exists-action="delete" />
+      <authentication-managed-identity resource="https://cognitiveservices.azure.com" ... />
+      <set-header name="Authorization" exists-action="override"> ... </set-header>
+      <set-backend-service backend-id="aoai-pool" />
+    short: policy
+    narration: >
+      The policy does four things. The token limit counts per subscription, so per team: over two thousand tokens a
+      minute returns four twenty nine with retry after, and over the monthly quota returns four oh three. Token
+      metrics go to Application Insights by subscription. The caller's key is removed, the gateway's own token is
+      added, and the request goes to the pool.
+
+  - id: client
+    type: code
+    heading: "The app only knows the gateway"
+    lang: python
+    code: |
+      def make_gateway_client(gateway_url, subscription_key, *, api_path="aoai", max_retries=2, **kwargs):
+          from openai import OpenAI
+          if not subscription_key:
+              raise ValueError("subscription_key is required (APIM subscription for this team/app)")
+          return OpenAI(
+              base_url=gateway_base_url(gateway_url, api_path),    # https://<apim>/aoai/openai/v1/
+              api_key=UNUSED_BEARER,                               # replaced by the gateway's token
+              default_headers={"api-key": subscription_key},
+              max_retries=max_retries,
+          )
+    narration: >
+      On the application side it's the standard Open A I Python client, pointed at the gateway's v one path. The app
+      holds one secret, its team's subscription key, sent in the api key header. The bearer value is a placeholder,
+      because the gateway overwrites the authorization header with its own token before anything reaches the model.
+
+  - id: errors
+    type: code
+    heading: "Not every error deserves a retry"
+    lang: python
+    code: |
+      if status == 429:
+          return Decision("throttled", True, retry_after, "Rate exceeded; wait for Retry-After.")
+      if status == 403:
+          return Decision("quota_exhausted", False, None, "Token quota used up; alert the owner.")
+      if status == 400 and code == "content_filter":
+          return Decision("content_filtered", False, None, "Content filtered; don't resend unchanged.")
+      if status == 503:
+          return Decision("unavailable", True, retry_after, "No healthy backend; retry later.")
+    narration: >
+      Behind a gateway, status codes carry meaning. Four twenty nine is rate, so wait for retry after. Four oh three is
+      the quota for the period, and retrying is pointless, so alert the owner. A content filter block is never resent
+      unchanged. And five oh three means no healthy backend: the breakers are open.
+
+  - id: gotcha
+    type: code
+    heading: "The gotcha: retries multiply"
+    lang: python
+    code: |
+      def test_sdk_retry_on_top_of_gateway_multiplies_calls(stub_server):
+          # max_retries=2 (SDK default): one logical call can become three HTTP calls to the gateway.
+          stub_server.responses += [(429, {"retry-after-ms": "10"}, {}), (429, {"retry-after-ms": "10"}, {}),
+                                    (429, {"retry-after-ms": "10"}, {})]
+          client = make_gateway_client(stub_server.url, "k", max_retries=2)
+          rows = run_burst(client, "chat", 1, Ledger())
+          assert rows[0].kind == "throttled" and len(stub_server.requests) == 3
+    short: gotcha
+    narration: >
+      Here's the honest gotcha. The Open A I SDK retries four twenty nines twice by default. This test proves one
+      call becomes three requests. Put a gateway retry of two behind that, and one click can become nine calls to the
+      model, all counting against your quota. Retry in one place. Our gateway does one fast retry to reach the other
+      region, and the app adds no loop of its own.
+
+  - id: tests
+    type: code
+    heading: "37 tests before a single deployment"
+    lang: text
+    code: |
+      $ python -m pytest tests -q
+      .....................................                  [100%]
+      37 passed in 3.50s
+
+      test_bicep.py    compiles main.bicep, checks the ARM output:
+                       keyless accounts, pinned model, OpenAI User role,
+                       breakers on 429, pool priorities 1 and 2
+      test_policy.py   required attributes, max five metric dimensions,
+                       caller credentials removed before the backend
+    narration: >
+      Thirty seven tests run in under four seconds, before anything is deployed. One file compiles the Bicep and
+      checks the A R M output: keyless accounts, a pinned model version, the right role, breakers on four twenty nine.
+      Another checks the policy against the reference docs. The rest run the real SDK against a local gateway stub.
+
+  - id: deployed
+    type: screen
+    heading: "Deployed: gateway, two regions, one identity"
+    image: screens/deployed.jpg
+    bar: "Azure portal · resource group rg-mglab-aoai"
+    demo: "Azure portal, resource group after az deployment group create: API Management (Basic v2), two Azure OpenAI accounts (two regions), Application Insights, Log Analytics. Names and subscription masked."
+    narration: >
+      Deployed from one Bicep file: the gateway on API Management Basic v two, two Azure OpenAI accounts in two
+      European regions with data zone standard deployments, and Application Insights. On both accounts, local
+      authentication is disabled, so there is no key to leak.
+
+  - id: burst
+    type: screen
+    heading: "One team drains its budget"
+    image: screens/burst.jpg
+    bar: "Terminal · python -m aoai_gateway.smoke --requests 12"
+    demo: "Terminal: smoke run with the hr-bot key and --max-retries 0, showing the remaining-this-minute values going down, then the 429 rows with retry-after, then the summary and token CSV."
+    narration: >
+      Now the hr bot team sends a burst through the gateway, with SDK retries off so we see everything. Watch the
+      remaining tokens for this minute go down on each call, and then the gateway's four twenty nine with its retry
+      after. Those blocked requests never reached the model, and only this team is blocked.
+    # TODO after recording: mention how many calls succeeded before the first 429 in this run.
+
+  - id: other-team
+    type: screen
+    heading: "The other team is unaffected"
+    image: screens/other-team.jpg
+    bar: "Terminal · same run with the sales-copilot key"
+    demo: "Terminal: immediately after the burst, the same smoke command with the sales-copilot key and --requests 2, showing 200 responses."
+    narration: >
+      Straight after, the sales copilot team runs the same command with its own key. Its counter is separate, so it
+      gets its answers. That's the whole point of keying the limit on the subscription.
+
+  - id: metrics
+    type: screen
+    heading: "Token usage per team"
+    image: screens/metrics.jpg
+    bar: "Application Insights · Metrics · aoai-gateway"
+    demo: "Application Insights > Metrics, namespace aoai-gateway, total tokens split by Subscription ID, last 30 minutes. Both teams visible."
+    narration: >
+      And this is the view the platform team wanted: total tokens from the custom metric namespace, split by
+      subscription. Both teams, side by side, from the gateway, with no logging code in either application.
+
+  - id: recap
+    type: bullets
+    heading: "Five rules"
+    bullets:
+      - "Disable keys; the gateway's identity calls the model"
+      - "One subscription and one token budget per team"
+      - "Breakers that honour Retry-After, then a second region"
+      - "429 waits, 403 alerts, content filter never retries"
+      - "Retry in one place, and test the Bicep before deploying"
+    narration: >
+      Five rules. Disable keys, and let the gateway's identity call the model. Give each team a subscription and a
+      token budget. Use breakers that honour retry after, then a second region. Wait on four twenty nine, alert on
+      four oh three, and never resend a filtered prompt. Retry in one place, and test your Bicep before you deploy.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The Bicep, the policy, the client and the tests are on GitHub, and the complete guide with four deeper articles
+      is on devladlog dot com. Links are in the description. Next time: retrieval augmented generation and vector
+      search. This was DEVLADLOG AI, by Momento Galático.

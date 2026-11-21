@@ -1,29 +1,285 @@
-# DEVLADLOG .NET — episode 01 (stub: write the scenes after building the demo)
+# DEVLADLOG .NET — episode 01 (draft; screens are captured in the lab, see demo.md)
 episode: 1
 slug: minimal-apis
 series_label: ".NET"
 series_name: "DEVLADLOG .NET"
 file_prefix: "net"
-title: "Minimal APIs"
-subtitle: "Built for real, in a lab tenant"
+title: "Minimal APIs on .NET 10"
+subtitle: "Route groups, validation, OpenAPI, tests, App Service"
 voice: am_michael
-thumbnail_text: "MINIMAL APIS"
+thumbnail_text: "MINIMAL APIS\nON .NET 10\nDONE RIGHT"
 youtube:
-  title: "Minimal APIs (Real Demo) | DEVLADLOG .NET #1"
-  tags: []
+  title: "Minimal APIs on .NET 10: Validation, TypedResults, OpenAPI, Tests (Real Demo) | DEVLADLOG .NET #1"
+  tags: [Minimal APIs, ASP.NET Core, .NET 10, C#, TypedResults, OpenAPI, AddValidation, endpoint filters, WebApplicationFactory, Azure App Service, xUnit]
 sources:
   - https://www.devladlog.com/articles/dotnet/2026-05-05-minimal-apis-complete-guide-2026/
+
 scenes:
   - id: hook
     type: title
-    heading: "Minimal APIs"
-    sub: "Built for real, in a lab tenant"
+    heading: "Minimal APIs on .NET 10"
+    sub: "Small Program.cs, real validation, real tests"
     short: hook
     narration: >
-      TODO
+      Minimal APIs have a reputation: great for a demo, a mess in production. Everything ends up in one giant
+      Program dot c s. In this episode we build a real API with dot net ten: route groups, built-in validation,
+      typed results, OpenAPI, twenty-two tests, and a deploy to Azure App Service on the free tier. Welcome to
+      DEVLADLOG dot net.
+
+  - id: plan
+    type: bullets
+    heading: "What we're building"
+    bullets:
+      - "Project requests API: submit, list, approve"
+      - "50,000 or more is High priority"
+      - "250,000 or more needs a justification"
+      - "You can't approve your own request"
+      - "Writes can be paused: read-only mode"
+    narration: >
+      We're building a project requests API. You submit a request, list them, and an approver decides. Fifty thousand
+      or more is high priority. Two hundred and fifty thousand or more needs a justification. You can't approve your
+      own request. And operations can pause all writes with a read-only switch. Next episode builds the same rules
+      with controllers, so you can compare the two styles.
+
+  - id: program
+    type: code
+    heading: "Program.cs stays short"
+    lang: csharp
+    code: |
+      builder.Services.AddOpenApi();          // OpenAPI 3.1 document
+      builder.Services.AddValidation();       // .NET 10: DataAnnotations for Minimal APIs
+      builder.Services.AddProblemDetails();   // problem+json for every error
+      builder.Services.AddHealthChecks();
+      builder.Services.AddSingleton<IRequestStore, InMemoryRequestStore>();
+
+      var app = builder.Build();
+      app.UseExceptionHandler();
+      app.UseStatusCodePages();
+      if (app.Environment.IsDevelopment()) app.MapOpenApi();
+
+      app.MapHealthChecks("/healthz");
+      app.MapRequestsApi();                   // the endpoints live in their own class
+      app.Run();
+    narration: >
+      Program dot c s stays short. Add OpenAPI, the new built-in validation, problem details and health checks.
+      Register the store. Then the exception handler and status code pages, so every error comes back as problem
+      details. The OpenAPI document is only mapped in Development. And one line maps all our endpoints, which live
+      in their own class.
+
+  - id: groups
+    type: code
+    heading: "Route groups and an endpoint filter"
+    lang: csharp
+    code: |
+      var group = app.MapGroup("/api/requests").WithTags("Project requests");
+
+      group.MapGet("/", List);
+      group.MapGet("/{id:int}", GetById);
+
+      var writes = group.MapGroup("")
+          .AddEndpointFilter<ReadOnlyModeFilter>()   // 503 when Api:ReadOnly = true
+          .ProducesValidationProblem()
+          .ProducesProblem(503);
+
+      writes.MapPost("/", Create);
+      writes.MapPost("/{id:int}/decision", Decide).ProducesProblem(409);
+    narration: >
+      Here's the structure. One group for slash api slash requests, with the two reads. Then an inner group with an
+      empty prefix, just to hang rules on the writes. Every write gets the read-only filter: when the setting is on,
+      the filter returns a five oh three and the handler never runs. The produces calls are for OpenAPI, and we'll see
+      why in a minute.
+
+  - id: typed
+    type: code
+    heading: "TypedResults: the compiler checks your responses"
+    lang: csharp
+    code: |
+      public static Results<Ok<ProjectRequest>, NotFound> GetById(int id, IRequestStore store) =>
+          store.Get(id) is { } item ? TypedResults.Ok(item) : TypedResults.NotFound();
+
+      public static Results<Ok<ProjectRequest>, NotFound, ProblemHttpResult> Decide(
+          int id, DecisionRequest decision, IRequestStore store)
+      {
+          if (store.Get(id) is not { } current) return TypedResults.NotFound();
+
+          if (decision.DecidedBy.Trim().ToLowerInvariant() == current.RequestedBy)
+              return TypedResults.Problem(title: "You can't decide your own request.",
+                                          statusCode: StatusCodes.Status409Conflict);
+          ...
+      }
+    narration: >
+      The handlers return typed results with a results union type. Get by id can only return OK with a project
+      request, or not found. Return anything else and it doesn't compile. Decide adds a problem result for the
+      conflicts, like approving your own request. And because these are plain static methods, unit tests can call
+      them directly and check the exact type.
+
+  - id: validation
+    type: code
+    heading: "Built-in validation in .NET 10"
+    lang: csharp
+    code: |
+      public sealed class CreateProjectRequest : IValidatableObject
+      {
+          [Required, StringLength(100, MinimumLength = 3)] public string Title { get; set; } = "";
+          [Range(typeof(decimal), "1", "10000000")]        public decimal Budget { get; set; }
+          [Required, EmailAddress]                         public string RequestedBy { get; set; } = "";
+          [StringLength(2000)]                             public string? Justification { get; set; }
+
+          public IEnumerable<ValidationResult> Validate(ValidationContext context)
+          {
+              if (PriorityRules.NeedsJustification(Budget) && string.IsNullOrWhiteSpace(Justification))
+                  yield return new ValidationResult("A justification is required...", [nameof(Justification)]);
+          }
+      }
+    short: validation
+    narration: >
+      Validation used to need a library or a hand-written filter. In dot net ten you call add validation, and data
+      annotations on the request are checked before your handler runs. Attributes cover the simple rules. The
+      cross-field rule, a justification for big budgets, goes in I validatable object. If anything fails, the client
+      gets a four hundred with every error, and your handler never sees bad data.
+
+  - id: local
+    type: screen
+    heading: "The walk-through, locally"
+    image: screens/local-smoke.jpg
+    bar: "Terminal · smoke.sh against localhost"
+    demo: >
+      Terminal (dark theme, large font) running ./deploy/smoke.sh http://localhost:5207 after dotnet run. Visible:
+      step 1 HTTP 400 with errors for Title, Budget and RequestedBy; step 2 HTTP 400 with the Justification error;
+      step 3 the 201 body with "priority":"High"; step 4 HTTP 409 "You can't decide your own request.".
+    narration: >
+      Let's run it. An invalid body gives a four hundred with errors for title, budget and email. Three hundred
+      thousand without a justification: four hundred, with the cross-field message. A valid seventy-five thousand
+      request: two oh one, and the priority is high. And Alex trying to approve their own request gets a four oh
+      nine.
+
+  - id: openapi
+    type: screen
+    heading: "OpenAPI: every status code, documented"
+    image: screens/openapi.jpg
+    bar: "Browser · localhost/openapi/v1.json"
+    demo: >
+      Browser (JSON viewer, collapsed) at http://localhost:5207/openapi/v1.json. Expand "openapi": "3.1.1" and
+      paths → /api/requests/{id}/decision → post → responses, showing 200, 400, 404, 409 and 503.
+    narration: >
+      The OpenAPI document is built in, version three point one. Two hundred and four oh four come for free from the
+      typed results. But the four oh nine was missing at first: a problem result doesn't tell OpenAPI its status
+      code. That's why we added produces problem four oh nine, and produces validation problem for the four hundreds.
+      A test now checks the document, so it can't drift.
+
+  - id: tests
+    type: code
+    heading: "Twenty-two tests, one second"
+    lang: text
+    code: |
+      public class ApiTests(WebApplicationFactory<Program> factory)
+          : IClassFixture<WebApplicationFactory<Program>>     // no "public partial class Program" in .NET 10
+
+      [Fact] Read_only_mode_blocks_writes_with_503_but_reads_still_work()
+          using var readOnly = factory.WithWebHostBuilder(b => b.UseSetting("Api:ReadOnly", "true"));
+
+      $ dotnet test
+      Passed!  - Failed: 0, Passed: 22, Skipped: 0, Total: 22, Duration: 1 s
+    narration: >
+      Ten unit tests cover the rules and call the handlers directly. Twelve integration tests run the whole pipeline in memory with web
+      application factory: validation, the filter, problem details and the OpenAPI document. In dot net ten you no
+      longer need public partial class Program, a source generator adds it. Twenty-two tests, about one second.
+
+  - id: gotcha-package
+    type: bullets
+    heading: "Two things that bit us"
+    bullets:
+      - "dotnet add package picked OpenApi 11.0.0 for a net10.0 app"
+      - "Build error: no AddOpenApi. Fix: --version 10.0.15"
+      - "The cross-field rule only runs after every attribute passes"
+      - "So a client may fix one error and then see the next"
+    short: gotcha
+    narration: >
+      Two honest gotchas. When we added the OpenAPI package, the CLI picked version eleven, because dot net eleven
+      is already out. Restore worked, the build didn't: no add open API. Pin the major version, ten point oh point
+      fifteen. Second: the cross-field rule only runs once every attribute passes. So a client fixes the title, and
+      only then learns about the justification. It's documented, and we have a test for it.
+
+  - id: deploy
+    type: code
+    heading: "Deploy: Free F1, Linux, .NET 10"
+    lang: bash
+    code: |
+      dotnet publish "$project" --configuration Release --output "$out/publish" --nologo -v quiet
+      (cd "$out/publish" && zip -qr "$out/app.zip" .)    # zip the CONTENTS of publish/, not the folder
+
+      az group create --name "$RG" --location "$LOCATION" --tags series=net episode=01 -o none
+      az appservice plan create --name "$PLAN" --resource-group "$RG" --sku F1 --is-linux -o none
+      az webapp create --name "$APP" --resource-group "$RG" --plan "$PLAN" --runtime "DOTNETCORE:10.0" -o none
+
+      # Hierarchical keys use a double underscore on Linux: Api:ReadOnly -> Api__ReadOnly
+      az webapp config appsettings set --name "$APP" --resource-group "$RG" --settings Api__ReadOnly=false -o none
+      az webapp deploy --resource-group "$RG" --name "$APP" --src-path "$out/app.zip" --type zip -o none
+    narration: >
+      To deploy, publish in release and zip the contents of the publish folder. Then a resource group, an App Service
+      plan on the free F1 tier on Linux, and a web app with the dot net ten runtime. The read-only switch becomes an
+      app setting. On Linux, nested keys use a double underscore. Then a zip deploy.
+
+  - id: live
+    type: screen
+    heading: "Live on App Service"
+    image: screens/live-smoke.jpg
+    bar: "Terminal · smoke.sh against App Service"
+    demo: >
+      Terminal: tail of ./deploy/deploy-appservice.sh ending with "==> https://<masked>.azurewebsites.net/healthz"
+      and "Healthy", then ./deploy/smoke.sh against the same URL showing step 3 (201, priority High) and step 5
+      (HTTP 200, "status":"Approved"). Mask the app host name except ".azurewebsites.net".
+    narration: >
+      A couple of minutes later the health endpoint answers healthy, on the free tier. Same walk-through, now in
+      Azure: the request is created with high priority, and when Sam, the approver, decides, it's approved.
+
+  - id: readonly
+    type: screen
+    heading: "Pause writes without a deploy"
+    image: screens/readonly.jpg
+    bar: "Azure portal · Environment variables · then terminal"
+    demo: >
+      Split capture: Azure portal → the web app → Settings → Environment variables → App settings, showing
+      Api__ReadOnly = true (value revealed). Next to it a terminal with curl -i -X POST to /api/requests returning
+      "HTTP/1.1 503", "Retry-After: 120" and the problem title "The API is in read-only mode.", then a GET returning
+      200. Mask subscription, resource IDs and the app host name.
+    narration: >
+      Now operations needs to pause writes during a migration. Set the app setting to true, no deploy. Posts get a
+      five oh three with retry after and a clear problem message. Reads keep working.
+
+  - id: restart
+    type: screen
+    heading: "The catch: a setting change restarts the app"
+    image: screens/restart-empty.jpg
+    bar: "Terminal · GET /api/requests after the setting change"
+    demo: >
+      Terminal: curl -s https://<masked>/api/requests returning [] right after the setting change (the request
+      created during the live scene is gone). Optionally the portal Activity log or Log stream line showing the
+      restart. Mask the host name.
+    narration: >
+      But look at the list: empty. Changing an app setting restarts the app, that's documented. And our store lives
+      in memory, so the data is gone. Fine for a demo, not for production. That's exactly why episode three moves
+      this API to Entity Framework Core.
+
+  - id: recap
+    type: bullets
+    heading: "Five rules"
+    bullets:
+      - "Route groups and handler classes, not a giant Program.cs"
+      - "TypedResults with Results<...> for every handler"
+      - "AddValidation for the rules, problem details for the errors"
+      - "Describe every status code, and test the OpenAPI document"
+      - "Pin package versions to your target framework"
+    narration: >
+      Five rules. Use route groups and handler classes, not a giant Program dot c s. Return typed results with a
+      union type. Let add validation enforce the rules and problem details describe the errors. Describe every
+      status code, and test the OpenAPI document. And pin your package versions to your target framework.
+
   - id: outro
     type: outro
     heading: "Code on GitHub, guides on devladlog.com"
     sub: "github.com/devladlog/mg-lab"
     narration: >
-      TODO
+      The API, the twenty-two tests and the deploy script are on GitHub, and the full guide is on devladlog dot com.
+      Links are in the description. Next time: the same ideas with controllers, plus authentication. Subscribe so you
+      don't miss it. This was DEVLADLOG dot net, by Momento Galático.

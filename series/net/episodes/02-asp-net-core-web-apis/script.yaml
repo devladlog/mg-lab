@@ -1,0 +1,275 @@
+# DEVLADLOG .NET — episode 02 (draft; screens are captured in the lab, see demo.md)
+episode: 2
+slug: asp-net-core-web-apis
+series_label: ".NET"
+series_name: "DEVLADLOG .NET"
+file_prefix: "net"
+title: "ASP.NET Core Web APIs with controllers"
+subtitle: "Entra ID tokens, problem details, rate limiting, real tests"
+voice: am_michael
+thumbnail_text: "WEB API\nCONTROLLERS\n+ ENTRA ID"
+youtube:
+  title: "ASP.NET Core Web API with Controllers: Entra ID, Problem Details, Rate Limiting | DEVLADLOG .NET #2"
+  tags: [ASP.NET Core, Web API, controllers, ApiController, .NET 10, C#, JWT bearer, Microsoft Entra ID, app roles, problem details, IExceptionHandler, rate limiting, dotnet user-jwts, Azure App Service]
+sources:
+  - https://www.devladlog.com/articles/dotnet/2026-04-20-aspnet-core-web-apis-complete-guide-2026/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Web APIs with controllers"
+    sub: "Locked down with Entra ID, tested with real tokens"
+    short: hook
+    narration: >
+      Most API tutorials stop at "it returns JSON". Then production asks: who is calling, what are they allowed to
+      do, what does an error look like, and what happens when someone hammers the endpoint? In this episode we
+      answer all four with an ASP.NET Core controller API on dot net ten, secured with Microsoft Entra ID. Welcome
+      to DEVLADLOG dot net.
+
+  - id: plan
+    type: bullets
+    heading: "What we're building"
+    bullets:
+      - "Expense claims: submit, list, approve"
+      - "Approvers need the Claims.Approve app role"
+      - "You can't approve your own claim"
+      - "Every error is problem details"
+      - "Five submits per user per minute, then 429"
+    narration: >
+      We're building an expense claims API. Employees submit claims and see their own. Approvers need the claims
+      approve app role, and nobody can approve their own claim. Every error comes back as problem details. And each
+      user can submit five claims per minute, then gets a four twenty-nine.
+
+  - id: auth
+    type: code
+    heading: "Authentication from configuration"
+    lang: csharp
+    code: |
+      builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+          .AddJwtBearer(o =>
+          {
+              o.MapInboundClaims = false;                          // keep "roles", "oid", "sub"
+              o.TokenValidationParameters.RoleClaimType = "roles"; // Entra app roles
+              o.TokenValidationParameters.NameClaimType = "name";
+          });
+
+      builder.Services.AddAuthorizationBuilder()
+          .AddPolicy("Approver", p => p.RequireRole("Claims.Approve"));
+
+      // Authority and ValidAudiences come from Authentication:Schemes:Bearer
+      //   local: dotnet user-jwts      Azure: Microsoft Entra ID
+    narration: >
+      Authentication is JWT bearer, and notice what's missing: no authority, no audience in code. They come from
+      configuration, under authentication, schemes, bearer. Locally that's dotnet user j w t s, in Azure it's Entra
+      ID, same code. We switch off claim mapping, so the API sees roles, o i d and sub exactly as they are in the
+      token. And the approver policy is just the app role.
+
+  - id: controller
+    type: code
+    heading: "[ApiController] does the boring parts"
+    lang: csharp
+    code: |
+      [ApiController, Route("api/claims"), Authorize]
+      public sealed class ClaimsController(ClaimWorkflow workflow) : ControllerBase
+      {
+          [HttpPost, EnableRateLimiting("submit")]
+          public ActionResult<ExpenseClaim> Submit(SubmitClaimRequest request)   // [FromBody] inferred
+          {
+              var claim = workflow.Submit(request, CurrentUser.Id(User));
+              return CreatedAtAction(nameof(Get), new { id = claim.Id }, claim);
+          }
+
+          [HttpPost("{id:int}/approve"), Authorize(Policy = "Approver")]
+          public ActionResult<ExpenseClaim> Approve(int id) =>
+              workflow.Approve(id, CurrentUser.Id(User));    // domain exceptions -> 404 / 409
+      }
+    narration: >
+      The controller is short because API controller does the boring parts. It infers that the request comes from the
+      body, validates it, and returns a four hundred before the action runs. Submit returns two oh one with a
+      location header. Approve needs the approver policy. And there's no if model state is valid anywhere.
+
+  - id: errors
+    type: code
+    heading: "Domain errors become problem details"
+    lang: csharp
+    code: |
+      public sealed class DomainExceptionHandler(IProblemDetailsService problemDetails) : IExceptionHandler
+      {
+          public async ValueTask<bool> TryHandleAsync(HttpContext http, Exception exception, CancellationToken ct)
+          {
+              if (exception is not DomainException domain) return false;   // -> default 500
+
+              http.Response.StatusCode = domain.StatusCode;                 // 404 or 409
+              return await problemDetails.TryWriteAsync(new ProblemDetailsContext
+              {
+                  HttpContext = http,
+                  ProblemDetails = new() { Status = domain.StatusCode, Title = domain.Title, Detail = domain.Message },
+              });
+          }
+      }
+    narration: >
+      The workflow throws domain exceptions: claim not found, or a conflict like approving your own claim. One
+      exception handler turns them into problem details with the right status code. Anything it doesn't know returns
+      false, and falls through to a generic five hundred, with no stack trace leaking out.
+
+  - id: ratelimit
+    type: code
+    heading: "Rate limiting: per user, and not 503"
+    lang: csharp
+    code: |
+      builder.Services.AddRateLimiter(o =>
+      {
+          o.RejectionStatusCode = StatusCodes.Status429TooManyRequests;   // the default is 503
+          o.AddPolicy("submit", http => RateLimitPartition.GetFixedWindowLimiter(
+              http.User.FindFirst("oid")?.Value ?? http.User.FindFirst("sub")?.Value ?? "anonymous",
+              _ => new FixedWindowRateLimiterOptions
+              {
+                  PermitLimit = config.GetValue("RateLimits:SubmitPerMinute", 5),   // simplified
+                  Window = TimeSpan.FromMinutes(1),
+              }));
+      });
+
+      app.UseAuthentication();
+      app.UseAuthorization();
+      app.UseRateLimiter();      // after authentication, or everyone shares the "anonymous" window
+    short: ratelimit
+    narration: >
+      Rate limiting is built in, with one surprise: rejected requests get a five oh three by default, which tells
+      clients the server is down. Set four twenty-nine. Partition by user, so one noisy client doesn't block
+      everyone. And call use rate limiter after authentication, otherwise every caller lands in the same anonymous
+      window.
+
+  - id: local
+    type: screen
+    heading: "Local tokens with dotnet user-jwts"
+    image: screens/local-demo.jpg
+    bar: "Terminal · deploy/local-demo.sh against localhost"
+    demo: >
+      Terminal running ./deploy/local-demo.sh after dotnet run. Visible: step 1 "HTTP/1.1 401" and
+      "WWW-Authenticate: Bearer"; step 4 the 403 Forbidden problem; step 6 the 409 "Claim already approved."; step 7
+      "201 201 201 429 429". Tokens are printed truncated (24 characters), nothing to mask.
+    narration: >
+      Let's run it locally. dotnet user j w t s creates real signed tokens for Alex, an employee, and Sam, an approver.
+      No token: four oh one. Alex tries to approve: four oh three. Sam approves, and a second approval is a four oh
+      nine. Then Alex keeps submitting, and after the limit, four twenty-nine.
+
+  - id: tests
+    type: code
+    heading: "Tests with the real JwtBearer handler"
+    lang: text
+    code: |
+      // ClaimsApiFactory: same app, same JwtBearer handler, only the signing key changes
+      services.PostConfigure<JwtBearerOptions>("Bearer", o =>
+      {
+          o.Authority = null;
+          o.TokenValidationParameters.ValidIssuers = [Issuer];
+          o.TokenValidationParameters.ValidAudiences = [Audience];
+          o.TokenValidationParameters.IssuerSigningKeys = [_key];     // random per test run
+      });
+      // tokens look like Entra's: oid, name, roles: ["Claims.Approve"]
+
+      $ dotnet test
+      Passed!  - Failed: 0, Passed: 28, Skipped: 0, Total: 28, Duration: 1 s
+    narration: >
+      For tests, we don't fake authentication. The factory keeps the real JWT bearer handler and only swaps the
+      signing key for one generated per run. Tokens look like Entra's, with o i d and a roles array. So expired
+      tokens, wrong audiences and wrong keys really get four oh one. Twenty-eight tests, about a second.
+
+  - id: gotchas
+    type: bullets
+    heading: "Three things that bit us"
+    bullets:
+      - "[Produces(\"application/json\")] hid application/problem+json"
+      - "One class-level [ProducesResponseType(401)]: the 200s vanished from OpenAPI"
+      - "user-jwts --role writes \"role\", Entra writes \"roles\""
+    short: gotcha
+    narration: >
+      Three honest gotchas. A produces application slash json attribute on the controller changed our error
+      responses from problem plus json to plain json. Two tests caught it. A single class-level produces response
+      type for four oh one made every two hundred disappear from the OpenAPI document. And dotnet user j w t s with
+      dash dash role writes a role claim, singular, while Entra writes roles. Use dash dash claim roles instead.
+
+  - id: entra
+    type: screen
+    heading: "The API in Microsoft Entra ID"
+    image: screens/entra-app.jpg
+    bar: "Microsoft Entra admin center · App registrations"
+    demo: >
+      Two captures side by side (or one after the other): the app registration "contoso-expense-claims-api" →
+      App roles, showing Claims.Approve (Users/Groups, enabled); and Expose an API, showing the scope
+      api://<masked>/Claims.Submit and the Azure CLI under Authorized client applications. Mask the client ID,
+      tenant ID and any user names except "Sam Approver".
+    narration: >
+      In Entra ID, the API gets an app registration. Expose an API defines the claims submit scope, and we authorize
+      the Azure CLI as a client, so we can get tokens from the terminal. App roles defines claims approve, and in
+      enterprise applications we assign it to Sam.
+
+  - id: deploy
+    type: code
+    heading: "Same code, Entra settings in App Service"
+    lang: bash
+    code: |
+      az appservice plan create --name "$PLAN" --resource-group "$RG" --sku F1 --is-linux -o none
+      az webapp create --name "$APP" --resource-group "$RG" --plan "$PLAN" --runtime "DOTNETCORE:10.0" -o none
+
+      az webapp config appsettings set --name "$APP" --resource-group "$RG" -o none --settings \
+        "Authentication__Schemes__Bearer__Authority=https://sts.windows.net/$TENANT_ID/" \
+        "Authentication__Schemes__Bearer__ValidAudiences__0=api://$API_CLIENT_ID" \
+        "RateLimits__SubmitPerMinute=5"
+
+      az webapp deploy --resource-group "$RG" --name "$APP" --src-path "$out/app.zip" --type zip -o none
+    narration: >
+      Deployment is the free tier on Linux again. The only difference from local is two app settings: the authority,
+      your tenant on sts dot windows dot net, because new Entra-only APIs get version one access tokens by default,
+      and the audience, api colon slash slash and the client ID. A test checks these exact keys bind to the bearer
+      options.
+
+  - id: token
+    type: screen
+    heading: "A real Entra token, accepted"
+    image: screens/entra-token.jpg
+    bar: "Terminal · deploy/call-api.sh against App Service"
+    demo: >
+      Terminal running ./deploy/call-api.sh https://<masked> <masked-client-id>. Visible: the jq summary with
+      "aud": "api://<masked>", "iss": "https://sts.windows.net/<masked>/", "ver": "1.0", "scp": "Claims.Submit",
+      "roles": ["Claims.Approve"], then the POST returning 201 with "submittedBy" (masked oid). Mask every GUID.
+    narration: >
+      Now a real token. The Azure CLI asks Entra for the claims submit scope. The audience is our API, the issuer
+      is our tenant, version one point oh, and Sam's token carries the claims approve role. The API accepts it, and
+      the claim is created.
+
+  - id: selfapprove
+    type: screen
+    heading: "The rule holds with real identities"
+    image: screens/entra-selfapprove.jpg
+    bar: "Terminal · approve your own claim in Azure"
+    demo: >
+      Terminal: ./deploy/call-api.sh https://<masked> <masked-client-id> <id of the claim just created> showing the
+      approve call returning "<- HTTP 409" with title "You can't approve your own claim." Mask GUIDs and host.
+    narration: >
+      And the business rule still holds with real identities. Sam has the approver role, but this is Sam's own claim.
+      The API compares the object ID from the token with the submitter, and says no: four oh nine, you can't approve
+      your own claim.
+
+  - id: recap
+    type: bullets
+    heading: "Five rules"
+    bullets:
+      - "Authority and audience in configuration, not code"
+      - "Let [ApiController] validate; never check ModelState by hand"
+      - "One exception handler, problem details everywhere"
+      - "Rate limit per user, return 429, after authentication"
+      - "Test with the real JWT handler, not a fake login"
+    narration: >
+      Five rules. Keep the authority and audience in configuration, not code. Let API controller validate, and never
+      check model state by hand. Use one exception handler and problem details everywhere. Rate limit per user,
+      return four twenty-nine, after authentication. And test with the real JWT handler, not a fake login.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The API, the twenty-eight tests and the deploy scripts are on GitHub, and the full guide is on devladlog dot
+      com. Links are in the description. Next time, we replace the in-memory store with Entity Framework Core.
+      Subscribe so you don't miss it. This was DEVLADLOG dot net, by Momento Galático.

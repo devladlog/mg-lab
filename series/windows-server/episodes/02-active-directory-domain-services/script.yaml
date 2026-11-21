@@ -1,0 +1,295 @@
+# DEVLADLOG Windows Server - episode 02 (draft: the screen scenes need the lab recording, see demo.md)
+episode: 2
+slug: active-directory-domain-services
+series_label: "WINDOWS SERVER"
+series_name: "DEVLADLOG Windows Server"
+file_prefix: "windows-server"
+title: "Active Directory Domain Services"
+subtitle: "A new forest, users from a CSV, and an honest hygiene report"
+voice: am_michael
+thumbnail_text: "ACTIVE\nDIRECTORY\nDONE RIGHT"
+youtube:
+  title: "Active Directory with PowerShell: Forest, CSV Users, Hygiene Report | DEVLADLOG Windows Server #2"
+  tags: [Active Directory, AD DS, Windows Server 2025, PowerShell, Install-ADDSForest, New-ADUser, AdminSDHolder, lastLogonTimestamp, Pester, sysadmin]
+sources:
+  - https://www.devladlog.com/articles/windows-server/2025-08-26-active-directory-domain-services-complete-guide-2025/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Your directory remembers everything"
+    sub: "Except to tell you what's wrong with it"
+    short: hook
+    narration: >
+      An admin account nobody has used since July, with a password that never expires. A recycle bin that was never
+      switched on. A former admin who still doesn't inherit permissions. Active Directory never complains about any
+      of it. In this episode we build a new forest, load users from a CSV the safe way, and write a hygiene report
+      that does complain.
+
+  - id: plan
+    type: bullets
+    heading: "What we're building"
+    bullets:
+      - "A Windows Server 2025 forest, promoted with PowerShell"
+      - "OUs, groups and users from a CSV, safe to re-run"
+      - "A snapshot of the domain, exported to JSON"
+      - "Hygiene checks: stale, privileged, orphaned, domain-wide"
+      - "Forty-two Pester tests, AD cmdlets mocked"
+    narration: >
+      The plan. Promote a Windows Server 2025 forest with PowerShell. Create OUs, groups and users from a CSV, with a
+      script you can safely run twice. Export a snapshot of the domain and check it for stale accounts, privileged
+      groups and orphaned admins. Forty two Pester tests cover it.
+
+  - id: forest
+    type: code
+    heading: "Promote the first domain controller"
+    lang: powershell
+    code: |
+      Install-WindowsFeature -Name AD-Domain-Services -IncludeManagementTools
+
+      # Which functional levels does THIS server accept?
+      $accepted = (Get-Command Install-ADDSForest).Parameters['ForestMode'].ParameterType.GetEnumNames()
+      if ($accepted -notcontains $FunctionalLevel) { throw "Pick one of: $($accepted -join ', ')" }
+
+      $forest = @{ DomainName = 'lab.contoso.com'; DomainNetbiosName = 'CONTOSOLAB'
+                   DomainMode = $FunctionalLevel; ForestMode = $FunctionalLevel; InstallDns = $true
+                   SafeModeAdministratorPassword = $SafeModePassword }
+
+      $test = Test-ADDSForestInstallation @forest
+      if ($test.Status -ne 'Success') { throw 'Prerequisite checks failed.' }
+      Install-ADDSForest @forest -Force
+    narration: >
+      Step one, the forest. Install the A D D S role, then ask the cmdlet which functional levels this server
+      accepts, instead of trusting a blog. The Learn install guide uses Win twenty twenty five, while the cmdlet
+      reference still lists values up to Win Threshold, so we check. Then Test A D D S Forest Installation runs the
+      real prerequisite checks, and Install A D D S Forest promotes the server. DNS comes with it by default.
+
+  - id: promote
+    type: screen
+    heading: "Check first, then promote"
+    image: screens/promote.jpg
+    bar: "Lab · CON-DC01 · New-LabForest.ps1"
+    demo: >
+      On CON-DC01 (Server Core console or a remote session): ./New-LabForest.ps1 -DomainName lab.contoso.com
+      -NetbiosName CONTOSOLAB -WhatIf. Show the line "ForestMode values accepted here: ..." and the
+      Test-ADDSForestInstallation result (Status Success). Then the real run and the restart prompt (B-roll).
+    narration: >
+      On the lab server, a what if run first. Here is the list of functional levels this build accepts, and the
+      prerequisite checks come back as success. Rewrite this to what's on screen. New forests need at least the
+      Windows Server 2016 level, and the 2025 level is required for the new thirty two k database page feature.
+
+  - id: ous
+    type: code
+    heading: "Structure from a CSV"
+    lang: text
+    code: |
+      EmployeeId,GivenName,Surname,Department,Title
+      1001,Alex,Demo,IT,Systems Administrator
+      1002,João,Gonçalves,Finance,Accountant
+      1005,Jorge,Gonçalves,Sales,Account Manager
+      1007,Bartholomew,Featherstonehaugh-Smythe,Operations,Logistics Lead
+
+      OU=Contoso,DC=lab,DC=contoso,DC=com
+        OU=Users   ->  OU=Finance, OU=HR, OU=IT, OU=Operations, OU=Sales
+        OU=Groups  ->  GG-Dept-Finance, GG-Dept-HR, GG-Dept-IT, ...
+        OU=Servers
+    narration: >
+      The input is a plain CSV from HR: employee ID, names, department and title. From it we derive the structure. A
+      Contoso OU with Users, Groups and Servers, one OU per department under Users, and one global security group per
+      department. OUs are created protected from accidental deletion, parents first.
+
+  - id: naming
+    type: code
+    heading: "Logon names: twenty characters, no accents"
+    lang: powershell
+    code: |
+      function ConvertTo-AdLabSamAccountName {
+          param([string] $GivenName, [string] $Surname)
+          $first = (ConvertTo-AdLabAscii $GivenName).ToLowerInvariant() -replace '[^a-z0-9]', ''
+          $last  = ((ConvertTo-AdLabAscii $Surname).Trim() -split '\s+')[-1].ToLowerInvariant() -replace '[^a-z0-9]', ''
+          $sam = $first.Substring(0, 1) + $last
+          if ($sam.Length -gt 20) { $sam = $sam.Substring(0, 20) }
+          $sam
+      }
+
+      # João Gonçalves                        -> jgoncalves
+      # Jorge Gonçalves                       -> jgoncalves2
+      # Bartholomew Featherstonehaugh-Smythe  -> bfeatherstonehaughsm
+    narration: >
+      Logon names are first initial plus surname. Accents are stripped by decomposing the text and dropping the
+      combining marks, so João Gonçalves becomes j goncalves. The pre Windows two thousand logon name must be twenty
+      characters or fewer, so long names are cut, and a collision gets a number, still within twenty.
+
+  - id: idempotent
+    type: code
+    heading: "Match on EmployeeID, not on names"
+    lang: powershell
+    code: |
+      foreach ($u in $User) {
+          $id = ([string]$u.EmployeeId).Trim()
+          if ($byEmployee.ContainsKey($id)) {
+              $sam = $byEmployee[$id].SamAccountName        # existing person keeps their logon name
+              $action = 'Exists'
+          }
+          else {
+              $sam = Get-AdLabUniqueSamAccountName -Base (ConvertTo-AdLabSamAccountName $given $sur) -Taken $taken
+              [void]$taken.Add($sam)
+              $action = 'Create'
+          }
+          ...
+      }
+    narration: >
+      What makes it safe to re-run: people are matched on employee ID, not on their names. Someone who changes their
+      surname keeps their account instead of getting a second one. Every logon name already in the domain counts as
+      taken. And the whole provisioning function supports what if, so you can see the plan before anything is created.
+
+  - id: provision
+    type: screen
+    heading: "Run it twice"
+    image: screens/provision.jpg
+    bar: "Lab · CON-DC01 · Invoke-AdLabProvisioning"
+    short: idempotent
+    demo: >
+      Two runs of Invoke-AdLabProvisioning -CsvPath ./users.csv -DomainDn 'DC=lab,DC=contoso,DC=com'
+      -UpnSuffix lab.contoso.com -InitialPassword (Read-Host -AsSecureString) | Group-Object Action, Type | Format-Table Count, Name.
+      First run: Created OU 9, Created Group 5, Created User 8. Second run: Exists 22, Created 0.
+      Optional third shot: Active Directory Users and Computers with the OU tree.
+    narration: >
+      In the lab, the first run creates nine OUs, five groups and eight users, each with must change password at next
+      logon. Run it again and everything comes back as exists. Nothing created twice. That's the property you want
+      before you put a script like this in a scheduled task.
+
+  - id: snapshot
+    type: code
+    heading: "Export a snapshot, by SID"
+    lang: powershell
+    code: |
+      $script:ProtectedGroupSids = [ordered]@{
+          'Administrators'    = 'S-1-5-32-544'
+          'Account Operators' = 'S-1-5-32-548'
+          'Backup Operators'  = 'S-1-5-32-551'
+          'Domain Admins'     = 'D-512'
+          'Schema Admins'     = 'D-518'
+          'Enterprise Admins' = 'D-519'
+          # ... the rest of the AdminSDHolder protected groups
+      }
+      $grp = Get-ADGroup @ad -Filter "SID -eq '$sid'"
+      Members = @(Get-ADGroupMember @ad -Identity $grp -Recursive | ForEach-Object SamAccountName)
+    narration: >
+      For the report, Export A D Lab Snapshot reads users, computers, the protected groups and a few domain settings
+      into one JSON file. Groups are found by their well known S I Ds, so it works on a domain controller in any
+      language, and membership is recursive, because nested groups count.
+
+  - id: checks
+    type: code
+    heading: "Checks that know AD's quirks"
+    lang: powershell
+    code: |
+      elseif ($null -ne $last -and $last -lt $staleCut) {
+          $sev  = if ($isTierZero) { 'High' } else { 'Medium' }
+          $out.Add((New-AdLabFinding $sev 'StaleUser' $sam "... (lastLogonTimestamp can lag by up to 14 days)."))
+      }
+      if ($u.AdminCount -eq 1 -and -not $protectedMembers.Contains($sam) -and $sam -ne $builtinAdmin) {
+          $out.Add((New-AdLabFinding Low 'OrphanedAdminCount' $sam 'adminCount=1 but no longer in a protected group...'))
+      }
+      foreach ($g in @($s.ProtectedGroups | Where-Object { $_.Name -in $script:TierZeroGroups })) {
+          $people = @($g.Members | Where-Object { $_ -ne $builtinAdmin })
+          if ($people.Count -gt $p.MaxTierZeroMembers) { ... }
+      }
+    narration: >
+      The checks know Active Directory's quirks. A stale account is Medium, a stale privileged account is High. An
+      account removed from a protected group keeps admin count one and stays without inherited permissions, so we
+      flag it. And Enterprise Admins, Domain Admins and Administrators should hold no day to day users, except a
+      secured built in Administrator.
+
+  - id: tests
+    type: code
+    heading: "Forty-two tests, no domain controller"
+    lang: text
+    code: |
+      PS> Invoke-Pester ./tests -Output Detailed
+      Describing Logon names
+        [+] João Gonçalves -> jgoncalves
+        [+] never exceeds 20 characters (sAMAccountName limit)
+      Describing Hygiene checks
+        [+] flags a stale privileged account as High and a stale normal account as Medium
+        [+] finds orphaned adminCount but not current members of protected groups
+      Describing Invoke-AdLabProvisioning (ActiveDirectory cmdlets mocked)
+        [+] creates 9 OUs, 5 groups and 8 users, OUs protected from accidental deletion
+        [+] changes nothing with -WhatIf
+        [+] creates nothing when everything already exists
+
+      Tests Passed: 42, Failed: 0, Skipped: 0
+    narration: >
+      Forty two Pester tests run on Linux. Naming, plans and checks are pure. For provisioning, the Active Directory
+      cmdlets are mocked, and the tests prove the three things that matter: the right objects on an empty domain,
+      nothing with what if, and nothing on a second run.
+
+  - id: report
+    type: screen
+    heading: "The lab domain, judged"
+    image: screens/report.jpg
+    bar: "Lab · CON-DC01 · Invoke-AdHygieneReport.ps1"
+    demo: >
+      ./Invoke-AdHygieneReport.ps1 -SnapshotFile ./lab-snapshot.json -OutFile ./ad-report.md on CON-DC01 (or the admin
+      VM with RSAT). Show the findings table: expect RecycleBin (Medium), PasswordPolicy (Medium), LockoutPolicy if the
+      threshold is 0, PrivilegedGroup if adm-alex was added to Domain Admins, plus the adminCount demo user.
+    narration: >
+      Now the real lab domain. Rewrite this to the findings on screen. Even a brand new forest isn't clean: the
+      recycle bin isn't enabled by default, and the password policy is checked against our policy file. The orphaned
+      admin we set up on purpose shows up exactly as expected.
+
+  - id: lastlogon
+    type: screen
+    heading: "Gotcha: lastLogonTimestamp isn't a stopwatch"
+    image: screens/lastlogon.jpg
+    bar: "Lab · CON-DC01 · lastLogon vs lastLogonTimestamp"
+    short: gotcha
+    demo: >
+      Sign in twice as CONTOSO\jgoncalves on CON-FS01 a few minutes apart (or run a command with -Credential twice).
+      Then: Get-ADUser jgoncalves -Properties lastLogon, lastLogonTimestamp | Select-Object Name,
+      @{n='lastLogon';e={[datetime]::FromFileTimeUtc($_.lastLogon)}}, @{n='lastLogonTimestamp';e={[datetime]::FromFileTimeUtc($_.lastLogonTimestamp)}}.
+      lastLogon shows the second sign-in, lastLogonTimestamp still the first.
+    narration: >
+      The gotcha. We signed in twice, minutes apart. Last logon, which lives on this domain controller only, shows
+      the second sign in. Last logon timestamp, the replicated one, still shows the first. It's only updated when
+      it's nine to fourteen days old. Great for finding stale accounts, useless as a stopwatch. That's why the report
+      says lag of up to fourteen days.
+
+  - id: fixes
+    type: bullets
+    heading: "Fix in this order"
+    bullets:
+      - "Disable stale privileged accounts first"
+      - "Empty Tier 0 groups to the built-in Administrator"
+      - "Clear adminCount, re-enable inheritance"
+      - "Enable the Recycle Bin: irreversible, protects later deletes only"
+      - "krbtgt over 180 days: reset twice, 10 hours apart"
+    narration: >
+      Fix in this order. Disable stale privileged accounts first. Empty the tier zero groups down to the built in
+      Administrator. For orphaned admins, clear admin count and re enable inheritance. Enable the recycle bin: it
+      can't be turned off, and only protects objects deleted after you enable it. And if krbtgt's password is older
+      than a hundred and eighty days, reset it twice, at least ten hours apart.
+
+  - id: recap
+    type: bullets
+    heading: "Five rules"
+    bullets:
+      - "Ask the server, not the blog"
+      - "Match people on a stable ID"
+      - "Find groups by SID, membership recursively"
+      - "Know what each attribute can't tell you"
+      - "Re-run the report on a schedule"
+    narration: >
+      Five rules. Ask the server what it accepts, not the blog. Match people on a stable ID, never on names. Find
+      groups by S I D, and count nested members. Know what each attribute can't tell you. And re-run the hygiene report
+      on a schedule, because a directory only gets messier on its own.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The forest script, the AdLab module, the CSV and all forty two tests are on GitHub, and the complete guide to
+      Active Directory Domain Services is on devladlog dot com. Links are in the description. Next episode: Group
+      Policy, on this same lab domain. Subscribe so you don't miss it.

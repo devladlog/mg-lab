@@ -1,0 +1,265 @@
+# DEVLADLOG AI — episode 03. Code scenes are real excerpts from infra/, src/ and tests/.
+# Screen scenes: capture per demo.md. Their narration describes what is on screen without quoting live numbers;
+# after recording, add the real values where marked TODO.
+episode: 3
+slug: rag-patterns-vector-search
+series_label: "AI"
+series_name: "DEVLADLOG AI"
+file_prefix: "ai"
+title: "RAG patterns and vector search: hybrid retrieval you can measure"
+subtitle: "Chunk, index, retrieve four ways, answer with checked citations"
+voice: am_michael
+thumbnail_text: "RAG THAT\nCITES ITS\nSOURCES"
+youtube:
+  title: "RAG with Azure AI Search: Hybrid + Vector Search, Measured, With Checked Citations | DEVLADLOG AI #3"
+  tags: [RAG, retrieval augmented generation, Azure AI Search, vector search, hybrid search, semantic ranker, Reciprocal Rank Fusion, Azure OpenAI, embeddings, text-embedding-3-small, Python, generative AI]
+sources:
+  - https://www.devladlog.com/articles/ai/2026-03-31-rag-patterns-complete-guide-2026/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Your bot read the handbook. Prove it."
+    sub: "RAG with Azure AI Search, measured"
+    short: hook
+    narration: >
+      Every company wants a chatbot that answers from its own documents. Most of them answer confidently, and nobody
+      can tell whether the answer came from the handbook or from the model's imagination. Today we build retrieval
+      augmented generation that we can measure, and that has to show its sources. Welcome to DEVLADLOG AI.
+
+  - id: problem
+    type: bullets
+    heading: "The HR bot from episode two needs facts"
+    bullets:
+      - "Answer only from the Contoso HR handbook"
+      - "Find the right section, whatever words people use"
+      - "Cite a source for every claim"
+      - "Say so when the handbook has no answer"
+      - "Compare retrieval options with numbers, not vibes"
+    narration: >
+      Remember the hr bot team behind our gateway in episode two? Their bot now has to answer from the fictional
+      Contoso HR handbook. It must find the right section whatever words people use, cite a source for every claim,
+      say so when the handbook has no answer, and we want numbers to compare retrieval options, not vibes.
+
+  - id: arch
+    type: diagram
+    heading: "The pipeline"
+    nodes: ["Docs", "Chunks", "Index", "Answer"]
+    labels: ["HR handbook (.md)", "by section", "text + vectors", "with citations"]
+    narration: >
+      The pipeline has four stops. Markdown documents are split into chunks by section. Each chunk is embedded and
+      pushed into an Azure AI Search index that holds both text and vectors. At question time we retrieve the best
+      chunks, and the model answers from them, with numbered citations we can check.
+
+  - id: chunking
+    type: code
+    heading: "Chunk by section, keep the context"
+    lang: python
+    code: |
+      def chunk_markdown(markdown, source, max_chars=MAX_CHARS, overlap=OVERLAP):
+          title, sections = split_sections(markdown)
+          chunks = []
+          for heading, body in sections:
+              prefix = f"{title} > {heading}" if heading != title else title
+              budget = max_chars - len(prefix) - 2
+              for part, piece in enumerate(split_long(body, budget, min(overlap, budget // 2 - 1))):
+                  chunks.append(Chunk(
+                      id=f"{slugify(source)}-{slugify(heading)}-{part}",
+                      section_key=f"{source}#{slugify(heading)}",
+                      content=f"{prefix}\n\n{piece}", ...))
+          return chunks
+    narration: >
+      One chunk per section. A long section is split on sentence boundaries, using the starting point Microsoft
+      Learn recommends: about five hundred twelve tokens, roughly two thousand characters, with twenty five percent
+      overlap. Every chunk starts with its document and section title, so it still makes sense on its own.
+
+  - id: index
+    type: code
+    heading: "One index, text and vectors, no keys"
+    lang: python
+    code: |
+      SearchField(
+          name="content_vector",
+          type=SearchFieldDataType.Collection(SearchFieldDataType.Single),
+          searchable=True, hidden=True,
+          vector_search_dimensions=1536,
+          vector_search_profile_name=VECTOR_PROFILE,
+      )
+      AzureOpenAIVectorizer(
+          vectorizer_name=VECTORIZER,
+          parameters=AzureOpenAIVectorizerParameters(
+              resource_url=aoai_endpoint, deployment_name=embedding_deployment,
+              model_name="text-embedding-3-small",
+              # no api_key, no auth_identity -> the search service's managed identity
+          ),
+      )
+    narration: >
+      The index has searchable text fields and one vector field with fifteen thirty six dimensions, the size of text
+      embedding three small. The vectorizer lets the search service embed the question itself. With no key and no
+      identity set, it uses the service's own managed identity, which our Bicep gives the Open A I User role.
+
+  - id: modes
+    type: code
+    heading: "Four retrieval modes, one function"
+    lang: python
+    code: |
+      kwargs = {"select": SELECT, "top": top}
+      if mode in ("keyword", "hybrid", "hybrid_semantic"):
+          kwargs["search_text"] = question
+      if mode in ("vector", "hybrid", "hybrid_semantic"):
+          kwargs["vector_queries"] = [VectorizableTextQuery(
+              text=question, k_nearest_neighbors=k, fields=VECTOR_FIELD)]
+      if mode == "hybrid_semantic":
+          kwargs["query_type"] = "semantic"
+          kwargs["semantic_configuration_name"] = SEMANTIC_CONFIG
+      return kwargs
+    narration: >
+      Here are the four ways to ask. Keyword is classic full text search with B M twenty five. Vector sends the
+      question as text and lets the vectorizer embed it. Hybrid sends both in one request. And hybrid semantic adds
+      the semantic ranker, which re-ranks the fused results with a language model.
+
+  - id: rrf
+    type: code
+    heading: "How hybrid merges two rankings"
+    lang: python
+    code: |
+      def rrf(ranked_lists, k=60, weights=None):
+          for ranked, weight in zip(lists, weights):
+              for rank, doc_id in enumerate(ranked, start=1):
+                  scores[doc_id] += weight / (rank + k)
+          return sorted(scores.items(), key=...)
+
+      def test_document_good_in_both_lists_beats_first_in_one():
+          keyword = ["exp-4", "meals", "mileage"]
+          vector = ["flights", "meals", "carry-over"]
+          assert rrf([keyword, vector])[0][0] == "meals"
+    short: rrf
+    narration: >
+      How does hybrid merge two rankings with completely different scores? Reciprocal rank fusion. Each document
+      gets one over its rank plus sixty from every list it appears in, and the scores are added. So a chunk that is
+      second in both lists beats a chunk that is first in only one. The service does this for you; this test just
+      makes it visible.
+
+  - id: indexed
+    type: screen
+    heading: "Indexed, keyless"
+    image: screens/indexed.jpg
+    bar: "Terminal + Azure portal · hrrag.ingest"
+    demo: "Left: terminal running PYTHONPATH=src python -m hrrag.ingest ... ending with 'indexed 25 chunks into hr-handbook'. Right: portal, search service > Indexes > hr-handbook showing the document count and the vector index size. Names masked."
+    narration: >
+      One command creates the index, chunks the six handbook documents, embeds them and uploads the chunks. The
+      search service has API keys disabled, so everything here runs on Microsoft Entra ID and role assignments.
+
+  - id: scorecard
+    type: screen
+    heading: "Four modes, sixteen questions, real numbers"
+    image: screens/scorecard.jpg
+    bar: "Terminal · python -m hrrag.evaluate"
+    demo: "Terminal: PYTHONPATH=src python -m hrrag.evaluate --search-endpoint ... showing the scorecard table (mode, hit@1, hit@5, MRR, misses) for keyword, vector, hybrid, hybrid_semantic, then the out-of-scope list."
+    narration: >
+      Now the scorecard. Sixteen labelled questions, some with exact form codes, most phrased the way people really
+      ask. For each mode: how often the right section is first, how often it is in the top five, and the mean
+      reciprocal rank. This is how you choose a retrieval strategy: on your own questions.
+    # TODO after recording: name the best mode and one question that keyword missed but vector found, from this run.
+
+  - id: answer-code
+    type: code
+    heading: "Citations you can check"
+    lang: python
+    code: |
+      def check_citations(text, hits, finish_reason="stop"):
+          if text.strip() == NOT_FOUND:
+              return Answer(text, not_found=True, grounded=True, finish_reason=finish_reason)
+          numbers = [int(n) for n in _CITATION.findall(text)]
+          valid = sorted({n for n in numbers if 1 <= n <= len(hits)})
+          invalid = sorted({n for n in numbers if not 1 <= n <= len(hits)})
+          grounded = bool(valid) and not invalid and finish_reason == "stop"
+          return Answer(text, [hits[n - 1] for n in valid], invalid, False, grounded, finish_reason)
+    narration: >
+      The model sees the retrieved chunks numbered one to five inside delimiters, and must cite a number after every
+      fact, or reply with one fixed sentence. Then code checks the answer. A citation to a source we never sent, no
+      citation at all, or a truncated answer means it is not grounded, and the app can refuse to show it.
+
+  - id: answer
+    type: screen
+    heading: "An answer with its sources"
+    image: screens/answer.jpg
+    bar: "Terminal · python -m hrrag.answer"
+    demo: "Terminal: PYTHONPATH=src python -m hrrag.answer \"If I don't use all my vacation this year, can I keep some days?\" ... showing the answer with [n] citations, the five sources with scores and reranker scores, the cited ones marked with *, and grounded=True."
+    narration: >
+      Here is a real question that never uses the word carry over. The answer cites its sources, the cited chunks are
+      marked, and we see each chunk's fused score and its semantic reranker score. Grounded is true, because every
+      citation points at a chunk we actually retrieved.
+    # TODO after recording: this narration assumes the recorded run printed grounded=True; re-run or edit if not.
+
+  - id: not-found
+    type: screen
+    heading: "And when the handbook has no answer"
+    image: screens/not-found.jpg
+    bar: "Terminal · python -m hrrag.answer"
+    demo: "Terminal: PYTHONPATH=src python -m hrrag.answer \"What is the company car policy?\" ... showing the fixed sentence 'I can't find that in the Contoso HR handbook.', the five unrelated sources, and not_found=True."
+    narration: >
+      Now a question the handbook can't answer: the company car policy. Five chunks still come back, as you can see,
+      but none of them is about cars, and the model replies with the fixed sentence instead of inventing a policy.
+    # TODO after recording: this narration assumes the recorded run printed not_found=True; if the model answered
+    # anyway, keep the take and say so (it is exactly the gotcha), and tighten the system prompt in answer.py.
+
+  - id: gotcha
+    type: code
+    heading: "The gotcha: search never says no"
+    lang: python
+    code: |
+      def test_retrieval_always_returns_something_even_out_of_scope(local_index):
+          # Retrieval has no notion of "no answer": the answer step must refuse, not the search.
+          assert len(local_index.search("What is the company car policy?", "hybrid", 5)) == 5
+
+      def test_no_hits_means_no_model_call(stub_server):
+          result = answer(aoai(stub_server), "anything", [], deployment="chat", model="gpt-5-mini")
+          assert result.not_found and stub_server.requests == []
+    short: gotcha
+    narration: >
+      Here is the honest gotcha. Search never says no. Ask about company cars and you still get the top five chunks,
+      because ranking only orders what exists. If your prompt doesn't give the model a way out, it will build an
+      answer from whatever came back. Make refusal an explicit, tested outcome, and check citations in code.
+
+  - id: tests
+    type: code
+    heading: "38 tests, no cloud needed"
+    lang: text
+    code: |
+      $ python -m pytest tests -q
+      ......................................                 [100%]
+      38 passed
+
+      test_search_sdk.py         real Azure Search SDK vs a local stub:
+                                 index PUT, mergeOrUpload, hybrid + semantic body
+      test_embeddings_and_answer real OpenAI SDK: batching, citations, refusals
+      test_bicep.py              keyless search + OpenAI, search identity role
+      test_chunking.py           every labelled section exists in the handbook
+    narration: >
+      Thirty eight tests run in seconds without any cloud resource. The real Azure Search and Open A I SDKs run
+      against local stubs, so we check the exact request bodies. The Bicep is compiled and checked for keyless
+      services, and the evaluation set is checked against the handbook itself.
+
+  - id: recap
+    type: bullets
+    heading: "Five rules for RAG"
+    bullets:
+      - "Chunk by structure, keep titles in every chunk"
+      - "Same embedding model at index and query time"
+      - "Hybrid plus semantic ranker, then measure it"
+      - "Number the sources, check every citation in code"
+      - "Make 'not in the handbook' a tested answer"
+    narration: >
+      Five rules. Chunk by structure and keep titles in every chunk. Use the same embedding model at index time and
+      query time. Start with hybrid plus the semantic ranker, then measure it on your own questions. Number the
+      sources and check every citation in code. And make not in the handbook a tested answer.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The chunker, the index, the evaluation and the tests are on GitHub, and the complete guide with four deeper
+      articles is on devladlog dot com. Links are in the description. Next time: Document Intelligence, turning
+      invoices and forms into data. This was DEVLADLOG AI, by Momento Galático.

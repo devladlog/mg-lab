@@ -1,29 +1,291 @@
-# DEVLADLOG Power Apps — episode 01 (stub: write the scenes after building the demo)
+# DEVLADLOG Power Apps — episode 01. Draft: code scenes are real excerpts from src/, screen scenes need the lab recording.
 episode: 1
 slug: model-driven-apps
 series_label: "POWER APPS"
 series_name: "DEVLADLOG Power Apps"
 file_prefix: "powerapps"
-title: "Model-Driven Apps"
-subtitle: "Built for real, in a lab tenant"
+title: "Model-driven apps, built for real"
+subtitle: "Dataverse from code, a tested form script, a real app"
 voice: am_michael
-thumbnail_text: "MODEL-DRIVEN APPS"
+thumbnail_text: "MODEL-DRIVEN\nAPPS\nFOR REAL"
 youtube:
-  title: "Model-Driven Apps (Real Demo) | DEVLADLOG Power Apps #1"
-  tags: []
+  title: "Model-Driven Apps: Dataverse from Code + a Tested Form Script | DEVLADLOG Power Apps #1"
+  tags: [model-driven apps, Power Apps, Dataverse, Dataverse Web API, form script, TypeScript, Client API, formContext, app designer, Power Platform, low code]
 sources:
   - https://www.devladlog.com/articles/powerapps/2026-02-10-model-driven-apps-complete-guide-2026/
+
 scenes:
   - id: hook
     type: title
-    heading: "Model-Driven Apps"
-    sub: "Built for real, in a lab tenant"
+    heading: "Model-driven apps, for real"
+    sub: "Data model from code, form logic in TypeScript, a real app"
     short: hook
     narration: >
-      TODO
+      A model-driven app is only as good as the data model under it. In this episode we build one for real: two
+      Dataverse tables and the app itself created from code, a form script in TypeScript with thirty-eight passing
+      tests, and the running app, including the date bug that catches almost everyone. Welcome to DEVLADLOG Power Apps.
+
+  - id: when
+    type: bullets
+    heading: "When is model-driven the right choice?"
+    bullets:
+      - "Your data lives in Dataverse and has relationships"
+      - "Forms, views and navigation come from the data model"
+      - "Security roles decide who sees the app and the rows"
+      - "Canvas when the screen layout matters more than the data"
+      - "Every user needs a Power Apps premium licence"
+    narration: >
+      First, when does model-driven make sense? When your data lives in Dataverse and has real relationships. Forms, views
+      and navigation come from the data model. Security roles decide who sees the
+      app. If the exact screen layout matters more, that's a canvas app, our next episode. And be clear about cost: every
+      user who runs a model-driven app needs a Power Apps premium licence.
+
+  - id: plan
+    type: bullets
+    heading: "What we're building: Equipment Desk"
+    bullets:
+      - "Equipment: asset tag, category, status, purchase date"
+      - "Loan: equipment lookup, borrower, loan, due and return dates"
+      - "A device with loan history can't be deleted"
+      - "App module, site map, validate, publish: all from code"
+      - "Form script: defaults, blocking errors, overdue banner"
+    narration: >
+      We're building Equipment Desk, an app for lending laptops, monitors and phones. Two tables: Equipment, and Loan,
+      with a lookup to the device. A device with loan history can't be deleted, you retire it instead. The app module,
+      site map, validation and publishing all happen from code. And the Loan form gets a script for defaults, errors and
+      an overdue banner.
+
+  - id: model
+    type: code
+    heading: "The model is plain data"
+    lang: typescript
+    code: |
+      export const loan: TableDef = {
+        schemaName: "contoso_Loan",
+        displayName: "Loan",
+        primaryName: { schemaName: "contoso_Name", displayName: "Loan", maxLength: 100 },
+        columns: [   // displayName and description trimmed for the slide
+          { kind: "string", schemaName: "contoso_BorrowerEmail", maxLength: 100, format: "Email", required: true },
+          { kind: "date",   schemaName: "contoso_LoanDate",  required: true },
+          { kind: "date",   schemaName: "contoso_DueDate",   required: true },
+          { kind: "date",   schemaName: "contoso_ReturnedOn" },
+          { kind: "memo",   schemaName: "contoso_Notes", maxLength: 2000 },
+        ],
+      };
+    narration: >
+      The model is plain TypeScript data: tables, columns, the lookup and the app, all with the contoso publisher
+      prefix. Pure functions turn it into Web API payloads: entity definitions, attributes and a one to many relationship,
+      in the exact shapes from the Microsoft Learn articles. A test fails if any schema name is missing the prefix.
+
+  - id: dates
+    type: code
+    heading: "The date bug that catches everyone"
+    lang: typescript
+    short: gotcha
+    code: |
+      case "date":
+        // Without DateTimeBehavior the column is created as UserLocal, and a "date only"
+        // value can then show as the previous day for users in another time zone.
+        return {
+          "@odata.type": "Microsoft.Dynamics.CRM.DateTimeAttributeMetadata",
+          AttributeType: "DateTime",
+          ...common,
+          Format: "DateOnly",
+          DateTimeBehavior: { Value: "DateOnly" },
+        };
+    narration: >
+      Here's the gotcha. If you don't set a behaviour, Dataverse creates date columns as user local, even when the
+      format is date only. Microsoft's own docs warn that users in another time zone can then see a different day. A
+      due date that moves by a day is a real bug. So every date column is created with date only behaviour, and you
+      decide this up front, because once a column is date only you can't change it back.
+
+  - id: provision
+    type: code
+    heading: "The app module, from code"
+    lang: typescript
+    code: |
+      const appId = appRow?.appmoduleid
+        ?? (await dv.request("POST", "appmodules", appModulePayload(model.app), inSolution)).entityId!;
+
+      await dv.request("POST", "AddAppComponents", {
+        AppId: appId,
+        Components: [
+          { "@odata.type": "Microsoft.Dynamics.CRM.sitemap", sitemapid: sitemapId },
+          ...tableNames.map((t) => ({ "@odata.type": "Microsoft.Dynamics.CRM.entity", entityid: tableIds.get(t) })),
+        ],
+      });
+      const validation = (await dv.request("GET", `ValidateApp(AppModuleId=${appId})`)).body?.AppValidationResponse;
+      // errors? stop. Otherwise: PublishXml for the tables and the app
+    narration: >
+      The app follows the documented sequence: create the app module, add the site map and both tables with Add App
+      Components, run Validate App, which is the same check as the Validate button in the designer, and only publish if
+      there are no errors. Every write carries the solution unique name header, so everything lands in our solution,
+      ready for A L M.
+
+  - id: dryrun
+    type: code
+    heading: "Dry run first, every step idempotent"
+    lang: text
+    code: |
+      $ npm run plan
+      GET   publishers?$select=publisherid,customizationprefix&$filter=uniquename eq 'contoso'
+      POST  publishers
+      POST  solutions
+      POST  EntityDefinitions  [solution EquipmentDesk]
+      POST  EntityDefinitions(LogicalName='contoso_equipment')/Attributes  [solution EquipmentDesk]
+      ...
+      POST  RelationshipDefinitions  [solution EquipmentDesk]
+      POST  appmodules  [solution EquipmentDesk]
+      POST  sitemaps  [solution EquipmentDesk]
+      POST  AddAppComponents
+      GET   ValidateApp(AppModuleId=...)
+      POST  PublishXml
+
+      39 requests, 19 writes (dry run: nothing sent)
+    narration: >
+      Before touching an environment, the dry run prints every request: thirty-nine in total, nineteen of them writes.
+      Each step checks first and only creates what's missing, so running it twice creates nothing new, and there's a
+      test for exactly that.
+
+  - id: solution
+    type: screen
+    heading: "Everything lands in one solution"
+    image: screens/solution.jpg
+    bar: "Power Apps · Solutions · Equipment Desk"
+    demo: >
+      make.powerapps.com in the lab DEV environment, Solutions > Equipment Desk > Objects, right after the provisioning
+      run. Visible: Equipment and Loan tables, the Equipment Desk app, its site map and the contoso_/scripts/loanform.js
+      web resource. Mask the environment name and the user avatar.
+    narration: >
+      Here's the result in the maker portal. One solution, Equipment Desk, holding both tables, the app, its site map
+      and the form script web resource. Nothing in the default solution, so this whole thing can move to test and
+      production as a unit.
+
+  - id: designer
+    type: screen
+    heading: "Open it in the app designer"
+    image: screens/app-designer.jpg
+    bar: "Power Apps · app designer · Equipment Desk"
+    demo: >
+      Open the Equipment Desk app in the modern app designer. Navigation pane shows the Equipment Desk area with the
+      Lending group, Equipment and Loans pages; the preview shows the Loans view with three fictional loans. Mask the
+      environment name.
+    narration: >
+      Open the app in the designer and it's a normal model-driven app: an area, a group, and pages for Equipment and
+      Loans, with their views. Code built the skeleton. Makers keep working on it visually from here.
+
+  - id: formscript
+    type: code
+    heading: "The form script: one refresh, every rule"
+    lang: typescript
+    code: |
+      export function refresh(fc: Xrm.FormContext, now: Date): void {
+        const dates = readDates(fc);
+        const errors = validateDates(dates, now);
+        for (const field of DATE_FIELDS) {
+          const control = fc.getControl(field) as Xrm.Controls.StandardControl | null;
+          const error = errors.find((e) => e.field === field);
+          if (error) control?.setNotification(error.message, `contoso.dates.${field}`);
+          else control?.clearNotification(`contoso.dates.${field}`);
+        }
+        const state = loanState(dates, now);
+        if (state.state === "onTime") fc.ui.clearFormNotification(STATE_NOTIFICATION);
+        else fc.ui.setFormNotification(state.message, state.state === "overdue" ? "WARNING" : "INFO", STATE_NOTIFICATION);
+        // locked when returned, loan name filled when empty...
+      }
+    narration: >
+      The form script uses the form context from the execution context, not the deprecated X r m dot page. One refresh
+      function applies every rule. Real errors use set notification on the field, which blocks save. The overdue banner
+      uses a form notification, which informs but never blocks. The rules themselves live in a separate file with no
+      X r m at all.
+
+  - id: tests
+    type: code
+    heading: "Thirty-eight tests, no tenant"
+    lang: text
+    code: |
+      $ npm test
+      ✔ picking an earlier due date puts a blocking notification on the field, fixing it clears it
+      ✔ overdue loan shows a warning banner on load
+      ✔ returning the device locks the loan and replaces the banner
+      ✔ daysBetween counts calendar days across the daylight-saving change
+      ✔ 90 days is the limit, 91 is too long
+      ✔ date columns are created DateOnly (not the UserLocal default)
+      ✔ re-run against a provisioned environment creates nothing new
+      ✔ validation errors stop the publish
+      ✔ web resource bundle exposes Contoso.LoanForm.onLoad as a classic (non-module) script
+      ℹ tests 38
+      ℹ pass 38
+    narration: >
+      Thirty-eight tests with Node's built in test runner, no tenant needed. The form script runs against a small fake
+      form context. One test pins the Lisbon time zone, because the day the clocks change only has twenty-three hours,
+      and counting days by milliseconds gets it wrong. Another builds the bundle and checks the function name the form
+      designer will call.
+
+  - id: handler
+    type: screen
+    heading: "One handler in the designer"
+    image: screens/form-handler.jpg
+    bar: "Power Apps · form designer · Loan main form · Events"
+    demo: >
+      Loan main form in the form designer, Events tab, On Load handler dialog: library contoso_/scripts/loanform.js,
+      function Contoso.LoanForm.onLoad, "Pass execution context as first parameter" checked. Highlight the checkbox.
+    narration: >
+      In the form designer we register exactly one handler: On Load, calling contoso dot loan form dot on load, with
+      pass execution context as first parameter checked. Forget that checkbox and there's no form context. The script
+      attaches its own on change handlers, so the designer stays simple.
+
+  - id: live
+    type: screen
+    heading: "A due date before the loan date"
+    image: screens/due-date-error.jpg
+    bar: "Model-driven app · Equipment Desk · New Loan"
+    short: live
+    demo: >
+      Running app, New Loan. Loan date and due date were defaulted (today and plus fourteen days). Pick CT-0042 Laptop and
+      alex.demo@contoso.com, then set the due date to a day before the loan date: the red notification "Due date can't be
+      before the loan date." shows on the field. Press Save to show the save is blocked. Second capture
+      (screens/overdue-banner.jpg) for the cutaway: an existing loan due three days ago showing the yellow banner
+      "Overdue by 3 days. Contact the borrower."
+    narration: >
+      Now the real app. A new loan already has today's date and a due date two weeks out. Pick a device and a borrower,
+      and the loan name fills itself. Set the due date before the loan date and the field shows an error. Try to save,
+      and the platform blocks it. Open a loan that's three days late and the banner says so, before anyone has to ask.
+
+  - id: licence
+    type: bullets
+    heading: "Before you ship"
+    bullets:
+      - "Users need a Power Apps premium licence to run it"
+      - "Stricter licence checks for model-driven apps from February 2027"
+      - "Grant the app to a security role, not to everyone"
+      - "Unmanaged developer environments are being retired"
+      - "Move it with the solution: managed in test and production"
+    narration: >
+      Before you ship. Every user needs a premium licence, and Microsoft has announced stricter checks for model-driven
+      apps from February twenty twenty-seven. Grant the app to a security role. If you built
+      this in a Developer Plan environment, note that unmanaged developer environments are being retired, so keep your
+      work in a solution and move it as a managed solution to test and production.
+
+  - id: recap
+    type: bullets
+    heading: "Five rules"
+    bullets:
+      - "Design the data model first; the app follows it"
+      - "Decide date behaviour before you create the column"
+      - "Create everything inside your own solution"
+      - "Validate before you publish"
+      - "Form scripts: formContext, pure rules, unit tests"
+    narration: >
+      Five rules. Design the data model first, the app follows it. Decide date behaviour before you create the column.
+      Create everything inside your own solution. Validate before you publish. And write form scripts against the form
+      context, with the rules in a pure module and real tests.
+
   - id: outro
     type: outro
     heading: "Code on GitHub, guides on devladlog.com"
     sub: "github.com/devladlog/mg-lab"
     narration: >
-      TODO
+      The provisioning script, the form script and all thirty-eight tests are on GitHub, and the complete guide is on
+      devladlog dot com. Links are in the description. Next time: canvas apps, on the same Dataverse tables. Subscribe so
+      you don't miss it.

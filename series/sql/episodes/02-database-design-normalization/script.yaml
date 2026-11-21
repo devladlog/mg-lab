@@ -1,0 +1,280 @@
+# DEVLADLOG SQL — episode 02 (draft: screen scenes need the recording described in demo.md)
+episode: 2
+slug: database-design-normalization
+series_label: "SQL"
+series_name: "DEVLADLOG SQL"
+file_prefix: "sql"
+title: "Database Design & Normalization"
+subtitle: "From a flat export to third normal form, with evidence"
+voice: am_michael
+thumbnail_text: "FLAT FILE\nTO THIRD\nNORMAL FORM"
+youtube:
+  title: "Database Normalization in Practice: Flat Export to 3NF in SQL Server (Real Demo) | DEVLADLOG SQL #2"
+  tags: [database design, normalization, third normal form, 3NF, SQL Server, T-SQL, primary key, foreign key, functional dependency, data modeling]
+sources:
+  - https://www.devladlog.com/articles/sql/2025-07-20-database-design-normalization-complete-guide-2025/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "One company, two cities"
+    sub: "Normalization finds the bugs your spreadsheet hides"
+    short: hook
+    narration: >
+      This spreadsheet says Contoso is in Porto. And in Oporto. Both can't be right, and the file can't stop it,
+      because the city is copied into every row. In this episode we normalize a flat export into third normal form, in
+      SQL Server, and we prove every step: nothing lost, nothing duplicated, and bad data rejected.
+
+  - id: export
+    type: code
+    heading: "The export: everything in one row"
+    lang: text
+    code: |
+      BookingRef,BookingDate,CustomerEmail,CustomerName,Company,CompanyCity,
+          CourseCodes,CourseTitles,ListPrices,PricesPaid
+
+      B1001,2025-01-10,alex.demo@contoso.example,Alex Demo,Contoso Ltd,Porto,
+          SQL101|SQL201,T-SQL Fundamentals|T-SQL Advanced Queries,450.00|600.00,450.00|540.00
+      B1008,2025-03-10,alex.demo@contoso.example,Alex Demo,Contoso Ltd,Oporto,
+          PBI200,Power BI Data Modeling,550.00,550.00
+
+      # 16 bookings, 4 list columns that must line up item by item
+      # customer, company and course details repeated on every row
+    narration: >
+      Here's the export: sixteen bookings of a fictional training company. Each row holds a list of courses in four
+      pipe-separated columns: codes, titles, list prices and prices paid, which must line up item by item. And the
+      customer, the company and the course details are repeated on every row. Look at booking one thousand and eight:
+      Oporto.
+
+  - id: one-nf
+    type: code
+    heading: "First normal form: no repeating groups"
+    lang: python
+    code: |
+      def to_1nf(flat):
+          rows = []
+          for r in flat:
+              lists = {col: r[col].split("|") for col in LIST_COLUMNS}
+              lengths = {len(v) for v in lists.values()}
+              if len(lengths) != 1:
+                  raise ValueError(f"{r['BookingRef']}: list columns have different lengths ...")
+              for i in range(lengths.pop()):
+                  row = {c: r[c] for c in ONE_NF_COLUMNS[:6]}
+                  for col, single in LIST_COLUMNS.items():
+                      value = lists[col][i].strip()
+                      row[single] = Decimal(value) if single in ("ListPrice", "PricePaid") else value
+                  rows.append(row)
+          return rows
+      # 16 bookings -> 23 booking lines, key (BookingRef, CourseCode)
+    narration: >
+      First normal form: no repeating groups. A small Python step splits each list into one row per booking line, and
+      refuses a row whose lists don't line up. Sixteen bookings become twenty-three lines, and each line is
+      identified by the booking reference plus the course code. That's our composite key.
+
+  - id: report
+    type: code
+    heading: "Check the dependencies against the data"
+    lang: text
+    code: |
+      $ python src/normalize.py
+      declared dependencies (lhs -> rhs)      kind                    data
+        BookingRef -> BookingDate             partial: breaks 2NF     holds
+        BookingRef -> CustomerEmail           partial: breaks 2NF     holds
+        CustomerEmail -> CustomerName         transitive: breaks 3NF  holds
+        CustomerEmail -> Company              transitive: breaks 3NF  holds
+        Company -> CompanyCity                transitive: breaks 3NF  CONFLICT ['Oporto', 'Porto']
+        CourseCode -> CourseTitle             partial: breaks 2NF     CONFLICT ['...Modeling', '...Modelling']
+        CourseCode -> ListPrice               partial: breaks 2NF     holds
+        BookingRef, CourseCode -> PricePaid   full (fine)             holds
+    narration: >
+      Next, the dependencies. The business tells us what determines what: a course code determines the title and
+      list price, a company determines its city. The script checks each rule against the data. Depending on part of
+      the key breaks second normal form. Depending on a non-key column breaks third. And two rules are broken in the
+      data itself: two cities for Contoso, and two spellings of one course title.
+
+  - id: keys
+    type: code
+    heading: "The data can't decide for you"
+    lang: text
+    short: keys
+    code: |
+      16 column pairs are unique in this sample; the business key is (BookingRef, CourseCode).
+      Data can suggest a key, it can't prove one.
+
+      decision: CompanyCity for Contoso Ltd: ['Oporto', 'Porto']
+                -> kept 'Porto' (latest booking), 1 row(s) changed
+      decision: CourseTitle for PBI200: ['Power BI Data Modeling', 'Power BI Data Modelling']
+                -> kept 'Power BI Data Modeling' (latest booking), 1 row(s) changed
+
+      3NF tables: Company 4, Customer 7, Course 5, Booking 16, BookingLine 23
+      lossless join (rebuild == resolved 1NF): True
+    narration: >
+      Here's the honest part. In twenty-three rows, sixteen column pairs happen to be unique, including nonsense like
+      customer name plus list price. Data can suggest a key, it can't prove one. The key comes from the business
+      rule. Same for the conflicts: the script keeps the value from the latest booking and prints every decision, so a
+      person can sign it off. Then it joins the five tables back and gets the same twenty-three lines.
+
+  - id: schema-a
+    type: code
+    heading: "The schema: one fact in one place"
+    lang: sql
+    code: |
+      CREATE TABLE Training.Company (
+          CompanyId   int IDENTITY(1,1) NOT NULL CONSTRAINT PK_Company PRIMARY KEY,
+          CompanyName nvarchar(100)     NOT NULL CONSTRAINT UQ_Company_Name UNIQUE,
+          City        nvarchar(60)      NOT NULL
+      );
+
+      CREATE TABLE Training.Customer (
+          CustomerId int IDENTITY(1,1) NOT NULL CONSTRAINT PK_Customer PRIMARY KEY,
+          Email      nvarchar(254)     NOT NULL CONSTRAINT UQ_Customer_Email UNIQUE,
+          FullName   nvarchar(100)     NOT NULL,
+          CompanyId  int               NOT NULL
+                     CONSTRAINT FK_Customer_Company REFERENCES Training.Company (CompanyId)
+      );
+    narration: >
+      Now the SQL Server schema. The city lives on Company, once. Customers point to their company with a foreign key.
+      Emails can change, so the customer gets a surrogate identity key, and the email gets a unique constraint. One
+      customer, one row.
+
+  - id: schema-b
+    type: code
+    heading: "Courses, bookings and lines"
+    lang: sql
+    code: |
+      CREATE TABLE Training.Course (
+          CourseCode varchar(10)   NOT NULL CONSTRAINT PK_Course PRIMARY KEY,
+          Title      nvarchar(100) NOT NULL,
+          ListPrice  decimal(10,2) NOT NULL CONSTRAINT CK_Course_ListPrice CHECK (ListPrice >= 0)
+      );
+      CREATE TABLE Training.BookingLine (
+          BookingRef varchar(10)   NOT NULL CONSTRAINT FK_BookingLine_Booking REFERENCES Training.Booking (BookingRef),
+          CourseCode varchar(10)   NOT NULL CONSTRAINT FK_BookingLine_Course REFERENCES Training.Course (CourseCode),
+          PricePaid  decimal(10,2) NOT NULL CONSTRAINT CK_BookingLine_PricePaid CHECK (PricePaid >= 0),
+          CONSTRAINT PK_BookingLine PRIMARY KEY (BookingRef, CourseCode)
+      );
+      -- A FOREIGN KEY doesn't create an index. (BookingRef is covered by the primary key.)
+      CREATE INDEX IX_BookingLine_CourseCode ON Training.BookingLine (CourseCode);
+    narration: >
+      Course codes are stable, so they are the key. The booking line has the composite primary key, with a foreign key
+      to each parent and a check on the price. One detail people miss: a foreign key doesn't create an index. The
+      primary key covers booking reference, so course code gets its own index.
+
+  - id: tables-screen
+    type: screen
+    heading: "Five tables, keys and constraints"
+    image: screens/object-explorer.jpg
+    bar: "VS Code · MSSQL · ContosoTraining · Object Explorer"
+    demo: "VS Code MSSQL Object Explorer (or SSMS) connected to localhost, database ContosoTraining expanded: Tables shows Training.Booking, Training.BookingLine, Training.Company, Training.Course, Training.Customer; Training.BookingLine expanded to show its columns and keys (PK_BookingLine, FK_BookingLine_Booking, FK_BookingLine_Course); Views shows Training.vBookingLines."
+    narration: >
+      Here it is on SQL Server twenty twenty-two: five tables in the training schema, each with its keys, and one
+      view.
+
+  - id: view
+    type: code
+    heading: "Denormalize when you read, not when you store"
+    lang: sql
+    code: |
+      CREATE VIEW Training.vBookingLines
+      AS
+      SELECT b.BookingRef, b.BookingDate,
+             cu.Email AS CustomerEmail, cu.FullName AS CustomerName,
+             co.CompanyName AS Company, co.City AS CompanyCity,
+             bl.CourseCode, c.Title AS CourseTitle, c.ListPrice, bl.PricePaid
+      FROM Training.BookingLine AS bl
+      JOIN Training.Booking  AS b  ON b.BookingRef  = bl.BookingRef
+      JOIN Training.Customer AS cu ON cu.CustomerId = b.CustomerId
+      JOIN Training.Company  AS co ON co.CompanyId  = cu.CompanyId
+      JOIN Training.Course   AS c  ON c.CourseCode  = bl.CourseCode;
+    narration: >
+      Reports still want the flat shape, so we give it back as a view. Denormalize when you read, not when you
+      store. The tables keep one fact in one place, and the joins happen on demand.
+
+  - id: rebuilt-screen
+    type: screen
+    heading: "The export, rebuilt from five tables"
+    image: screens/q01-rebuilt.jpg
+    bar: "VS Code · MSSQL · ContosoTraining · q01-bookings-rebuilt.sql"
+    demo: "q01-bookings-rebuilt.sql and its results grid: 23 rows, BookingRef B1001..B1016. Visible: B1008 row with CompanyCity Porto (not Oporto) and B1011 PBI200 with CourseTitle Power BI Data Modeling."
+    narration: >
+      Query the view on SQL Server: twenty-three lines, exactly the first normal form rows. Booking one thousand and
+      eight now says Porto, and the course title has one spelling. The runner compares this grid with the expected
+      file, row by row.
+
+  - id: update-screen
+    type: screen
+    heading: "Contoso moves: one UPDATE"
+    image: screens/q03-update-once.jpg
+    bar: "VS Code · MSSQL · ContosoTraining · q03-update-once.sql"
+    short: update
+    demo: "q03-update-once.sql and its results grid (4 rows). Contoso Ltd / Matosinhos / 5 bookings / 7 booking lines highlighted. The Messages tab may show 1 row affected for the UPDATE."
+    narration: >
+      Now the anomaly test. Contoso moves to Matosinhos. In the spreadsheet that's seven rows to edit and hope. Here
+      it's one update on one row, and all five bookings, all seven lines, show the new city. The script rolls the
+      transaction back, so the demo data stays as loaded.
+
+  - id: price
+    type: code
+    heading: "Not every repeated value is redundancy"
+    lang: sql
+    code: |
+      SELECT c.CourseCode, c.Title, COUNT(*) AS Lines,
+             SUM(c.ListPrice) AS AtListPrice, SUM(bl.PricePaid) AS Paid,
+             SUM(c.ListPrice - bl.PricePaid) AS Discount
+      FROM Training.BookingLine AS bl
+      JOIN Training.Course AS c ON c.CourseCode = bl.CourseCode
+      GROUP BY c.CourseCode, c.Title ORDER BY c.CourseCode;
+
+      CourseCode  Lines  AtListPrice  Paid     Discount     (Title column not shown)
+      AZ300       4      2800.00      2730.00  70.00
+      PAD100      4      1600.00      1520.00  80.00
+      PBI200      6      3300.00      3190.00  110.00
+      SQL101      5      2250.00      2205.00  45.00
+      SQL201      4      2400.00      2280.00  120.00
+    narration: >
+      Careful, though: not every repeated value is redundancy. List price depends on the course, so it moved to the
+      course table. Price paid depends on this booking and this course, discounts included, so it stays on the line.
+      Change a list price tomorrow and past bookings still show what was actually paid.
+
+  - id: constraints-screen
+    type: screen
+    heading: "Bad data doesn't get in"
+    image: screens/should-fail.jpg
+    bar: "VS Code · MSSQL · ContosoTraining · 04-should-fail.sql · Messages"
+    demo: "04-should-fail.sql: run batch 1 (duplicate email) and batch 3 (unknown course) one at a time; the Messages tab shows the SQL Server errors naming UQ_Customer_Email and FK_BookingLine_Course. Capture with both messages visible."
+    narration: >
+      And the constraints do the rest. A second customer with Alex's email: rejected by the unique constraint. A
+      booking line for a course that doesn't exist: rejected by the foreign key. Six bad writes, six rejections, each
+      naming the constraint that stopped it.
+
+  - id: runner-screen
+    type: screen
+    heading: "Same checks, local and on SQL Server"
+    image: screens/runner-sqlserver.jpg
+    bar: "Terminal · tsql_runner.py --engine sqlserver"
+    demo: "Terminal, dark theme, 18 pt: `python3 -m pytest tests -q` -> '28 passed', then `python3 src/tsql_runner.py --engine sqlserver --setup` -> 'loaded: Company 4, Customer 7, Course 5, Booking 16, BookingLine 23', three OK lines, '3/3 queries match expected/ on sqlserver', six REJECTED lines, '6/6 constraint checks behaved on sqlserver'. SQL_CONNECTION_STRING set off-screen."
+    narration: >
+      Everything is automated. Twenty-eight tests run locally with no server. Then the same runner points at SQL
+      Server, loads the schema, checks the three queries and the six rejections. Three out of three, six out of six.
+
+  - id: recap
+    type: bullets
+    heading: "Five rules"
+    bullets:
+      - "Split repeating groups: one row per fact"
+      - "Keys come from business rules, not from the data"
+      - "Every non-key column: the key, the whole key, only the key"
+      - "Let constraints and FK indexes guard the design"
+      - "Denormalize in views, not in tables"
+    narration: >
+      Five rules. Split repeating groups into one row per fact. Take keys from business rules, not from the data.
+      Every non-key column depends on the key, the whole key, and nothing but the key. Let constraints guard the
+      design, and index your foreign keys. And denormalize in views, not in tables.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The export, the normalizer, the schema and the tests are on GitHub, and the complete guide is on dev lad log dot
+      com. Links are in the description. Next time: indexing strategies. This was dev lad log SQL, by Momento Galático.

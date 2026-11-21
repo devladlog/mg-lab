@@ -1,0 +1,30 @@
+{
+  "$comment": "What-if gate policy for the episode 2 workload. A protected change stops the run unless it was queued with 'Accept protected changes'. Add a path to ignore_paths only for a what-if false positive you have seen and written down.",
+  "block_change_types": ["Delete"],
+  "warn_change_types": ["Unsupported"],
+  "protected": [
+    {
+      "resource_type": "Microsoft.Storage/storageAccounts",
+      "paths": ["properties.publicNetworkAccess", "properties.allowSharedKeyAccess", "properties.networkAcls",
+                "properties.minimumTlsVersion"]
+    },
+    {
+      "resource_type": "Microsoft.KeyVault/vaults",
+      "paths": ["properties.publicNetworkAccess", "properties.enableRbacAuthorization",
+                "properties.enablePurgeProtection", "properties.networkAcls"]
+    },
+    {
+      "resource_type": "Microsoft.Network/networkSecurityGroups",
+      "paths": ["properties.securityRules"]
+    },
+    {
+      "resource_type": "Microsoft.Authorization/roleAssignments",
+      "paths": ["properties"]
+    },
+    {
+      "resource_type": "Microsoft.Web/sites",
+      "paths": ["identity", "properties.httpsOnly", "properties.virtualNetworkSubnetId"]
+    }
+  ],
+  "ignore_paths": []
+}

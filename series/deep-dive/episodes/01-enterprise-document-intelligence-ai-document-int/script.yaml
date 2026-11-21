@@ -1,29 +1,233 @@
-# DEVLADLOG Deep Dive — episode 01 (stub: write the scenes after building the demo)
+# DEVLADLOG Deep Dive — episode 01. Code and test scenes are real (from this folder); screen scenes need the lab
+# recording described in demo.md. Narration ~860 words.
 episode: 1
 slug: enterprise-document-intelligence-ai-document-int
 series_label: "DEEP DIVE"
 series_name: "DEVLADLOG Deep Dive"
 file_prefix: "deep-dive"
-title: "Enterprise Document Intelligence (AI Document Intelligence + Power Automate + SharePoint)"
-subtitle: "Built for real, in a lab tenant"
+title: "Enterprise document intelligence"
+subtitle: "Document Intelligence + Power Automate + SharePoint, built for real"
 voice: am_michael
-thumbnail_text: "ENTERPRISE DOCUMENT INTELLIGENCE (AI DOC"
+thumbnail_text: "INVOICES\nREAD THEMSELVES\nSAFELY"
 youtube:
-  title: "Enterprise Document Intelligence (AI Document Intelligence + Power Automate + SharePoint) (Real Demo) | DEVLADLOG Deep Dive #1"
-  tags: []
+  title: "Invoice Automation: Document Intelligence + Power Automate + SharePoint | DEVLADLOG Deep Dive #1"
+  tags: [Azure AI Document Intelligence, prebuilt invoice model, Power Automate, SharePoint, Azure Functions, Flex Consumption, managed identity, PnP PowerShell, Bicep, human in the loop, solution architecture]
 sources:
   - https://www.devladlog.com/articles/deep-dive/2026-05-18-enterprise-document-intelligence-azure-ai-power-automate-sharepoint/
+
 scenes:
   - id: hook
     type: title
-    heading: "Enterprise Document Intelligence (AI Document Intelligence + Power Automate + SharePoint)"
-    sub: "Built for real, in a lab tenant"
+    heading: "Invoices that file themselves"
+    sub: "and know when to ask a human"
     short: hook
     narration: >
-      TODO
+      Someone drops an invoice into SharePoint. A minute later the vendor, the number, the dates and the totals are
+      filled in, and the file is marked ready, or flagged for review with the exact reason. No keys stored anywhere,
+      and every rule is tested. This is the DEVLADLOG Deep Dive, and today we build it for real.
+
+  - id: architecture
+    type: diagram
+    heading: "Four parts, one direction"
+    nodes: ["Library", "Flow", "API", "Doc Intel"]
+    labels: ["Invoices Inbox", "Power Automate", "Azure Function", "prebuilt-invoice"]
+    narration: >
+      Here's the shape. A SharePoint library is the inbox. A Power Automate flow notices the new file and sends its
+      bytes to an Azure Function. The function calls Azure AI Document Intelligence with the prebuilt invoice model,
+      applies our business rules, and returns column values. The flow writes them back to the file.
+
+  - id: why-function
+    type: bullets
+    heading: "Why a function in the middle?"
+    bullets:
+      - "Rules in code, with unit tests"
+      - "Managed identity: no keys to Document Intelligence"
+      - "One contract shared by function, library and flow"
+      - "The flow stays short and readable"
+    narration: >
+      Why not call the service straight from the flow? Because the interesting part isn't the extraction, it's the
+      decision. In a function, the rules are code with unit tests. The function uses a managed identity, so there's
+      no service key to leak. And one contract file is shared by the function, the library and the flow.
+
+  - id: contract
+    type: code
+    heading: "One contract, three consumers"
+    lang: json
+    code: |
+      {
+        "library": "Invoices Inbox",
+        "columns": [
+          {"internalName": "InvVendor",   "type": "Text",   "source": "VendorName"},
+          {"internalName": "InvNumber",   "type": "Text",   "source": "InvoiceId"},
+          {"internalName": "InvTotal",    "type": "Number", "source": "InvoiceTotal"},
+          {"internalName": "InvStatus",   "type": "Choice", "source": "computed",
+           "choices": ["Pending", "Ready", "Needs review", "Rejected"]},
+          {"internalName": "InvDedupKey", "type": "Text",   "indexed": true},
+          ...
+        ]
+      }
+    narration: >
+      This is columns dot json, trimmed. Thirteen columns in the real file. The p n p PowerShell script creates the
+      library columns from it, the function returns exactly these keys, and a test checks that the flow only writes
+      columns that exist. Rename a column here and the tests tell you everything that breaks.
+
+  - id: extract
+    type: code
+    heading: "Calling the invoice model, keyless"
+    lang: python
+    code: |
+      MODEL_ID = "prebuilt-invoice"
+
+      def make_client(endpoint, credential=None):
+          if credential is None:
+              credential = DefaultAzureCredential()   # the function's managed identity
+          return DocumentIntelligenceClient(endpoint=endpoint, credential=credential)
+
+      def analyze_invoice(client, data: bytes, *, locale=None, **kwargs) -> dict:
+          poller = client.begin_analyze_document(
+              MODEL_ID, AnalyzeDocumentRequest(bytes_source=data), locale=locale, **kwargs)
+          return poller.result().as_dict()
+    narration: >
+      The extraction itself is small. Default Azure credential picks up the function's managed identity, which has the
+      Cognitive Services User role on the resource. We send the bytes to the prebuilt invoice model on the two thousand
+      twenty four, eleven, thirty API, the poller waits for the long running operation, and we get plain JSON back.
+
+  - id: rules
+    type: code
+    heading: "The decision is ours, not the model's"
+    short: rules
+    lang: python
+    code: |
+      for f in REQUIRED:                     # VendorName, InvoiceId, InvoiceDate, InvoiceTotal
+          if f not in x.values:
+              reasons.append(f"Missing {f}.")
+          elif x.confidence.get(f, 0.0) < policy.min_confidence:
+              reasons.append(f"Low confidence on {f} ({x.confidence[f]:.2f} < {policy.min_confidence:.2f}).")
+
+      if abs((sub + tax) - total) > policy.total_tolerance:
+          reasons.append(f"Subtotal + tax ({sub + tax:.2f}) does not match total ({total:.2f}).")
+      if total > policy.approval_limit:
+          reasons.append(f"Total above the approval limit ({policy.approval_limit:,.0f}).")
+
+      return _done(NEEDS_REVIEW if reasons else READY, reasons, cols)
+    narration: >
+      The model gives values and a confidence per field. Whether zero point seven eight is good enough is a business
+      decision, so it lives in a policy you set per environment. A required field that's missing or below the
+      threshold goes to a person. So does an invoice where subtotal plus tax doesn't equal the total, or one above the
+      approval limit. Every reason is written down, so the reviewer knows what to check.
+
+  - id: tests
+    type: code
+    heading: "Fifty-nine tests, no Azure needed"
+    lang: text
+    code: |
+      $ python -m pytest -v
+      test_rules.py::test_low_confidence_on_a_required_field_needs_review   PASSED
+      test_rules.py::test_totals_must_add_up                                PASSED
+      test_rules.py::test_dollar_sign_alone_is_ambiguous                    PASSED
+      test_contract.py::test_flow_writes_only_columns_that_exist            PASSED
+      test_contract.py::test_trigger_is_created_only_so_our_own_update...   PASSED
+      test_sdk_and_function.py::test_sdk_sends_base64_to_the_invoice...     PASSED
+      test_sdk_and_function.py::test_bad_input_never_reaches_the_ser...     PASSED
+      ...
+      ======================== 59 passed in 13.6s ========================
+    narration: >
+      Fifty nine Python tests run in about fourteen seconds, with no Azure at all. The real Document Intelligence SDK
+      talks to a small local stub of the REST API, so we test the actual request, the polling and the errors. Garbage
+      input is refused before it reaches the service, so you don't pay to analyze a zip file.
+
+  - id: infra
+    type: code
+    heading: "Bicep: keys off, one role"
+    lang: bicep
+    code: |
+      resource docIntel 'Microsoft.CognitiveServices/accounts@2024-10-01' = {
+        name: 'di-${resourceToken}'
+        kind: 'FormRecognizer'
+        sku: { name: docIntelSku }
+        properties: {
+          customSubDomainName: 'di-${resourceToken}'   // required for Entra ID auth
+          disableLocalAuth: true                       // no keys at all
+        }
+      }
+      // function identity -> 'Cognitive Services User' on this account only
+      // Flex Consumption app, Python 3.11, storage via managed identity too
+    narration: >
+      The infrastructure is Bicep. The Document Intelligence account has local auth disabled and a custom subdomain,
+      which Microsoft Entra authentication requires. The function runs on Flex Consumption, and its identity gets one
+      role on that account and nothing else. Even the function's own storage connection uses the identity.
+
+  - id: upload
+    type: screen
+    heading: "Three invoices in the inbox"
+    image: screens/library-upload.jpg
+    bar: "SharePoint · Invoices Inbox"
+    narration: >
+      Now the lab. Three fictional invoices go into the library: a clean one, one above the approval limit, and one
+      with a typo in the tax amount. Every column is still empty and the status says pending.
+
+  - id: run
+    type: screen
+    heading: "The flow run, step by step"
+    image: screens/flow-run.jpg
+    bar: "Power Automate · run history"
+    narration: >
+      The trigger polls the library, so give it a minute or two. Here's one run: get the API key from an environment
+      variable backed by Key Vault, with secure inputs and outputs so it never shows in the history. Get the file
+      content, call the function, check for a duplicate, and update the file properties.
+
+  - id: results
+    type: screen
+    heading: "Ready, or a reason"
+    image: screens/library-results.jpg
+    bar: "SharePoint · Invoices Inbox · after the flow"
+    narration: >
+      And the result. The clean invoice is ready, with vendor, number, dates and totals filled in. The other two need
+      review. Nobody typed anything, and nothing was approved that a person should have seen.
+
+  - id: reasons
+    type: screen
+    heading: "The reviewer sees why"
+    image: screens/review-reasons.jpg
+    bar: "SharePoint · file details"
+    narration: >
+      Open one, and the review reasons column says exactly what's wrong: subtotal plus tax doesn't match the total.
+      The reviewer checks one number instead of re-reading the whole invoice.
+
+  - id: gotcha
+    type: bullets
+    heading: "Two traps we designed around"
+    bullets:
+      - "Created or modified trigger + our update = a loop"
+      - "Use 'When a file is created (properties only)'"
+      - "The SDK already retries a 429: one call became four"
+      - "So the flow retries twice, not the default four"
+    short: gotcha
+    narration: >
+      Two traps. First, the trigger. When a file is created or modified fires again when our flow updates the
+      properties, so you build a loop. Use when a file is created, properties only. Second, retries. In our tests a
+      persistent four twenty nine became four calls, because the SDK already retries. The flow's default policy retries
+      up to four more times on top, so we set it to two.
+
+  - id: recap
+    type: bullets
+    heading: "What to take away"
+    bullets:
+      - "The model extracts; your policy decides"
+      - "Every 'needs review' carries a reason"
+      - "Keyless: managed identity and one role"
+      - "One contract, checked by tests"
+      - "Know who retries before you add retries"
+    narration: >
+      To recap. The model extracts, your policy decides. Every needs review carries a reason. Go keyless with a managed
+      identity and one role. Keep one contract and let tests check it. And know who already retries before you add
+      more retries.
+
   - id: outro
     type: outro
     heading: "Code on GitHub, guides on devladlog.com"
     sub: "github.com/devladlog/mg-lab"
     narration: >
-      TODO
+      The function, the Bicep, the p n p script, the flow definition and all the tests are on GitHub, and the full
+      guide is on devladlog dot com. Links are in the description. Next time: an enterprise AI copilot on top of
+      SharePoint. This was the DEVLADLOG Deep Dive, by Momento Galático.

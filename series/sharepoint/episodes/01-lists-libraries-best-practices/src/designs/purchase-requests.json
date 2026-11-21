@@ -1,0 +1,256 @@
+{
+  "description": "Contoso purchasing: a request list and a contract library, designed to stay fast past 5,000 items.",
+  "lists": [
+    {
+      "title": "Purchase Requests",
+      "url": "Lists/PurchaseRequests",
+      "template": "GenericList",
+      "expectedItems": 60000,
+      "versioning": {
+        "enabled": true,
+        "majorVersions": 100
+      },
+      "removeViews": [
+        "All Items"
+      ],
+      "breakInheritance": false,
+      "plannedUniqueScopes": 0,
+      "fields": [
+        {
+          "internalName": "RequestStatus",
+          "displayName": "Status",
+          "type": "Choice",
+          "required": true,
+          "indexed": true,
+          "choices": [
+            "New",
+            "Approved",
+            "Ordered",
+            "Closed",
+            "Rejected"
+          ],
+          "default": "New"
+        },
+        {
+          "internalName": "Requester",
+          "displayName": "Requester",
+          "type": "User",
+          "required": true,
+          "indexed": true
+        },
+        {
+          "internalName": "Department",
+          "displayName": "Department",
+          "type": "Choice",
+          "indexed": true,
+          "choices": [
+            "Finance",
+            "IT",
+            "Marketing",
+            "Operations",
+            "People"
+          ]
+        },
+        {
+          "internalName": "Amount",
+          "displayName": "Amount",
+          "type": "Currency"
+        },
+        {
+          "internalName": "DueDate",
+          "displayName": "Due date",
+          "type": "DateTime",
+          "dateOnly": true,
+          "indexed": true
+        },
+        {
+          "internalName": "RequestNotes",
+          "displayName": "Notes",
+          "type": "Note"
+        }
+      ],
+      "views": [
+        {
+          "title": "Open requests",
+          "default": true,
+          "rowLimit": 100,
+          "expectedRows": 1500,
+          "fields": [
+            "LinkTitle",
+            "RequestStatus",
+            "Requester",
+            "Department",
+            "Amount",
+            "DueDate"
+          ],
+          "filters": [
+            {
+              "field": "RequestStatus",
+              "op": "Neq",
+              "value": "Closed"
+            }
+          ],
+          "orderBy": {
+            "field": "DueDate",
+            "ascending": true
+          }
+        },
+        {
+          "title": "My open requests",
+          "rowLimit": 100,
+          "expectedRows": 50,
+          "fields": [
+            "LinkTitle",
+            "RequestStatus",
+            "Amount",
+            "DueDate"
+          ],
+          "filters": [
+            {
+              "field": "RequestStatus",
+              "op": "Neq",
+              "value": "Closed"
+            },
+            {
+              "field": "Requester",
+              "op": "Eq",
+              "value": "[Me]"
+            }
+          ],
+          "orderBy": {
+            "field": "DueDate",
+            "ascending": true
+          }
+        },
+        {
+          "title": "Due in 7 days",
+          "rowLimit": 100,
+          "expectedRows": 300,
+          "fields": [
+            "LinkTitle",
+            "RequestStatus",
+            "Requester",
+            "Amount",
+            "DueDate"
+          ],
+          "filters": [
+            {
+              "field": "DueDate",
+              "op": "Leq",
+              "value": "[Today+7]"
+            },
+            {
+              "field": "RequestStatus",
+              "op": "Neq",
+              "value": "Closed"
+            }
+          ],
+          "orderBy": {
+            "field": "DueDate",
+            "ascending": true
+          }
+        }
+      ]
+    },
+    {
+      "title": "Contracts",
+      "url": "Contracts",
+      "template": "DocumentLibrary",
+      "expectedItems": 12000,
+      "folderDepth": 0,
+      "versioning": {
+        "enabled": true,
+        "automatic": true
+      },
+      "removeViews": [
+        "All Documents"
+      ],
+      "breakInheritance": false,
+      "plannedUniqueScopes": 0,
+      "fields": [
+        {
+          "internalName": "ContractType",
+          "displayName": "Contract type",
+          "type": "Choice",
+          "required": true,
+          "indexed": true,
+          "choices": [
+            "NDA",
+            "Master agreement",
+            "Statement of work",
+            "Purchase order"
+          ]
+        },
+        {
+          "internalName": "VendorName",
+          "displayName": "Vendor",
+          "type": "Text",
+          "indexed": true
+        },
+        {
+          "internalName": "ExpiryDate",
+          "displayName": "Expiry date",
+          "type": "DateTime",
+          "dateOnly": true,
+          "indexed": true
+        },
+        {
+          "internalName": "ContractValue",
+          "displayName": "Contract value",
+          "type": "Currency"
+        }
+      ],
+      "views": [
+        {
+          "title": "Master agreements",
+          "default": true,
+          "rowLimit": 100,
+          "expectedRows": 4000,
+          "fields": [
+            "DocIcon",
+            "LinkFilename",
+            "ContractType",
+            "VendorName",
+            "ExpiryDate",
+            "Editor"
+          ],
+          "filters": [
+            {
+              "field": "ContractType",
+              "op": "Eq",
+              "value": "Master agreement"
+            }
+          ],
+          "orderBy": {
+            "field": "VendorName",
+            "ascending": true
+          }
+        },
+        {
+          "title": "Expiring in 90 days",
+          "rowLimit": 100,
+          "expectedRows": 400,
+          "fields": [
+            "DocIcon",
+            "LinkFilename",
+            "ContractType",
+            "VendorName",
+            "ExpiryDate",
+            "ContractValue"
+          ],
+          "filters": [
+            {
+              "field": "ExpiryDate",
+              "op": "Leq",
+              "value": "[Today+90]"
+            }
+          ],
+          "orderBy": {
+            "field": "ExpiryDate",
+            "ascending": true
+          }
+        }
+      ]
+    }
+  ]
+}

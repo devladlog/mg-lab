@@ -1,0 +1,27 @@
+
+# 1. Invalid body -> 400 validation problem
+{"type":"https://tools.ietf.org/html/rfc9110#section-15.5.1","title":"One or more validation errors occurred.","status":400,"errors":{"Title":["The field Title must be a string with a minimum length of 3 and a maximum length of 100."],"Budget":["The field Budget must be between 1 and 10000000."],"RequestedBy":["The RequestedBy field is not a valid e-mail address."]},"traceId":"00-86c67447c5c29dcf738d3b90dbd0997d-4576ff4e57a17ec5-00"}
+<- HTTP 400
+
+# 2. 300k without justification -> 400 (cross-field rule)
+{"type":"https://tools.ietf.org/html/rfc9110#section-15.5.1","title":"One or more validation errors occurred.","status":400,"errors":{"Justification":["A justification is required for budgets of 250,000 or more."]},"traceId":"00-683cd3342468e2c38b070a99c1fc4255-4229869b7f1cd487-00"}
+<- HTTP 400
+
+# 3. Valid request, 75k -> 201 Created, priority High
+{"id":1,"title":"CRM rollout","budget":75000,"requestedBy":"alex.demo@contoso.com","justification":null,"priority":"High","status":"Submitted","createdAt":"2026-11-21T03:22:46.8973619+00:00","decidedBy":null}
+
+# 4. Approve your own request -> 409
+{"type":"https://tools.ietf.org/html/rfc9110#section-15.5.10","title":"You can't decide your own request.","status":409,"traceId":"00-f5f34fe2f7828368bd24d79948ba0792-54275e200a7ab060-00"}
+<- HTTP 409
+
+# 5. Approver decides -> 200 Approved
+{"id":1,"title":"CRM rollout","budget":75000,"requestedBy":"alex.demo@contoso.com","justification":null,"priority":"High","status":"Approved","createdAt":"2026-11-21T03:22:46.8973619+00:00","decidedBy":"sam.approver@contoso.com"}
+<- HTTP 200
+
+# 6. Unknown id -> 404 problem details
+{"type":"https://tools.ietf.org/html/rfc9110#section-15.5.5","title":"Not Found","status":404,"traceId":"00-af7f3e5a57b2a24072781517c82399a7-44cd8e315190bc31-00"}
+<- HTTP 404
+
+# 7. High-priority list
+[{"id":1,"title":"CRM rollout","budget":75000,"requestedBy":"alex.demo@contoso.com","justification":null,"priority":"High","status":"Approved","createdAt":"2026-11-21T03:22:46.8973619+00:00","decidedBy":"sam.approver@contoso.com"}]
+<- HTTP 200

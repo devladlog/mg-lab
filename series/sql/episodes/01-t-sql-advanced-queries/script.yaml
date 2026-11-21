@@ -1,29 +1,278 @@
-# DEVLADLOG SQL — episode 01 (stub: write the scenes after building the demo)
+# DEVLADLOG SQL — episode 01 (draft: screen scenes need the recording described in demo.md)
 episode: 1
 slug: t-sql-advanced-queries
 series_label: "SQL"
 series_name: "DEVLADLOG SQL"
 file_prefix: "sql"
 title: "T-SQL Advanced Queries"
-subtitle: "Built for real, in a lab tenant"
+subtitle: "Window functions, APPLY, recursion, and the frame that lies"
 voice: am_michael
-thumbnail_text: "T-SQL ADVANCED QUERIES"
+thumbnail_text: "T-SQL\nADVANCED\nQUERIES"
 youtube:
-  title: "T-SQL Advanced Queries (Real Demo) | DEVLADLOG SQL #1"
-  tags: []
+  title: "T-SQL Advanced Queries: Window Functions, APPLY, Recursive CTEs (Real Demo) | DEVLADLOG SQL #1"
+  tags: [T-SQL, SQL Server, SQL Server 2022, Azure SQL, window functions, CROSS APPLY, recursive CTE, gaps and islands, PIVOT, GROUPING SETS]
 sources:
   - https://www.devladlog.com/articles/sql/2025-07-17-t-sql-advanced-queries-complete-guide-2025/
+
 scenes:
   - id: hook
     type: title
-    heading: "T-SQL Advanced Queries"
-    sub: "Built for real, in a lab tenant"
+    heading: "Your running total is wrong"
+    sub: "T-SQL advanced queries, tested for real"
     short: hook
     narration: >
-      TODO
+      Here is a running total in T-SQL. It looks right, it runs, and on two days it's wrong. In this episode we write
+      ten advanced queries: window functions, apply, recursion, pivot and grouping sets. Every one is checked against
+      an independent calculation, and then run on SQL Server twenty twenty-two. Including the one that lies.
+
+  - id: plan
+    type: bullets
+    heading: "What we're building"
+    bullets:
+      - "A small, fictional Contoso Bikes database"
+      - "Ten queries, one file each, plain T-SQL"
+      - "Run locally with no server: parsed, transpiled, executed"
+      - "Expected results committed as CSV"
+      - "Same files on SQL Server 2022, same rows"
+    narration: >
+      The data is a small, fictional Contoso Bikes database: six customers, twenty-one orders, an org chart and some
+      logins. Each query is one T-SQL file. Locally, a Python runner parses every file with a T-SQL parser,
+      transpiles it and runs it in DuckDB, so the tests need no server. The results are committed as CSV files, and
+      on SQL Server the same files must return the same rows.
+
+  - id: window
+    type: code
+    heading: "Window functions: running total and change"
+    lang: sql
+    code: |
+      WITH monthly AS (
+          SELECT c.Region, DATETRUNC(month, o.OrderDate) AS MonthStart,
+                 SUM(o.TotalAmount) AS Revenue
+          FROM Sales.Orders AS o
+          JOIN Sales.Customers AS c ON c.CustomerId = o.CustomerId
+          GROUP BY c.Region, DATETRUNC(month, o.OrderDate)
+      )
+      SELECT Region, MonthStart, Revenue,
+             SUM(Revenue) OVER (w ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS RunningRevenue,
+             Revenue - LAG(Revenue) OVER w AS ChangeVsPrev
+      FROM monthly
+      WINDOW w AS (PARTITION BY Region ORDER BY MonthStart)
+      ORDER BY Region, MonthStart;
+    narration: >
+      First, window functions. A common table expression sums revenue per region and month, using date trunc. Then
+      sum over gives the running total, and lag gives the change versus the previous row. The window clause names
+      the window once and reuses it. Date trunc and the window clause need SQL Server twenty twenty-two, at
+      compatibility level one sixty.
+
+  - id: window-screen
+    type: screen
+    heading: "Running total per region"
+    image: screens/q01-results.jpg
+    bar: "VS Code · MSSQL · ContosoLab · q01-monthly-running-total.sql"
+    demo: "VS Code with the MSSQL extension connected to the lab container, database ContosoLab. q01-monthly-running-total.sql open on the left, results grid on the right with 15 rows. Visible: North 2025-06-01 RunningRevenue 10330.00; Centre 2025-05-01 ChangeVsPrev 2564.75 (no April row for Centre)."
+    narration: >
+      On SQL Server, North ends June at ten thousand three hundred and thirty. Look at Centre: there's no April row,
+      so May is compared with March. Lag looks at the previous row, not the previous calendar month.
+
+  - id: topn
+    type: code
+    heading: "Top two per customer, two ways"
+    lang: sql
+    code: |
+      -- q02a: ROW_NUMBER
+      ROW_NUMBER() OVER (PARTITION BY o.CustomerId
+                         ORDER BY o.TotalAmount DESC, o.OrderId) AS rn
+      ...
+      WHERE r.rn <= 2
+
+      -- q02b: CROSS APPLY + TOP, "for each customer, run this subquery"
+      FROM Sales.Customers AS c
+      CROSS APPLY (
+          SELECT TOP (2) o.OrderId, o.TotalAmount
+          FROM Sales.Orders AS o
+          WHERE o.CustomerId = c.CustomerId
+          ORDER BY o.TotalAmount DESC, o.OrderId
+      ) AS t
+    narration: >
+      Next, the top two orders per customer. Version A numbers the rows with row number and keeps one and two.
+      Version B uses cross apply: for each customer, run a top two subquery. The test checks that both return
+      exactly the same ten rows. Note the order ID tie-breaker: Alex has two orders of one thousand two hundred and
+      fifty, and without it the second place is up to the engine.
+
+  - id: outer-apply
+    type: screen
+    heading: "OUTER APPLY keeps everyone"
+    image: screens/q03-outer-apply.jpg
+    bar: "VS Code · MSSQL · ContosoLab · q03-latest-order-outer-apply.sql"
+    demo: "q03-latest-order-outer-apply.sql and its results grid, 6 rows. Highlight the row Eva Newcustomer / South / NULL / NULL / NULL. Then (second capture, optional) the same query with CROSS APPLY returning 5 rows."
+    narration: >
+      Outer apply is the left join version. The latest order per customer, and Eva, who hasn't ordered yet, is still
+      here with nulls. Change it to cross apply and she disappears. That's the whole difference.
+
+  - id: islands
+    type: code
+    heading: "Gaps and islands: login streaks"
+    lang: sql
+    short: islands
+    code: |
+      WITH days AS (
+          SELECT DISTINCT UserName, CAST(LoginAt AS date) AS LoginDate
+          FROM App.Logins
+      ),
+      grouped AS (
+          SELECT UserName, LoginDate,
+                 DATEADD(day, -ROW_NUMBER() OVER (PARTITION BY UserName ORDER BY LoginDate),
+                         LoginDate) AS Anchor
+          FROM days
+      )
+      SELECT UserName, MIN(LoginDate) AS StreakStart, MAX(LoginDate) AS StreakEnd,
+             COUNT(*) AS Days
+      FROM grouped
+      GROUP BY UserName, Anchor;
+    narration: >
+      Gaps and islands: streaks of consecutive login days. The trick: subtract the row number from the date.
+      Consecutive days give the same anchor date, so each streak becomes one group. But you need distinct days first.
+      Without distinct, two logins on the first of March shift every row number, and the query invents a streak from
+      the first to the sixth, skipping the fourth. A test proves it.
+
+  - id: islands-screen
+    type: screen
+    heading: "Six streaks, one query"
+    image: screens/q04-streaks.jpg
+    bar: "VS Code · MSSQL · ContosoLab · q04-login-streaks.sql"
+    demo: "q04-login-streaks.sql results grid, 6 rows: alex.demo 2025-03-01..2025-03-03 (3), 2025-03-05..2025-03-06 (2), 2025-03-09 (1); rita.sample 2025-03-02..2025-03-05 (4), 2025-03-08 (1), 2025-03-10..2025-03-11 (2)."
+    narration: >
+      Six streaks. Rita's longest is four days, from the second to the fifth of March. Same result on SQL Server as in
+      the tests.
+
+  - id: recursive
+    type: code
+    heading: "A recursive CTE walks the org chart"
+    lang: sql
+    code: |
+      WITH org AS (
+          SELECT EmployeeId, FullName, JobTitle, ManagerId, 0 AS Lvl,
+                 CAST(FullName AS nvarchar(400)) AS Path
+          FROM HR.Employees WHERE ManagerId IS NULL
+          UNION ALL
+          SELECT e.EmployeeId, e.FullName, e.JobTitle, e.ManagerId, o.Lvl + 1,
+                 CAST(CONCAT(o.Path, N' > ', e.FullName) AS nvarchar(400))
+          FROM HR.Employees AS e
+          JOIN org AS o ON e.ManagerId = o.EmployeeId
+      )
+      SELECT EmployeeId, FullName, JobTitle, Lvl, Path
+      FROM org
+      ORDER BY Path
+      OPTION (MAXRECURSION 10);
+    narration: >
+      A recursive common table expression walks the org chart. The anchor picks the managing director, the recursive
+      member joins each employee to their manager. Both members must return the same data types, which is why the path
+      is cast to n var char four hundred on both sides. Max recursion defaults to one hundred. We set ten, so a cycle
+      in the data fails fast.
+
+  - id: pivot
+    type: code
+    heading: "PIVOT, or conditional aggregation"
+    lang: sql
+    code: |
+      -- q06a
+      SELECT Region, [1] AS Jan, [2] AS Feb, [3] AS Mar, [4] AS Apr, [5] AS May, [6] AS Jun
+      FROM (SELECT c.Region, MONTH(o.OrderDate) AS OrderMonth, o.TotalAmount
+            FROM Sales.Orders AS o JOIN Sales.Customers AS c ON c.CustomerId = o.CustomerId) AS src
+      PIVOT (SUM(TotalAmount) FOR OrderMonth IN ([1], [2], [3], [4], [5], [6])) AS p;
+
+      -- q06b
+      SELECT c.Region,
+             SUM(CASE WHEN MONTH(o.OrderDate) = 1 THEN o.TotalAmount END) AS Jan,
+             ...
+      GROUP BY c.Region;
+    narration: >
+      For a cross-tab, pivot turns months into columns. Conditional aggregation does the same with sum of case, and
+      it's easier to extend with totals. The tests check that both match a Python cross-tab. And an empty cell is
+      null, not zero: Centre had no orders in April.
+
+  - id: grouping-sets
+    type: code
+    heading: "Subtotals in one pass"
+    lang: sql
+    code: |
+      SELECT CASE WHEN GROUPING(c.Region) = 1 THEN N'All regions' ELSE c.Region END AS Region,
+             CASE WHEN GROUPING(DATEPART(quarter, o.OrderDate)) = 1 THEN N'All quarters'
+                  ELSE CONCAT(N'Q', DATEPART(quarter, o.OrderDate)) END AS Quarter,
+             COUNT(*) AS Orders, SUM(o.TotalAmount) AS Revenue
+      FROM Sales.Orders AS o
+      JOIN Sales.Customers AS c ON c.CustomerId = o.CustomerId
+      GROUP BY GROUPING SETS ((c.Region, DATEPART(quarter, o.OrderDate)), (c.Region), ())
+
+      -- ...
+      -- All regions   All quarters   21   24371.15
+    narration: >
+      Grouping sets gives detail rows, a subtotal per region and a grand total in one pass, instead of three queries
+      glued with union all. The grouping function tells a subtotal apart from a real null. The grand total is
+      twenty-four thousand three hundred and seventy-one, and the test checks every subtotal adds up.
+
+  - id: gotcha
+    type: code
+    heading: "The gotcha: the default frame"
+    lang: sql
+    short: gotcha
+    code: |
+      SELECT OrderId, OrderDate, TotalAmount,
+             SUM(TotalAmount) OVER (ORDER BY OrderDate)            AS DefaultFrame,
+             SUM(TotalAmount) OVER (ORDER BY OrderDate, OrderId
+                  ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS RowsFrame
+      FROM Sales.Orders WHERE OrderDate < '2025-03-01';
+
+      OrderId  OrderDate   TotalAmount  DefaultFrame  RowsFrame
+      1        2025-01-08  1250.00      1250.00       1250.00
+      2        2025-01-15  480.50       4030.50       1730.50
+      3        2025-01-15  2300.00      4030.50       4030.50
+    narration: >
+      Now the running total from the start. With order by and no frame, SQL Server uses range unbounded preceding and
+      current row. Range includes every row with the same order by value. Orders two and three are both on the
+      fifteenth of January, so both show four thousand and thirty. The fix: say rows, and add a unique tie-breaker.
+      Then it's a real running total.
+
+  - id: gotcha-screen
+    type: screen
+    heading: "Same bug on SQL Server"
+    image: screens/q08-gotcha.jpg
+    bar: "VS Code · MSSQL · ContosoLab · q08-gotcha-default-frame.sql"
+    demo: "q08-gotcha-default-frame.sql results grid, 8 rows. Rows OrderId 2 and 3 (2025-01-15): DefaultFrame 4030.50 on both, RowsFrame 1730.50 then 4030.50. Rows 6 and 7 (2025-02-11): DefaultFrame 7320.40 on both."
+    narration: >
+      And here it is on SQL Server: the default frame repeats on both tied dates, the rows frame doesn't. This isn't a
+      bug in the engine. It's documented behavior, and it's easy to miss.
+
+  - id: runner
+    type: screen
+    heading: "Ten files, same rows on both engines"
+    image: screens/runner-sqlserver.jpg
+    bar: "Terminal · tsql_runner.py --engine sqlserver"
+    demo: "Terminal, dark theme, 18 pt. Show `python3 -m pytest tests -q` ending in '31 passed', then `python3 src/tsql_runner.py --engine sqlserver --setup` listing OK for all ten files and the last line '10/10 queries match expected/ on sqlserver'. SQL_CONNECTION_STRING must be set beforehand off-screen (it contains the sa password)."
+    narration: >
+      Finally the proof. Thirty-one tests pass locally, with no server. Then the same runner points at SQL Server
+      through Microsoft's m s s q l python driver, creates the tables, runs all ten files and compares them with the
+      expected CSV files. Ten out of ten match.
+
+  - id: recap
+    type: bullets
+    heading: "Five rules"
+    bullets:
+      - "Window aggregates: say ROWS, add a unique tie-breaker"
+      - "APPLY for per-row subqueries; OUTER keeps the empty ones"
+      - "Gaps and islands: distinct values first"
+      - "Recursive CTEs: matching types, a MAXRECURSION limit"
+      - "Check every query against an independent calculation"
+    narration: >
+      Five rules. For window aggregates, say rows and add a unique tie-breaker. Use apply for per-row subqueries, and
+      outer apply to keep the empty ones. For gaps and islands, take distinct values first. Give recursive queries
+      matching types and a recursion limit. And check every query against an independent calculation.
+
   - id: outro
     type: outro
     heading: "Code on GitHub, guides on devladlog.com"
     sub: "github.com/devladlog/mg-lab"
     narration: >
-      TODO
+      All ten queries, the runner and the tests are on GitHub, and the complete guide is on dev lad log dot com.
+      Links are in the description. Next time: database design and normalization. This was dev lad log SQL, by Momento
+      Galático.

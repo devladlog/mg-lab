@@ -1,0 +1,8 @@
+using 'main.bicep'
+
+param prefix = 'mglab-rag'
+param developerPrincipalId = '00000000-0000-0000-0000-000000000000' // replace with: az ad signed-in-user show --query id -o tsv
+param developerPrincipalType = 'User'
+param searchSku = 'basic'
+param embeddingSku = 'Standard'
+param chatSku = 'DataZoneStandard'

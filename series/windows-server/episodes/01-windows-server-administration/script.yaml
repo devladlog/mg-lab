@@ -1,29 +1,288 @@
-# DEVLADLOG Windows Server — episode 01 (stub: write the scenes after building the demo)
+# DEVLADLOG Windows Server - episode 01 (draft: the screen scenes need the lab recording, see demo.md)
 episode: 1
 slug: windows-server-administration
 series_label: "WINDOWS SERVER"
 series_name: "DEVLADLOG Windows Server"
 file_prefix: "windows-server"
 title: "Windows Server Administration"
-subtitle: "Built for real, in a lab tenant"
+subtitle: "One baseline, every server, checked over PowerShell remoting"
 voice: am_michael
-thumbnail_text: "WINDOWS SERVER ADMINISTRATION"
+thumbnail_text: "WINDOWS SERVER\nBASELINE\nIN ONE COMMAND"
 youtube:
-  title: "Windows Server Administration (Real Demo) | DEVLADLOG Windows Server #1"
-  tags: []
+  title: "Windows Server Baseline Checks with PowerShell Remoting (Real Lab) | DEVLADLOG Windows Server #1"
+  tags: [Windows Server, Windows Server 2025, PowerShell, PowerShell remoting, Invoke-Command, Server Core, Pester, sysadmin, server baseline, patching]
 sources:
   - https://www.devladlog.com/articles/windows-server/2025-09-02-windows-server-administration-complete-guide-2025/
+
 scenes:
   - id: hook
     type: title
-    heading: "Windows Server Administration"
-    sub: "Built for real, in a lab tenant"
+    heading: "Is every server where you think it is?"
+    sub: "One baseline file, three lab servers, one command"
     short: hook
     narration: >
-      TODO
+      A pending reboot nobody noticed. A firewall profile switched off during a test. A file server that stopped
+      patching in July. In this episode we write one baseline file, check every Windows Server against it with a
+      single command, and fix what it finds, in a real lab. Welcome to the DEVLADLOG Windows Server series.
+
+  - id: plan
+    type: bullets
+    heading: "What we're building"
+    bullets:
+      - "A collector that runs on each server over PowerShell remoting"
+      - "A baseline in JSON: build, patches, disks, services, features"
+      - "Pure checks: snapshot in, findings out"
+      - "A markdown report, worst findings first"
+      - "Thirty-two Pester tests that run on Linux"
+    narration: >
+      The plan. A collector that runs on each server over PowerShell remoting and returns a snapshot. A baseline in
+      JSON with the rules. Pure functions that compare the two and return findings. A markdown report, worst first.
+      And thirty two Pester tests that run on Linux without a single server.
+
+  - id: lab
+    type: bullets
+    heading: "The lab"
+    bullets:
+      - "Windows Server 2025, 180-day evaluation VMs"
+      - "CON-DC01 and CON-APP01: Server Core"
+      - "CON-FS01: Desktop Experience, on purpose"
+      - "Isolated lab network, no production anything"
+      - "Mainstream support until November 2029"
+    narration: >
+      The lab is three Windows Server 2025 virtual machines on the free one hundred and eighty day evaluation. A domain
+      controller and an application server on Server Core, and a file server with the Desktop Experience, on purpose,
+      so the baseline has something to say. All on an isolated network. Windows Server 2025 has mainstream support
+      until November 2029.
+
+  - id: remoting
+    type: code
+    heading: "Fan out with Invoke-Command"
+    lang: powershell
+    code: |
+      function Get-SbSnapshot {
+          param([string[]] $ComputerName, [pscredential] $Credential, [int] $ThrottleLimit = 32)
+
+          if (-not $ComputerName) {
+              return (& $script:Collector | ConvertTo-SbSnapshot)
+          }
+          $params = @{ ComputerName = $ComputerName; ScriptBlock = $script:Collector
+                       ThrottleLimit = $ThrottleLimit }
+          if ($Credential) { $params.Credential = $Credential }
+          Invoke-Command @params | ConvertTo-SbSnapshot
+      }
+    narration: >
+      Collection is one Invoke-Command. PowerShell remoting is enabled by default on Windows Server, so there's
+      nothing to install on the targets. Give it a list of computer names and it runs the collector on all of them in
+      parallel, up to the throttle limit, and streams the results back. Without computer names, it runs locally.
+
+  - id: collector
+    type: code
+    heading: "The collector: facts, not opinions"
+    lang: powershell
+    code: |
+      $pending = [pscustomobject]@{
+          ComponentBasedServicing = Test-Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending'
+          WindowsUpdate           = Test-Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\RebootRequired'
+          PendingFileRename       = ($null -ne $pfro)
+          ComputerRename          = ($activeName -ne $pendingName)
+      }
+      $timeSource = ((& w32tm.exe /query /source) | Out-String).Trim()
+
+      # Domain controllers have no local SAM (DomainRole 4 and 5)
+      if ($cs.DomainRole -lt 4) {
+          # By SID, so it also works on non-English installs
+          $localAdmins = @(Get-LocalGroupMember -SID 'S-1-5-32-544' | ForEach-Object { [string]$_.Name })
+      }
+    narration: >
+      The collector only gathers facts: build and patch level, disks, stopped automatic services, features,
+      hotfixes, four pending reboot signals, the time source, firewall profiles, and the local Administrators group,
+      read by its well known S I D so it works in any language. A domain controller has no local users and groups
+      to manage, so we skip that part there.
+
+  - id: ps51
+    type: code
+    heading: "The remote side is Windows PowerShell 5.1"
+    lang: powershell
+    code: |
+      using namespace System.Management.Automation.Language
+
+      It 'has no PowerShell 7-only syntax (remote sessions run Windows PowerShell 5.1 by default)' {
+          $ternary  = & $script:Find { param($n) $n -is [TernaryExpressionAst] }
+          $chain    = & $script:Find { param($n) $n -is [PipelineChainAst] }
+          $coalesce = & $script:Find {
+              param($n)
+              ($n -is [BinaryExpressionAst] -and "$($n.Operator)" -eq 'QuestionQuestion') -or
+              ($n -is [AssignmentStatementAst] -and "$($n.Operator)" -eq 'QuestionQuestionEquals')
+          }
+          # ... plus null-conditional member access
+          $ternary.Count + $chain.Count + $coalesce.Count + $nullConditional.Count | Should -Be 0
+      }
+    narration: >
+      Here's a detail that bites people. We run PowerShell seven locally, but on the server the session lands in the
+      default endpoint, which is Windows PowerShell five point one. So the collector can't use the null coalescing
+      operator, the ternary or pipeline chains. Instead of hoping, a Pester test parses the collector and fails the
+      build if one of them sneaks in.
+
+  - id: baseline
+    type: code
+    heading: "The baseline is data"
+    lang: json
+    code: |
+      {
+        "MinimumBuild": 26100,
+        "PreferServerCore": true,
+        "MaxUptimeDays": 35,
+        "MaxDaysSinceLastUpdate": 45,
+        "MinFreePercent": 20,
+        "CriticalFreePercent": 10,
+        "ForbiddenFeatures": ["FS-SMB1", "Telnet-Client"],
+        "RequiredFeatures": [ { "Server": "CON-DC*", "Features": ["AD-Domain-Services", "DNS"] } ],
+        "BadTimeSources": ["Local CMOS Clock", "Free-running System Clock"],
+        "AllowedLocalAdmins": ["Administrator", "Domain Admins", "GG-Server-Admins"]
+      }
+    narration: >
+      The rules live in a JSON file. Build twenty six one hundred is Windows Server 2025. Thirty five days of uptime,
+      forty five days since the last update, twenty percent free disk. SMB one and the Telnet client are forbidden.
+      Domain controllers need A D D S and DNS. Change the file, not the script.
+
+  - id: checks
+    type: code
+    heading: "Snapshot in, findings out"
+    lang: powershell
+    code: |
+      $reasons = @()
+      if ($s.PendingReboot.ComponentBasedServicing) { $reasons += 'Component Based Servicing' }
+      if ($s.PendingReboot.WindowsUpdate)           { $reasons += 'Windows Update' }
+      if ($s.PendingReboot.ComputerRename)          { $reasons += 'computer rename' }
+      if ($reasons) {
+          $out.Add((New-SbFinding $name High 'PendingReboot' "Reboot pending: $($reasons -join ', ')."))
+      }
+      elseif ($s.PendingReboot.PendingFileRename) {
+          # Applications queue file renames too: not a reason to block maintenance
+          $out.Add((New-SbFinding $name Info 'PendingFileRename' '...'))
+      }
+    narration: >
+      Test S B baseline takes a snapshot, the baseline and the current time, so tests are repeatable. Each rule adds
+      a finding with a severity. Servicing, Windows Update or a computer rename means a real pending reboot: High.
+      Pending file renames on their own are only Info, because applications queue them too.
+
+  - id: tests
+    type: code
+    heading: "Thirty-two tests, no servers"
+    lang: text
+    code: |
+      PS> Invoke-Pester ./tests -Output Detailed
+      Describing Collector script
+        [+] has no PowerShell 7-only syntax (remote sessions run Windows PowerShell 5.1 by default)
+        [+] calls no ServerBaseline function (it must be self-contained to run remotely)
+      Describing Test-SbBaseline: individual checks
+        [+] treats a Windows Update reboot as High
+        [+] flags a domain controller running on its own CMOS clock
+        [+] grades disk space: 5 GB free of 100 is High
+        ...
+      Describing Invoke-ServerBaseline.ps1 (offline, end to end)
+        [+] writes the report and exits 1 with -FailOnHigh
+
+      Tests Passed: 32, Failed: 0, Skipped: 0
+    narration: >
+      The tests use three saved snapshots of fictional servers. Thirty two Pester tests cover every rule, the report,
+      the script's exit code, and the collector itself: no PowerShell seven syntax, and no calls back into the module,
+      because only the script block travels to the server.
+
+  - id: live-run
+    type: screen
+    heading: "Three servers, one command"
+    image: screens/live-run.jpg
+    bar: "Lab · PowerShell 7 on the admin VM"
+    demo: >
+      Terminal on the lab admin machine. Run:
+      ./Invoke-ServerBaseline.ps1 -ComputerName CON-DC01, CON-FS01, CON-APP01 -SnapshotDir ./snapshots -OutFile ./report.md
+      Show the full findings table and the summary line "3 server(s), N finding(s), N high."
+    narration: >
+      Now the real lab. From the admin machine, one command against all three servers. The snapshots are saved as
+      JSON, so we can re-check them later without touching the servers. Rewrite this line to the real result on
+      screen: the number of findings, and how many are High.
+
+  - id: report
+    type: screen
+    heading: "Worst first"
+    image: screens/report.jpg
+    bar: "Lab · report.md"
+    short: report
+    demo: >
+      report.md opened in VS Code preview (or the console table). Summary table per server on top, then the findings
+      with High rows first. Expect on CON-FS01: FS-SMB1 installed, Public firewall profile off, RDP enabled, and the
+      Desktop Experience Low finding. Zoom on the High rows.
+    narration: >
+      The report puts a summary row per server on top, then every finding, worst first. The file server is the
+      problem child, exactly as we set it up: SMB one installed, the public firewall profile off, and Remote Desktop
+      enabled on a server the baseline only manages remotely. Rewrite this to match the real rows.
+
+  - id: fix
+    type: screen
+    heading: "Fix it, run it again"
+    image: screens/fixed.jpg
+    bar: "Lab · CON-FS01 fixed, second run"
+    demo: >
+      Split or two takes. First: Invoke-Command -ComputerName CON-FS01 { Uninstall-WindowsFeature FS-SMB1;
+      Set-NetFirewallProfile -Profile Public -Enabled True }. Second: run Invoke-ServerBaseline.ps1 again and show
+      that the ForbiddenFeature and Firewall rows are gone (a pending reboot finding may appear after removing SMB1:
+      keep it on screen if it does).
+    narration: >
+      Fixing is remoting too: remove the SMB one feature and turn the public profile back on, from the same console.
+      Run the baseline again and those findings are gone. If removing the feature leaves a pending reboot, the
+      baseline says so, which is exactly its job.
+
+  - id: hotfix
+    type: screen
+    heading: "Gotcha: Get-HotFix doesn't list every update"
+    image: screens/hotfix.jpg
+    bar: "Lab · CON-FS01 · Get-HotFix vs Windows Update history"
+    short: gotcha
+    demo: >
+      On CON-FS01 (Desktop Experience, so the Settings app exists): left, a PowerShell window with
+      Get-HotFix | Sort-Object InstalledOn -Descending | Select-Object -First 5. Right, Settings > Windows Update >
+      Update history. Show at least one entry in the history that Get-HotFix doesn't list (for example a Defender
+      definition update). If none differs on the day, show the Notes section of the Get-HotFix page on Learn instead
+      and adjust the narration.
+    narration: >
+      The honest gotcha. Our update check uses Get-HotFix, which reads the Win32 Quick Fix Engineering class. That
+      class only returns updates from Component Based Servicing. Updates delivered by Windows Installer or the Windows
+      Update site aren't in it. So the check is good for cumulative updates, and when it finds nothing dated, the
+      finding tells you to look at the Windows Update history instead.
+
+  - id: tune
+    type: bullets
+    heading: "Tune the baseline to your reality"
+    bullets:
+      - "Fill the ignore list from your first run, not from a blog"
+      - "Pin the patch level: MinimumUbr from the release info page"
+      - "Hotpatch servers reboot quarterly: raise MaxUptimeDays"
+      - "Unreachable servers stay in the report as High"
+    narration: >
+      Make it yours. Fill the services ignore list from your own first run; it starts empty on purpose. Pin the patch
+      level with minimum U B R, from the Windows Server release information page. With Hotpatch, servers only restart
+      for the quarterly baseline, so raise the uptime limit. And a server that doesn't answer shows up as High.
+
+  - id: recap
+    type: bullets
+    heading: "Five rules"
+    bullets:
+      - "Collect facts remotely, judge them locally"
+      - "Rules in a file, not in the script"
+      - "The remote side is Windows PowerShell 5.1: test for it"
+      - "Know what each data source can't see"
+      - "Run it on a schedule, fail on High"
+    narration: >
+      Five rules. Collect facts remotely and judge them locally. Keep the rules in a file. Remember the remote side
+      is Windows PowerShell five point one, and test for it. Know what each data source can't see. And run it on a
+      schedule with fail on High, so a red report becomes a ticket instead of a surprise.
+
   - id: outro
     type: outro
     heading: "Code on GitHub, guides on devladlog.com"
     sub: "github.com/devladlog/mg-lab"
     narration: >
-      TODO
+      The module, the baseline, the sample snapshots and the tests are on GitHub, and the complete guide to Windows
+      Server administration is on devladlog dot com. Links are in the description. Next episode, we build the
+      domain: Active Directory Domain Services. Subscribe so you don't miss it.

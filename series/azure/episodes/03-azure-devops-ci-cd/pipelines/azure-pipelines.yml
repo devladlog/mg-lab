@@ -1,0 +1,60 @@
+# DEVLADLOG Azure #3: ship the episode 2 workload (Bicep + .NET 10 readiness probe) through Azure Pipelines.
+#   ci  ──►  lab (deploy, no approval)  ──►  prod_plan (what-if + gate, summary)  ──►  prod (approval on the environment)
+# Approvals and checks are NOT in this file: they live on the Azure DevOps environments (contoso-lab, contoso-prod).
+# Checks run before a stage starts, so the prod what-if gets its own stage and the approver can read it first.
+
+trigger:
+  branches:
+    include: [main]
+  paths:
+    include:
+      - series/azure/episodes/02-cloud-architecture
+      - series/azure/episodes/03-azure-devops-ci-cd
+
+# Azure Repos Git ignores YAML PR triggers: pull request validation is a branch policy (Build validation) on main.
+pr: none
+
+parameters:
+  - name: acceptProtectedChanges
+    displayName: Accept protected changes (network, identity, role assignments)
+    type: boolean
+    default: false
+
+variables:
+  workloadDir: series/azure/episodes/02-cloud-architecture
+  pipelineDir: series/azure/episodes/03-azure-devops-ci-cd
+
+pool:
+  vmImage: ubuntu-latest
+
+stages:
+  - template: templates/ci-stage.yml
+
+  - template: templates/deploy-stage.yml
+    parameters:
+      name: lab
+      dependsOn: [ci]
+      environment: contoso-lab
+      serviceConnection: sc-contoso-lab          # workload identity federation, scoped to rg-contoso-lab
+      resourceGroup: rg-contoso-lab
+      parameterFile: env/lab.bicepparam
+      acceptProtectedChanges: ${{ parameters.acceptProtectedChanges }}
+
+  - template: templates/plan-stage.yml
+    parameters:
+      name: prod_plan
+      dependsOn: [lab]
+      serviceConnection: sc-contoso-prod         # no checks on the connection itself: the plan must run unattended
+      resourceGroup: rg-contoso-prod
+      parameterFile: env/prod.bicepparam
+      acceptProtectedChanges: ${{ parameters.acceptProtectedChanges }}
+
+  - template: templates/deploy-stage.yml
+    parameters:
+      name: prod
+      dependsOn: [prod_plan]
+      environment: contoso-prod                  # Approvals + Exclusive lock configured on this environment
+      serviceConnection: sc-contoso-prod
+      resourceGroup: rg-contoso-prod
+      parameterFile: env/prod.bicepparam
+      acceptProtectedChanges: ${{ parameters.acceptProtectedChanges }}

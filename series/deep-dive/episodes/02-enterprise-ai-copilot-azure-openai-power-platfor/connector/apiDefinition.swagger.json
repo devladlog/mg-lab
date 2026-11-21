@@ -1,0 +1,89 @@
+{
+  "swagger": "2.0",
+  "info": {
+    "title": "Contoso HR Policy Copilot",
+    "description": "Answers questions about Contoso HR policies from the SharePoint documents the signed-in user is allowed to read, with citations.",
+    "version": "1.0"
+  },
+  "host": "func-copilot-contoso.azurewebsites.net",
+  "basePath": "/api",
+  "schemes": ["https"],
+  "consumes": ["application/json"],
+  "produces": ["application/json"],
+  "paths": {
+    "/ask": {
+      "post": {
+        "operationId": "AskHrPolicies",
+        "summary": "Ask the HR policies",
+        "description": "Use this to answer questions about Contoso HR policies: annual leave, business travel, expenses, IT, salary bands. Returns an answer grounded in the user's permitted documents, with numbered citations. If nothing permitted matches, it says so.",
+        "x-ms-visibility": "important",
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {"$ref": "#/definitions/AskRequest"}
+          }
+        ],
+        "responses": {
+          "200": {"description": "Answer", "schema": {"$ref": "#/definitions/AskResponse"}},
+          "400": {"description": "Empty or too long question", "schema": {"$ref": "#/definitions/Error"}},
+          "401": {"description": "Not signed in", "schema": {"$ref": "#/definitions/Error"}},
+          "403": {"description": "Group membership can't be read from the token (group overage)", "schema": {"$ref": "#/definitions/Error"}},
+          "422": {"description": "Blocked by the content filter", "schema": {"$ref": "#/definitions/Error"}},
+          "503": {"description": "Busy, try again", "schema": {"$ref": "#/definitions/Error"}}
+        }
+      }
+    }
+  },
+  "definitions": {
+    "AskRequest": {
+      "type": "object",
+      "required": ["question"],
+      "properties": {
+        "question": {"type": "string", "maxLength": 1000, "x-ms-summary": "Question",
+                     "description": "The employee's question, in their own words."}
+      }
+    },
+    "AskResponse": {
+      "type": "object",
+      "properties": {
+        "answer": {"type": "string", "x-ms-summary": "Answer", "description": "Answer text with [n] citation markers."},
+        "grounded": {"type": "boolean", "x-ms-summary": "Grounded", "description": "False if the answer has no valid citation."},
+        "sources_considered": {"type": "integer", "x-ms-summary": "Sources considered"},
+        "citations": {
+          "type": "array",
+          "x-ms-summary": "Citations",
+          "items": {
+            "type": "object",
+            "properties": {
+              "n": {"type": "integer", "x-ms-summary": "Number"},
+              "title": {"type": "string", "x-ms-summary": "Title"},
+              "url": {"type": "string", "x-ms-summary": "Link"}
+            }
+          }
+        },
+        "usage": {
+          "type": "object",
+          "x-ms-visibility": "internal",
+          "properties": {
+            "prompt_tokens": {"type": "integer"},
+            "completion_tokens": {"type": "integer"},
+            "total_tokens": {"type": "integer"}
+          }
+        }
+      }
+    },
+    "Error": {"type": "object", "properties": {"error": {"type": "string", "x-ms-summary": "Error"}}}
+  },
+  "securityDefinitions": {
+    "oauth2-auth": {
+      "type": "oauth2",
+      "flow": "accessCode",
+      "authorizationUrl": "https://login.microsoftonline.com/common/oauth2/authorize",
+      "tokenUrl": "https://login.microsoftonline.com/common/oauth2/authorize",
+      "scopes": {}
+    }
+  },
+  "security": [{"oauth2-auth": []}]
+}

@@ -1,0 +1,279 @@
+# DEVLADLOG Power Apps — episode 03. Draft: code scenes are real excerpts from src/ and tests/, screen scenes need the lab recording.
+episode: 3
+slug: power-fx-formulas-tips
+series_label: "POWER APPS"
+series_name: "DEVLADLOG Power Apps"
+file_prefix: "powerapps"
+title: "Power Fx formulas and tips, as functions you can test"
+subtitle: "User-defined functions, Switch, With, Coalesce, Text and one silent delegation trap"
+voice: am_michael
+thumbnail_text: "POWER FX\nYOUR OWN\nFUNCTIONS"
+youtube:
+  title: "Power Fx Tips: User-Defined Functions, Working Days, With and Delegation | DEVLADLOG Power Apps #3"
+  tags: [Power Fx, Power Apps, user-defined functions, named formulas, canvas apps, delegation, Dataverse, With function, Coalesce, Weekday, low code, Power Platform]
+sources:
+  - https://www.devladlog.com/articles/powerapps/2026-02-14-power-fx-formulas-tips-complete-guide-2026/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Power Fx, written like real code"
+    sub: "Your own functions, tested, and one trap with no warning"
+    short: hook
+    narration: >
+      Copying the same formula into ten controls works until one copy is wrong. In this episode we move the business rules
+      of a canvas app into user-defined functions, call them from every screen, and run them in tests. Along the way: a
+      weekday trap, and a tidy-looking formula that silently breaks delegation. Welcome to DEVLADLOG Power Apps.
+
+  - id: plan
+    type: bullets
+    heading: "Equipment Desk gets an Open loans screen"
+    bullets:
+      - "How many loans are overdue, and an overdue-only toggle"
+      - "Per loan: overdue, due soon or on loan, with a colour"
+      - "Working days late, skipping weekends and holidays"
+      - "Copy a friendly reminder for the borrower"
+      - "All rules in App.Formulas, 39 tests on Microsoft's engine"
+    narration: >
+      We keep building the Equipment Desk app from episode two. It gets an open loans screen: how many loans are overdue,
+      a state and a colour per loan, working days late that skip weekends and public holidays, and a button that copies a
+      reminder for the borrower. Every rule lives in App dot Formulas.
+
+  - id: udf
+    type: code
+    heading: "Named formulas and your first function"
+    lang: text
+    code: |
+      // App.Formulas
+      Holidays = [Date(2026, 12, 1), Date(2026, 12, 8), Date(2026, 12, 25), Date(2027, 1, 1)];
+      OverdueCount = CountIf(Loans, IsBlank('Returned on') && 'Due date' < Today());
+
+      IsWorkingDay(d: Date): Boolean =
+          Weekday(d, StartOfWeek.Monday) <= 5 && !(d in Holidays);
+    narration: >
+      App dot Formulas can hold three things. Named formulas, like the holiday list and the overdue count. User-defined
+      functions, which take typed parameters and return a typed value. And behavior functions, which we'll see later. Is
+      working day takes a date and returns a Boolean: Monday to Friday, and not in the holiday list.
+
+  - id: workingdays
+    type: code
+    heading: "Functions calling functions"
+    lang: text
+    code: |
+      WorkingDaysBetween(start: Date, finish: Date): Number =
+          If(finish <= start, 0,
+              CountIf(
+                  ForAll(Sequence(DateDiff(start, finish)), DateAdd(start, Value)),
+                  IsWorkingDay(Value)
+              ));
+
+      WorkingDays(n: Number): Text = n & If(n = 1, " working day", " working days");
+    narration: >
+      Working days between two dates uses a classic pattern. Sequence makes a table of numbers, For All turns each number
+      into a date, and Count If keeps the working days. It calls our first function like any built-in one. From Friday the
+      twenty-seventh of November to Wednesday the ninth of December, that's six: two holidays drop out.
+
+  - id: weekday
+    type: code
+    heading: "The Weekday trap"
+    lang: text
+    short: weekday
+    code: |
+      Weekday(Date(2026, 11, 29))                       // Sunday   -> 1
+      Weekday(Date(2026, 11, 27))                       // Friday   -> 6
+      Weekday(Date(2026, 11, 29), StartOfWeek.Monday)   // Sunday   -> 7
+
+      Weekday(d) <= 5                                   // Sunday to Thursday!
+      Weekday(d, StartOfWeek.Monday) <= 5               // Monday to Friday
+
+      Passed  The_naive_working_day_test_gets_Sunday_and_Friday_wrong
+    narration: >
+      Here's the trap. Weekday starts the week on Sunday by default, so Sunday is one and Friday is six. Weekday of d, less
+      than or equal to five, reads like Monday to Friday, but it means Sunday to Thursday. Always pass Start Of Week dot
+      Monday. A test keeps both versions, so nobody quietly simplifies it back.
+
+  - id: switch
+    type: code
+    heading: "Switch(true, ...) instead of nested If"
+    lang: text
+    code: |
+      LoanState(due: Date, returned: Date): Text =
+          Switch(true,
+              !IsBlank(returned), "Returned",
+              due < Today(), "Overdue",
+              WorkingDaysBetween(Today(), due) <= 2, "Due soon",
+              "On loan");
+
+      StateColor(state: Text): Color =
+          Switch(state, "Overdue", RGBA(168, 0, 0, 1), "Due soon", RGBA(138, 90, 0, 1),
+                        "Returned", RGBA(16, 124, 16, 1), RGBA(50, 49, 48, 1));
+    narration: >
+      Loan state uses Switch on true: the first condition that holds wins, which reads much better than nested Ifs.
+      Returned beats everything, then overdue, then due soon within two working days. State colour switches on the
+      value, and the last argument is the default.
+
+  - id: formulas-studio
+    type: screen
+    heading: "Your functions in Studio"
+    image: screens/app-formulas.jpg
+    bar: "Power Apps Studio · App · Formulas"
+    demo: >
+      Power Apps Studio, Equipment Desk (phone). Tree view: App selected, property dropdown on Formulas, the formula bar
+      expanded (or the pop-out formula editor) showing the Formulas block from App.pa.yaml with IsWorkingDay,
+      WorkingDaysBetween and LoanState visible and no red errors. Second capture: a label's Text property typed as
+      WorkingDaysBetween(Date(2026,11,27), Date(2026,12,9)) with IntelliSense showing the signature
+      (start: Date, finish: Date) and the label showing 6. Mask environment and user.
+    narration: >
+      In Studio it looks like this. The whole block sits in the App object's Formulas property. And when you call a function
+      in a label, IntelliSense shows its typed parameters, and the label shows six.
+
+  - id: gallery
+    type: code
+    heading: "Keep the gallery delegable"
+    lang: text
+    code: |
+      Items (galLoans):
+        Sort(
+            Filter(
+                Loans,
+                IsBlank('Returned on') && (!tglOverdueOnly.Value || 'Due date' < Today())
+            ),
+            'Due date'
+        )
+
+      Text (lblLoanDetail, in the template):
+        With({ state: LoanState(ThisItem.'Due date', ThisItem.'Returned on') }, ...)
+    narration: >
+      The gallery stays boring on purpose: filter and sort, all delegable to Dataverse. Today is the same for every row, so
+      it's sent as a constant. The per-row maths, state and working days, runs in the template labels. Adding it with Add
+      Columns would cap the result at the data row limit, five hundred by default.
+
+  - id: gotcha
+    type: code
+    heading: "Tidy, and silently not delegated"
+    lang: text
+    short: gotcha
+    code: |
+      // looks cleaner... don't
+      With(
+          { open: Filter(Loans, IsBlank('Returned on')) },
+          Sort(Filter(open, !tglOverdueOnly.Value || 'Due date' < Today()), 'Due date')
+      )
+
+      // Learn: With, UpdateContext and Set create collections internally.
+      // Collections can't participate in delegation. You don't see a delegation warning.
+
+      Passed  In_memory_the_With_version_gives_the_same_rows_which_is_why_we_need_a_lint
+    narration: >
+      Now the gotcha. Naming the open loans with With looks cleaner. But Microsoft's docs say With creates a collection
+      internally, collections can't be delegated, and you get no warning. With more than five hundred loans, rows just go
+      missing. Worse, a unit test can't see it: in memory both versions return the same rows. So we lint for it instead.
+      Use With for values, never for tables.
+
+  - id: rowlimit
+    type: screen
+    heading: "Row limit 1, still every overdue loan"
+    image: screens/row-limit-overdue.jpg
+    bar: "Power Apps Studio · Settings · General"
+    demo: >
+      First capture: Settings > General, Data row limit = 1. Second capture: LoansScreen in preview with "Overdue only" on,
+      the gallery showing BOTH overdue loans (CT-0043 and CT-0107) and no delegation warning on galLoans. Optional third
+      capture: temporarily paste the With version into galLoans.Items: with row limit 1 the gallery shows only one loan
+      and still no warning. Undo afterwards. Mask environment and user.
+    narration: >
+      Proof in Studio. Data row limit set to one. Overdue only shows both overdue loans, so Dataverse did the filtering.
+      Paste the With version and, with the same limit, one loan disappears, without a single warning.
+
+  - id: reminder
+    type: code
+    heading: "Interpolation, and Text that ignores the user's language"
+    lang: text
+    code: |
+      FirstName(email: Text): Text = Proper(First(Split(First(Split(email, "@")).Value, ".")).Value);
+
+      ReminderText(asset: Text, email: Text, due: Date): Text =
+          $"Hi {FirstName(email)}, the {asset} you borrowed was due back on
+            {Text(due, "dddd d mmmm", "en-GB")}, {WorkingDays(WorkingDaysBetween(due, Today()))} ago. ..."
+
+      // user language pt-PT, no third argument:  "segunda-feira 16 novembro"
+    narration: >
+      The reminder uses string interpolation, a dollar sign and curly braces, so it reads like the message itself. First
+      name turns alex dot demo at contoso into Alex. And note the third argument to Text: en G B. Without it, Text follows
+      the user's language, and a colleague running the app in Portuguese would send an English email with Portuguese dates.
+
+  - id: behavior
+    type: code
+    heading: "A behavior function, honest about failure"
+    lang: text
+    code: |
+      CopyReminder(asset: Text, email: Text, due: Date): Void = {
+          IfError(
+              Copy(ReminderText(asset, email, due)),
+              Notify("Couldn't copy the reminder: " & FirstError.Message, NotificationType.Error),
+              Notify("Reminder for " & email & " copied", NotificationType.Success)
+          )
+      };
+
+      OnSelect (btnRemind):  CopyReminder(ThisItem.Equipment.'Asset tag' & " " & ThisItem.Equipment.Name, ...)
+    narration: >
+      Curly braces make a behavior function: it can have side effects and returns Void. Copy puts the text on the
+      clipboard. Microsoft's docs warn that embedded hosts like Teams or SharePoint don't support Copy, and recommend If
+      Error. So the user sees either copied, or the real reason it failed.
+
+  - id: tests
+    type: code
+    heading: "Thirty-nine tests, fixed clock"
+    lang: text
+    code: |
+      $ dotnet test EquipmentDesk.Formulas.Tests
+        Passed  Every_user_defined_function_compiles
+        Passed  Working_days_between_...(start: "Date(2026, 11, 27)", finish: "Date(2026, 12, 9)", expected: 6)
+        Passed  Loan_state(due: "Date(2026, 12, 2)", returned: "Blank()", expected: "Due soon")
+        Passed  The_reminder_is_English_even_when_the_user_runs_the_app_in_Portuguese
+        Passed  Copy_reminder_reports_a_clipboard_failure_instead_of_claiming_success
+        Passed  Overdue_only_keeps_the_loans_past_their_due_date
+        Passed  No_With_record_holds_a_data_source(where: "galLoans.Items", ...)
+
+      Passed!  - Failed: 0, Passed: 208, Total: 208
+    narration: >
+      The tests read the pa dot yaml files, load every function into Microsoft's open source Power Fx interpreter, and
+      freeze the clock on Monday the thirtieth of November, so overdue means the same thing every day. Thirty-nine test
+      methods, two hundred and eight cases with the data rows, about one second.
+
+  - id: loans-screen
+    type: screen
+    heading: "Open loans on the phone"
+    image: screens/open-loans.jpg
+    bar: "Power Apps · Equipment Desk (phone) · Open loans"
+    demo: >
+      App in preview (phone layout) or Power Apps mobile mirrored, LoansScreen with "Overdue only" off. Must show: red
+      summary "2 loans are overdue"; rows in due-date order: CT-0043 Laptop 14 "alex.demo@contoso.com · N working days late"
+      in red with notes "Charger missing" and a Copy reminder button; CT-0107 Monitor 27 in red; CT-0108 Monitor 24 in amber
+      "due ... (soon)"; CT-0311 Phone in grey. The working-day numbers depend on the recording day: set the test data due
+      dates relative to the recording date as described in demo.md. Mask environment and user.
+    narration: >
+      On the phone. Two loans overdue in red, with working days late. One due soon in amber, one on loan in grey. Notes
+      fall back to no notes thanks to Coalesce, which treats blank and empty text the same.
+
+  - id: copied
+    type: screen
+    heading: "Reminder copied"
+    image: screens/reminder-copied.jpg
+    bar: "Power Apps · Equipment Desk (phone) · Open loans"
+    demo: >
+      Tap "Copy reminder" on CT-0043: green banner "Reminder for alex.demo@contoso.com copied". Cut to a plain text editor
+      (Notepad or a new Outlook draft to alex.demo@contoso.com, not sent) with the pasted text "Hi Alex, the CT-0043 Laptop 14
+      you borrowed was due back on <weekday day month>, N working days ago. ...". Optional: the same app inside Teams showing
+      the red "Couldn't copy the reminder" banner if Copy is blocked there.
+    narration: >
+      Tap copy reminder. Copied, and pasted into a draft it reads like a person wrote it, with the right weekday and the
+      right number of working days. Five tips, one app: functions for rules, Monday for weekdays, With for values only,
+      language tags on Text, and If Error around anything that can fail.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The pa dot yaml source, the harness and all the tests are on GitHub, and the complete guide is on devladlog dot com.
+      Links are in the description. Next time: Dataverse integration, from outside the app. Subscribe so you don't miss it.

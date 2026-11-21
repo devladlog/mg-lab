@@ -1,0 +1,378 @@
+createOrReplace
+
+	/// Folder that holds the star schema CSV files (fact_sales.csv, dim_*.csv). Keep the trailing backslash.
+	expression DataFolder = "C:\MGLab\power-bi\star\" meta [IsParameterQuery=true, Type="Text", IsParameterQueryRequired=true]
+
+
+	/// Fact table, one row per order line. Filters arrive from Date (order date), Customer, Product and Store.
+	table Sales
+
+		measure 'Sales Amount' = SUMX(Sales, Sales[Quantity] * Sales[Unit Price])
+			formatString: #,0.00
+			displayFolder: Sales
+
+		measure 'Total Cost' = SUMX(Sales, Sales[Quantity] * Sales[Unit Cost])
+			formatString: #,0.00
+			displayFolder: Sales
+
+		measure Margin = [Sales Amount] - [Total Cost]
+			formatString: #,0.00
+			displayFolder: Margin
+
+		measure 'Margin %' = DIVIDE([Margin], [Sales Amount])
+			formatString: 0.0%
+			displayFolder: Margin
+
+		measure Units = SUM(Sales[Quantity])
+			formatString: #,0
+			displayFolder: Sales
+
+		measure Orders = DISTINCTCOUNT(Sales[Order Number])
+			formatString: #,0
+			displayFolder: Sales
+
+		/// Degenerate dimension: kept on the fact table for filtering by order.
+		column 'Order Number'
+			dataType: string
+			summarizeBy: none
+			sourceColumn: OrderNumber
+
+		column 'Line Number'
+			dataType: int64
+			isHidden
+			formatString: 0
+			summarizeBy: none
+			sourceColumn: LineNumber
+
+		column 'Order Date'
+			dataType: dateTime
+			isHidden
+			formatString: yyyy-mm-dd
+			summarizeBy: none
+			sourceColumn: OrderDate
+
+		column 'Ship Date'
+			dataType: dateTime
+			isHidden
+			formatString: yyyy-mm-dd
+			summarizeBy: none
+			sourceColumn: ShipDate
+
+		column CustomerKey
+			dataType: int64
+			isHidden
+			formatString: 0
+			summarizeBy: none
+			sourceColumn: CustomerKey
+
+		column ProductKey
+			dataType: int64
+			isHidden
+			formatString: 0
+			summarizeBy: none
+			sourceColumn: ProductKey
+
+		column StoreKey
+			dataType: int64
+			isHidden
+			formatString: 0
+			summarizeBy: none
+			sourceColumn: StoreKey
+
+		column Quantity
+			dataType: int64
+			isHidden
+			formatString: #,0
+			summarizeBy: none
+			sourceColumn: Quantity
+
+		column 'Unit Price'
+			dataType: decimal
+			isHidden
+			formatString: #,0.00
+			summarizeBy: none
+			sourceColumn: UnitPrice
+
+		column 'Unit Cost'
+			dataType: decimal
+			isHidden
+			formatString: #,0.00
+			summarizeBy: none
+			sourceColumn: UnitCost
+
+		partition Sales = m
+			mode: import
+			source =
+					let
+					    Source = Csv.Document(File.Contents(DataFolder & "fact_sales.csv"), [Delimiter = ",", Encoding = 65001, QuoteStyle = QuoteStyle.Csv]),
+					    Promoted = Table.PromoteHeaders(Source, [PromoteAllScalars = true]),
+					    Typed = Table.TransformColumnTypes(Promoted, {
+					        {"OrderNumber", type text}, {"LineNumber", Int64.Type},
+					        {"OrderDate", type date}, {"ShipDate", type date},
+					        {"CustomerKey", Int64.Type}, {"ProductKey", Int64.Type}, {"StoreKey", Int64.Type},
+					        {"Quantity", Int64.Type}, {"UnitPrice", Currency.Type}, {"UnitCost", Currency.Type}
+					    }, "en-US")
+					in
+					    Typed
+
+
+	/// Date dimension: one row per day, full calendar years, marked as the date table. Filters Sales by order date.
+	table Date
+		dataCategory: Time
+
+		column Date
+			dataType: dateTime
+			isKey
+			formatString: yyyy-mm-dd
+			summarizeBy: none
+			sourceColumn: Date
+
+		column Year
+			dataType: int64
+			formatString: 0
+			summarizeBy: none
+			sourceColumn: Year
+
+		column Quarter
+			dataType: string
+			summarizeBy: none
+			sourceColumn: Quarter
+
+		column 'Month Number'
+			dataType: int64
+			isHidden
+			formatString: 0
+			summarizeBy: none
+			sourceColumn: Month Number
+
+		column Month
+			dataType: string
+			summarizeBy: none
+			sourceColumn: Month
+			sortByColumn: 'Month Number'
+
+		column 'Year Month Number'
+			dataType: int64
+			isHidden
+			formatString: 0
+			summarizeBy: none
+			sourceColumn: Year Month Number
+
+		column 'Year Month'
+			dataType: string
+			summarizeBy: none
+			sourceColumn: Year Month
+			sortByColumn: 'Year Month Number'
+
+		column 'Day of Week Number'
+			dataType: int64
+			isHidden
+			formatString: 0
+			summarizeBy: none
+			sourceColumn: Day of Week Number
+
+		column 'Day of Week'
+			dataType: string
+			summarizeBy: none
+			sourceColumn: Day of Week
+			sortByColumn: 'Day of Week Number'
+
+		hierarchy Calendar
+
+			level Year
+				column: Year
+
+			level Quarter
+				column: Quarter
+
+			level Month
+				column: Month
+
+			level Date
+				column: Date
+
+		partition Date = m
+			mode: import
+			source =
+					let
+					    Source = Csv.Document(File.Contents(DataFolder & "dim_date.csv"), [Delimiter = ",", Encoding = 65001, QuoteStyle = QuoteStyle.Csv]),
+					    Promoted = Table.PromoteHeaders(Source, [PromoteAllScalars = true]),
+					    Typed = Table.TransformColumnTypes(Promoted, {
+					        {"Date", type date}, {"Year", Int64.Type}, {"Quarter", type text},
+					        {"Month Number", Int64.Type}, {"Month", type text},
+					        {"Year Month", type text}, {"Year Month Number", Int64.Type},
+					        {"Day of Week Number", Int64.Type}, {"Day of Week", type text}
+					    }, "en-US")
+					in
+					    Typed
+
+
+	/// Product dimension. Category and subcategory are flattened into this table (no snowflake).
+	table Product
+
+		column ProductKey
+			dataType: int64
+			isHidden
+			isKey
+			formatString: 0
+			summarizeBy: none
+			sourceColumn: ProductKey
+
+		column 'Product Code'
+			dataType: string
+			summarizeBy: none
+			sourceColumn: ProductCode
+
+		column Product
+			dataType: string
+			summarizeBy: none
+			sourceColumn: Product
+
+		column Subcategory
+			dataType: string
+			summarizeBy: none
+			sourceColumn: Subcategory
+
+		column Category
+			dataType: string
+			summarizeBy: none
+			sourceColumn: Category
+
+		column Color
+			dataType: string
+			summarizeBy: none
+			sourceColumn: Color
+
+		hierarchy 'Product Hierarchy'
+
+			level Category
+				column: Category
+
+			level Subcategory
+				column: Subcategory
+
+			level Product
+				column: Product
+
+		partition Product = m
+			mode: import
+			source =
+					let
+					    Source = Csv.Document(File.Contents(DataFolder & "dim_product.csv"), [Delimiter = ",", Encoding = 65001, QuoteStyle = QuoteStyle.Csv]),
+					    Promoted = Table.PromoteHeaders(Source, [PromoteAllScalars = true]),
+					    Typed = Table.TransformColumnTypes(Promoted, {
+					        {"ProductKey", Int64.Type}, {"ProductCode", type text}, {"Product", type text},
+					        {"Subcategory", type text}, {"Category", type text}, {"Color", type text}
+					    }, "en-US")
+					in
+					    Typed
+
+
+	/// Customer dimension. Key -1 is the explicit "Unknown customer" row for guest orders.
+	table Customer
+
+		column CustomerKey
+			dataType: int64
+			isHidden
+			isKey
+			formatString: 0
+			summarizeBy: none
+			sourceColumn: CustomerKey
+
+		column 'Customer Code'
+			dataType: string
+			summarizeBy: none
+			sourceColumn: CustomerCode
+
+		column Customer
+			dataType: string
+			summarizeBy: none
+			sourceColumn: Customer
+
+		column City
+			dataType: string
+			summarizeBy: none
+			sourceColumn: City
+
+		column Country
+			dataType: string
+			summarizeBy: none
+			sourceColumn: Country
+
+		partition Customer = m
+			mode: import
+			source =
+					let
+					    Source = Csv.Document(File.Contents(DataFolder & "dim_customer.csv"), [Delimiter = ",", Encoding = 65001, QuoteStyle = QuoteStyle.Csv]),
+					    Promoted = Table.PromoteHeaders(Source, [PromoteAllScalars = true]),
+					    Typed = Table.TransformColumnTypes(Promoted, {
+					        {"CustomerKey", Int64.Type}, {"CustomerCode", type text}, {"Customer", type text},
+					        {"City", type text}, {"Country", type text}
+					    }, "en-US")
+					in
+					    Typed
+
+
+	/// Store dimension (physical stores and the online shop).
+	table Store
+
+		column StoreKey
+			dataType: int64
+			isHidden
+			isKey
+			formatString: 0
+			summarizeBy: none
+			sourceColumn: StoreKey
+
+		column Store
+			dataType: string
+			summarizeBy: none
+			sourceColumn: Store
+
+		column Country
+			dataType: string
+			summarizeBy: none
+			sourceColumn: Country
+
+		column Channel
+			dataType: string
+			summarizeBy: none
+			sourceColumn: Channel
+
+		partition Store = m
+			mode: import
+			source =
+					let
+					    Source = Csv.Document(File.Contents(DataFolder & "dim_store.csv"), [Delimiter = ",", Encoding = 65001, QuoteStyle = QuoteStyle.Csv]),
+					    Promoted = Table.PromoteHeaders(Source, [PromoteAllScalars = true]),
+					    Typed = Table.TransformColumnTypes(Promoted, {
+					        {"StoreKey", Int64.Type}, {"Store", type text}, {"Country", type text}, {"Channel", type text}
+					    }, "en-US")
+					in
+					    Typed
+
+
+	relationship 'Sales Order Date to Date'
+		fromColumn: Sales.'Order Date'
+		toColumn: Date.Date
+
+
+	relationship 'Sales Ship Date to Date'
+		isActive: false
+		fromColumn: Sales.'Ship Date'
+		toColumn: Date.Date
+
+
+	relationship 'Sales to Customer'
+		fromColumn: Sales.CustomerKey
+		toColumn: Customer.CustomerKey
+
+
+	relationship 'Sales to Product'
+		fromColumn: Sales.ProductKey
+		toColumn: Product.ProductKey
+
+
+	relationship 'Sales to Store'
+		fromColumn: Sales.StoreKey
+		toColumn: Store.StoreKey

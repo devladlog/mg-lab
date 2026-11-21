@@ -1,0 +1,457 @@
+{
+  "properties": {
+    "connectionReferences": {
+      "shared_commondataserviceforapps": {
+        "runtimeSource": "embedded",
+        "connection": {
+          "connectionReferenceLogicalName": "cts_sharedcommondataserviceforapps_directory"
+        },
+        "api": {
+          "name": "shared_commondataserviceforapps"
+        }
+      },
+      "shared_office365": {
+        "runtimeSource": "embedded",
+        "connection": {
+          "connectionReferenceLogicalName": "cts_sharedoffice365_purchasing"
+        },
+        "api": {
+          "name": "shared_office365"
+        }
+      }
+    },
+    "definition": {
+      "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+      "contentVersion": "1.0.0.0",
+      "parameters": {
+        "$connections": {
+          "defaultValue": {},
+          "type": "Object"
+        },
+        "$authentication": {
+          "defaultValue": {},
+          "type": "SecureObject"
+        },
+        "Graph base URL (cts_GraphBaseUrl)": {
+          "defaultValue": "https://graph.microsoft.com",
+          "type": "String",
+          "metadata": {
+            "schemaName": "cts_GraphBaseUrl",
+            "description": "Microsoft Graph root, no trailing slash"
+          }
+        },
+        "Entra authority (cts_EntraAuthority)": {
+          "defaultValue": "https://login.microsoftonline.com",
+          "type": "String",
+          "metadata": {
+            "schemaName": "cts_EntraAuthority",
+            "description": "Token issuer for client credentials"
+          }
+        },
+        "Entra tenant ID (cts_EntraTenantId)": {
+          "defaultValue": "00000000-0000-0000-0000-000000000000",
+          "type": "String",
+          "metadata": {
+            "schemaName": "cts_EntraTenantId",
+            "description": "Directory (tenant) ID"
+          }
+        },
+        "Graph client ID (cts_GraphClientId)": {
+          "defaultValue": "00000000-0000-0000-0000-000000000001",
+          "type": "String",
+          "metadata": {
+            "schemaName": "cts_GraphClientId",
+            "description": "App registration (client) ID with User.Read.All application permission"
+          }
+        },
+        "Graph page size (cts_GraphPageSize)": {
+          "defaultValue": "999",
+          "type": "String",
+          "metadata": {
+            "schemaName": "cts_GraphPageSize",
+            "description": "Users per page, 1-999"
+          }
+        }
+      },
+      "triggers": {
+        "Every_Monday_at_6": {
+          "type": "Recurrence",
+          "recurrence": {
+            "frequency": "Week",
+            "interval": 1,
+            "timeZone": "GMT Standard Time",
+            "schedule": {
+              "weekDays": [
+                "Monday"
+              ],
+              "hours": [
+                "6"
+              ],
+              "minutes": [
+                30
+              ]
+            }
+          }
+        }
+      },
+      "actions": {
+        "Get_client_secret": {
+          "type": "OpenApiConnection",
+          "runAfter": {},
+          "inputs": {
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+              "connectionName": "shared_commondataserviceforapps",
+              "operationId": "PerformUnboundAction"
+            },
+            "parameters": {
+              "actionName": "RetrieveEnvironmentVariableSecretValue",
+              "item/EnvironmentVariableName": "cts_GraphClientSecret"
+            },
+            "authentication": "@parameters('$authentication')"
+          },
+          "runtimeConfiguration": {
+            "secureData": {
+              "properties": [
+                "outputs"
+              ]
+            }
+          }
+        },
+        "Initialize_next_link": {
+          "type": "InitializeVariable",
+          "runAfter": {
+            "Get_client_secret": [
+              "Succeeded"
+            ]
+          },
+          "inputs": {
+            "variables": [
+              {
+                "name": "nextLink",
+                "type": "string",
+                "value": "@{parameters('Graph base URL (cts_GraphBaseUrl)')}/v1.0/users?$select=id,displayName,mail,department,accountEnabled&$expand=manager($select=id,displayName)&$top=@{parameters('Graph page size (cts_GraphPageSize)')}"
+              }
+            ]
+          }
+        },
+        "Initialize_users_without_manager": {
+          "type": "InitializeVariable",
+          "runAfter": {
+            "Initialize_next_link": [
+              "Succeeded"
+            ]
+          },
+          "inputs": {
+            "variables": [
+              {
+                "name": "usersWithoutManager",
+                "type": "array",
+                "value": []
+              }
+            ]
+          }
+        },
+        "Initialize_pages": {
+          "type": "InitializeVariable",
+          "runAfter": {
+            "Initialize_users_without_manager": [
+              "Succeeded"
+            ]
+          },
+          "inputs": {
+            "variables": [
+              {
+                "name": "pages",
+                "type": "integer",
+                "value": 0
+              }
+            ]
+          }
+        },
+        "Initialize_graph_error": {
+          "type": "InitializeVariable",
+          "runAfter": {
+            "Initialize_pages": [
+              "Succeeded"
+            ]
+          },
+          "inputs": {
+            "variables": [
+              {
+                "name": "graphError",
+                "type": "object",
+                "value": {}
+              }
+            ]
+          }
+        },
+        "Get_all_pages": {
+          "type": "Until",
+          "runAfter": {
+            "Initialize_graph_error": [
+              "Succeeded"
+            ]
+          },
+          "expression": "@empty(variables('nextLink'))",
+          "limit": {
+            "count": 100,
+            "timeout": "PT1H"
+          },
+          "actions": {
+            "Get_users_page": {
+              "type": "Http",
+              "runAfter": {},
+              "inputs": {
+                "method": "GET",
+                "uri": "@variables('nextLink')",
+                "headers": {
+                  "Accept": "application/json"
+                },
+                "authentication": {
+                  "type": "ActiveDirectoryOAuth",
+                  "authority": "@parameters('Entra authority (cts_EntraAuthority)')",
+                  "tenant": "@parameters('Entra tenant ID (cts_EntraTenantId)')",
+                  "audience": "@parameters('Graph base URL (cts_GraphBaseUrl)')",
+                  "clientId": "@parameters('Graph client ID (cts_GraphClientId)')",
+                  "credentialType": "Secret",
+                  "secret": "@body('Get_client_secret')?['EnvironmentVariableSecretValue']"
+                },
+                "retryPolicy": {
+                  "type": "exponential",
+                  "count": 4,
+                  "interval": "PT10S",
+                  "minimumInterval": "PT5S",
+                  "maximumInterval": "PT2M"
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Without_manager_on_page": {
+              "type": "Query",
+              "runAfter": {
+                "Get_users_page": [
+                  "Succeeded"
+                ]
+              },
+              "inputs": {
+                "from": "@body('Get_users_page')?['value']",
+                "where": "@and(equals(item()?['accountEnabled'], true), equals(item()?['manager']?['id'], null))"
+              }
+            },
+            "Merge_page": {
+              "type": "Compose",
+              "runAfter": {
+                "Without_manager_on_page": [
+                  "Succeeded"
+                ]
+              },
+              "inputs": "@union(variables('usersWithoutManager'), body('Without_manager_on_page'))"
+            },
+            "Store_users": {
+              "type": "SetVariable",
+              "runAfter": {
+                "Merge_page": [
+                  "Succeeded"
+                ]
+              },
+              "inputs": {
+                "name": "usersWithoutManager",
+                "value": "@outputs('Merge_page')"
+              }
+            },
+            "Count_page": {
+              "type": "IncrementVariable",
+              "runAfter": {
+                "Store_users": [
+                  "Succeeded"
+                ]
+              },
+              "inputs": {
+                "name": "pages",
+                "value": 1
+              }
+            },
+            "Set_next_link": {
+              "type": "SetVariable",
+              "runAfter": {
+                "Count_page": [
+                  "Succeeded"
+                ]
+              },
+              "inputs": {
+                "name": "nextLink",
+                "value": "@{coalesce(body('Get_users_page')?['@odata.nextLink'], '')}"
+              }
+            },
+            "Stop_paging": {
+              "type": "SetVariable",
+              "runAfter": {
+                "Get_users_page": [
+                  "Failed",
+                  "TimedOut"
+                ]
+              },
+              "inputs": {
+                "name": "nextLink",
+                "value": ""
+              }
+            },
+            "Record_graph_error": {
+              "type": "SetVariable",
+              "runAfter": {
+                "Stop_paging": [
+                  "Succeeded"
+                ]
+              },
+              "inputs": {
+                "name": "graphError",
+                "value": {
+                  "status": "@outputs('Get_users_page')?['statusCode']",
+                  "message": "@{coalesce(body('Get_users_page')?['error']?['message'], body('Get_users_page')?['error_description'], 'No details in the response')}"
+                }
+              }
+            },
+            "Page_done": {
+              "type": "Compose",
+              "runAfter": {
+                "Set_next_link": [
+                  "Succeeded",
+                  "Skipped"
+                ],
+                "Record_graph_error": [
+                  "Succeeded",
+                  "Skipped"
+                ]
+              },
+              "inputs": "@variables('pages')"
+            }
+          }
+        },
+        "Paging_failed": {
+          "type": "If",
+          "runAfter": {
+            "Get_all_pages": [
+              "Succeeded",
+              "Failed",
+              "TimedOut"
+            ]
+          },
+          "expression": "@not(equals(variables('graphError')?['status'], null))",
+          "actions": {
+            "Notify_failure": {
+              "type": "OpenApiConnection",
+              "runAfter": {},
+              "inputs": {
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365",
+                  "connectionName": "shared_office365",
+                  "operationId": "SendEmailV2"
+                },
+                "parameters": {
+                  "emailMessage/To": "automation-admins@contoso.com",
+                  "emailMessage/Subject": "Directory check failed: Graph returned @{variables('graphError')?['status']}",
+                  "emailMessage/Body": "<p>Page @{add(variables('pages'), 1)} of GET /users failed after the retry policy: @{variables('graphError')?['message']}</p><p>Run: @{workflow()?['run']?['name']}</p>",
+                  "emailMessage/Importance": "High"
+                },
+                "authentication": "@parameters('$authentication')"
+              }
+            },
+            "Fail_the_run": {
+              "type": "Terminate",
+              "runAfter": {
+                "Notify_failure": [
+                  "Succeeded",
+                  "Failed"
+                ]
+              },
+              "inputs": {
+                "runStatus": "Failed",
+                "runError": {
+                  "code": "GraphCallFailed",
+                  "message": "@{variables('graphError')?['status']}: @{variables('graphError')?['message']}"
+                }
+              }
+            }
+          },
+          "else": {
+            "actions": {
+              "Has_findings": {
+                "type": "If",
+                "runAfter": {},
+                "expression": {
+                  "and": [
+                    {
+                      "greater": [
+                        "@length(variables('usersWithoutManager'))",
+                        0
+                      ]
+                    }
+                  ]
+                },
+                "actions": {
+                  "Findings_table": {
+                    "type": "Table",
+                    "runAfter": {},
+                    "inputs": {
+                      "from": "@sort(variables('usersWithoutManager'), 'displayName')",
+                      "format": "HTML",
+                      "columns": [
+                        {
+                          "header": "Name",
+                          "value": "@item()?['displayName']"
+                        },
+                        {
+                          "header": "Mail",
+                          "value": "@item()?['mail']"
+                        },
+                        {
+                          "header": "Department",
+                          "value": "@coalesce(item()?['department'], '-')"
+                        }
+                      ]
+                    }
+                  },
+                  "Send_report": {
+                    "type": "OpenApiConnection",
+                    "runAfter": {
+                      "Findings_table": [
+                        "Succeeded"
+                      ]
+                    },
+                    "inputs": {
+                      "host": {
+                        "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365",
+                        "connectionName": "shared_office365",
+                        "operationId": "SendEmailV2"
+                      },
+                      "parameters": {
+                        "emailMessage/To": "purchasing-team@contoso.com",
+                        "emailMessage/Subject": "@{length(variables('usersWithoutManager'))} enabled users have no manager in Entra",
+                        "emailMessage/Body": "<p>Their purchase requests go to the purchasing team instead of a manager. Checked @{variables('pages')} page(s) of users.</p>@{body('Findings_table')}",
+                        "emailMessage/Importance": "Normal"
+                      },
+                      "authentication": "@parameters('$authentication')"
+                    }
+                  }
+                },
+                "else": {
+                  "actions": {}
+                }
+              }
+            }
+          }
+        }
+      },
+      "outputs": {}
+    },
+    "templateName": ""
+  },
+  "schemaVersion": "1.0.0.0"
+}

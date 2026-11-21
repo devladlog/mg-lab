@@ -1,0 +1,84 @@
+# Written-down exceptions. Each suppression says WHY, targets one resource type in one environment
+# and EXPIRES, so a trade-off made for a lab can't silently become the production design.
+---
+# Synopsis: Lab runs one B1 instance without zones: cost over resilience (WAF trade-off).
+apiVersion: github.com/microsoft/PSRule/v1
+kind: SuppressionGroup
+metadata:
+  name: lab-single-instance-plan
+spec:
+  expiresOn: '2027-06-30T00:00:00Z'
+  rule:
+    - Azure.AppService.PlanInstanceCount
+    - Azure.AppService.AvailabilityZone
+    - Azure.AppService.MinPlan
+  if:
+    allOf:
+      - field: type
+        equals: Microsoft.Web/serverfarms
+      - field: tags.environment
+        equals: lab
+---
+# Synopsis: Lab data is disposable: locally redundant storage is enough.
+apiVersion: github.com/microsoft/PSRule/v1
+kind: SuppressionGroup
+metadata:
+  name: lab-lrs-storage
+spec:
+  expiresOn: '2027-06-30T00:00:00Z'
+  rule:
+    - Azure.Storage.UseReplication
+  if:
+    allOf:
+      - field: type
+        equals: Microsoft.Storage/storageAccounts
+      - field: tags.environment
+        equals: lab
+---
+# Synopsis: Lab vault must be purgeable so tear-down leaves nothing behind.
+apiVersion: github.com/microsoft/PSRule/v1
+kind: SuppressionGroup
+metadata:
+  name: lab-purgeable-vault
+spec:
+  expiresOn: '2027-06-30T00:00:00Z'
+  rule:
+    - Azure.KeyVault.PurgeProtect
+  if:
+    allOf:
+      - field: type
+        equals: Microsoft.KeyVault/vaults
+      - field: tags.environment
+        equals: lab
+---
+# Synopsis: Lab logs aren't replicated to a second region.
+apiVersion: github.com/microsoft/PSRule/v1
+kind: SuppressionGroup
+metadata:
+  name: lab-log-replication
+spec:
+  expiresOn: '2027-06-30T00:00:00Z'
+  rule:
+    - Azure.Log.Replication
+  if:
+    allOf:
+      - field: type
+        equals: Microsoft.OperationalInsights/workspaces
+      - field: tags.environment
+        equals: lab
+---
+# Synopsis: Workspace replication deferred until the disaster-recovery region is chosen (ADR-004).
+apiVersion: github.com/microsoft/PSRule/v1
+kind: SuppressionGroup
+metadata:
+  name: prod-log-replication-deferred
+spec:
+  expiresOn: '2027-03-31T00:00:00Z'
+  rule:
+    - Azure.Log.Replication
+  if:
+    allOf:
+      - field: type
+        equals: Microsoft.OperationalInsights/workspaces
+      - field: tags.environment
+        equals: prod

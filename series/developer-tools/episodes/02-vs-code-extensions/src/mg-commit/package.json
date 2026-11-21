@@ -1,0 +1,68 @@
+{
+  "name": "mg-commit",
+  "displayName": "MG Commit Helper",
+  "description": "Compose Conventional Commit messages in the Source Control box, validated as you type.",
+  "version": "0.1.0",
+  "publisher": "contoso",
+  "license": "MIT",
+  "private": true,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/devladlog/mg-lab.git"
+  },
+  "engines": {
+    "vscode": "^1.100.0"
+  },
+  "categories": ["SCM Providers", "Other"],
+  "keywords": ["git", "conventional commits", "commit message"],
+  "extensionDependencies": ["vscode.git"],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "mgCommit.compose",
+        "title": "Compose Conventional Commit",
+        "category": "MG",
+        "icon": "$(edit)"
+      }
+    ],
+    "menus": {
+      "scm/title": [
+        {
+          "command": "mgCommit.compose",
+          "when": "scmProvider == git",
+          "group": "navigation"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "MG Commit Helper",
+      "properties": {
+        "mgCommit.types": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^[a-z]+$" },
+          "default": ["feat", "fix", "docs", "refactor", "test", "build", "ci", "chore", "perf", "style", "revert"],
+          "description": "Commit types offered first in the picker. Keep in sync with the commit-msg hook."
+        },
+        "mgCommit.scopes": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": [],
+          "description": "Scopes for this repository, e.g. api, orders, infra. Set them in the workspace settings."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p .",
+    "lint": "tsc -p . --noEmit",
+    "test": "npm run compile && node --test out/test/*.test.js",
+    "package": "vsce package"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/vscode": "~1.100.0",
+    "@vscode/vsce": "^3.0.0",
+    "typescript": "^5.9.0"
+  }
+}

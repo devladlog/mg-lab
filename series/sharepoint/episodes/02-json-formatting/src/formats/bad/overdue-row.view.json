@@ -1,0 +1,33 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/sp/v2/column-formatting.schema.json",
+  "debugMode": true,
+  "additionalRowClass": "=if(@currentField <= today(), 'sp-field-severity--severeWarning', '')",
+  "rowFormatter": {
+    "elmType": "div",
+    "style": {
+      "float": "left"
+    },
+    "children": [
+      {
+        "elmType": "span",
+        "txtContent": "@currentField"
+      },
+      {
+        "elmType": "span",
+        "txtContent": "[$Department]"
+      },
+      {
+        "elmType": "a",
+        "txtContent": "Escalate",
+        "attributes": {
+          "href": "='javascript:alert(' + [$ID] + ')'",
+          "onclick": "x"
+        }
+      },
+      {
+        "elmType": "span",
+        "txtContent": "=[$Requester.title] + ' / ' + [$Amount]"
+      }
+    ]
+  }
+}

@@ -1,0 +1,272 @@
+# DEVLADLOG Power Apps — episode 02. Draft: code scenes are real excerpts from src/ and tests/, screen scenes need the lab recording.
+episode: 2
+slug: canvas-apps-fundamentals
+series_label: "POWER APPS"
+series_name: "DEVLADLOG Power Apps"
+file_prefix: "powerapps"
+title: "Canvas apps fundamentals, with tested formulas"
+subtitle: "Gallery, delegation, validation and honest error handling"
+voice: am_michael
+thumbnail_text: "CANVAS APPS\nFORMULAS\nTESTED"
+youtube:
+  title: "Canvas Apps Fundamentals: Delegation, Validation, IfError, Tested Power Fx | DEVLADLOG Power Apps #2"
+  tags: [canvas apps, Power Apps, Power Fx, delegation, Dataverse, IfError, named formulas, pa.yaml, Power Apps Studio, low code, Power Platform]
+sources:
+  - https://www.devladlog.com/articles/powerapps/2026-02-06-canvas-apps-fundamentals-complete-guide-2026/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Canvas apps, fundamentals done right"
+    sub: "A real app, and formulas that actually run in tests"
+    short: hook
+    narration: >
+      Most canvas apps work fine in the demo and then quietly show the wrong data, or say saved when it wasn't. In this
+      episode we build a small canvas app on Dataverse and run its formulas in fifty-two automated tests, with
+      Microsoft's own Power Fx engine. One of those tests caught a bug in my first version. Welcome to DEVLADLOG Power Apps.
+
+  - id: when
+    type: bullets
+    heading: "Canvas or model-driven?"
+    bullets:
+      - "Canvas: you design every screen, phone or tablet"
+      - "Model-driven: forms and views come from the data"
+      - "Same Dataverse tables can serve both"
+      - "Building canvas apps needs no licence"
+      - "Running this one does: Dataverse is premium"
+    narration: >
+      Canvas or model-driven? In a canvas app you design every screen, ideal for a focused task on a phone. Model-driven
+      apps generate forms and views from the data. They can share the same tables, and today we reuse the ones from
+      episode one. Building a canvas app needs no licence, but because this one uses Dataverse, every user needs a Power
+      Apps premium licence to run it.
+
+  - id: plan
+    type: bullets
+    heading: "Equipment Desk, phone edition"
+    bullets:
+      - "Browse: search box, available-only toggle, gallery"
+      - "Lend: borrower email, loan and due dates"
+      - "One error label, Lend button disabled until it's empty"
+      - "Save the loan, mark the device on loan"
+      - "Source kept as pa.yaml, formulas tested in .NET"
+    narration: >
+      Two screens. Browse has a search box, an available only toggle and a gallery. Lend has the borrower's email, two
+      dates, one error label, and a Lend button that stays disabled until there's nothing wrong. Saving creates the loan
+      and marks the device as on loan. The app is kept as pa dot yaml source, the format Studio writes into every app file.
+
+  - id: source
+    type: code
+    heading: "The app as source: named formulas first"
+    lang: yaml
+    code: |
+      # App.pa.yaml
+      App:
+        Properties:
+          StartScreen: =BrowseScreen
+          # Named formulas: declared once, recalculated automatically, no OnStart needed.
+          Formulas: |-
+            =DefaultLoanDays = 14;
+            MaxLoanDays = 90;
+    narration: >
+      Here's the app file. Start screen, and two named formulas: fourteen days by default, ninety at most. Named formulas
+      replace the old habit of setting variables in On Start. Microsoft's guidance reports Studio load times dropping by as
+      much as eighty percent with that change alone, and named formulas can't be changed by accident with Set.
+
+  - id: gallery
+    type: code
+    heading: "A gallery formula Dataverse can delegate"
+    lang: text
+    code: |
+      Items:
+        Sort(
+            Filter(
+                Equipment,
+                (StartsWith('Asset tag', txtSearch.Text) || StartsWith(Name, txtSearch.Text))
+                    && (!tglAvailableOnly.Value || Status = 'Status (Equipment)'.Available)
+            ),
+            'Asset tag'
+        )
+    narration: >
+      The gallery shows Equipment filtered by the search box, prefix match on asset tag or name, and optionally only
+      available devices, sorted by asset tag. Every piece is on Microsoft's list of operations Dataverse can delegate:
+      filter, starts with on text, equals on a choice, and sort on one column. Note how local choices are named: the column,
+      then the table in brackets.
+
+  - id: delegation
+    type: bullets
+    heading: "Delegation in one slide"
+    bullets:
+      - "Delegated: Dataverse runs the query, you get every match"
+      - "Not delegated: only the first 500 rows are processed"
+      - "Data row limit: default 500, maximum 10,000"
+      - "Dataverse: Text(column), Len and Trim don't delegate"
+      - "While testing, set the limit to 1"
+    narration: >
+      Why that matters. When a query is delegated, Dataverse runs it and you get every match. When any part can't be
+      delegated, Power Apps processes only the first five hundred rows, and you just get a warning. You can raise the limit
+      to ten thousand, but that only hides the problem. For Dataverse, wrapping a column in Text, Len or Trim breaks
+      delegation. Microsoft's tip: set the limit to one while you test.
+
+  - id: rowlimit
+    type: screen
+    heading: "Data row limit 1: still every match"
+    image: screens/data-row-limit.jpg
+    bar: "Power Apps Studio · Settings · General"
+    short: delegation
+    demo: >
+      Power Apps Studio. First capture: Settings > General with "Data row limit" set to 1. Second capture (cut to): the
+      Browse screen in preview with "CT-01" typed in the search box, the gallery showing both CT-0107 and CT-0108, and no
+      delegation warning (no yellow triangle) on the gallery. Mask environment and user.
+    narration: >
+      So here's the proof. Data row limit set to one. If our formula weren't delegated, the gallery would show at most one
+      device. Type C T zero one and both monitors appear, and there's no delegation warning on the gallery. Dataverse did
+      the filtering, not the phone.
+
+  - id: validation
+    type: code
+    heading: "One label, every rule"
+    lang: text
+    code: |
+      Text:
+        With(
+            { days: DateDiff(dpLoan.SelectedDate, dpDue.SelectedDate, TimeUnit.Days) },
+            If(
+                galEquipment.Selected.Status <> 'Status (Equipment)'.Available, "This device is not available.",
+                IsBlank(txtEmail.Text), "Enter the borrower's email.",
+                !IsMatch(txtEmail.Text, Match.Email), "That doesn't look like an email address.",
+                days < 0, "The due date can't be before the loan date.",
+                days > MaxLoanDays, "Loans are limited to " & MaxLoanDays & " days.",
+                ""
+            )
+        )
+
+      DisplayMode (btnLend):  If(IsBlank(lblError.Text), DisplayMode.Edit, DisplayMode.Disabled)
+    narration: >
+      Validation lives in one label. The first problem wins: device not available, missing email, malformed email, due date
+      before the loan date, or longer than ninety days. Empty text means valid, and the Lend button's display mode simply
+      checks whether the label is empty.
+
+  - id: tests
+    type: code
+    heading: "Fifty-two tests on Microsoft's Power Fx engine"
+    lang: text
+    code: |
+      $ dotnet test EquipmentDesk.Canvas.Tests
+        Passed  Every_file_is_valid_against_the_official_pa_yaml_v3_schema(file: "LendScreen.pa.yaml")
+        Passed  Every_logic_formula_binds_against_the_Dataverse_shaped_tables(control: "galEquipment", property: "Items")
+        Passed  Search_matches_the_start_of_the_asset_tag
+        Passed  Toggle_off_shows_every_device
+        Passed  Ninety_days_is_allowed_ninety_one_is_not
+        Passed  Lend_saves_the_loan_marks_the_device_on_loan_and_goes_back
+        Passed  Two_writes_are_not_a_transaction_when_the_second_fails_the_loan_is_already_saved
+        Passed  Gallery_Items_uses_only_functions_Dataverse_can_delegate
+
+      Passed!  - Failed: 0, Passed: 52, Total: 52
+    narration: >
+      Now the testing. The tests read the pa dot yaml files, validate them against Microsoft's official schema, and run the
+      formulas on the open source Power Fx interpreter, against in-memory tables with the same display names and choices
+      as Dataverse. Navigate, Back and Notify are stubs that record their calls. Fifty-two tests, under two seconds. They
+      can't prove delegation, so that part is a lint against Microsoft's list.
+
+  - id: gotcha
+    type: code
+    heading: "The bug the tests caught"
+    lang: text
+    short: gotcha
+    code: |
+      // first version
+      IfError(
+          Collect(Loans, {...});
+          Patch(Equipment, galEquipment.Selected, { Status: 'Status (Equipment)'.'On loan' });
+          Notify("Loan saved", NotificationType.Success);
+          Back(),
+          Notify("Could not save the loan: " & FirstError.Message, NotificationType.Error)
+      )
+
+      // the device update fails (no Write privilege on Equipment):
+      Notify(Success): Loan saved
+      Back()
+      Notify(Error): Could not save the loan: denied
+    narration: >
+      And here's the bug. My first Lend button chained everything with semicolons inside one If Error. When the device
+      update failed, the user saw loan saved, went back, and then saw an error. Microsoft's docs are clear: in a chain, the
+      second Patch is attempted even if the first fails, and the chain doesn't stop. A test simulating a missing
+      privilege showed it immediately.
+
+  - id: fix
+    type: code
+    heading: "The fix: one IfError pair per write"
+    lang: text
+    code: |
+      IfError(
+          Collect(Loans, {...}),
+          Notify("Could not save the loan: " & FirstError.Message, NotificationType.Error),
+          Patch(Equipment, galEquipment.Selected, { Status: 'Status (Equipment)'.'On loan' }),
+          Notify("Loan saved, but the device status wasn't updated: " & FirstError.Message, NotificationType.Warning),
+          Notify("Loan saved: " & galEquipment.Selected.'Asset tag', NotificationType.Success);
+          Back()
+      )
+    narration: >
+      The fix is If Error with a pair per write. If the loan fails, say so and stop. If the device update fails, say what
+      actually happened: the loan is saved, the status isn't. Only when both succeed do we show success and go back. And
+      remember, two writes are never one transaction. If you need a hard guarantee, move the second write to the server.
+
+  - id: lend
+    type: screen
+    heading: "Validation on the phone"
+    image: screens/lend-validation.jpg
+    bar: "Power Apps · Equipment Desk (phone) · Lend"
+    demo: >
+      App in preview (or the Power Apps mobile app, screen-mirrored). Lend screen for CT-0042 Laptop 14, email
+      alex.demo@contoso.com, due date set one day before the loan date: red label "The due date can't be before the loan
+      date." and the Lend button greyed out. Then fix the due date: label empty, button enabled.
+    narration: >
+      On the phone. Pick C T zero zero four two, type the borrower's email, and set the due date a day before the loan
+      date. The label explains the problem and Lend is disabled. Fix the date and the button comes back.
+
+  - id: saved
+    type: screen
+    heading: "Saved, and honest about it"
+    image: screens/saved.jpg
+    bar: "Power Apps · Equipment Desk (phone) · Browse"
+    demo: >
+      Tap Lend: green notification "Loan saved: CT-0042" and the app is back on Browse; with "Available only" on,
+      CT-0042 is no longer in the list. Optional cutaway (screens/warning.jpg): run as a test user whose role can create
+      Loans but not write Equipment, and capture the yellow "Loan saved, but the device status wasn't updated" banner.
+    narration: >
+      Tap Lend. Loan saved, back to the list, and the laptop is gone from the available devices. And with a test user who
+      can create loans but not edit equipment, the app says exactly what happened, instead of a cheerful saved.
+
+  - id: same-data
+    type: screen
+    heading: "Same data, model-driven app"
+    image: screens/model-driven-loan.jpg
+    bar: "Model-driven app · Equipment Desk · Loans"
+    demo: >
+      The model-driven app from episode 1: Loans view showing the loan just created from the phone
+      ("CT-0042 - alex.demo - <today>"), and the CT-0042 equipment record with Status "On loan". Mask environment and user.
+    narration: >
+      And in the model-driven app from episode one, the same loan is already there, with the same name format, and the
+      laptop shows on loan. One data model, two kinds of app, each doing what it's good at.
+
+  - id: recap
+    type: bullets
+    heading: "Five rules"
+    bullets:
+      - "Write gallery formulas Dataverse can delegate; test with row limit 1"
+      - "Named formulas instead of OnStart variables"
+      - "One place for validation, the button just reads it"
+      - "One IfError pair per write; never trust a chain"
+      - "Keep the source, test the formulas"
+    narration: >
+      Five rules. Write gallery formulas Dataverse can delegate, and test with the row limit at one. Use named formulas
+      instead of variables in On Start. Keep validation in one place. Give every write its own If Error pair. And keep the
+      source and test the formulas: it took one test to find a bug I'd have shipped.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The pa dot yaml source and all fifty-two tests are on GitHub, and the complete guide is on devladlog dot com. Links
+      are in the description. Next time: Power Fx formulas and tips. Subscribe so you don't miss it.

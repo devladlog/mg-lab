@@ -1,0 +1,12 @@
+// The naive YoY formula next to the model measure, by year (2026 only has ship dates, no orders)
+DEFINE
+    MEASURE Sales[YoY % naive] = DIVIDE([Sales Amount] - [Sales PY], [Sales PY])
+EVALUATE
+SUMMARIZECOLUMNS(
+    'Date'[Year],
+    "Sales", [Sales Amount],
+    "Sales PY", [Sales PY],
+    "YoY % naive", [YoY % naive],
+    "YoY %", [Sales YoY %]
+)
+ORDER BY 'Date'[Year]

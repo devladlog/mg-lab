@@ -1,0 +1,76 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/sp/site-design-script-actions.schema.json",
+  "actions": [
+    {
+      "verb": "setRegionalSettings",
+      "timeZone": 2,
+      "locale": 2070,
+      "sortOrder": 25,
+      "hourFormat": "24"
+    },
+    {
+      "verb": "setSiteBranding",
+      "navigationLayout": "Megamenu",
+      "headerLayout": "Compact",
+      "headerBackground": "Soft",
+      "showFooter": true
+    },
+    {
+      "verb": "setSiteExternalSharingCapability",
+      "capability": "Disabled"
+    },
+    {
+      "verb": "createSPList",
+      "listName": "Purchasing FAQ",
+      "templateType": 100,
+      "subactions": [
+        {
+          "verb": "setDescription",
+          "description": "Questions people ask the purchasing team, with the answers."
+        },
+        {
+          "verb": "addSPField",
+          "fieldType": "Note",
+          "displayName": "Answer",
+          "internalName": "FaqAnswer",
+          "id": "1a4f53e1-6c4b-491b-b3e7-2d73b2730924",
+          "isRequired": true,
+          "addToDefaultView": true
+        },
+        {
+          "verb": "addSPFieldXml",
+          "schemaXml": "<Field ID=\"{62b3e203-0fb8-4319-9606-1dfc98ed1c61}\" Type=\"Choice\" DisplayName=\"Category\" Required=\"TRUE\" Format=\"Dropdown\" StaticName=\"FaqCategory\" Name=\"FaqCategory\"><Default>Ordering</Default><CHOICES><CHOICE>Ordering</CHOICE><CHOICE>Approvals</CHOICE><CHOICE>Suppliers</CHOICE><CHOICE>Invoices</CHOICE></CHOICES></Field>",
+          "addToDefaultView": true
+        },
+        {
+          "verb": "addSPView",
+          "name": "By category",
+          "viewFields": ["LinkTitle", "FaqCategory", "FaqAnswer"],
+          "query": "<OrderBy><FieldRef Name=\"FaqCategory\" /><FieldRef Name=\"Title\" /></OrderBy>",
+          "rowLimit": 100,
+          "isPaged": true,
+          "makeDefault": true
+        }
+      ]
+    },
+    {
+      "verb": "addNavLink",
+      "url": "/SitePages/how-to-buy.aspx",
+      "displayName": "How to buy",
+      "isWebRelative": true
+    },
+    {
+      "verb": "addNavLink",
+      "url": "/Lists/Purchasing FAQ",
+      "displayName": "FAQ",
+      "isWebRelative": true
+    },
+    {
+      "verb": "addNavLink",
+      "url": "/SitePages/how-to-buy.aspx",
+      "displayName": "Purchasing policy",
+      "navComponent": "Footer",
+      "isWebRelative": true
+    }
+  ]
+}

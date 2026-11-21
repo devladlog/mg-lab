@@ -1,29 +1,273 @@
-# DEVLADLOG Microsoft 365 — episode 01 (stub: write the scenes after building the demo)
+# DEVLADLOG Microsoft 365 — episode 01 (draft: code and tests are real; screen scenes still need the lab recording)
 episode: 1
 slug: tenant-administration-monitoring
 series_label: "MICROSOFT 365"
 series_name: "DEVLADLOG Microsoft 365"
 file_prefix: "microsoft-365"
 title: "Tenant Administration & Monitoring"
-subtitle: "Built for real, in a lab tenant"
+subtitle: "A read-only health check on Microsoft Graph, tested and scheduled"
 voice: am_michael
-thumbnail_text: "TENANT ADMINISTRATION & MONITORING"
+thumbnail_text: "TENANT\nHEALTH CHECK\nWITH GRAPH"
 youtube:
-  title: "Tenant Administration & Monitoring (Real Demo) | DEVLADLOG Microsoft 365 #1"
-  tags: []
+  title: "Microsoft 365 Tenant Health Check with Graph and PowerShell (Real Demo) | DEVLADLOG Microsoft 365 #1"
+  tags: [Microsoft 365, M365 admin, Microsoft Graph, PowerShell, service health, message center, Secure Score, licensing, Global Administrator, Pester, tenant monitoring]
 sources:
   - https://www.devladlog.com/articles/office-365/2025-07-10-tenant-administration-complete-guide-2025/
+
 scenes:
   - id: hook
     type: title
-    heading: "Tenant Administration & Monitoring"
-    sub: "Built for real, in a lab tenant"
+    heading: "Your tenant is already telling you"
+    sub: "Service health, deadlines, licences, admins: one report"
     short: hook
     narration: >
-      TODO
+      Your Microsoft 365 tenant is already telling you what's wrong. A service is degraded, a message center deadline
+      is next week, a licence pool is full, and someone added a guest as Global Administrator. The problem is that it's
+      spread over five admin centers. In this episode we pull it into one read-only report with Microsoft Graph and
+      PowerShell, test it, and schedule it.
+
+  - id: watch
+    type: bullets
+    heading: "What an admin actually has to watch"
+    bullets:
+      - "Service health: incidents and advisories"
+      - "Message center: posts with an action-required date"
+      - "Licences: full, unused or in a grace period"
+      - "Global Administrators: how many, and who"
+      - "Secure Score trend, and inactive licensed users"
+    narration: >
+      Here's what an admin actually has to watch. Service health, for incidents and advisories. The message center,
+      for posts with an action required date. Licences that are full, unused, or in a grace period. Who holds Global
+      Administrator. And two slower signals: the Secure Score trend, and licensed users who stopped signing in.
+
+  - id: plan
+    type: bullets
+    heading: "What we're building"
+    bullets:
+      - "A PowerShell module: collection and analysis kept apart"
+      - "GET only, least-privileged read scopes"
+      - "Every check returns findings with a severity"
+      - "Markdown report, plus an exit code for schedulers"
+      - "Thirty-eight Pester tests, no tenant needed"
+    narration: >
+      We're building a small PowerShell module. Collection and analysis are kept apart: a few functions talk to Graph,
+      everything else is pure logic that turns JSON into findings with a severity. It only ever sends GET requests, with
+      read scopes. It writes a markdown report, returns an exit code a scheduler can act on, and thirty-eight Pester
+      tests run without a tenant.
+
+  - id: scopes
+    type: code
+    heading: "Least privilege, one scope per API"
+    lang: powershell
+    code: |
+      $script:RequiredScopes = @(
+          'ServiceHealth.Read.All'        # healthOverviews, issues
+          'ServiceMessage.Read.All'       # message center
+          'Reports.Read.All'              # usage reports (CSV)
+          'ReportSettings.Read.All'       # concealed names setting
+          'LicenseAssignment.Read.All'    # subscribedSkus
+          'RoleManagement.Read.Directory' # role assignments
+          'SecurityEvents.Read.All'       # secureScores
+      )
+      # Invoke-TenantHealthCheck.ps1
+      Connect-MgGraph -Scopes (Get-M365RequiredScope) -NoWelcome
+    narration: >
+      Each Graph API documents its least privileged permission, so we ask for exactly those. Service health, service
+      messages, reports, report settings, licence assignment, directory role management and security events. All read.
+      Nothing here can change the tenant, which makes it much easier to get approved.
+
+  - id: paging
+    type: code
+    heading: "One GET helper, every page"
+    lang: powershell
+    code: |
+      function Invoke-M365GraphGet {
+          param([Parameter(Mandatory)][string]$Uri, [int]$MaxPages = 100)
+          $next = $Uri
+          $page = 0
+          while ($next) {
+              if (++$page -gt $MaxPages) { throw "Stopped after $MaxPages pages of $Uri" }
+              $resp = Invoke-MgGraphRequest -Method GET -Uri $next -OutputType PSObject -ErrorAction Stop
+              if ($null -eq $resp.PSObject.Properties['value']) { return $resp }   # single object, no paging
+              foreach ($item in $resp.value) { $item }
+              $next = Get-M365Prop $resp '@odata.nextLink'
+          }
+      }
+    narration: >
+      All collection goes through one helper. It calls Invoke M g Graph Request and keeps following the odata next link
+      until the last page, with a safety limit. Single objects come back as they are. Because it's one function, the
+      tests mock it once and every check is covered.
+
+  - id: health
+    type: code
+    heading: "Service health, case-insensitive on purpose"
+    lang: powershell
+    code: |
+      $script:HealthState = @{
+          serviceoperational          = 'Healthy'
+          servicerestored             = 'Healthy'
+          restoringservice            = 'Recovering'
+          extendedrecovery            = 'Recovering'
+          servicedegradation          = 'Degraded'
+          serviceinterruption         = 'Down'
+          # ... 11 documented values in total
+      }
+      function Get-M365HealthState {
+          param([AllowNull()][string]$Status)
+          if (-not $Status) { return 'Unknown' }
+          $state = $script:HealthState[$Status.ToLowerInvariant()]
+          if ($state) { $state } else { 'Unknown' }
+      }
+    narration: >
+      Service health returns one status per service. The documentation lists the values in camel case, but its own
+      sample responses use Pascal case, so we compare without case. Each status maps to healthy, recovering, degraded
+      or down, and anything new maps to unknown instead of being silently treated as fine.
+
+  - id: admins
+    type: code
+    heading: "Global Administrators: the documented thresholds"
+    lang: powershell
+    code: |
+      # Get-M365TenantSnapshot: assignments with the principal expanded
+      '/v1.0/roleManagement/directory/roleAssignments' +
+          "?`$filter=roleDefinitionId eq '$script:GlobalAdminRoleId'&`$expand=principal"
+
+      # Get-M365TenantFinding
+      $r = Get-M365GlobalAdminReport -Assignments @($ga)
+      if ($r.Count -ge 5) { & $add 'High' "$($r.Count) active Global Administrator assignments" 'Microsoft recommends fewer than five.' }
+      if ($r.Count -lt 2) { & $add 'Medium' "Only $($r.Count) Global Administrator" 'Microsoft recommends two cloud-only emergency access accounts.' }
+      foreach ($g in $r.Guests)   { & $add 'High' "Guest holds Global Administrator: $($g.DisplayName)" }
+      foreach ($d in $r.Disabled) { & $add 'Low' "Disabled account still holds Global Administrator: $($d.DisplayName)" }
+    narration: >
+      For privileged access we read the Global Administrator role assignments with the principal expanded. Microsoft
+      recommends fewer than five Global Administrators, and two cloud-only emergency access accounts. So five or more
+      is high, fewer than two is medium, a guest with the role is high, and a disabled account that still holds it is
+      low. These are active assignments. Eligible assignments in Privileged Identity Management are a separate API.
+
+  - id: sample
+    type: screen
+    heading: "Fictional tenant, real report"
+    image: screens/sample-run.jpg
+    bar: "PowerShell · Invoke-TenantHealthCheck -FromSnapshot (fictional contoso data)"
+    demo: >
+      Local terminal, no sign-in. Run: ./Invoke-TenantHealthCheck.ps1 -FromSnapshot ../tests/fixtures/snapshot.json
+      -Now 2026-11-20T09:30:00Z -OutFile ../sample/report.md -FailOnHigh. Capture the findings table (5 High first:
+      EMSPREMIUM grace period, MC000005 overdue, MC000001 in 4 days, 5 Global Administrators, guest Global Administrator)
+      and the red line "5 high-severity finding(s)".
+    narration: >
+      Before touching a tenant, here's a saved snapshot of a fictional contoso tenant. Five high findings come first:
+      a licence in its grace period, one message center post overdue and one due in four days, five Global
+      Administrators, and one of them is a guest. Then the medium and low ones. And because we passed fail on high, the
+      exit code is one.
+
+  - id: live
+    type: screen
+    heading: "The same check, live in the lab tenant"
+    image: screens/live-run.jpg
+    bar: "PowerShell · Invoke-TenantHealthCheck (lab tenant, masked)"
+    short: live
+    demo: >
+      Lab tenant, delegated sign-in (Connect-MgGraph shows the consent for the 7 read scopes the first time). Run
+      ./Invoke-TenantHealthCheck.ps1 -OutFile ./report.md -SnapshotFile ./snapshot.json. Capture the findings table.
+      Mask tenant name, UPNs and any real message center IDs if they identify the tenant. Re-record narration numbers to
+      match what is on screen.
+    narration: >
+      Now the lab tenant. Sign in once, consent to the seven read scopes, and the same command collects everything in
+      a few seconds. If one section fails, for example because the signed-in role can't read it, the report says which
+      one and keeps going instead of crashing. The snapshot is saved as JSON, so every report can be re-rendered and
+      audited later.
+
+  - id: concealed
+    type: screen
+    heading: "The gotcha: every user is a hash"
+    image: screens/concealed.jpg
+    bar: "Usage report · getOffice365ActiveUserDetail (concealed)"
+    short: gotcha
+    demo: >
+      Lab tenant with the default report setting (concealed names ON). Show the first rows of the downloaded active
+      users CSV (Import-Csv | Select-Object -First 3 'User Principal Name','Display Name') with hashed values, then the
+      Info finding "Usage reports are concealed; inactive users cannot be named". Nothing to mask: the values are hashes.
+    narration: >
+      Here's the gotcha. The inactive users check came back with names like this: long hashes. Since the first of
+      September twenty twenty-one, Microsoft 365 hides user details in usage reports by default, and that setting also
+      applies to the Graph reports API. So the module detects hashed names, reads the report setting, and reports it as
+      information instead of naming the wrong people.
+
+  - id: setting
+    type: screen
+    heading: "Whether to show names is a privacy decision"
+    image: screens/report-setting.jpg
+    bar: "Microsoft 365 admin center · Settings · Org settings · Reports"
+    demo: >
+      Microsoft 365 admin center > Settings > Org settings > Services > Reports panel, showing the checkbox
+      "Conceal user, group, and site names in all reports". Do NOT change it on camera unless the lab owner agrees;
+      just show it. Mask the tenant name in the header.
+    narration: >
+      The switch lives in org settings, under reports. Clearing it shows real names everywhere: admin center, Graph and
+      Power BI. That's a privacy decision for your organization, not a script fix, and showing identifiable information
+      is a logged event in the audit log. Also note the roles: Global Reader only sees tenant level data in usage
+      reports. For per user detail, use Reports Reader.
+
+  - id: tests
+    type: code
+    heading: "Thirty-eight tests, no tenant"
+    lang: text
+    code: |
+      $ Invoke-Pester ./tests
+      Describing Service health
+        [+] maps ServiceOperational to Healthy
+        [+] counts only unresolved issues per service
+      Describing Usage reports
+        [+] detects a concealed report
+        [+] treats day 29 as active and skips deleted and unlicensed users
+      Describing Graph collection (mocked)
+        [+] follows @odata.nextLink across pages
+        [+] records a failing section and still collects the others
+      Describing Real Microsoft Graph PowerShell parameters
+        [+] Invoke-MgGraphRequest has every parameter the module uses
+
+      Tests Passed: 38, Failed: 0, Skipped: 0
+    narration: >
+      All of this is covered by thirty-eight Pester tests: status mapping, deadlines, licence flags, the thirty day
+      boundary measured from the report's own refresh date, paging, and partial failures. One group even checks our
+      calls against the real Microsoft Graph PowerShell module, so a renamed parameter breaks the build, not the
+      Monday report.
+
+  - id: schedule
+    type: code
+    heading: "Run it every morning"
+    lang: powershell
+    code: |
+      # App-only: certificate auth, application permissions with admin consent
+      ./Invoke-TenantHealthCheck.ps1 -TenantId $tenantId -ClientId $appId `
+          -CertificateThumbprint $thumb -OutFile ./report.md -FailOnHigh
+
+      # Exit code 1 when there is at least one High finding:
+      # the pipeline or runbook turns red, and the report is attached.
+    narration: >
+      To make it monitoring instead of a one-off, run it unattended with an app registration and a certificate, using
+      the same read permissions as application permissions with admin consent. Fail on high returns exit code one when
+      there's at least one high finding, so a pipeline or runbook turns red and the report goes with it.
+
+  - id: recap
+    type: bullets
+    heading: "Five rules for tenant monitoring"
+    bullets:
+      - "Read-only, least-privileged scopes"
+      - "Keep collection apart from analysis, and test the analysis"
+      - "One failing section must not hide the others"
+      - "Usage reports are concealed by default: detect it"
+      - "Fewer than five Global Administrators, two emergency accounts"
+    narration: >
+      Five rules. Read only, with least privileged scopes. Keep collection apart from analysis, and test the analysis.
+      Never let one failing section hide the others. Remember that usage reports are concealed by default, and detect
+      it. And keep fewer than five Global Administrators, with two emergency access accounts.
+
   - id: outro
     type: outro
     heading: "Code on GitHub, guides on devladlog.com"
     sub: "github.com/devladlog/mg-lab"
     narration: >
-      TODO
+      The module, the tests and the fictional snapshot are on GitHub, and the complete guide is on dev lad log dot com.
+      Links are in the description. Next in this series: Microsoft Teams architecture and governance. Subscribe so you
+      don't miss it.

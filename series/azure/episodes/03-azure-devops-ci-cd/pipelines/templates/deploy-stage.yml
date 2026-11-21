@@ -1,0 +1,52 @@
+# Deploy one environment: what-if -> gate -> Bicep -> probe package -> /healthz.
+# The deployment job targets an Azure DevOps environment, so that environment's approvals and checks run
+# before this stage starts, and every run is recorded in its deployment history.
+parameters:
+  - name: name
+    type: string
+  - name: dependsOn
+    type: object
+  - name: environment
+    type: string
+  - name: serviceConnection        # template parameter = known at compile time (a runtime variable won't do)
+    type: string
+  - name: resourceGroup
+    type: string
+  - name: parameterFile
+    type: string
+  - name: acceptProtectedChanges
+    type: boolean
+    default: false
+
+stages:
+  - stage: ${{ parameters.name }}
+    displayName: Deploy ${{ parameters.name }}
+    dependsOn: ${{ parameters.dependsOn }}
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+    jobs:
+      - deployment: deploy
+        displayName: ${{ parameters.resourceGroup }}
+        environment: ${{ parameters.environment }}
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                # A deployment job doesn't check out the repo by default; pipeline artifacts (the probe
+                # package) are downloaded automatically to $(Pipeline.Workspace)/<artifact>.
+                - checkout: self
+                  fetchDepth: 1
+                - task: AzureCLI@2
+                  displayName: what-if, gate, deploy, publish, health
+                  inputs:
+                    azureSubscription: ${{ parameters.serviceConnection }}
+                    scriptType: bash
+                    scriptLocation: scriptPath
+                    scriptPath: $(pipelineDir)/pipelines/scripts/deploy.sh
+                    arguments: >-
+                      --resource-group ${{ parameters.resourceGroup }}
+                      --parameters $(workloadDir)/infra/${{ parameters.parameterFile }}
+                      --policy $(pipelineDir)/pipelines/gate-policy.json
+                      --package $(Pipeline.Workspace)/probe/probe.zip
+                      --accept-protected ${{ parameters.acceptProtectedChanges }}
+                      --summary $(Agent.TempDirectory)/whatif-${{ parameters.name }}.md
+                      --azure-devops

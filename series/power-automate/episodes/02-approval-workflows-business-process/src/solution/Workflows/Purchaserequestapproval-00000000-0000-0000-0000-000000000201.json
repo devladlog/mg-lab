@@ -1,0 +1,519 @@
+{
+  "properties": {
+    "connectionReferences": {
+      "shared_sharepointonline": {
+        "runtimeSource": "embedded",
+        "connection": {
+          "connectionReferenceLogicalName": "cts_sharedsharepointonline_purchasing"
+        },
+        "api": {
+          "name": "shared_sharepointonline"
+        }
+      },
+      "shared_office365": {
+        "runtimeSource": "embedded",
+        "connection": {
+          "connectionReferenceLogicalName": "cts_sharedoffice365_purchasing"
+        },
+        "api": {
+          "name": "shared_office365"
+        }
+      },
+      "shared_office365users": {
+        "runtimeSource": "embedded",
+        "connection": {
+          "connectionReferenceLogicalName": "cts_sharedoffice365users_purchasing"
+        },
+        "api": {
+          "name": "shared_office365users"
+        }
+      },
+      "shared_approvals": {
+        "runtimeSource": "embedded",
+        "connection": {
+          "connectionReferenceLogicalName": "cts_sharedapprovals_purchasing"
+        },
+        "api": {
+          "name": "shared_approvals"
+        }
+      }
+    },
+    "definition": {
+      "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+      "contentVersion": "1.0.0.0",
+      "parameters": {
+        "$connections": {
+          "defaultValue": {},
+          "type": "Object"
+        },
+        "$authentication": {
+          "defaultValue": {},
+          "type": "SecureObject"
+        }
+      },
+      "triggers": {
+        "When_a_purchase_request_is_created": {
+          "type": "OpenApiConnection",
+          "recurrence": {
+            "interval": 5,
+            "frequency": "Minute"
+          },
+          "splitOn": "@triggerOutputs()?['body/value']",
+          "conditions": [
+            {
+              "expression": "@equals(triggerBody()?['Status']?['Value'], 'Pending')"
+            }
+          ],
+          "inputs": {
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+              "connectionName": "shared_sharepointonline",
+              "operationId": "GetOnNewItems"
+            },
+            "parameters": {
+              "dataset": "https://contoso.sharepoint.com/sites/Purchasing",
+              "table": "Purchase Requests"
+            },
+            "authentication": "@parameters('$authentication')"
+          }
+        }
+      },
+      "actions": {
+        "Initialize_fallback_approver": {
+          "type": "InitializeVariable",
+          "runAfter": {},
+          "inputs": {
+            "variables": [
+              {
+                "name": "fallbackApprover",
+                "type": "string",
+                "value": "purchasing-team@contoso.com"
+              }
+            ]
+          }
+        },
+        "Initialize_decision": {
+          "type": "InitializeVariable",
+          "runAfter": {
+            "Initialize_fallback_approver": [
+              "Succeeded"
+            ]
+          },
+          "inputs": {
+            "variables": [
+              {
+                "name": "decision",
+                "type": "object",
+                "value": {
+                  "outcome": "Pending",
+                  "by": "",
+                  "comments": ""
+                }
+              }
+            ]
+          }
+        },
+        "Is_small_amount": {
+          "type": "If",
+          "runAfter": {
+            "Initialize_decision": [
+              "Succeeded"
+            ]
+          },
+          "expression": {
+            "and": [
+              {
+                "less": [
+                  "@triggerBody()?['Amount']",
+                  500
+                ]
+              }
+            ]
+          },
+          "actions": {
+            "Auto_approve": {
+              "type": "SetVariable",
+              "runAfter": {},
+              "inputs": {
+                "name": "decision",
+                "value": {
+                  "outcome": "Approve",
+                  "by": "Policy: under 500 EUR",
+                  "comments": "Auto-approved"
+                }
+              }
+            }
+          },
+          "else": {
+            "actions": {
+              "Get_manager": {
+                "type": "OpenApiConnection",
+                "runAfter": {},
+                "inputs": {
+                  "host": {
+                    "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365users",
+                    "connectionName": "shared_office365users",
+                    "operationId": "Manager_V2"
+                  },
+                  "parameters": {
+                    "id": "@triggerBody()?['Author']?['Email']",
+                    "$select": "mail,displayName"
+                  },
+                  "authentication": "@parameters('$authentication')"
+                }
+              },
+              "Manager_email": {
+                "type": "Compose",
+                "runAfter": {
+                  "Get_manager": [
+                    "Succeeded",
+                    "Failed"
+                  ]
+                },
+                "inputs": "@coalesce(body('Get_manager')?['mail'], variables('fallbackApprover'))"
+              },
+              "Manager_approval": {
+                "type": "OpenApiConnectionWebhook",
+                "runAfter": {
+                  "Manager_email": [
+                    "Succeeded"
+                  ]
+                },
+                "limit": {
+                  "timeout": "P3D"
+                },
+                "inputs": {
+                  "host": {
+                    "apiId": "/providers/Microsoft.PowerApps/apis/shared_approvals",
+                    "connectionName": "shared_approvals",
+                    "operationId": "StartAndWaitForAnApproval"
+                  },
+                  "parameters": {
+                    "approvalType": "Basic",
+                    "WebhookApprovalCreationInput/title": "Manager approval: @{triggerBody()?['Title']} (@{triggerBody()?['Amount']} EUR)",
+                    "WebhookApprovalCreationInput/assignedTo": "@outputs('Manager_email')",
+                    "WebhookApprovalCreationInput/details": "**Requested by:** @{triggerBody()?['Author']?['DisplayName']}\n\n**Amount:** @{triggerBody()?['Amount']} EUR\n\n**Justification:** @{coalesce(triggerBody()?['Justification'], '-')}",
+                    "WebhookApprovalCreationInput/itemLink": "@triggerBody()?['{Link}']",
+                    "WebhookApprovalCreationInput/itemLinkDescription": "Purchase request #@{triggerBody()?['ID']}",
+                    "WebhookApprovalCreationInput/requestor": "@triggerBody()?['Author']?['Email']",
+                    "WebhookApprovalCreationInput/enableNotifications": true,
+                    "WebhookApprovalCreationInput/enableReassignment": true
+                  },
+                  "authentication": "@parameters('$authentication')"
+                }
+              },
+              "Record_manager_response": {
+                "type": "SetVariable",
+                "runAfter": {
+                  "Manager_approval": [
+                    "Succeeded"
+                  ]
+                },
+                "inputs": {
+                  "name": "decision",
+                  "value": {
+                    "outcome": "@body('Manager_approval')?['outcome']",
+                    "by": "@{first(body('Manager_approval')?['responses'])?['responder']?['displayName']} (manager)",
+                    "comments": "@{coalesce(first(body('Manager_approval')?['responses'])?['comments'], '')}"
+                  }
+                }
+              },
+              "Record_manager_timeout": {
+                "type": "SetVariable",
+                "runAfter": {
+                  "Manager_approval": [
+                    "TimedOut"
+                  ]
+                },
+                "inputs": {
+                  "name": "decision",
+                  "value": {
+                    "outcome": "TimedOut",
+                    "by": "Manager: no response within 3 days",
+                    "comments": ""
+                  }
+                }
+              },
+              "Needs_finance_approval": {
+                "type": "If",
+                "runAfter": {
+                  "Record_manager_response": [
+                    "Succeeded",
+                    "Skipped"
+                  ],
+                  "Record_manager_timeout": [
+                    "Succeeded",
+                    "Skipped"
+                  ]
+                },
+                "expression": {
+                  "and": [
+                    {
+                      "equals": [
+                        "@variables('decision')?['outcome']",
+                        "Approve"
+                      ]
+                    },
+                    {
+                      "greaterOrEquals": [
+                        "@triggerBody()?['Amount']",
+                        5000
+                      ]
+                    }
+                  ]
+                },
+                "actions": {
+                  "Finance_approval": {
+                    "type": "OpenApiConnectionWebhook",
+                    "runAfter": {},
+                    "limit": {
+                      "timeout": "P3D"
+                    },
+                    "inputs": {
+                      "host": {
+                        "apiId": "/providers/Microsoft.PowerApps/apis/shared_approvals",
+                        "connectionName": "shared_approvals",
+                        "operationId": "StartAndWaitForAnApproval"
+                      },
+                      "parameters": {
+                        "approvalType": "Basic",
+                        "WebhookApprovalCreationInput/title": "Finance approval: @{triggerBody()?['Title']} (@{triggerBody()?['Amount']} EUR)",
+                        "WebhookApprovalCreationInput/assignedTo": "finance-approvers@contoso.com",
+                        "WebhookApprovalCreationInput/details": "**Requested by:** @{triggerBody()?['Author']?['DisplayName']}\n\n**Amount:** @{triggerBody()?['Amount']} EUR\n\n**Justification:** @{coalesce(triggerBody()?['Justification'], '-')}",
+                        "WebhookApprovalCreationInput/itemLink": "@triggerBody()?['{Link}']",
+                        "WebhookApprovalCreationInput/itemLinkDescription": "Purchase request #@{triggerBody()?['ID']}",
+                        "WebhookApprovalCreationInput/requestor": "@triggerBody()?['Author']?['Email']",
+                        "WebhookApprovalCreationInput/enableNotifications": true,
+                        "WebhookApprovalCreationInput/enableReassignment": true
+                      },
+                      "authentication": "@parameters('$authentication')"
+                    }
+                  },
+                  "Record_finance_response": {
+                    "type": "SetVariable",
+                    "runAfter": {
+                      "Finance_approval": [
+                        "Succeeded"
+                      ]
+                    },
+                    "inputs": {
+                      "name": "decision",
+                      "value": {
+                        "outcome": "@body('Finance_approval')?['outcome']",
+                        "by": "@{first(body('Finance_approval')?['responses'])?['responder']?['displayName']} (finance)",
+                        "comments": "@{coalesce(first(body('Finance_approval')?['responses'])?['comments'], '')}"
+                      }
+                    }
+                  },
+                  "Record_finance_timeout": {
+                    "type": "SetVariable",
+                    "runAfter": {
+                      "Finance_approval": [
+                        "TimedOut"
+                      ]
+                    },
+                    "inputs": {
+                      "name": "decision",
+                      "value": {
+                        "outcome": "TimedOut",
+                        "by": "Finance: no response within 3 days",
+                        "comments": ""
+                      }
+                    }
+                  },
+                  "Finance_result": {
+                    "type": "Compose",
+                    "runAfter": {
+                      "Record_finance_response": [
+                        "Succeeded",
+                        "Skipped"
+                      ],
+                      "Record_finance_timeout": [
+                        "Succeeded",
+                        "Skipped"
+                      ]
+                    },
+                    "inputs": "@variables('decision')"
+                  }
+                },
+                "else": {
+                  "actions": {}
+                }
+              }
+            }
+          }
+        },
+        "Route_decision": {
+          "type": "Switch",
+          "runAfter": {
+            "Is_small_amount": [
+              "Succeeded"
+            ]
+          },
+          "expression": "@variables('decision')?['outcome']",
+          "cases": {
+            "Approved": {
+              "case": "Approve",
+              "actions": {
+                "Mark_approved": {
+                  "type": "OpenApiConnection",
+                  "runAfter": {},
+                  "inputs": {
+                    "host": {
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                      "connectionName": "shared_sharepointonline",
+                      "operationId": "PatchItem"
+                    },
+                    "parameters": {
+                      "dataset": "https://contoso.sharepoint.com/sites/Purchasing",
+                      "table": "Purchase Requests",
+                      "id": "@triggerBody()?['ID']",
+                      "item/Title": "@triggerBody()?['Title']",
+                      "item/Status/Value": "Approved",
+                      "item/DecisionBy": "@variables('decision')?['by']",
+                      "item/DecisionComments": "@variables('decision')?['comments']"
+                    },
+                    "authentication": "@parameters('$authentication')"
+                  }
+                },
+                "Notify_requester_approved": {
+                  "type": "OpenApiConnection",
+                  "runAfter": {
+                    "Mark_approved": [
+                      "Succeeded"
+                    ]
+                  },
+                  "inputs": {
+                    "host": {
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365",
+                      "connectionName": "shared_office365",
+                      "operationId": "SendEmailV2"
+                    },
+                    "parameters": {
+                      "emailMessage/To": "@triggerBody()?['Author']?['Email']",
+                      "emailMessage/Subject": "Approved: @{triggerBody()?['Title']}",
+                      "emailMessage/Body": "<p>Your purchase request was approved by @{variables('decision')?['by']}.</p><p>@{variables('decision')?['comments']}</p>"
+                    },
+                    "authentication": "@parameters('$authentication')"
+                  }
+                }
+              }
+            },
+            "Rejected": {
+              "case": "Reject",
+              "actions": {
+                "Mark_rejected": {
+                  "type": "OpenApiConnection",
+                  "runAfter": {},
+                  "inputs": {
+                    "host": {
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                      "connectionName": "shared_sharepointonline",
+                      "operationId": "PatchItem"
+                    },
+                    "parameters": {
+                      "dataset": "https://contoso.sharepoint.com/sites/Purchasing",
+                      "table": "Purchase Requests",
+                      "id": "@triggerBody()?['ID']",
+                      "item/Title": "@triggerBody()?['Title']",
+                      "item/Status/Value": "Rejected",
+                      "item/DecisionBy": "@variables('decision')?['by']",
+                      "item/DecisionComments": "@variables('decision')?['comments']"
+                    },
+                    "authentication": "@parameters('$authentication')"
+                  }
+                },
+                "Notify_requester_rejected": {
+                  "type": "OpenApiConnection",
+                  "runAfter": {
+                    "Mark_rejected": [
+                      "Succeeded"
+                    ]
+                  },
+                  "inputs": {
+                    "host": {
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365",
+                      "connectionName": "shared_office365",
+                      "operationId": "SendEmailV2"
+                    },
+                    "parameters": {
+                      "emailMessage/To": "@triggerBody()?['Author']?['Email']",
+                      "emailMessage/Subject": "Rejected: @{triggerBody()?['Title']}",
+                      "emailMessage/Body": "<p>Your purchase request was rejected by @{variables('decision')?['by']}.</p><p>Reason: @{variables('decision')?['comments']}</p>"
+                    },
+                    "authentication": "@parameters('$authentication')"
+                  }
+                }
+              }
+            },
+            "Timed_out": {
+              "case": "TimedOut",
+              "actions": {
+                "Mark_escalated": {
+                  "type": "OpenApiConnection",
+                  "runAfter": {},
+                  "inputs": {
+                    "host": {
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                      "connectionName": "shared_sharepointonline",
+                      "operationId": "PatchItem"
+                    },
+                    "parameters": {
+                      "dataset": "https://contoso.sharepoint.com/sites/Purchasing",
+                      "table": "Purchase Requests",
+                      "id": "@triggerBody()?['ID']",
+                      "item/Title": "@triggerBody()?['Title']",
+                      "item/Status/Value": "Escalated",
+                      "item/DecisionBy": "@variables('decision')?['by']"
+                    },
+                    "authentication": "@parameters('$authentication')"
+                  }
+                },
+                "Notify_purchasing_team": {
+                  "type": "OpenApiConnection",
+                  "runAfter": {
+                    "Mark_escalated": [
+                      "Succeeded"
+                    ]
+                  },
+                  "inputs": {
+                    "host": {
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365",
+                      "connectionName": "shared_office365",
+                      "operationId": "SendEmailV2"
+                    },
+                    "parameters": {
+                      "emailMessage/To": "@variables('fallbackApprover')",
+                      "emailMessage/Subject": "Escalated: @{triggerBody()?['Title']} (@{triggerBody()?['Amount']} EUR)",
+                      "emailMessage/Body": "<p>@{variables('decision')?['by']}. Please follow up.</p><p><a href=\"@{triggerBody()?['{Link}']}\">Open the request</a></p>",
+                      "emailMessage/Importance": "High"
+                    },
+                    "authentication": "@parameters('$authentication')"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "actions": {
+              "Unexpected_outcome": {
+                "type": "Terminate",
+                "runAfter": {},
+                "inputs": {
+                  "runStatus": "Failed",
+                  "runError": {
+                    "code": "UnexpectedOutcome",
+                    "message": "Approval outcome '@{variables('decision')?['outcome']}' isn't handled"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "outputs": {}
+    },
+    "templateName": ""
+  },
+  "schemaVersion": "1.0.0.0"
+}

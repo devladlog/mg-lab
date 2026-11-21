@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# Fake Azure CLI for the script tests: logs calls, answers what the episode scripts ask.
+echo "az $*" >> "${FAKE_LOG:?}"
+case "$1 $2" in
+  "account get-access-token") cat "${FAKE_TOKEN_FILE:?}" ;;
+  "ad app")
+    case "$3" in
+      show) if [[ "$*" == *"--query id"* ]]; then echo "00000000-0000-0000-0000-0000000000d1"; else cat "${FAKE_API_JSON:?}"; fi ;;
+      *) exit 0 ;;
+    esac ;;
+  "rest --method") all="$*"; body="${all##*--body @}"; cp "${body%% *}" "${FAKE_LOG}.body"; echo "{}" ;;
+  *) echo "fake az: unexpected: $*" >&2; exit 64 ;;
+esac

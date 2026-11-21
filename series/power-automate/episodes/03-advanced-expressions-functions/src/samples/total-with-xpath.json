@@ -1,0 +1,27 @@
+{
+  "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+  "contentVersion": "1.0.0.0",
+  "triggers": {
+    "manual": {
+      "type": "Request",
+      "kind": "Button",
+      "inputs": {
+        "schema": {
+          "type": "object",
+          "properties": {
+            "rows": {
+              "type": "array"
+            }
+          }
+        }
+      }
+    }
+  },
+  "actions": {
+    "Total": {
+      "type": "Compose",
+      "runAfter": {},
+      "inputs": "@xpath(xml(json(concat('{\"root\":{\"row\":', string(triggerBody()?['rows']), '}}'))), 'sum(/root/row/amount)')"
+    }
+  }
+}

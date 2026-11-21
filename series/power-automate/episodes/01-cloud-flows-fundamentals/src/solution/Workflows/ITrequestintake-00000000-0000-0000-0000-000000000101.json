@@ -1,0 +1,136 @@
+{
+  "properties": {
+    "connectionReferences": {
+      "shared_sharepointonline": {
+        "runtimeSource": "embedded",
+        "connection": { "connectionReferenceLogicalName": "cts_sharedsharepointonline_itrequests" },
+        "api": { "name": "shared_sharepointonline" }
+      },
+      "shared_office365": {
+        "runtimeSource": "embedded",
+        "connection": { "connectionReferenceLogicalName": "cts_sharedoffice365_itrequests" },
+        "api": { "name": "shared_office365" }
+      }
+    },
+    "definition": {
+      "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+      "contentVersion": "1.0.0.0",
+      "parameters": {
+        "$connections": { "defaultValue": {}, "type": "Object" },
+        "$authentication": { "defaultValue": {}, "type": "SecureObject" }
+      },
+      "triggers": {
+        "When_an_IT_request_is_created": {
+          "type": "OpenApiConnection",
+          "recurrence": { "interval": 5, "frequency": "Minute" },
+          "splitOn": "@triggerOutputs()?['body/value']",
+          "conditions": [
+            { "expression": "@not(startsWith(coalesce(triggerBody()?['Title'], ''), '[test]'))" }
+          ],
+          "inputs": {
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+              "connectionName": "shared_sharepointonline",
+              "operationId": "GetOnNewItems"
+            },
+            "parameters": {
+              "dataset": "https://contoso.sharepoint.com/sites/ITHelpdesk",
+              "table": "IT Requests"
+            },
+            "authentication": "@parameters('$authentication')"
+          }
+        }
+      },
+      "actions": {
+        "Initialize_SLA_hours": {
+          "type": "InitializeVariable",
+          "runAfter": {},
+          "inputs": {
+            "variables": [
+              {
+                "name": "slaHours",
+                "type": "integer",
+                "value": "@if(equals(triggerBody()?['Priority']?['Value'], 'High'), 4, 24)"
+              }
+            ]
+          }
+        },
+        "Due_date": {
+          "type": "Compose",
+          "runAfter": { "Initialize_SLA_hours": ["Succeeded"] },
+          "inputs": "@addHours(utcNow(), variables('slaHours'))"
+        },
+        "Is_high_priority": {
+          "type": "If",
+          "runAfter": { "Due_date": ["Succeeded"] },
+          "expression": {
+            "and": [
+              { "equals": ["@triggerBody()?['Priority']?['Value']", "High"] }
+            ]
+          },
+          "actions": {
+            "Alert_on_call_engineer": {
+              "type": "OpenApiConnection",
+              "runAfter": {},
+              "inputs": {
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365",
+                  "connectionName": "shared_office365",
+                  "operationId": "SendEmailV2"
+                },
+                "parameters": {
+                  "emailMessage/To": "it-oncall@contoso.com",
+                  "emailMessage/Subject": "HIGH priority IT request #@{triggerBody()?['ID']}: @{triggerBody()?['Title']}",
+                  "emailMessage/Body": "<p>@{triggerBody()?['Author']?['DisplayName']} raised a high priority @{triggerBody()?['Category']?['Value']} request.</p><p>Due: @{formatDateTime(outputs('Due_date'), 'yyyy-MM-dd HH:mm')} UTC</p><p><a href=\"@{triggerBody()?['{Link}']}\">Open the request</a></p>",
+                  "emailMessage/Importance": "High"
+                },
+                "authentication": "@parameters('$authentication')"
+              }
+            }
+          },
+          "else": { "actions": {} }
+        },
+        "Mark_as_triaged": {
+          "type": "OpenApiConnection",
+          "runAfter": { "Is_high_priority": ["Succeeded"] },
+          "inputs": {
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+              "connectionName": "shared_sharepointonline",
+              "operationId": "PatchItem"
+            },
+            "parameters": {
+              "dataset": "https://contoso.sharepoint.com/sites/ITHelpdesk",
+              "table": "IT Requests",
+              "id": "@triggerBody()?['ID']",
+              "item/Title": "@triggerBody()?['Title']",
+              "item/Status/Value": "Triaged",
+              "item/DueDate": "@outputs('Due_date')"
+            },
+            "authentication": "@parameters('$authentication')"
+          }
+        },
+        "Acknowledge_requester": {
+          "type": "OpenApiConnection",
+          "runAfter": { "Mark_as_triaged": ["Succeeded"] },
+          "inputs": {
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365",
+              "connectionName": "shared_office365",
+              "operationId": "SendEmailV2"
+            },
+            "parameters": {
+              "emailMessage/To": "@triggerBody()?['Author']?['Email']",
+              "emailMessage/Subject": "We received your IT request #@{triggerBody()?['ID']}",
+              "emailMessage/Body": "<p>Hi @{triggerBody()?['Author']?['DisplayName']},</p><p>Your request <b>@{triggerBody()?['Title']}</b> is triaged. Target: @{formatDateTime(outputs('Due_date'), 'yyyy-MM-dd HH:mm')} UTC (@{variables('slaHours')} hours).</p>"
+            },
+            "authentication": "@parameters('$authentication')"
+          }
+        }
+      },
+      "outputs": {}
+    },
+    "templateName": ""
+  },
+  "schemaVersion": "1.0.0.0"
+}

@@ -1,0 +1,56 @@
+{
+  "description": "What we found in a real-world-style legacy site (fictional data): every common mistake in one place.",
+  "lists": [
+    {
+      "title": "Legacy Requests",
+      "url": "Lists/LegacyRequests",
+      "template": "GenericList",
+      "expectedItems": 150000,
+      "versioning": { "enabled": true, "majorVersions": 50 },
+      "breakInheritance": true,
+      "plannedUniqueScopes": 8000,
+      "fields": [
+        { "internalName": "Request Status", "displayName": "Request Status", "type": "Choice",
+          "choices": ["New", "Done"] },
+        { "internalName": "Vendor", "displayName": "Vendor", "type": "Lookup", "lookupList": "Vendors", "indexed": true },
+        { "internalName": "Approver1", "type": "User" },
+        { "internalName": "Approver2", "type": "User" },
+        { "internalName": "Approver3", "type": "User" },
+        { "internalName": "Owner", "type": "User" },
+        { "internalName": "Buyer", "type": "User" },
+        { "internalName": "CostCentre", "type": "Lookup", "lookupList": "CostCentres" },
+        { "internalName": "Project", "type": "Lookup", "lookupList": "Projects" },
+        { "internalName": "Region", "type": "Lookup", "lookupList": "Regions" },
+        { "internalName": "Watchers", "type": "UserMulti" },
+        { "internalName": "Category", "type": "LookupMulti", "lookupList": "Categories" },
+        { "internalName": "Amount", "type": "Currency" }
+      ],
+      "views": [
+        { "title": "All Items", "default": true, "rowLimit": 30,
+          "fields": ["LinkTitle", "Request Status", "Amount"] },
+        { "title": "By vendor", "rowLimit": 30, "expectedRows": 9000,
+          "fields": ["LinkTitle", "Vendor", "Approver1", "Approver2", "Approver3", "Owner", "Buyer",
+                     "CostCentre", "Project", "Region", "Watchers", "Category", "Author", "Editor", "Amount"],
+          "filters": [ { "field": "Vendor", "op": "Eq", "value": "Fabrikam" } ] },
+        { "title": "Big ones", "rowLimit": 30,
+          "fields": ["LinkTitle", "Amount", "Budget"],
+          "filters": [ { "field": "Amount", "op": "Gt", "value": "10000" } ] }
+      ]
+    },
+    {
+      "title": "Shared Documents Archive",
+      "url": "Archive",
+      "template": "DocumentLibrary",
+      "expectedItems": 3000,
+      "folderDepth": 6,
+      "versioning": { "enabled": false },
+      "fields": [
+        { "internalName": "DocType", "displayName": "Document type", "type": "Choice", "choices": ["Contract", "Invoice"] },
+        { "internalName": "DocType", "displayName": "Doc type (copy)", "type": "Text" }
+      ],
+      "views": [
+        { "title": "All Documents", "default": true, "fields": ["DocIcon", "LinkFilename", "DocType"] }
+      ]
+    }
+  ]
+}

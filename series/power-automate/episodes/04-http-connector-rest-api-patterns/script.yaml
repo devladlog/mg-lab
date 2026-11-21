@@ -1,0 +1,278 @@
+# DEVLADLOG Power Automate — episode 04 (draft: material built and tested locally, demo still to record)
+episode: 4
+slug: http-connector-rest-api-patterns
+series_label: "POWER AUTOMATE"
+series_name: "DEVLADLOG Power Automate"
+file_prefix: "power-automate"
+title: "Calling a REST API that pages, throttles and fails"
+subtitle: "HTTP action, Entra ID OAuth, nextLink paging, retry policies"
+voice: am_michael
+thumbnail_text: "PAGE 1 OF 4\n429\nRETRY-AFTER"
+youtube:
+  title: "Power Automate HTTP Action: OAuth, Graph Paging, 429 Retries, Secrets | DEVLADLOG Power Automate #4"
+  tags: [Power Automate, HTTP action, REST API, Microsoft Graph, OAuth, pagination, retry policy, throttling, 429, Power Platform]
+sources:
+  - https://www.devladlog.com/articles/power-automate/2026-05-02-http-connector-patterns-complete-guide-2026/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Page one of four"
+    sub: "An HTTP call that pages, throttles and fails, tested"
+    short: hook
+    narration: >
+      Your flow calls an API and it works. Then the directory grows, and the flow quietly reads page one of four.
+      Then the API says four twenty-nine, too many requests. Then the secret shows up in run history. In this
+      episode we call Microsoft Graph with the HTTP action and handle all three, with tests against a local API.
+
+  - id: scenario
+    type: bullets
+    heading: "Why we need Graph"
+    bullets:
+      - "Episode 2: no manager in Entra means purchasing approves"
+      - "Who has no manager? Ask Microsoft Graph"
+      - "GET /users with $expand=manager, every Monday"
+      - "App registration, User.Read.All application permission"
+      - "Report to purchasing, alert admins on failure"
+    narration: >
+      Remember the approval flow: when a requester has no manager in Entra, purchasing approves instead. So
+      purchasing wants a weekly list of who has no manager. Graph answers that with get users, expanding the
+      manager. The flow signs in as an app registration with the user read all application permission.
+
+  - id: basics
+    type: bullets
+    heading: "The HTTP action in one slide"
+    bullets:
+      - "Premium connector, built into Power Automate"
+      - "Auth: Basic, client certificate, Entra ID OAuth, raw, managed identity"
+      - "Retried: 408, 429 and 5xx, per the retry policy"
+      - "Synchronous calls time out after 120 seconds"
+      - "202 Accepted plus Location: polled until done (a setting)"
+    narration: >
+      The HTTP action is premium. It supports basic, client certificate, Entra ID OAuth, raw and managed identity
+      authentication. Its retry policy resends on four oh eight, four twenty-nine and five hundreds. A synchronous
+      call times out after a hundred and twenty seconds. And by default, a two oh two with a location header is polled
+      until the work is done; the asynchronous pattern setting turns that off.
+
+  - id: app-registration
+    type: screen
+    heading: "One app, one permission"
+    image: screens/app-registration.jpg
+    bar: "Microsoft Entra admin center · App registrations · Directory checks"
+    demo: >
+      App registration "Directory checks (lab)": API permissions page with Microsoft Graph User.Read.All, type
+      Application, status "Granted for <tenant>" (mask the tenant name). Certificates & secrets page with one client
+      secret (value hidden, only the description and expiry). Mask Application (client) ID and Directory (tenant) ID.
+    narration: >
+      In Entra, one app registration with exactly one Graph permission, user read all, as an application
+      permission with admin consent. The client secret never goes into the flow. It lives in Azure Key Vault.
+
+  - id: env-vars
+    type: screen
+    heading: "Configuration lives in the solution"
+    image: screens/env-vars.jpg
+    bar: "Power Apps · Solutions · Directory Checks · Environment variables"
+    demo: >
+      The Directory Checks solution showing six environment variables: Entra authority, Entra tenant ID, Graph base
+      URL, Graph client ID, Graph page size (current value 2 for the demo) and Graph client secret of type Secret,
+      pointing to an Azure Key Vault secret (show the type, mask the vault path).
+    narration: >
+      Every setting is an environment variable in the solution: authority, tenant, Graph base URL, client ID and
+      page size. The client secret is a secret environment variable that points to Key Vault. Page size is two in
+      the lab, so we actually see paging with a handful of users.
+
+  - id: auth
+    type: code
+    heading: "Read the secret, hide it, use it"
+    lang: json
+    code: |
+      "Get_client_secret": {
+        "inputs": { "host": { "operationId": "PerformUnboundAction" },
+          "parameters": { "actionName": "RetrieveEnvironmentVariableSecretValue",
+                          "item/EnvironmentVariableName": "cts_GraphClientSecret" } },
+        "runtimeConfiguration": { "secureData": { "properties": ["outputs"] } }
+      },
+      "Get_users_page": { "type": "Http",
+        "inputs": { "method": "GET", "uri": "@variables('nextLink')",
+          "authentication": { "type": "ActiveDirectoryOAuth",
+            "tenant": "@parameters('Entra tenant ID (cts_EntraTenantId)')",
+            "audience": "@parameters('Graph base URL (cts_GraphBaseUrl)')",
+            "clientId": "@parameters('Graph client ID (cts_GraphClientId)')",
+            "secret": "@body('Get_client_secret')?['EnvironmentVariableSecretValue']" } },
+        "runtimeConfiguration": { "secureData": { "properties": ["inputs"] } } }
+    narration: >
+      The Dataverse action retrieve environment variable secret value reads the secret at run time, with secure
+      outputs on. The HTTP action uses Entra ID OAuth with that secret, and secure inputs on. Both settings come from
+      the Learn guidance, and a test checks the secret never appears in the run record.
+
+  - id: loop
+    type: code
+    heading: "Follow nextLink until it's gone"
+    lang: json
+    code: |
+      "nextLink": "@{parameters('Graph base URL (cts_GraphBaseUrl)')}/v1.0/users?$select=id,displayName,mail,
+                   department,accountEnabled&$expand=manager($select=id,displayName)&$top=@{parameters(...)}",
+
+      "Get_all_pages": { "type": "Until",
+        "expression": "@empty(variables('nextLink'))",
+        "limit": { "count": 100, "timeout": "PT1H" },
+        "actions": {
+          "Get_users_page": { "...": "the HTTP call" },
+          "Without_manager_on_page": { "type": "Query",
+            "where": "@and(equals(item()?['accountEnabled'], true), equals(item()?['manager']?['id'], null))" },
+          "Merge_page": { "inputs": "@union(variables('usersWithoutManager'), body('Without_manager_on_page'))" },
+          "Set_next_link": { "value": "@{coalesce(body('Get_users_page')?['@odata.nextLink'], '')}" } } }
+    narration: >
+      Graph pages its results and returns an at odata dot next link until the last page. So a do until loop calls
+      the link, filters enabled users without a manager, merges them, and stores the next link, or an empty string
+      when there isn't one. Set the loop limit yourself: the default is sixty iterations.
+
+  - id: retry
+    type: code
+    heading: "An explicit retry policy"
+    lang: json
+    code: |
+      "retryPolicy": {
+        "type": "exponential",
+        "count": 4,
+        "interval": "PT10S",
+        "minimumInterval": "PT5S",
+        "maximumInterval": "PT2M"
+      }
+
+      Retried:       408, 429, 5xx          Not retried:  400, 401, 403, 404 ...
+      Retry-After:   the response says how long to wait, and the action waits that long
+      Limits:        1 to 90 retries, intervals from 5 seconds to 1 day
+    narration: >
+      The retry policy is set explicitly: exponential, four retries, starting at ten seconds. Only four oh eight,
+      four twenty-nine and five hundreds are retried. A bad request or a wrong secret fails at once. And when the
+      response carries a retry after header, that tells the action how long to wait.
+
+  - id: retry-tests
+    type: code
+    heading: "Throttling, tested on demand"
+    lang: text
+    code: |
+      $ python -m mockgraph --port 8765 --throttle-page 2 &
+      $ python -m flowkit run Userswithoutamanager-*.json --params params-local.json --mocks mocks-local.json
+        Get_all_pages        Succeeded  (4 iterations)
+        Send_report          Succeeded
+        retried Get_users_page: 429 (waited 2s), 200
+      Run: Succeeded
+
+      test_429_waits_for_retry_after_then_continues            PASSED
+      test_a_persistent_outage_fails_loudly_after_the_retries  PASSED   503 x 5, waits 10, 20, 40, 80
+      test_a_wrong_secret_fails_at_the_token_and_never_calls_graph  PASSED
+    short: retry
+    narration: >
+      You can't make Graph throttle you on demand, so the repo has a small local stand-in. Here page two answers
+      four twenty-nine with retry after two seconds. The flow waits two seconds, retries, and finishes all four
+      pages. The tests also cover a long outage and a wrong secret.
+
+  - id: failure
+    type: code
+    heading: "Fail loudly, with the reason"
+    lang: json
+    code: |
+      "Stop_paging":        { "runAfter": { "Get_users_page": ["Failed", "TimedOut"] },
+                              "inputs": { "name": "nextLink", "value": "" } },
+      "Record_graph_error": { "inputs": { "name": "graphError", "value": {
+                                "status": "@outputs('Get_users_page')?['statusCode']",
+                                "message": "@{coalesce(body('Get_users_page')?['error']?['message'], ...)}" } } },
+      "Page_done":          { "runAfter": { "Set_next_link": ["Succeeded", "Skipped"],
+                                            "Record_graph_error": ["Succeeded", "Skipped"] } },
+
+      "Paging_failed": { "expression": "@not(equals(variables('graphError')?['status'], null))",
+        "actions": { "Notify_failure": { "...": "email to automation-admins" },
+                     "Fail_the_run": { "type": "Terminate", "inputs": { "runStatus": "Failed" } } } }
+    narration: >
+      When a page still fails after the retries, we stop paging, keep the status code and Graph's message, and
+      join the branches with page done, the lesson from the approvals episode. After the loop, admins get an
+      email with the reason, and the run ends as failed. No half report goes to purchasing.
+
+  - id: run-paging
+    type: screen
+    heading: "Four pages in the run history"
+    image: screens/run-paging.jpg
+    bar: "Power Automate · Users without a manager · Run history"
+    demo: >
+      Run details with Graph page size 2: Get all pages (Do until) showing 4 iterations with the iteration selector
+      at 4 of 4; Get users page expanded with the lock icon and its inputs hidden (outputs visible); Get client secret
+      with its outputs hidden. Mask the tenant and client IDs anywhere they appear.
+    narration: >
+      The real run. The do until loop ran four times, one per page. Get users page shows a lock: its inputs are
+      hidden, so the secret isn't in the history. The outputs are still there to debug the data.
+
+  - id: gotcha
+    type: code
+    heading: "The default retry policy is patient. Very patient."
+    lang: text
+    code: |
+      Learn, Power Automate limits, default retry policy (Medium and High profiles):
+        "up to 12 retries at exponentially increasing intervals, which scale by
+         seven (7) seconds up to an interval of approximately 1 hour"
+
+      test_without_a_retry_policy_an_outage_takes_hours_to_surface   PASSED
+        503 x 13 attempts, last waits capped at one hour (flowkit's model)
+        nobody hears about it for hours
+
+      flowkit lint: WARNING Get_users_page: no retryPolicy ... set an explicit policy
+    short: gotcha
+    narration: >
+      Here's the trap. Leave the retry policy on default, and on a premium or process licence Power Automate sends up
+      to twelve retries, with intervals growing to about an hour. A dead API keeps your run waiting for hours before anyone
+      hears about it. Set an explicit policy that matches how long the answer is still useful.
+
+  - id: tests
+    type: code
+    heading: "Twenty-seven tests against a local API"
+    lang: text
+    code: |
+      $ python -m pytest
+      27 passed in 10.3s
+
+      test_all_pages_are_read_and_only_enabled_users_without_a_manager_are_reported
+      test_the_next_link_is_used_as_an_opaque_url
+      test_rebuilding_the_next_page_url_with_skip_breaks
+      test_secret_is_hidden_in_run_history
+      test_a_400_is_not_retried
+      test_hard_coded_secret_is_an_error
+    narration: >
+      Twenty-seven tests. They run the real flow definition against the local API over real HTTP: paging, the next
+      link used as an opaque URL, because users doesn't support skip, retries, a four hundred that must not be
+      retried, secrets hidden, and a linter that rejects hard coded credentials.
+
+  - id: email
+    type: screen
+    heading: "The answer purchasing wanted"
+    image: screens/report-email.jpg
+    bar: "Outlook · purchasing-team"
+    demo: >
+      The report email in the purchasing-team test mailbox: subject "3 enabled users have no manager in Entra" (or
+      the lab count), first line about purchase requests going to purchasing, "Checked 4 page(s) of users", and the
+      Name / Mail / Department table with the lab test users (Casey Demo, Riley Contractor...).
+    narration: >
+      And the result: enabled users with no manager, sorted by name, with how many pages were read. Purchasing can
+      fix Entra before those requests land on their desk.
+
+  - id: recap
+    type: bullets
+    heading: "Five rules for REST calls"
+    bullets:
+      - "Secrets from Key Vault, secure inputs and outputs on"
+      - "Follow nextLink as an opaque URL, with a loop limit"
+      - "Set the retry policy you mean"
+      - "Retry 429 and 5xx; fail fast on other 4xx"
+      - "Fail loudly with the status and the message"
+    narration: >
+      Five rules. Secrets come from Key Vault, with secure inputs and outputs on. Follow the next link as an opaque
+      URL, with a loop limit you chose. Set the retry policy you mean. Retry throttling and server errors, fail fast
+      on everything else. And when it fails, fail loudly, with the status code and the message.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The solution, the local Graph stand-in, flowkit and all twenty-seven tests are on GitHub, and the complete
+      guide is on dev lad log dot com. Next in the series: SharePoint integration. Subscribe so you don't miss it.

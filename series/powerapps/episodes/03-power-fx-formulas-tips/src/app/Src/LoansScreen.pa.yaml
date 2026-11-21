@@ -1,0 +1,111 @@
+Screens:
+  LoansScreen:
+    Properties:
+      Fill: =RGBA(245, 246, 250, 1)
+    Children:
+      - lblLoansTitle:
+          Control: Label
+          Properties:
+            Text: ="Open loans"
+            X: =24
+            Y: =24
+            Width: =Parent.Width - 48
+            Height: =48
+            Size: =24
+            FontWeight: =FontWeight.Semibold
+      - lblSummary:
+          Control: Label
+          Properties:
+            # OverdueCount is a named formula (CountIf delegates to Dataverse and is exact up to 50,000 rows).
+            Text: |-
+              =If(
+                  OverdueCount = 0, "Nothing overdue",
+                  OverdueCount = 1, "1 loan is overdue",
+                  OverdueCount & " loans are overdue"
+              )
+            Color: =If(OverdueCount = 0, StateColor("Returned"), StateColor("Overdue"))
+            X: =24
+            Y: =72
+            Width: =Parent.Width - 48
+            Height: =32
+      - tglOverdueOnly:
+          Control: Classic/Toggle
+          Properties:
+            Default: =false
+            X: =24
+            Y: =112
+            Width: =96
+            Height: =40
+      - lblOverdueOnly:
+          Control: Label
+          Properties:
+            Text: ="Overdue only"
+            X: =128
+            Y: =112
+            Width: =200
+            Height: =40
+      - galLoans:
+          Control: Gallery
+          Properties:
+            # Delegable to Dataverse: Filter, IsBlank and < on a date column, Sort on one column. Today() is a constant
+            # for every row, so it is sent as a value. The per-row maths (working days, state) lives in the template
+            # labels, not in AddColumns: AddColumns output is capped at the data row limit (Learn: table shaping).
+            Items: |-
+              =Sort(
+                  Filter(
+                      Loans,
+                      IsBlank('Returned on') && (!tglOverdueOnly.Value || 'Due date' < Today())
+                  ),
+                  'Due date'
+              )
+            TemplateSize: =112
+            X: =0
+            Y: =160
+            Width: =Parent.Width
+            Height: =Parent.Height - 160
+          Children:
+            - lblLoanTitle:
+                Control: Label
+                Properties:
+                  Text: =ThisItem.Equipment.'Asset tag' & " · " & ThisItem.Equipment.Name
+                  X: =24
+                  Y: =8
+                  Width: =Parent.TemplateWidth - 160
+                  Height: =32
+                  FontWeight: =FontWeight.Semibold
+            - lblLoanDetail:
+                Control: Label
+                Properties:
+                  # With names a scalar once; the record never holds a table, so nothing here affects delegation.
+                  Text: |-
+                    =With(
+                        { state: LoanState(ThisItem.'Due date', ThisItem.'Returned on') },
+                        ThisItem.'Borrower email' & " · " &
+                        Switch(state,
+                            "Overdue", WorkingDays(WorkingDaysBetween(ThisItem.'Due date', Today())) & " late",
+                            "Due soon", "due " & Text(ThisItem.'Due date', "ddd d mmm", "en-GB") & " (soon)",
+                            "due " & Text(ThisItem.'Due date', "ddd d mmm", "en-GB"))
+                    )
+                  Color: =StateColor(LoanState(ThisItem.'Due date', ThisItem.'Returned on'))
+                  X: =24
+                  Y: =40
+                  Width: =Parent.TemplateWidth - 160
+                  Height: =28
+            - lblLoanNotes:
+                Control: Label
+                Properties:
+                  Text: =Coalesce(ThisItem.Notes, "No notes")
+                  X: =24
+                  Y: =70
+                  Width: =Parent.TemplateWidth - 160
+                  Height: =28
+            - btnRemind:
+                Control: Classic/Button
+                Properties:
+                  Text: ="Copy reminder"
+                  Visible: =LoanState(ThisItem.'Due date', ThisItem.'Returned on') = "Overdue"
+                  OnSelect: =CopyReminder(ThisItem.Equipment.'Asset tag' & " " & ThisItem.Equipment.Name, ThisItem.'Borrower email', ThisItem.'Due date')
+                  X: =Parent.TemplateWidth - 128
+                  Y: =32
+                  Width: =112
+                  Height: =40

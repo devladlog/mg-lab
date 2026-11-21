@@ -1,0 +1,274 @@
+# DEVLADLOG SharePoint — episode 03 (draft: screens to be captured in the lab tenant, see demo.md)
+episode: 3
+slug: modern-sites-pages
+series_label: "SHAREPOINT"
+series_name: "DEVLADLOG SharePoint"
+file_prefix: "sharepoint"
+title: "Modern sites and pages, as code"
+subtitle: "Site templates and page designs: lint, apply, read back"
+voice: am_michael
+thumbnail_text: "SITES\nAND PAGES\nAS CODE"
+youtube:
+  title: "SharePoint Site Templates & Modern Pages as Code with PnP PowerShell | DEVLADLOG SharePoint #3"
+  tags: [SharePoint, SharePoint Online, site templates, site scripts, site designs, modern pages, communication site, PnP PowerShell, Pester, Microsoft 365, intranet]
+sources:
+  - https://www.devladlog.com/articles/sharepoint/2026-03-15-modern-sites-pages-complete-guide-2026/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Your site, in git"
+    sub: "Site templates and page designs: lint, apply, read back"
+    short: hook
+    narration: >
+      Most SharePoint sites are configured by hand, once, and nobody can say what changed since. In this episode the
+      Contoso purchasing site is a site template and a set of page designs in git. We lint them, apply them with p n p
+      PowerShell, and read back what SharePoint actually did. Welcome to DEVLADLOG SharePoint.
+
+  - id: halves
+    type: bullets
+    heading: "A modern site has two halves"
+    bullets:
+      - "The site: regional settings, branding, navigation, lists, sharing"
+      - "Site template = site scripts, JSON, applied by SharePoint"
+      - "The pages: sections, columns, web parts"
+      - "No site script verb for page content: PnP builds the pages"
+      - "Same scenario: the Contoso purchasing team"
+    narration: >
+      A modern site has two halves. The site itself: regional settings, branding, navigation, lists and sharing. That's
+      a site template, made of site scripts in JSON, and SharePoint applies it. Then the pages: sections, columns and
+      web parts. Site scripts have no verb for page content, so p n p PowerShell builds the pages. Same scenario as
+      before: the Contoso purchasing team.
+
+  - id: limits
+    type: bullets
+    heading: "The limits Learn documents"
+    bullets:
+      - "30 actions when applied synchronously"
+      - "300 actions or 100,000 characters when applied async"
+      - "100 site scripts and 100 site templates per tenant"
+      - "Web template 68 = communication, 64 = team, 69 = channel"
+      - "Unknown verb: the upload fails"
+    short: limits
+    narration: >
+      The numbers first, from Microsoft Learn. A site script applied synchronously with Invoke S P O site design can
+      have thirty actions. Applied asynchronously, through the user interface or a site design task, it can have three
+      hundred, or one hundred thousand characters. A tenant holds one hundred site scripts and one hundred site
+      templates. And a verb SharePoint doesn't know fails the upload.
+
+  - id: script
+    type: code
+    heading: "The site script"
+    lang: json
+    code: |
+      { "verb": "setRegionalSettings", "timeZone": 2, "locale": 2070,
+        "sortOrder": 25, "hourFormat": "24" },
+      { "verb": "setSiteBranding", "navigationLayout": "Megamenu",
+        "headerLayout": "Compact", "headerBackground": "Soft", "showFooter": true },
+      { "verb": "setSiteExternalSharingCapability", "capability": "Disabled" },
+      { "verb": "createSPList", "listName": "Purchasing FAQ", "templateType": 100,
+        "subactions": [
+          { "verb": "addSPField", "fieldType": "Note", "displayName": "Answer",
+            "internalName": "FaqAnswer", "id": "1a4f53e1-6c4b-491b-b3e7-2d73b2730924",
+            "isRequired": true, "addToDefaultView": true } ] },
+      { "verb": "addNavLink", "url": "/SitePages/how-to-buy.aspx",
+        "displayName": "How to buy", "isWebRelative": true }
+    narration: >
+      Here's the purchasing site script. Portuguese locale and a twenty-four hour clock. A compact header, a mega menu
+      and a footer. External sharing off. A purchasing F A Q list whose fields all carry an I D, so applying the
+      template again updates the field instead of adding a second one. And navigation links. Eleven actions in total.
+
+  - id: lint
+    type: code
+    heading: "Lint before anything exists"
+    lang: text
+    code: |
+      $ ./Invoke-ModernSite.ps1 -TemplatePath ./bad/template.json
+      ERROR   PG003  page 'Landing Page!' / section 1 (OneColumnFullWidth)
+                     The full-width column exists only on communication sites.
+      ERROR   PG005  page 'Landing Page!'
+                     3 web parts use iframes (Embed, File viewer) ...
+      ERROR   SS001  #5 createList 'Projects'
+                     'createList' isn't a top-level action ...
+      ERROR   SS005  #6 createSPList 'Project Tracker' / 1 setTitle
+                     setTitle inside createSPList renames the list ...
+      ERROR   SS007  #1 setSiteLogo
+                     setSiteLogo only works on the communication site template (68) ...
+      WARNING SS004  #6 createSPList 'Project Tracker' / 2 addSPField
+                     No 'id': re-applying the template can add the field again ...
+      10 error(s), 9 warning(s)
+    narration: >
+      Now a template with every classic mistake, for a team site. A verb called create list, which doesn't exist.
+      Set title inside create S P list, which Learn says stops the list from updating when you apply the template again.
+      A site logo, which only works on communication sites. Fields without an I D. Ten errors, nine warnings, and no
+      tenant involved.
+
+  - id: rule
+    type: code
+    heading: "Each rule is a documented fact"
+    lang: powershell
+    code: |
+      if ($all.Count -gt $L.MaxActionsAsync) {
+          New-MgFinding 'SS002' 'Error' 'script' "$($all.Count) actions (counting subactions)..."
+      }
+      elseif ($all.Count -gt $L.MaxActionsSync) {
+          New-MgFinding 'SS003' 'Warning' 'script' "...too many for a synchronous Invoke-SPOSiteDesign"
+      }
+      ...
+      'setSiteLogo' {
+          if ($wt -ne 68) {
+              New-MgFinding 'SS007' 'Error' $t "setSiteLogo only works on the communication site template (68)..."
+          }
+      }
+    narration: >
+      Every rule is a few lines of PowerShell, tied to something Learn documents. Over three hundred actions is an
+      error. Over thirty is a warning: don't apply it synchronously. Subactions count too, to be safe. And a site logo
+      on anything but template sixty-eight is an error.
+
+  - id: page
+    type: code
+    heading: "A page is a JSON file too"
+    lang: json
+    code: |
+      { "name": "purchasing-home", "title": "Purchasing", "layout": "Home",
+        "sections": [
+          { "template": "TwoColumnLeft", "controls": [
+              { "column": 1, "type": "Text", "text": "<h2>Buy what you need, the right way</h2>..." },
+              { "column": 2, "type": "Text", "text": "<h3>Need help?</h3>..." } ] },
+          { "template": "OneColumn", "controls": [
+              { "column": 1, "type": "WebPart", "webPart": "News" } ] },
+          { "template": "OneColumn", "controls": [
+              { "column": 1, "type": "WebPart", "webPart": "List",
+                "properties": { "isDocumentLibrary": false,
+                                "selectedListId": "{listid:Purchasing FAQ}" } } ] } ] }
+    narration: >
+      Pages are JSON too. Sections with a layout, controls in columns: text, the news web part, and the F A Q list. The
+      list web part needs the list's G U I D, which doesn't exist yet, so the design uses a token and provisioning
+      looks it up. Add p n p page, add a section, add the parts, publish, set the home page.
+
+  - id: pagerules
+    type: bullets
+    heading: "Page rules from Page Diagnostics"
+    bullets:
+      - "3 or more iframe web parts: Attention required"
+      - "No more than 3 search requests per modern page"
+      - "Events and Highlighted content are search-driven"
+      - "Full-width column: communication sites only"
+      - "Column must exist in the section layout"
+    narration: >
+      The page rules come from the Page Diagnostics tool. Three or more web parts using iframes is attention required.
+      A modern page should make no more than three search requests, and Events and Highlighted content are the ones
+      that search, so four of them get a warning. Full-width sections exist only on communication sites.
+
+  - id: tests
+    type: code
+    heading: "40 Pester tests, real PnP signatures"
+    lang: text
+    code: |
+      $ Invoke-Pester ./tests -Output Detailed
+      Describing Test-MgSiteScript
+        [+] allows 30 actions for a synchronous apply; warns at 31
+        [+] allows 300 actions; 301 is an error
+      Describing Microsoft's site script schema
+        [+] reports one SS000 per bad action, with the reason
+      Describing Tenant functions (PnP cmdlets mocked)
+        [+] is idempotent: updates the existing script and template, adds nothing
+        [+] provisions the pages section by section, publishes them and sets the home page
+      Tests Passed: 40, Failed: 0, Skipped: 0
+    narration: >
+      Forty Pester tests cover the limits at their boundaries, Microsoft's published schema, and the tenant functions,
+      with the real p n p cmdlets mocked. Those mocks caught a real bug: a closure that bypassed the mock and
+      called the real cmdlet. Better here than in the demo.
+
+  - id: apply
+    type: screen
+    heading: "Register, apply, read back"
+    image: screens/apply-run.jpg
+    bar: "PowerShell 7 · Invoke-ModernSite.ps1"
+    demo: >
+      Terminal (dark theme, font 18+) after running Invoke-ModernSite.ps1 -TemplatePath ./src/purchasing/template.json
+      -AdminUrl -SiteUrl -ClientId -CreateSite against the lab tenant. Visible: "Lint ... No findings", AddScript /
+      AddTemplate rows, CreateSite, QueueTemplate, then the "Template run:" block with one Success line per action,
+      then the AddPage / AddSection / AddText / AddWebPart / Publish / SetHomePage rows. Mask tenant host, admin URL
+      and client id.
+    narration: >
+      Against the lab tenant. The template lints clean, the site script and the site template are registered, the
+      communication site is created, and the template is queued asynchronously. Then the important part: we read back
+      the run, one line per action, with its outcome. Then the three pages are built and published.
+
+  - id: site
+    type: screen
+    heading: "What the template configured"
+    image: screens/site-settings.jpg
+    bar: "Contoso Purchasing · Site settings"
+    demo: >
+      Browser on the new Contoso Purchasing site: compact header with the mega menu showing "How to buy" and "FAQ",
+      the footer link "Purchasing policy". Optional second capture: Site settings > Regional settings showing the
+      Portuguese locale and 24-hour time. Mask the tenant URL and avatar.
+    narration: >
+      In the browser, the compact header, the mega menu with how to buy and the F A Q, and the footer link. In regional
+      settings, the Portuguese locale and the twenty-four hour clock. Nobody clicked any of it.
+
+  - id: home
+    type: screen
+    heading: "The pages, from JSON"
+    image: screens/home-page.jpg
+    bar: "Contoso Purchasing · Home"
+    demo: >
+      Browser on the site home page (purchasing-home.aspx set as home): the two text columns, the News web part showing
+      "New approval limits from January", and the Purchasing FAQ list web part. Mask tenant URL and avatar.
+    narration: >
+      The home page, built from the page design: the welcome text and the help box, the news post about the new
+      approval limits, and the F A Q list. Re-running skips pages that already exist, unless you ask to recreate them.
+
+  - id: gotcha
+    type: bullets
+    heading: "The gotcha: the docs and the schema disagree"
+    bullets:
+      - "enableApprovals: on Learn, not in the schema"
+      - "addFile, addFolder: in the schema, not on Learn"
+      - "The schema requires isRequired, hidden, sortOrder"
+      - "Learn's samples contain /* comments */: not JSON"
+      - "Lint against both, pin the drift in a test"
+    short: gotcha
+    narration: >
+      The gotcha. Microsoft publishes a schema for site scripts, and Learn documents the verbs, and they don't agree.
+      Enable approvals is on Learn but not in the schema. Add file is in the schema but not on Learn. The schema also
+      requires properties the docs don't show. And two of Learn's samples contain comments, so they aren't valid JSON.
+      We lint against both, and a test pins the difference.
+
+  - id: export
+    type: screen
+    heading: "Bring a hand-built site under control"
+    image: screens/export-lint.jpg
+    bar: "PowerShell 7 · Invoke-ModernSite.ps1 -ExportFrom"
+    demo: >
+      Terminal: Invoke-ModernSite.ps1 -ExportFrom <a lab site configured by hand> -ClientId. Visible: "Exported to
+      exported.site-script.json" and the lint findings on the exported script (record whatever it reports, e.g. SS004
+      for fields without an id). Mask tenant host and client id.
+    narration: >
+      And for sites someone already built by hand: export a site script from the site, with branding and regional
+      settings, and lint it. Now it's a file you can review, fix and keep in git.
+
+  - id: recap
+    type: bullets
+    heading: "Five rules"
+    bullets:
+      - "Site template for the site, PnP for the pages"
+      - "Give every field an ID"
+      - "Apply asynchronously and read back the run"
+      - "Respect the Page Diagnostics baselines"
+      - "Export hand-built sites and lint them"
+    narration: >
+      Five rules. Site template for the site, p n p for the pages. Give every field an I D. Apply asynchronously and
+      read back the run. Respect the Page Diagnostics baselines. And export the sites people built by hand. Next
+      episode: document management.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The module, both templates and the Pester tests are on GitHub, and the full guide is on devladlog dot com. Links
+      are in the description. Subscribe for episode four, document management. This was DEVLADLOG SharePoint, by
+      Momento Galático.

@@ -1,0 +1,275 @@
+# DEVLADLOG Azure — episode 04. Draft script: code scenes are real excerpts from infra/, src/ and tests/,
+# screen scenes are captured by the recorder following demo.md.
+episode: 4
+slug: security-identity-entra-id
+series_label: "AZURE"
+series_name: "DEVLADLOG Azure"
+file_prefix: "azure"
+title: "An API with zero secrets"
+subtitle: "Entra ID app roles, scopes, managed identity, Graph Bicep"
+voice: am_michael
+thumbnail_text: "AN API WITH\nZERO\nSECRETS"
+youtube:
+  title: "Secure an Azure API with Entra ID: App Roles, Scopes, Managed Identity | DEVLADLOG Azure #4"
+  tags: [Microsoft Entra ID, Azure security, managed identity, app roles, OAuth scopes, Microsoft Graph Bicep, Microsoft.Identity.Web, ASP.NET Core, zero trust, Azure identity]
+sources:
+  - https://www.devladlog.com/articles/azure/2026-01-19-security-identity-entra-id-complete-guide-2026/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "An API with zero secrets"
+    sub: "Who is calling, and what are they allowed to do?"
+    short: hook
+    narration: >
+      Every API answers two questions on every request: who is calling, and what are they allowed to do? Most teams
+      answer the first one with a shared secret in a config file, and the second one not at all. In this episode we
+      protect an API with Entra ID, with zero secrets: not in the API, not in the client, not in the pipeline.
+      Welcome to DEVLADLOG Azure.
+
+  - id: federation
+    type: bullets
+    heading: "First: what signed in our pipeline?"
+    bullets:
+      - "Episode 3: an app registration, no secret"
+      - "It trusts tokens from Azure DevOps (federation)"
+      - "Swapped for an Entra access token at run time"
+      - "Managed identity: Azure holds the credential"
+    narration: >
+      First, a promise from last episode. The pipeline's service connection is an app registration with workload
+      identity federation. It trusts tokens issued for Azure DevOps, and at run time it swaps that token for an Entra
+      access token. Nothing is stored. A managed identity goes one step further: Azure holds the credential, and you
+      can't even see it. Today we use both ideas on our own API.
+
+  - id: callers
+    type: diagram
+    heading: "Two kinds of callers"
+    nodes: ["Person", "Scope", "Workload", "App role"]
+    labels: ["through a client app", "scp: Orders.Read", "managed identity", "roles: ReadWrite.All"]
+    narration: >
+      Our orders API has two kinds of callers. People, through a client application, get a delegated scope:
+      Orders dot Read, in the s c p claim. Workloads, like the order processor from episode one, call as themselves
+      with an app role: Orders dot ReadWrite dot All, in the roles claim. Different callers, different permissions.
+
+  - id: graph
+    type: code
+    heading: "Entra objects as code"
+    lang: bicep
+    code: |
+      extension microsoftGraphV1
+
+      resource api 'Microsoft.Graph/applications@v1.0' = {
+        uniqueName: '${workload}-orders-api'
+        identifierUris: [ 'api://${tenant().tenantId}/${workload}-orders' ]
+        api: {
+          requestedAccessTokenVersion: 2   // aud = the API's client ID
+          oauth2PermissionScopes: [ { value: 'Orders.Read', type: 'User', ... } ]
+        }
+        appRoles: [
+          { value: 'Orders.ReadWrite.All', allowedMemberTypes: ['Application'], ... }
+          { value: 'Orders.Reader',        allowedMemberTypes: ['User'], ... }
+        ]
+        optionalClaims: { accessToken: [ { name: 'idtyp' } ] }
+      }
+    narration: >
+      The app registration is Bicep, using the Microsoft Graph extension. The scope for people, two app roles, one for
+      applications and one for users, and the i d typ optional claim, which marks app-only tokens. Notice there's no
+      password or certificate anywhere. And we ask for version two access tokens.
+
+  - id: assign
+    type: code
+    heading: "Assignment required, managed identity assigned"
+    lang: bicep
+    code: |
+      resource apiSp 'Microsoft.Graph/servicePrincipals@v1.0' = {
+        appId: api.appId
+        appRoleAssignmentRequired: true      // no assignment, no token
+      }
+
+      resource processor 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
+        name: 'id-${workload}-order-processor'
+        location: location
+      }
+
+      resource processorCanWrite 'Microsoft.Graph/appRoleAssignedTo@v1.0' = {
+        appRoleId: ids.writeRole
+        principalId: processor.properties.principalId
+        resourceId: apiSp.id
+      }
+    narration: >
+      The service principal requires assignment, so an identity that isn't assigned to the API doesn't get a token at
+      all. The order processor gets a user-assigned managed identity, an Azure resource in the same template, and the
+      write role is assigned to it. Azure resources and Entra objects, one deployment.
+
+  - id: policies
+    type: code
+    heading: "The API decides with claims"
+    lang: csharp
+    code: |
+      builder.Services.AddMicrosoftIdentityWebApiAuthentication(builder.Configuration, "AzureAd");
+
+      .AddPolicy(ReadOrders, p => p
+          .RequireAuthenticatedUser()
+          .RequireScopeOrAppPermission([ReadScope], [WriteAppRole]))
+      .AddPolicy(WriteOrders, p => p
+          .RequireAuthenticatedUser()
+          .RequireScopeOrAppPermission([], [WriteAppRole])
+          .RequireClaim("idtyp", "app"));
+
+      app.MapGet("/orders", ...).RequireAuthorization(AuthPolicies.ReadOrders);
+      app.MapPost("/orders", ...).RequireAuthorization(AuthPolicies.WriteOrders);
+    narration: >
+      The API is dot net ten with Microsoft Identity Web, which validates the signature, issuer, lifetime and
+      audience. Then two policies. Reading needs the scope or the app role. Writing needs the app role, and the token
+      must be app-only. Why both? Because roles can show up in user tokens too.
+
+  - id: client
+    type: code
+    heading: "The client: no secret either"
+    lang: csharp
+    code: |
+      TokenCredential credential = string.IsNullOrEmpty(clientId)
+          ? new AzureCliCredential()                                   // laptop
+          : new ManagedIdentityCredential(
+                ManagedIdentityId.FromUserAssignedClientId(clientId)); // in Azure
+
+      // EntraTokenHandler: one scope, and it must be "/.default"
+      if (!scope.EndsWith("/.default", StringComparison.Ordinal))
+          throw new ArgumentException("App-only calls need the '/.default' scope");
+
+      AccessToken token = await credential.GetTokenAsync(new TokenRequestContext(scopes), ct);
+      request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token.Token);
+    narration: >
+      The order processor uses a managed identity in Azure and the Azure CLI on a laptop. Same code. An app-only call
+      asks for the App I D U R I slash dot default: you can't request a single app role, the token carries every role
+      assigned to that identity. The handler refuses anything else.
+
+  - id: tests
+    type: code
+    heading: "Twenty tests against the real pipeline"
+    lang: text
+    code: |
+      No_token_is_401                                      401
+      User_with_read_scope_can_read                        200
+      User_with_read_scope_cannot_write                    403
+      App_with_write_role_can_write_and_is_recorded        201
+      User_token_carrying_the_app_role_still_cannot_write  403
+      Token_without_scp_or_roles_is_rejected               401
+      Wrong_audience_is_401 (App ID URI, other API)        401
+      Expired_token_is_401 / Token_signed_with_another_key_is_401
+
+      $ dotnet test
+      Passed!  - Failed: 0, Passed: 20, Skipped: 0, Total: 20
+    narration: >
+      The tests run the real API pipeline with test-signed tokens. Only the signing key is swapped; audience and
+      permission checks are Microsoft Identity Web's own. Readers read, readers can't write, the processor writes.
+      And a token with neither a scope nor a role is refused: that's what an identity with no role would bring if
+      assignment weren't required.
+
+  - id: deploy
+    type: screen
+    heading: "One deployment: Azure and Entra"
+    image: screens/graph-deploy.jpg
+    bar: "Terminal · infra/deploy.sh"
+    demo: >
+      Output of infra/deploy.sh rg-contoso-identity: the what-if listing the managed identity and the
+      Microsoft.Graph resources (application, service principal, appRoleAssignedTo x2), then the outputs table with
+      apiClientId, apiAppIdUri, readScope, processorClientId. Mask tenant ID, subscription ID and object IDs.
+    narration: >
+      Here's the deployment in the lab tenant. One what-if, one deployment: the managed identity, the app
+      registration, the service principal and both role assignments.
+
+  - id: portal
+    type: screen
+    heading: "What Entra shows"
+    image: screens/app-roles.jpg
+    bar: "Microsoft Entra admin center · App registrations · contoso orders API"
+    demo: >
+      Two captures side by side: the app registration's App roles blade (Orders.ReadWrite.All for Applications,
+      Orders.Reader for Users) and the Enterprise application's Users and groups blade listing the managed identity
+      and Alex Demo with their roles, with Assignment required = Yes visible on the Properties blade (or a third crop).
+      Mask tenant name, IDs and the real user name (the reader must be the fictional Alex Demo account).
+    narration: >
+      In the Entra admin center you see the same thing: the two app roles, assignment required, and the two
+      assignments, the managed identity and Alex Demo.
+
+  - id: user
+    type: screen
+    heading: "Alex reads, Alex can't write"
+    image: screens/call-as-user.jpg
+    bar: "Terminal · infra/call-as-user.sh"
+    short: user
+    demo: >
+      Output of infra/call-as-user.sh with the API running locally (infra/run-api-local.sh): the claims block
+      (aud = API client ID, scp = Orders.Read, roles = [Orders.Reader], kind = delegated (user)), then
+      GET /orders -> 200, GET /me -> 200 with kind delegated, POST /orders -> 403. Mask oid, tid and the client ID GUIDs.
+    narration: >
+      Now as a person. Alex signs in with the Azure CLI and gets a token: the audience is the API's client ID, the scope
+      is Orders dot Read. Reading works. Writing is a four oh three, because people don't write orders, workloads do.
+
+  - id: app
+    type: screen
+    heading: "The managed identity's token"
+    image: screens/app-token.jpg
+    bar: "Terminal · infra/prove-app-token.sh"
+    demo: >
+      Output of infra/prove-app-token.sh rg-contoso-identity: the container's log with the claims JSON from IMDS
+      (aud = API client ID, roles = ["Orders.ReadWrite.All"], idtyp = "app", kind = app-only). Mask GUIDs.
+    narration: >
+      And the workload. A short-lived container runs as the order processor's managed identity and asks the metadata
+      endpoint for a token. No secret was involved. The token is app-only, with the write role.
+
+  - id: gotcha
+    type: code
+    heading: "Gotcha: the audience is not the URI"
+    lang: text
+    short: gotcha
+    code: |
+      requestedAccessTokenVersion: 2      aud = "<API client ID>"           -> 200
+      left at the default (v1.0 tokens)   aud can be "api://.../contoso-orders" -> 401
+
+      [InlineData("api://00000000-.../contoso-orders")]  // what a v1.0 token can carry
+      public async Task Wrong_audience_is_401(string audience)
+
+      Learn: in v2.0 tokens, aud is always the client ID of the API.
+      Apps with custom App ID URIs: use v2.0 tokens, accept only the appId.
+    narration: >
+      The gotcha. In version two tokens, the audience is always the API's client ID. In version one tokens it can be
+      the App I D U R I. Our API accepts its client ID only, so if you leave the token version at the default, perfectly
+      valid tokens come back four oh one. Set version two and validate the client ID, nothing else.
+
+  - id: teardown
+    type: bullets
+    heading: "Cleaning up Entra is different"
+    bullets:
+      - "The app isn't in the resource group"
+      - "Deleted apps stay restorable for 30 days"
+      - "Redeploying the same uniqueName can then fail"
+      - "Tear-down purges it from deleted items"
+    narration: >
+      One more thing about cleaning up. The app registration doesn't live in the resource group, so deleting the group
+      leaves it behind. A deleted app stays restorable for thirty days, and redeploying the same unique name after a
+      delete outside Bicep can fail. So the tear-down script deletes the app and purges it.
+
+  - id: recap
+    type: bullets
+    heading: "Five rules"
+    bullets:
+      - "Scopes for people, app roles for workloads"
+      - "Managed identities and federation, never secrets"
+      - "v2 tokens, validate the client ID as audience"
+      - "Writes need idtyp = app, not just a role"
+      - "Assignment required, Entra objects as code"
+    narration: >
+      Five rules. Scopes for people, app roles for workloads. Managed identities and federation, never secrets. Version
+      two tokens, and validate the API's client ID as the audience. Check that writes come from app-only tokens, not
+      just that a role is present. And require assignment, with your Entra objects in code next to everything else.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The Graph Bicep, the API, the client and all the tests are on GitHub, and the complete guide is on devladlog dot
+      com. Next episode: monitoring and Application Insights, where we find out what all of this is actually doing in
+      production. This was DEVLADLOG Azure, by Momento Galático.

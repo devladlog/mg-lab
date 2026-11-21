@@ -1,0 +1,140 @@
+{
+  "_comment": "Reference definition of the 'Invoice intake' cloud flow (what the designer's code view shows). Written by hand from the designer steps in demo.md and checked by tests/test_contract.py; NOT yet imported. After the lab build, replace it with the definition exported from the solution.",
+  "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "$connections": {"defaultValue": {}, "type": "Object"},
+    "$authentication": {"defaultValue": {}, "type": "SecureObject"},
+    "Site URL (mgl_SiteUrl)": {"defaultValue": "https://contoso.sharepoint.com/sites/finance-lab", "type": "String",
+      "metadata": {"schemaName": "mgl_SiteUrl"}},
+    "Invoices library (mgl_InvoicesLibrary)": {"defaultValue": "00000000-0000-0000-0000-000000000000", "type": "String",
+      "metadata": {"schemaName": "mgl_InvoicesLibrary"}},
+    "Invoice API URL (mgl_InvoiceApiUrl)": {"defaultValue": "https://func-contoso-invoices.azurewebsites.net/api/invoices/extract", "type": "String",
+      "metadata": {"schemaName": "mgl_InvoiceApiUrl"}}
+  },
+  "triggers": {
+    "When_a_file_is_created_(properties_only)": {
+      "type": "OpenApiConnection",
+      "recurrence": {"interval": 1, "frequency": "Minute"},
+      "splitOn": "@triggerOutputs()?['body/value']",
+      "inputs": {
+        "host": {"apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                 "connectionName": "shared_sharepointonline", "operationId": "GetOnNewFileItems"},
+        "parameters": {
+          "dataset": "@parameters('Site URL (mgl_SiteUrl)')",
+          "table": "@parameters('Invoices library (mgl_InvoicesLibrary)')"
+        },
+        "authentication": "@parameters('$authentication')"
+      }
+    }
+  },
+  "actions": {
+    "Get_API_key": {
+      "type": "OpenApiConnection",
+      "runAfter": {},
+      "runtimeConfiguration": {"secureData": {"properties": ["inputs", "outputs"]}},
+      "inputs": {
+        "host": {"apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+                 "connectionName": "shared_commondataserviceforapps", "operationId": "PerformUnboundAction"},
+        "parameters": {
+          "actionName": "RetrieveEnvironmentVariableSecretValue",
+          "item/EnvironmentVariableName": "mgl_InvoiceApiKey"
+        },
+        "authentication": "@parameters('$authentication')"
+      }
+    },
+    "Get_file_content": {
+      "type": "OpenApiConnection",
+      "runAfter": {"Get_API_key": ["Succeeded"]},
+      "inputs": {
+        "host": {"apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                 "connectionName": "shared_sharepointonline", "operationId": "GetFileContent"},
+        "parameters": {
+          "dataset": "@parameters('Site URL (mgl_SiteUrl)')",
+          "id": "@triggerOutputs()?['body/{Identifier}']",
+          "inferContentType": true
+        },
+        "authentication": "@parameters('$authentication')"
+      }
+    },
+    "Extract_invoice": {
+      "type": "Http",
+      "runAfter": {"Get_file_content": ["Succeeded"]},
+      "runtimeConfiguration": {"secureData": {"properties": ["inputs"]}},
+      "inputs": {
+        "method": "POST",
+        "uri": "@parameters('Invoice API URL (mgl_InvoiceApiUrl)')",
+        "headers": {
+          "x-functions-key": "@outputs('Get_API_key')?['body/EnvironmentVariableSecretValue']",
+          "X-File-Name": "@triggerOutputs()?['body/{FilenameWithExtension}']"
+        },
+        "body": "@body('Get_file_content')",
+        "retryPolicy": {"type": "exponential", "count": 2, "interval": "PT30S"}
+      }
+    },
+    "Find_duplicates": {
+      "type": "OpenApiConnection",
+      "runAfter": {"Extract_invoice": ["Succeeded"]},
+      "inputs": {
+        "host": {"apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                 "connectionName": "shared_sharepointonline", "operationId": "GetFileItems"},
+        "parameters": {
+          "dataset": "@parameters('Site URL (mgl_SiteUrl)')",
+          "table": "@parameters('Invoices library (mgl_InvoicesLibrary)')",
+          "$filter": "InvDedupKey eq '@{body('Extract_invoice')?['fields']?['InvDedupKey']}' and ID ne @{triggerOutputs()?['body/ID']}",
+          "$top": 1
+        },
+        "authentication": "@parameters('$authentication')"
+      }
+    },
+    "Final_status": {
+      "type": "Compose",
+      "runAfter": {"Find_duplicates": ["Succeeded"]},
+      "inputs": "@if(and(not(empty(body('Extract_invoice')?['fields']?['InvDedupKey'])), greater(length(body('Find_duplicates')?['value']), 0)), 'Needs review', body('Extract_invoice')?['status'])"
+    },
+    "Update_file_properties": {
+      "type": "OpenApiConnection",
+      "runAfter": {"Final_status": ["Succeeded"]},
+      "inputs": {
+        "host": {"apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                 "connectionName": "shared_sharepointonline", "operationId": "PatchFileItem"},
+        "parameters": {
+          "dataset": "@parameters('Site URL (mgl_SiteUrl)')",
+          "table": "@parameters('Invoices library (mgl_InvoicesLibrary)')",
+          "id": "@triggerOutputs()?['body/ID']",
+          "item/InvVendor": "@body('Extract_invoice')?['fields']?['InvVendor']",
+          "item/InvNumber": "@body('Extract_invoice')?['fields']?['InvNumber']",
+          "item/InvDate": "@body('Extract_invoice')?['fields']?['InvDate']",
+          "item/InvDueDate": "@body('Extract_invoice')?['fields']?['InvDueDate']",
+          "item/InvPO": "@body('Extract_invoice')?['fields']?['InvPO']",
+          "item/InvSubTotal": "@body('Extract_invoice')?['fields']?['InvSubTotal']",
+          "item/InvTax": "@body('Extract_invoice')?['fields']?['InvTax']",
+          "item/InvTotal": "@body('Extract_invoice')?['fields']?['InvTotal']",
+          "item/InvCurrency": "@body('Extract_invoice')?['fields']?['InvCurrency']",
+          "item/InvConfidence": "@body('Extract_invoice')?['fields']?['InvConfidence']",
+          "item/InvDedupKey": "@body('Extract_invoice')?['fields']?['InvDedupKey']",
+          "item/InvStatus/Value": "@outputs('Final_status')",
+          "item/InvReasons": "@{body('Extract_invoice')?['fields']?['InvReasons']}@{if(equals(outputs('Final_status'), body('Extract_invoice')?['status']), '', 'Possible duplicate of an existing invoice.')}"
+        },
+        "authentication": "@parameters('$authentication')"
+      }
+    },
+    "Mark_extraction_failed": {
+      "type": "OpenApiConnection",
+      "runAfter": {"Extract_invoice": ["Failed", "TimedOut"]},
+      "inputs": {
+        "host": {"apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                 "connectionName": "shared_sharepointonline", "operationId": "PatchFileItem"},
+        "parameters": {
+          "dataset": "@parameters('Site URL (mgl_SiteUrl)')",
+          "table": "@parameters('Invoices library (mgl_InvoicesLibrary)')",
+          "id": "@triggerOutputs()?['body/ID']",
+          "item/InvStatus/Value": "Needs review",
+          "item/InvReasons": "Extraction failed (HTTP @{outputs('Extract_invoice')?['statusCode']}): @{body('Extract_invoice')?['error']}"
+        },
+        "authentication": "@parameters('$authentication')"
+      }
+    }
+  },
+  "outputs": {}
+}
