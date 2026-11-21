@@ -1,0 +1,230 @@
+# DEVLADLOG Windows Server - episode 07 (draft: the screen scenes need the lab recording, see demo.md)
+episode: 7
+slug: hyper-v-virtualization
+series_label: "WINDOWS SERVER"
+series_name: "DEVLADLOG Windows Server"
+file_prefix: "windows-server"
+title: "Hyper-V Virtualization"
+subtitle: "Audit the host, build a VM from a file, and stop checkpoints from eating the disk"
+voice: am_michael
+thumbnail_text: "50 CHECKPOINTS\nONE DISK CHAIN\nZERO PANIC"
+youtube:
+  title: "Hyper-V Checkpoints and VM Build with PowerShell: Audit, Plan, Merge | DEVLADLOG Windows Server #7"
+  tags: [Hyper-V, Windows Server 2025, PowerShell, checkpoints, virtual machines, VHDX, vTPM, Secure Boot, sysadmin, Pester]
+sources:
+  - https://www.devladlog.com/articles/windows-server/2025-09-06-hyper-v-virtualization-complete-guide-2025/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Your lab runs on a pile of disks"
+    sub: "Fifty checkpoints is the limit. Three is plenty."
+    short: hook
+    narration: >
+      Every server in this series is a virtual machine, and so far we have only looked at what runs inside them. Today
+      we look underneath: the Hyper V host. We audit it with a script, build a throwaway machine from a json file, and
+      learn why a checkpoint is really a disk that never stops growing.
+
+  - id: where
+    type: bullets
+    heading: "The host is the recording laptop"
+    bullets:
+      - "Five lab VMs, one Hyper-V host"
+      - "Audit first: read-only, facts as JSON"
+      - "Build a throwaway VM from a spec"
+      - "Checkpoints, cleanup, tear-down"
+    narration: >
+      Our host is the recording laptop, so that is what we audit. The pattern is the same as earlier episodes. A
+      collector gathers facts on the host and saves them as json, and pure rules turn the facts into findings that we
+      can test anywhere. Then we build a machine, pile checkpoints onto it, clean them up properly, and delete the machine again, all on a throwaway that has no operating system and nothing to lose.
+
+  - id: rules
+    type: code
+    heading: "Rules with a reason"
+    lang: powershell
+    code: |
+      if ($cps.Count -ge $script:CheckpointLimit) {
+          [void]$out.Add((New-HvFinding $n High 'CheckpointLimit'
+              "$($cps.Count) checkpoints: Learn's maximum is $($script:CheckpointLimit), dependent on available storage."))
+      }
+      elseif ($cps.Count -gt [int](Get-HvProp $pol 'MaxCheckpoints' 3)) {
+          [void]$out.Add((New-HvFinding $n Medium 'TooManyCheckpoints'
+              "$($cps.Count) checkpoints (policy: at most 3). Every one is a differencing disk in the chain."))
+      }
+      # Standard checkpoint on a domain controller: High (Learn: consistency problems with replicating systems)
+      # Production checkpoint but the VSS integration service is off: Medium
+    narration: >
+      Some limits come from Microsoft. A virtual machine can have at most fifty checkpoints, depending on storage, so
+      that is a constant in the code. Other limits are our own policy, like at most three checkpoints, and those live
+      in the config file. The audit also flags a standard checkpoint on a domain controller, because Learn warns it can
+      cause consistency problems with Active Directory.
+
+  - id: audit
+    type: screen
+    heading: "The host, audited"
+    image: screens/audit.jpg
+    bar: "Lab · Hyper-V host · PowerShell"
+    demo: >
+      Elevated PowerShell on the laptop in the episode src folder: .\Invoke-HvAudit.ps1 -FactsFile .\host-facts.json
+      -OutFile .\audit.md. Show the findings table and the final line "<host>: 5 VM(s), N finding(s), N high."
+      Only the five CON-* VMs may be visible; crop the real computer name and any other VMs.
+    narration: >
+      On the real host. Five virtual machines, and this is what the audit finds. Rewrite this to the real number of
+      findings on screen. Nothing was changed: the collector only reads.
+
+  - id: badhost
+    type: code
+    heading: "A host that has seen things (sample data)"
+    lang: text
+    code: |
+      High   CON-DC01     CheckpointVeryOld        'before-adprep' is 45 days old (policy: 30)
+      High   CON-DC01     StandardCheckpointOnDc   Standard checkpoints and Active Directory
+      High   HV-OLD01     DiskOvercommit           disks can still grow by 714 GB, only 95 GB free
+      High   LAB-NEST01   NestedNeedsVersion       needs configuration version 8.0, this VM is 7.0
+      High   SCRATCH-50   CheckpointLimit          50 checkpoints
+      Medium BUILD-AGENT  HeartbeatNotNormal       Running, but the heartbeat says No Contact
+      ...
+      HV-OLD01: 7 VM(s), 24 finding(s), 7 high.
+    narration: >
+      To test the rules, a second invented host is full of mistakes. A domain controller with a forty five day old
+      standard checkpoint. Dynamic disks that can grow past the free space. A nested virtualization VM on configuration
+      version seven, when Learn says eight is the minimum. And a machine that is Running but has no heartbeat, because
+      running only means Hyper V set resources aside.
+
+  - id: spec
+    type: code
+    heading: "A VM from a file"
+    lang: powershell
+    code: |
+      PS> Get-HvVmPlan -Spec $config.TestVm -HostFacts $hostFacts | Format-Table Order, Cmdlet, Why
+
+      Order Cmdlet             Why
+      ----- ------             ---
+          1 New-VHD            Dynamically expanding VHDX.
+          2 New-VM             Generation 2 VM in <VM path>\CON-HVT01.
+          3 Set-VM             Dynamic Memory 512-1024 MB, checkpoint type Production...
+          4 Set-VMFirmware     Secure Boot is on by default for generation 2 (Learn)...
+          5 Set-VMKeyProtector A virtual TPM needs a key protector first.
+          6 Enable-VMTPM       Virtual TPM (generation 2 only).
+    narration: >
+      The spec is a few lines of json: name, generation, memory, disk size, Secure Boot, T P M. A pure function
+      validates it and turns it into an ordered plan. A virtual T P M needs a key protector first, so that step comes
+      before it. The builder runs the plan with What If support, and skips a machine, or a disk, that already exists, so running it twice is safe.
+
+  - id: create
+    type: screen
+    heading: "A VM from a file"
+    image: screens/create.jpg
+    bar: "Lab · Hyper-V host · CON-HVT01"
+    demo: >
+      On the laptop: .\Deploy-HvLab.ps1 -Step Create -WhatIf (six What if lines), then the real run, then Get-VM
+      CON-HVT01 | Format-List Name, Generation, Version, ProcessorCount, DynamicMemoryEnabled, CheckpointType, State and
+      Get-VMFirmware / Get-VMSecurity showing Secure Boot and the virtual TPM.
+    narration: >
+      What if first, then the real thing. A generation two machine with no operating system, two virtual processors,
+      dynamic memory, Production checkpoints, Secure Boot and a T P M. Rewrite this to the values on screen.
+
+  - id: checkpoints
+    type: bullets
+    heading: "Production or Standard?"
+    bullets:
+      - "Production: VSS inside the guest, no memory state"
+      - "Standard: memory and device state, not application consistent"
+      - "Production falls back to Standard if it fails"
+      - "ProductionOnly fails instead"
+      - "Never a backup. Hours or days, not weeks"
+    short: checkpoints
+    narration: >
+      Two kinds of checkpoint. Production uses the Volume Shadow Copy Service inside the guest and takes no memory
+      state. Standard captures memory and device state, and is not application consistent. Here's the trap: with the
+      type set to Production, a failed production checkpoint quietly becomes a standard one. Production only fails
+      instead. Either way, a checkpoint is for hours or days, not a backup.
+
+  - id: chain
+    type: screen
+    heading: "Checkpoints are disks"
+    image: screens/chain.jpg
+    bar: "Lab · Hyper-V host · CON-HVT01 checkpoints"
+    demo: >
+      .\Deploy-HvLab.ps1 -Step Checkpoints: demo-1, demo-2, demo-3 and KEEP-baseline, then the checkpoint list with
+      SnapshotType and the disk chain (Get-VHD Path, VhdType, ParentPath). Record what an OS-less VM really does under
+      the Production type (Standard fallback, failure, or Production) and say exactly that.
+    narration: >
+      Four checkpoints on an empty machine, and each one is another differencing disk on top of the last. Look at the
+      snapshot type column and at the parent path chain. Rewrite this to what actually happened with the Production
+      type on a machine with no operating system.
+
+  - id: merge
+    type: code
+    heading: "Gotcha: deleting a checkpoint is not done yet"
+    lang: powershell
+    code: |
+      foreach ($r in $remove) {
+          if ($PSCmdlet.ShouldProcess("$VmName/$($r.Checkpoint)", 'Remove-VMCheckpoint (Hyper-V merges ...)')) {
+              Remove-VMCheckpoint -VMName $VmName -Name $r.Checkpoint
+          }
+      }
+      # Remove-VMCheckpoint returns; the .avhdx merge continues in the background
+      $merge = Wait-HvDiskMerge -VmName $VmName -ExpectedDepth $expected -TimeoutSeconds 600
+      # still too deep after the timeout: warn, never delete .avhdx files by hand
+    short: gotcha
+    narration: >
+      The gotcha. Removing a checkpoint in Hyper V returns quickly, but the real work, merging the differencing disk
+      into its parent, goes on in the background. If you delete and immediately assume the disk is small again, you
+      are wrong. So the cleanup waits and watches the live disk chain. If it is still deep after the timeout, it
+      warns. It never deletes disk files by hand.
+
+  - id: cleanup
+    type: screen
+    heading: "Plan, remove, wait for the merge"
+    image: screens/cleanup.jpg
+    bar: "Lab · Hyper-V host · CON-HVT01 cleanup"
+    demo: >
+      .\Deploy-HvLab.ps1 -Step Cleanup -WhatIf then the real run. Show the plan table (Keep or Remove with the reason:
+      KEEP-baseline protected by name, the newest kept, the rest removed) and the merge result with Merged and
+      WaitedSeconds.
+    narration: >
+      The plan first: the protected baseline stays because of its name, the newest checkpoint stays, the others go.
+      Then the real run, and the wait for the merge. Rewrite this to the real merge time on screen.
+
+  - id: tests
+    type: code
+    heading: "Forty tests, no Hyper-V"
+    lang: text
+    code: |
+      Describing Test-HvHost on the problem host
+        [+] finds 24 problems, 7 of them High
+        [+] flags nested virtualization on a too-old configuration version
+      Describing Get-HvCheckpointPlan
+        [+] never removes a protected name, even the oldest
+      Describing Wait-HvDiskMerge and Invoke-HvCheckpointCleanup
+        [+] Wait warns and returns Merged false on timeout, without deleting anything
+      Describing Remove-HvLabVm
+        [+] refuses a VM that is not on the allow list
+      Tests Passed: 40, Failed: 0
+    narration: >
+      Forty Pester tests run on Linux with every Hyper V cmdlet stubbed and mocked. They check that the audit finds the
+      seven high problems, that the cleanup never removes a protected checkpoint, and that the removal refuses any
+      machine that is not on its allow list. The real Hyper V behaviour is what the recording is for.
+
+  - id: recap
+    type: bullets
+    heading: "Five rules for a Hyper-V host"
+    bullets:
+      - "Audit the host: paths, free space, versions"
+      - "Build VMs from a validated spec, with What If"
+      - "Few checkpoints, short lives, none on domain controllers (Standard)"
+      - "Wait for the merge, never touch the avhdx files"
+      - "Destructive steps only on an allow-listed throwaway"
+    narration: >
+      Five rules. Audit the host before you trust it. Build machines from a validated spec. Keep checkpoints few and
+      short, and never standard ones on a domain controller. Wait for the merge. And point anything destructive only at
+      a throwaway machine on an allow list.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The module, the audit, the deploy script and the tests are on GitHub, and the complete guide to Hyper V
+      virtualization is on devladlog dot com. Next episode: Windows Server security. Subscribe so you don't miss it.

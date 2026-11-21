@@ -1,0 +1,225 @@
+# DEVLADLOG Windows Server - episode 08 (draft: the screen scenes need the lab recording, see demo.md)
+episode: 8
+slug: windows-server-security
+series_label: "WINDOWS SERVER"
+series_name: "DEVLADLOG Windows Server"
+file_prefix: "windows-server"
+title: "Windows Server Security"
+subtitle: "Check the baseline, read the plan, then change it. Plus Windows LAPS in Active Directory"
+voice: am_michael
+thumbnail_text: "CHECK FIRST\nCHANGE SECOND\nUNDO IT"
+youtube:
+  title: "Windows Server 2025 Security Baseline in PowerShell: SMB, NTLM, LAPS | DEVLADLOG Windows Server #8"
+  tags: [Windows Server 2025, security baseline, PowerShell, SMB signing, NTLM, Credential Guard, Windows LAPS, auditpol, Defender, sysadmin, Pester]
+sources:
+  - https://www.devladlog.com/articles/windows-server/2025-09-27-windows-server-security-complete-guide-2025/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Harden the lab. Then undo it."
+    sub: "A security check that reads first and writes second"
+    short: hook
+    narration: >
+      Most security guides give you a long list of settings and a dare. Today we do it the other way round. A script
+      reads the whole lab, tells us what is off, writes the plan as a table, and remembers every value it is about to
+      replace, so we can put it all back. Then we add Windows LAPS, the one step that cannot be undone.
+
+  - id: what
+    type: bullets
+    heading: "What the check looks at"
+    bullets:
+      - "SMB signing and SMB 1"
+      - "NTLM level, WDigest, Credential Guard"
+      - "LDAP signing on the domain controller"
+      - "Process creation audit and the command line"
+      - "Defender, and Windows LAPS policy"
+    narration: >
+      This is the same pattern as the earlier episodes: a collector that only reads, pure rules, and a report. Five
+      servers, read only, over Win R M. SMB signing and SMB one. The NTLM level, WDigest, and whether Credential
+      Guard is running. LDAP signing on the domain controller. The audit setting for process creation. Defender. And
+      whether anything backs up the local administrator password.
+
+  - id: rules
+    type: code
+    heading: "Rules that say what they know"
+    lang: powershell
+    code: |
+      if ($null -eq $ldap) {
+          [void]$out.Add((New-SecFinding $n Info 'LdapSigningNotInRegistry'
+              'No LDAPServerIntegrity value on this domain controller. Not a finding by itself: Learn says
+              Windows Server 2025 requires LDAP signing by default for new deployments ...'))
+      }
+      elseif ([int]$ldap -eq 0) {
+          [void]$out.Add((New-SecFinding $n High 'LdapSigningNotRequired'
+              'LDAPServerIntegrity is 0: the domain controller accepts unsigned LDAP binds ...'))
+      }
+      # LmCompatibilityLevel: below 3 is High, below our policy (5) is Medium, not set is Info
+    narration: >
+      The rules are careful about what they know. A missing L D A P signing value is not a finding, because Learn says
+      Windows Server twenty twenty five requires signing by default for new deployments. Only an explicit zero is
+      high. The N T L M level works the same way: below three is high, below our policy is medium, and not set is just
+      information.
+
+  - id: before
+    type: screen
+    heading: "Five servers, one question"
+    image: screens/check-before.jpg
+    bar: "Lab · CON-SRV02 · Invoke-SecCheck.ps1"
+    demo: >
+      On CON-SRV02, elevated PowerShell in C:\lab\ep08\src: .\Invoke-SecCheck.ps1 -FactsFile .\facts-before.json
+      -OutFile .\check-before.md -PlanOnly. Show the findings table, the last line "N server(s), N finding(s),
+      N high.", and the plan table (Target, Fix, Before, Value, Why).
+    narration: >
+      On the real lab. Rewrite this to the real number of findings and what they are. Nothing has been changed yet:
+      the check only reads, and the plan is just a table.
+
+  - id: plan
+    type: code
+    heading: "The plan remembers the old value"
+    lang: text
+    code: |
+      Target    Fix                     Kind      Before      Value  Why
+      CON-SRV01 AuditProcessCreation    AuditPol  No Auditing enable Audit Process Creation, success (event 4688).
+      CON-SRV01 ProcessCreationCmdLine  Registry              1      Include the command line in event 4688 ...
+      CON-SRV01 RequireSmbServerSigning SmbServer False       True   Require inbound SMB signing (guest access stops).
+      ...
+      # not in the plan: LmCompatibilityLevel 5 (NTLMv2 only), left out unless -IncludeRisky
+    short: plan
+    narration: >
+      Here is the plan, from sample data. Each row names the server, the fix, the value the script read, and the value
+      it wants. The risky step, N T L M version two only, is not in the plan unless you ask for it, because Learn says
+      domain controllers at that level refuse L M and N T L M, and anything still using them stops signing in.
+
+  - id: harden
+    type: screen
+    heading: "Read the plan, then change it"
+    image: screens/harden.jpg
+    bar: "Lab · CON-SRV02 · Deploy-SecLab.ps1 -Step Harden"
+    demo: >
+      .\Deploy-SecLab.ps1 -Step Harden -RollbackFile .\rollback.json -WhatIf (plan and What if lines), then without
+      -WhatIf, then .\Invoke-SecCheck.ps1 -OutFile .\check-after.md. Show the Before and Value columns, then the
+      re-check with the Medium findings gone. Do not use -IncludeRisky on camera.
+    narration: >
+      What If first, then the real run, then the check again. Rewrite this to the real counts: the medium findings are
+      gone, and the rollback file holds every old value.
+
+  - id: rollback
+    type: code
+    heading: "The rollback is just the plan, reversed"
+    lang: powershell
+    code: |
+      'Registry' {
+          if ($null -eq $s.Before) { $h.Remove = $true; $h.Value = $null }   # it did not exist before
+          else { $h.Value = $s.Before }                                      # put the old value back
+      }
+      'SmbServer' {
+          if ($null -eq $s.Before) { $h.Kind = 'Manual' } else { $h.Value = [bool]$s.Before }
+      }
+      'AuditPol' { $h.Value = 'disable' }
+    narration: >
+      The rollback is the plan, reversed. A registry value that did not exist is removed again. A value that did is
+      put back. And if the script does not know the old value, the step becomes manual and says so, instead of
+      guessing.
+
+  - id: laps
+    type: bullets
+    heading: "Windows LAPS in Active Directory"
+    bullets:
+      - "Schema update: one time, for the whole forest"
+      - "OU permission: computers may write their own password"
+      - "A GPO: backup to Active Directory, 30 days, 14 characters"
+      - "Hourly processing, or Invoke-LapsPolicyProcessing"
+      - "Event 10018 means the password reached Active Directory"
+    narration: >
+      Windows LAPS gives every server its own local administrator password, rotated and stored in Active Directory.
+      It needs a schema update, which Learn calls a one time operation for the entire forest. Then permission on the
+      O U, and a policy with three values. Windows L A P S processes policy once an hour, or on demand, and event ten
+      eighteen means the password arrived.
+
+  - id: lapsplan
+    type: screen
+    heading: "The one-way step"
+    image: screens/laps-plan.jpg
+    bar: "Lab · CON-SRV02 · Deploy-SecLab.ps1 -Step Laps"
+    demo: >
+      .\Deploy-SecLab.ps1 -Step Laps -WhatIf: the plan with Update-LapsADSchema marked Irreversible (or starting at the
+      OU permission if the schema already has LAPS), then .\Deploy-SecLab.ps1 -Step Laps -AllowSchemaUpdate.
+    narration: >
+      The plan marks the schema step as irreversible, and the script refuses to run it without a switch that says
+      so. It first looks for the L A P S attribute in the schema, and skips the step if it is already there. This lab
+      can be rebuilt. A production forest cannot. Rewrite this to what the plan really showed.
+
+  - id: lapsresult
+    type: screen
+    heading: "A different password on every server"
+    image: screens/laps-result.jpg
+    bar: "Lab · CON-SRV01 · LAPS event log"
+    demo: >
+      Invoke-Command to CON-SRV01: gpupdate and Invoke-LapsPolicyProcessing, then the last events of the Windows LAPS
+      Operational log (event 10018), then Get-LapsADPassword -Identity CON-SRV01 with the password masked (never
+      -AsPlainText). Repeat for CON-SQL01 to show a second expiration time.
+    narration: >
+      Policy processed, event ten eighteen in the log, and the password is in Active Directory with an expiry date,
+      thirty days out, from our policy file.
+      The password column stays masked on camera. Rewrite this to what the log and the expiry dates really showed.
+
+  - id: gotcha
+    type: code
+    heading: "Gotcha: Learn says two things about SMB signing"
+    lang: text
+    code: |
+      Control SMB signing behavior:
+        "Windows Server 2025 requires outbound SMB signing only."
+      SMB security hardening:
+        "all outbound and inbound SMB connections are now required
+         to be signed by default."
+      -> the check reads Get-SmbServerConfiguration and
+         Get-SmbClientConfiguration, and never assumes the default.
+    short: gotcha
+    narration: >
+      The gotcha. Two Learn pages disagree about Windows Server twenty twenty five. One says it requires outbound SMB
+      signing only. The other says outbound and inbound are both required by default. So the check does not assume
+      either. It reads the real values on every server. And requiring signing also turns off guest access, which can
+      break third party shares.
+
+  - id: tests
+    type: code
+    heading: "Thirty-nine tests, no servers"
+    lang: text
+    code: |
+      Describing Test-SecHost on the bad servers
+        [+] flags SMB 1, WDigest, weak LM level and unsigned LDAP
+      Describing Get-SecRemediationPlan and Get-SecRollbackPlan
+        [+] leaves out the risky LmCompatibilityLevel step unless asked
+      Describing Invoke-SecLapsPlan (GroupPolicy and LAPS mocked)
+        [+] skips the schema update without -AllowSchemaUpdate
+        [+] is idempotent: an existing GPO and an existing link are left alone
+
+      Tests Passed: 39, Failed: 0
+    narration: >
+      Thirty nine Pester tests run on Linux with the remoting, Group Policy and L A P S commands mocked. They check
+      that the risky step stays out of the plan, that the schema update needs its switch, and that running the L A P S
+      steps twice changes nothing the second time.
+
+  - id: recap
+    type: bullets
+    heading: "Five rules for hardening"
+    bullets:
+      - "Read first: a check that never writes"
+      - "A finding is not always a fix"
+      - "Plan as a table, with the old values"
+      - "Risky and irreversible steps need a switch"
+      - "Never trust a default: read the real value"
+    narration: >
+      Five rules. Read first with a check that never writes. Remember that a finding is not always a fix. Show the plan
+      as a table with the old values. Put risky and irreversible steps behind a switch. And never trust a default:
+      read the real value. All of it is a plan you can read, a switch you can refuse, and a file that undoes it.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The module, the check, the deploy script and the tests are on GitHub, and the complete guide to Windows Server
+      security is on devladlog dot com. Subscribe so you don't miss the next series.
