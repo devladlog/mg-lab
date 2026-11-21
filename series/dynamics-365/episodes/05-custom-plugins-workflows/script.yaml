@@ -209,20 +209,20 @@ scenes:
     heading: "Gotcha: a date that moves"
     lang: csharp
     code: |
-      /// Episode 1 created mgl_duedate with Format DateOnly but no behavior, so it got the default, User local:
-      /// a date the user picks is stored as THEIR midnight in UTC (Lisbon in summer: 23:00 the day before).
-      /// Learn says to avoid that combination. Until the column is switched to Date only behavior, take the
-      /// nearest UTC midnight: right for any user between UTC-12 and UTC+12.
+      /// A Date only column left on the default behavior (User local) stores a picked date as the user's
+      /// midnight in UTC (Lisbon in summer: 23:00 the day before). Learn says to avoid that combination.
+      /// Defensive read for environments that still have such a column: take the nearest UTC midnight,
+      /// right for any user between UTC-12 and UTC+12, and harmless for real Date only values.
       public static DateTime? NearestDate(DateTime? stored) =>
           stored.HasValue ? stored.Value.AddHours(12).Date : (DateTime?)null;
 
       [InlineData("2027-07-14T23:00:00Z", "2027-07-15")]   // Lisbon summer user picked 15 July
     short: dates
     narration: >
-      A bug we found writing tests. In episode one the due date column got date only format but the default
-      behavior, user local. A date picked in Lisbon in summer is stored as eleven p m the day before, in U T C. Learn
-      says avoid that combination. Our plugin reads the nearest midnight, and the real fix is switching the column to
-      date only behavior.
+      A bug we found writing tests. A date only column left on the default behavior, user local, stores a date
+      picked in Lisbon in summer as eleven p m the day before, in U T C. Learn says avoid that combination. Episode
+      one now sets date only behavior when it creates the column, and the plugin still reads the nearest midnight,
+      so older environments that kept the default are safe too.
 
   - id: tests
     type: code

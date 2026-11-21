@@ -1,0 +1,51 @@
+{
+  "SchemaVersion": 1,
+  "EndpointName": "Contoso.AppOps",
+  "ModuleName": "ContosoOps",
+  "Description": "App server operations for lab.contoso.com. Edit jea-definition.json, not the generated .psrc/.pssc files.",
+  "TargetRole": "MemberServer",
+  "AcceptedRisks": [
+    {
+      "Check": "VirtualAccountIsAdmin",
+      "Reason": "Restarting W3SVC/WAS needs local admin rights; the role only exposes two constrained commands and two functions."
+    }
+  ],
+  "Session": {
+    "RunAsVirtualAccount": true,
+    "RunAsVirtualAccountGroups": [],
+    "TranscriptDirectory": "C:\\ProgramData\\JEAConfiguration\\Transcripts",
+    "RoleDefinitions": {
+      "CONTOSO\\GG-AppOps-Readers": ["AppOpsReader"],
+      "CONTOSO\\GG-AppOps-Operators": ["AppOpsReader", "AppOpsOperator"]
+    }
+  },
+  "Roles": {
+    "AppOpsReader": {
+      "Description": "Read-only health for helpdesk and monitoring",
+      "VisibleCmdlets": [
+        { "Name": "Get-Service" }
+      ],
+      "VisibleFunctions": [
+        { "Name": "Get-OpsHealth" }
+      ]
+    },
+    "AppOpsOperator": {
+      "Description": "Restart the web services and trim old IIS logs",
+      "VisibleCmdlets": [
+        {
+          "Name": "Restart-Service",
+          "Parameters": [
+            { "Name": "Name", "ValidateSet": ["W3SVC", "WAS"] }
+          ]
+        }
+      ],
+      "VisibleFunctions": [
+        { "Name": "Clear-OpsLogFolder" }
+      ]
+    }
+  },
+  "Settings": {
+    "WatchedServices": ["W3SVC", "WAS"],
+    "LogRoot": "C:\\inetpub\\logs\\LogFiles"
+  }
+}

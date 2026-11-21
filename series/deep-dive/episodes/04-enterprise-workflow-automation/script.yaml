@@ -185,6 +185,13 @@ scenes:
     heading: "The library shows who has it"
     image: screens/library-waiting.jpg
     bar: "SharePoint · Invoices Inbox"
+    demo: >
+      Browser (Edge, 1920x1080, zoom 100 %, SharePoint light theme, signed in as labadmin or Alex Demo) on the lab site
+      /sites/finance-lab, library Invoices Inbox, All Documents view with Name, Review status, Vendor, Total, Approval
+      status, Approval step, Decided by, Approval summary. About a minute after Review status was set to Ready on both:
+      INV1001 (Fabrikam Ltd, 1476 EUR) and INV1002 (Fabrikam Ltd, 7380 EUR) with Review status Ready, Approval status
+      "Waiting for approval" and Approval step "Manager approval: sam.demo@..." (written by the real Function app via
+      the relay flow). Mask the tenant host and the domain part of the e-mail addresses (keep "sam.demo" readable).
     narration: >
       Now the lab, with a five minute deadline. Two invoices from episode one are ready. A minute later the library
       shows approval status waiting, and who has each one: Sam, the manager.
@@ -194,6 +201,13 @@ scenes:
     heading: "The approval, in Teams"
     image: screens/teams-approval.jpg
     bar: "Microsoft Teams · Approvals"
+    demo: >
+      Teams (desktop or web) > Approvals app, signed in as Sam Demo (sam.demo, the manager), Received tab, the real
+      Power Automate approval from the "Invoice approval relay" flow opened: title "Invoice INV1002 from Fabrikam Ltd:
+      7380 EUR", the details text with the deadline (5 minutes after the request), the "Open the invoice" link and the
+      Approve / Reject buttons; INV1001 already shown as Approved by Sam in the list. Fallback if Teams doesn't show it:
+      the same request as an Outlook on the web actionable message in Sam's inbox. Mask the tenant name, the domain
+      part of e-mail addresses and avatars.
     narration: >
       Sam gets a normal Power Automate approval in Teams and Outlook, with a link to the invoice. Sam approves the small
       one. The big one, seven thousand three hundred eighty euros, he ignores.
@@ -203,6 +217,13 @@ scenes:
     heading: "Five minutes later: escalated"
     image: screens/escalated.jpg
     bar: "SharePoint · Invoices Inbox"
+    demo: >
+      Two real captures for this scene. (1) Browser on Invoices Inbox after the 5-minute stage deadline has passed (the
+      Durable timer fired, stageTimeoutMinutes=5): row INV1002 with Approval status "Waiting for approval" and Approval
+      step "Manager approval escalated to riley.demo@..."; INV1001 Approved, Decided by sam.demo@.... (2) Outlook on
+      the web signed in as Sam Demo: the e-mail "Invoice INV1002: your answer was not used", sent by the relay flow's
+      run-after-failed branch after Sam approved the old, no longer active request. Mask the tenant host and e-mail
+      domains (keep "riley.demo" / "sam.demo" readable).
     narration: >
       Five minutes later the durable timer fires. The library says manager approval escalated to Riley, and Riley
       has a new approval. Sam finally taps approve on the old one, and gets an email: your answer was not used.
@@ -212,6 +233,12 @@ scenes:
     heading: "Approved, with the whole story"
     image: screens/outcome.jpg
     bar: "SharePoint · Invoices Inbox · after the approvals"
+    demo: >
+      Browser on Invoices Inbox after Riley Demo approved the escalated manager stage and Jordan Demo approved the
+      finance stage (7380 EUR is above the 5000 EUR finance threshold): row INV1002 with Approval status "Approved",
+      Decided by "jordan.demo@...", Approval step empty, Approval summary "Manager: Approved by riley.demo@...
+      (escalated); Finance: Approved by jordan.demo@...". Optional inset: Alex Demo's result e-mail from the relay flow
+      in Outlook on the web. Mask the tenant host and e-mail domains (keep the user part readable).
     narration: >
       Riley approves, then Jordan approves as finance director. The library shows approved, decided by Jordan, and
       the summary says manager approved by Riley, escalated, finance approved by Jordan. Alex gets the result by email.

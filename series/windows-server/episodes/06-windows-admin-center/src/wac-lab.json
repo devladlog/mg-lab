@@ -1,0 +1,26 @@
+{
+  "SchemaVersion": 1,
+  "Domain": "lab.contoso.com",
+  "Gateway": {
+    "ComputerName": "CON-SRV02",
+    "Mode": "Administration",
+    "HttpsPort": 443,
+    "CertificateThumbprint": ""
+  },
+  "Nodes": [
+    { "Name": "CON-DC01",  "Type": "server", "Tags": ["dc", "core"],          "Shared": true, "KerberosSso": false },
+    { "Name": "CON-SRV01", "Type": "server", "Tags": ["app", "core"],         "Shared": true, "KerberosSso": true,  "Rbac": true },
+    { "Name": "CON-SRV02", "Type": "server", "Tags": ["gateway", "desktop"],  "Shared": true, "KerberosSso": false },
+    { "Name": "CON-SQL01", "Type": "server", "Tags": ["sql", "core"],         "Shared": true, "KerberosSso": true,  "Optional": true },
+    { "Name": "CON-CLI01", "Type": "server", "Tags": ["client", "core"],      "Shared": true, "KerberosSso": true }
+  ],
+  "Rbac": {
+    "Readers": ["CONTOSO\\alex.demo"],
+    "Administrators": [],
+    "HyperVAdministrators": []
+  },
+  "Policy": {
+    "MaxNodesAdministrationMode": 10,
+    "CertificateWarnDays": 30
+  }
+}

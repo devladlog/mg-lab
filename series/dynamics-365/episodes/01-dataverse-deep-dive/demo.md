@@ -30,7 +30,8 @@ Everything in `src/` and `tests/` already ran in the build container against the
 2. `export DATAVERSE_URL=https://<lab-env>.crm4.dynamics.com` (and the three `AZURE_*` variables if using the app user).
 3. Terminal: dark theme, font 18+, ~1600×900, short prompt (`PS1='$ '`). Don't `echo` the environment URL.
 4. Make sure the table **doesn't exist yet** (fresh run shows the key status polling). If it exists from a rehearsal,
-   delete the table in the solution first (see tear-down).
+   delete the table in the solution first (see tear-down). `provision` skips everything when the table exists, so an
+   older table keeps its old Due Date behavior.
 
 ## Screens to capture (match the `screen` scenes in script.yaml)
 
@@ -47,6 +48,10 @@ Capture the full output: created table, 4 columns, the lookup, the alternate key
 ### 2. `screens/maker-keys.jpg` — "Same table in the maker portal" (**needs tenant**)
 make.powerapps.com → Solutions → MGLabDataverse → Project Request → **Keys**: "Request Code", status Active.
 Optional B-roll: Columns page (Budget, Due Date, Priority, Request Code, Customer Account).
+**Check (off camera or as B-roll):** open **Due Date** → *Advanced options*: Format **Date only**, Behavior **Date only**
+(set by `DateTimeBehavior: {"Value": "DateOnly"}` in `schema.py`). If it says *User local*, the table is left over from
+a run before this fix: delete it and provision again (a Date only column can't be switched back, and the date shift
+episode 5 describes only happens with User local).
 Mask tenant/environment name in the header and the account menu.
 
 ### 3. `screens/import.jpg` — "Run it twice: still eighteen records" (**needs tenant**)

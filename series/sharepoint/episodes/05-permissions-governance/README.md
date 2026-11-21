@@ -52,8 +52,8 @@ rest; your own Entra app for PnP with delegated permissions — see
 $site  = 'https://contoso.sharepoint.com/sites/Purchasing'     # the episode 3 site
 $app   = '00000000-0000-0000-0000-000000000000'
 $label = '00000000-0000-0000-0000-000000000000'                # Get-Label | ft Name, Guid  (Security & Compliance PowerShell)
-./src/New-PermissionDrift.ps1 -SiteUrl $site -ClientId $app -DirectUser lee.gu@contoso.com `
-    -ShareWithUser megan.bowen@contoso.com -ContractManager isaiah.langer@contoso.com          # lab only
+./src/New-PermissionDrift.ps1 -SiteUrl $site -ClientId $app -DirectUser alex.demo@contoso.com `
+    -ShareWithUser sam.demo@contoso.com -ContractManager jordan.demo@contoso.com          # lab only
 ./src/Invoke-Governance.ps1 -PolicyPath ./src/governance/purchasing.policy.json -SiteUrl $site -ClientId $app `
     -SensitivityLabelId $label -ExportSnapshot ./src/snapshots/before.json
 ./src/Invoke-Governance.ps1 -PolicyPath ./src/governance/purchasing.policy.json -SiteUrl $site -ClientId $app `
@@ -115,7 +115,7 @@ can't be edited.
 - **SharePoint Advanced Management isn't in E5.** Learn's prerequisites say SAM comes with a Microsoft 365 Copilot
   licence in the organization or the SAM Plan 1 add-on (or Microsoft 365 E7). The lab is an E5 trial, so the episode
   uses only base SharePoint features plus Purview labels, and says so.
-- **Limited Access is noise.** In the drifted site Megan and Contract Managers appear on the site itself, but only with
+- **Limited Access is noise.** In the drifted site Sam and Contract Managers appear on the site itself, but only with
   *Limited Access*: Learn documents it as the level SharePoint combines with fine-grained permissions so people can
   reach one list or item, and it can't be edited. Counting it would flag every item share twice, so the audit ignores it.
 - **Breaking inheritance with "copy" keeps everyone.** `Set-PnPList -BreakRoleInheritance -CopyRoleAssignments`

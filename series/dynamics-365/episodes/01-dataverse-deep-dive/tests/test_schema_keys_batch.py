@@ -34,6 +34,23 @@ def test_alternate_key_columns_exist_and_are_a_supported_type():
         assert cols[k]["@odata.type"].endswith("StringAttributeMetadata")   # string/int/decimal/date/lookup/choice only
 
 
+def test_due_date_is_date_only_in_format_and_behavior():
+    col = next(c for c in schema.extra_columns() if c["SchemaName"] == f"{schema.PREFIX}_DueDate")
+    assert col["@odata.type"].endswith("DateTimeAttributeMetadata")
+    assert col["Format"] == "DateOnly"
+    # without this the column defaults to UserLocal and dates shift a day for users east of UTC (episode 5)
+    assert col["DateTimeBehavior"] == {"Value": "DateOnly"}
+
+
+def test_every_date_column_sets_a_behavior_that_fits_its_format():
+    for c in schema.extra_columns():
+        if c["AttributeType"] != "DateTime":
+            continue
+        assert "DateTimeBehavior" in c, c["SchemaName"]
+        if c["DateTimeBehavior"]["Value"] == "DateOnly":
+            assert c["Format"] == "DateOnly", c["SchemaName"]   # Learn: DateOnly behavior can't use DateAndTime format
+
+
 def test_labels_only_set_localized_labels():
     blob = json.dumps([schema.project_request_table(), schema.extra_columns(), schema.account_relationship()])
     assert "UserLocalizedLabel" not in blob

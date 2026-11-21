@@ -1,0 +1,36 @@
+{
+  "SchemaVersion": 1,
+  "EndpointName": "Contoso.AppOps",
+  "ModuleName": "ContosoOps",
+  "Description": "The same endpoint after a few 'quick fixes' (fictional, for the tests and the video).",
+  "TargetRole": "MemberServer",
+  "Session": {
+    "RunAsVirtualAccount": true,
+    "RoleDefinitions": {
+      "CONTOSO\\GG-AppOps-Readers": ["AppOpsReader"],
+      "CONTOSO\\GG-AppOps-Operators": ["AppOpsReader", "AppOpsOperator"],
+      "localhost\\Helpdesk": ["AppOpsReader"]
+    }
+  },
+  "Roles": {
+    "AppOpsReader": {
+      "Description": "Helpdesk asked to restart the print spooler",
+      "VisibleCmdlets": [
+        { "Name": "Get-Service" },
+        { "Name": "Restart-Service" },
+        { "Name": "Get-*" }
+      ],
+      "VisibleFunctions": [ { "Name": "Get-OpsHealth" } ],
+      "VisibleExternalCommands": [ "whoami.exe" ]
+    },
+    "AppOpsOperator": {
+      "VisibleCmdlets": [
+        { "Name": "Restart-Service", "Parameters": [ { "Name": "Name", "ValidateSet": ["W3SVC", "WAS"] } ] },
+        { "Name": "Start-Process" },
+        { "Name": "Stop-Website", "Parameters": [ { "Name": "Name", "ValidateSet": ["Default Web Site"], "ValidatePattern": "Contoso" } ] }
+      ],
+      "VisibleFunctions": [ { "Name": "Clear-OpsLogFolder" }, { "Name": "Reset-OpsCache" } ],
+      "VisibleProviders": [ "FileSystem" ]
+    }
+  }
+}

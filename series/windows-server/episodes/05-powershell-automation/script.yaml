@@ -1,0 +1,300 @@
+# DEVLADLOG Windows Server - episode 05 (draft: the screen scenes need the lab recording, see demo.md)
+episode: 5
+slug: powershell-automation
+series_label: "WINDOWS SERVER"
+series_name: "DEVLADLOG Windows Server"
+file_prefix: "windows-server"
+title: "PowerShell Automation"
+subtitle: "An unattended job with no password and three allowed commands: JEA, gMSA, scheduled task"
+voice: am_michael
+thumbnail_text: "NO PASSWORD\nNO ADMIN\nSTILL AUTOMATED"
+youtube:
+  title: "PowerShell Automation Without Admin Rights: JEA, gMSA, Task Scheduler | DEVLADLOG Windows Server #5"
+  tags: [PowerShell, JEA, Just Enough Administration, gMSA, group managed service account, scheduled task, Windows Server 2025, least privilege, automation, Pester, sysadmin]
+sources:
+  - https://www.devladlog.com/articles/windows-server/2025-09-09-powershell-automation-complete-guide-2025/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Your 3 AM script is a Domain Admin"
+    sub: "Same job, no password, three allowed commands"
+    short: hook
+    narration: >
+      The scheduled task that restarts the web server at three in the morning. It runs as a domain admin, and the
+      password sits in the task, or worse, in the script. In this episode we rebuild that job so it holds no password
+      at all, and the only things it can do on the server are the three things it needs. Real lab, real code.
+
+  - id: plan
+    type: bullets
+    heading: "What we're building"
+    bullets:
+      - "A JEA endpoint on CON-SRV01, generated from one JSON file"
+      - "A lint that checks the roles before anything is registered"
+      - "A runbook that decides, acts, logs and re-checks"
+      - "A gMSA that runs it from Task Scheduler on CON-SRV02"
+      - "Forty-seven Pester tests, no servers needed"
+    narration: >
+      The plan. A Just Enough Administration endpoint on the app server, generated from one JSON file. A lint that
+      checks the roles before we register anything. A runbook that reads health, decides, acts, logs, and checks
+      again. And a group managed service account that runs it from Task Scheduler on the second server. Same lab
+      dot contoso dot com domain as the last four episodes.
+
+  - id: definition
+    type: code
+    heading: "The endpoint is data"
+    lang: json
+    code: |
+      "Session": {
+        "RunAsVirtualAccount": true,
+        "TranscriptDirectory": "C:\\ProgramData\\JEAConfiguration\\Transcripts",
+        "RoleDefinitions": {
+          "CONTOSO\\GG-AppOps-Readers":   ["AppOpsReader"],
+          "CONTOSO\\GG-AppOps-Operators": ["AppOpsReader", "AppOpsOperator"]
+        }
+      },
+      "AppOpsOperator": {
+        "VisibleCmdlets": [
+          { "Name": "Restart-Service",
+            "Parameters": [ { "Name": "Name", "ValidateSet": ["W3SVC", "WAS"] } ] }
+        ],
+        "VisibleFunctions": [ { "Name": "Clear-OpsLogFolder" } ]
+      }
+    narration: >
+      Two roles. Readers get Get Service and our own health function. Operators also get Restart Service, but only
+      the Name parameter, and only two values: the web service and the process activation service. Plus one function
+      that trims old I I S logs. Every session is transcribed, and runs as a temporary virtual account.
+
+  - id: merge
+    type: code
+    heading: "The merge trap"
+    lang: text
+    code: |
+      PS> ./Invoke-OpsLint.ps1 -DefinitionPath risky-definition.json -FailOnHigh
+
+      Severity Scope                             Check            Message
+      High     group CONTOSO\GG-AppOps-Operators MergeWidening    Restart-Service loses its
+               constraint from role AppOpsOperator: role 'AppOpsReader' allows
+               Restart-Service with no parameter constraints, so all parameters are allowed.
+      High     role AppOpsOperator               DangerousCommand 'Start-Process' can be used
+               to bypass JEA
+      High     role AppOpsReader                 WildcardCommand  'Get-*' uses a wildcard
+      ...
+      Contoso.AppOps: 12 finding(s), 6 high.
+    short: merge
+    narration: >
+      Here's a trap that looks harmless. Helpdesk asks to restart the print spooler, so someone adds Restart Service
+      to the reader role, with no constraints. Operators are in both roles, and JEA merges roles to the most
+      permissive set. So operators can now restart any service. The lint applies the merge rules from Microsoft Learn
+      per group, and fails the build.
+
+  - id: install
+    type: code
+    heading: "Generate, test, register"
+    lang: powershell
+    code: |
+      foreach ($roleName in (Get-OpsPropNames $def.Roles)) {
+          $params = ConvertTo-OpsRoleCapabilityParams -Definition $def -RoleName $roleName `
+                        -Path (Join-Path $rcDir "$roleName.psrc")
+          New-PSRoleCapabilityFile @params
+      }
+      $sessionParams = ConvertTo-OpsSessionConfigParams -Definition $def -Path $pssc
+      New-PSSessionConfigurationFile @sessionParams
+      if (-not (Test-PSSessionConfigurationFile -Path $pssc)) { throw "Test failed for '$pssc'." }
+      if (Get-PSSessionConfiguration -Name $def.EndpointName -ErrorAction SilentlyContinue) {
+          Unregister-PSSessionConfiguration -Name $def.EndpointName -Force
+      }
+      Register-PSSessionConfiguration -Path $pssc -Name $def.EndpointName -Force
+    narration: >
+      Install O P S endpoint refuses to continue if the lint has a High finding. Then it builds a module with a
+      Role Capabilities folder, one P S R C file per role, a session configuration file, tests it, and registers the
+      endpoint. Registering restarts Win R M, which drops every remoting session, so we run it over PowerShell
+      Direct from the Hyper V host.
+
+  - id: register
+    type: screen
+    heading: "The endpoint, registered"
+    image: screens/register.jpg
+    bar: "Lab · Hyper-V host · PowerShell Direct to CON-SRV01"
+    demo: >
+      Elevated PowerShell on the Hyper-V host. Invoke-Command -VMName CON-SRV01 runs Install-OpsEndpoint (Windows
+      PowerShell 5.1 inside the VM) and prints Steps "module transcripts registered" and the one Accepted finding.
+      Then: Get-PSSessionConfiguration -Name Contoso.AppOps | Format-List Name, PSVersion, Permission, showing
+      PSVersion 5.1 and the two CONTOSO\GG-AppOps groups with AccessAllowed.
+    narration: >
+      On the lab, the install runs inside CON SRV zero one over PowerShell Direct. Zero High findings, one accepted
+      risk: the virtual account is a local administrator. Get P S Session Configuration shows the endpoint, and the
+      permission list is exactly our two groups. Rewrite this to what's on screen.
+
+  - id: helpdesk
+    type: screen
+    heading: "What helpdesk can do"
+    image: screens/helpdesk.jpg
+    bar: "Lab · CON-CLI01 · JEA session as CONTOSO\\alex.demo"
+    demo: >
+      On CON-CLI01 (pwsh): Enter-PSSession -ComputerName CON-SRV01 -ConfigurationName Contoso.AppOps -Credential
+      CONTOSO\alex.demo. In the session: Get-Command (short list: the 8 defaults plus Get-Service and Get-OpsHealth),
+      Get-OpsHealth, then Restart-Service W3SVC, which fails as not recognized. Exit, then on CON-SRV01 as admin:
+      Get-PSSessionCapability -ConfigurationName Contoso.AppOps -Username CONTOSO\alex.demo.
+    narration: >
+      Alex from helpdesk is in the readers group and isn't an administrator anywhere. In the endpoint, Get Command
+      lists a handful of commands. Get O P S Health works. Restart Service isn't even there. And Get P S Session
+      Capability shows the same list for any user, without signing in as them.
+
+  - id: decision
+    type: code
+    heading: "Decide first, touch nothing"
+    lang: powershell
+    code: |
+      'Stopped' {
+          if ($allowed -notcontains $svc.Name) {
+              & $alert High 'ServiceStopped' "$($svc.Name) is stopped and not in RestartAllowed."
+          }
+          elseif ($recent -ge $maxRestarts) {
+              & $alert High 'RestartLoop' "$($svc.Name) was already restarted $recent time(s) in 24 h"
+          }
+          else {
+              [void]$actions.Add([pscustomobject]@{ Action = 'RestartService'; Target = $svc.Name
+                      Arguments = @{ Name = [string]$svc.Name }; Reason = "$($svc.Name) is stopped" })
+          }
+      }
+      'Missing' { & $alert Medium 'ServiceMissing' "$($svc.Name) isn't installed on this server." }
+    narration: >
+      The runbook separates deciding from doing. Get O P S Decision takes health facts, the policy and the restart
+      history, and returns actions and alerts. A stopped service gets restarted, unless it already was three times in
+      twenty four hours. Then it's a circuit breaker: no more restarts, a High alert, a human looks.
+
+  - id: remoting
+    type: code
+    heading: "Retry reads, never writes"
+    lang: powershell
+    code: |
+      # JEA is NoLanguage: import only the commands we need, run them locally in full language
+      $module = Import-PSSession -Session $session -CommandName 'Get-OpsHealth', 'Restart-Service', 'Clear-OpsLogFolder' `
+          -Prefix $Prefix -AllowClobber -DisableNameChecking -ErrorAction Stop
+
+      $health = Invoke-OpsWithRetry -Activity "health of $target" -MaxAttempts $r.MaxAttempts `
+          -BaseDelaySeconds $r.BaseDelaySeconds -MaxDelaySeconds $r.MaxDelaySeconds -ScriptBlock {
+              Invoke-OpsRemote -Connection $conn -Operation Health
+          }
+      foreach ($action in $decision.Actions) {
+          # No retry here: a change that half-happened is not retried blindly
+          $res = Invoke-OpsRemote -Connection $conn -Operation $action.Action -Arguments $action.Arguments
+      }
+    narration: >
+      Connections and health reads retry with exponential backoff: five, ten, twenty seconds. Changes never retry.
+      If a restart fails halfway, the job logs it, exits with code one, and leaves it for a person. After a restart
+      it reads health again and reports what it sees, not what it hoped for.
+
+  - id: gmsa
+    type: code
+    heading: "No password anywhere"
+    lang: powershell
+    code: |
+      New-ADServiceAccount -Name $GmsaName -DNSHostName "$GmsaName.$($domain.DNSRoot)" `
+          -PrincipalsAllowedToRetrieveManagedPassword $hostAccount -KerberosEncryptionType AES128, AES256
+      Add-ADGroupMember -Identity $OperatorsGroup -Members $gmsa
+
+      # on CON-SRV02
+      Install-ADServiceAccount -Identity $GmsaName
+      $principal = New-ScheduledTaskPrincipal -UserId 'CONTOSO\gmsa-opsjob$' -LogonType Password -RunLevel Limited
+      $settings  = New-ScheduledTaskSettingsSet -MultipleInstances IgnoreNew -ExecutionTimeLimit (New-TimeSpan -Minutes 10)
+      Register-ScheduledTask -TaskPath '\Contoso\' -TaskName 'OpsJob' -Action $action -Trigger $trigger `
+          -Principal $principal -Settings $settings
+    narration: >
+      The identity is a group managed service account. The domain controller manages its password, and only CON SRV
+      zero two may retrieve it. It joins the operators group, and that's its only right on the app server. The task
+      principal uses logon type Password, but we never type one: Windows fetches it.
+
+  - id: task
+    type: screen
+    heading: "The job, running as the gMSA"
+    image: screens/task.jpg
+    bar: "Lab · CON-SRV02 · Task Scheduler"
+    demo: >
+      Before: on CON-SRV01 (admin) Stop-Service W3SVC and the demo log files exist (60+ MB, older than 14 days).
+      On CON-SRV02 (Desktop Experience, VMConnect): Task Scheduler > Contoso > OpsJob, General tab showing
+      "When running the task, use the following user account: CONTOSO\gmsa-opsjob$". Right-click Run. Then the
+      History or Last Run Result 0x0, and a PowerShell window with Get-Content C:\OpsJob\logs\ops-*.jsonl -Tail 6
+      showing RestartService W3SVC Succeeded and ClearLogs with the files removed and MB freed.
+    narration: >
+      On CON SRV zero two, the task runs as the managed account. We stopped the web service and filled the log
+      folder before the run. Last run result zero. The log has one line per event: health, restart succeeded, logs
+      trimmed with the number of files and megabytes freed. Rewrite to the real numbers.
+
+  - id: transcript
+    type: screen
+    heading: "Who did it? The transcript knows"
+    image: screens/transcript.jpg
+    bar: "Lab · CON-SRV01 · JEA transcript"
+    demo: >
+      On CON-SRV01 (VMConnect, sconfig option 15 PowerShell): open the newest file in
+      C:\ProgramData\JEAConfiguration\Transcripts. Show the header lines Username: CONTOSO\gmsa-opsjob$ and
+      RunAs User: WinRM Virtual Users\WinRM VA_..., and the lines CommandInvocation(Restart-Service) /
+      ParameterBinding(Restart-Service): name="Name"; value="W3SVC".
+    narration: >
+      On the app server, every JEA session leaves a transcript. The header shows who connected, our managed account,
+      and the temporary virtual account that actually ran the command. Below, the restart, with its parameter. That's
+      the audit trail, and the job can't delete it: transcripts are written by the system account.
+
+  - id: nolanguage
+    type: screen
+    heading: "Gotcha: no variables in JEA"
+    image: screens/nolanguage.jpg
+    bar: "Lab · CON-CLI01 · Invoke-Command to the JEA endpoint"
+    short: gotcha
+    demo: >
+      On CON-CLI01 (pwsh), $cred = Get-Credential CONTOSO\alex.demo, then: Invoke-Command -ComputerName CON-SRV01
+      -ConfigurationName Contoso.AppOps -Credential $cred -ScriptBlock { $svc = 'W3SVC'; Get-Service -Name $svc }.
+      Capture the error exactly as printed. Then the working form in the same window:
+      Invoke-Command ... -ScriptBlock { Get-Service -Name W3SVC }.
+    narration: >
+      The honest gotcha. JEA sessions run in No Language mode. You can't use variables to store data or inspect
+      object properties, so the obvious Invoke Command with a variable inside fails. That's why the runbook uses
+      implicit remoting: Import P S Session brings in proxy commands, and our script keeps full language locally.
+
+  - id: tests
+    type: code
+    heading: "Forty-seven tests, no servers"
+    lang: text
+    code: |
+      Describing Merge-OpsRoleCapability (the merge rules on Learn)
+        [+] reproduces the Learn example: Get-Service loses its pattern, the Restart-Service sets are combined
+      Describing Test-OpsEndpointDefinition
+        [+] reports the merge trap: Operators lose the W3SVC/WAS limit because Readers allow Restart-Service unconstrained
+      Describing Install-OpsEndpoint (Windows cmdlets mocked)
+        [+] refuses to register a definition with High findings
+      Describing Invoke-OpsMaintenanceRun
+        [+] exits 1 and logs Failed when a change fails, without retrying it
+        [+] stops restarting after three successful restarts in 24 hours (reads its own logs)
+      Describing Runs on Windows PowerShell 5.1 (servers and the scheduled task)
+        [+] src/OpsLab/OpsLab.psm1 has no PowerShell 7-only syntax
+
+      Tests Passed: 47, Failed: 0, Skipped: 0
+    narration: >
+      Forty seven Pester tests run on Linux. The merge function reproduces the example from the Learn article. The
+      installer refuses a risky definition. The runbook is tested with the endpoint mocked: a failed restart, an
+      unreachable server, and the circuit breaker reading its own logs.
+
+  - id: recap
+    type: bullets
+    heading: "Five rules for unattended jobs"
+    bullets:
+      - "No passwords: gMSA for the job, virtual accounts on the server"
+      - "Expose commands, not admin rights: JEA with ValidateSet"
+      - "Lint the merged roles, not each role alone"
+      - "Retry reads, never writes; re-check after acting"
+      - "Log every decision; keep the transcripts"
+    narration: >
+      Five rules. No passwords: a managed account for the job, virtual accounts on the server. Expose commands, not
+      admin rights. Lint what each group gets after the merge, not each role alone. Retry reads, never writes, and
+      check again after acting. And log every decision, because the transcript is your audit trail.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The module, the JEA definition, the setup scripts and the tests are on GitHub, and the complete guide to
+      PowerShell automation is on devladlog dot com. Next episode: Windows Admin Center, which, it turns out, uses a
+      JEA endpoint for its own role based access. Subscribe so you don't miss it.

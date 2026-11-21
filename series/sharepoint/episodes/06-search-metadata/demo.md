@@ -1,12 +1,24 @@
 # Demo shot list — SharePoint #6 Search and metadata
 
+## Lab environment
+
+| Item | What this episode needs |
+|---|---|
+| VMs / Azure / Power Platform | none (no Hyper-V VM, no Azure resource group) |
+| Tenant | **SharePoint** in the lab tenant (Microsoft 365 E5 trial, until 20 Dec 2026): term store, site collection search schema, SharePoint search (KQL). No SharePoint Premium / Syntex. Episode 3's communication site `/sites/Purchasing` (*Contoso Purchasing*) with episode 4's **Supplier Documents** library filed **with `-IncludeIncomplete`** (the Adventure Works contract without expiry date) plus `scan_0001.txt` dragged in, and with Fabrikam, Northwind Traders, Tailspin Toys and Adventure Works files present. Episode 5's permission changes and Confidential label don't matter here (its tear-down may or may not have run). Created here: term group *Contoso Purchasing* → term set *Purchasing Categories* (14 terms with fixed IDs), site column `PurchCategory` added to the *Purchasing Document* content type and the library, category values on the files, aliases/mappings on RefinableString00/01 and RefinableDate00/01, a library re-index (all removed in tear-down unless episode 7 keeps them) |
+| Lab users | `labadmin` (Lab Admin, the recording account) only: runs the script, the browser steps and the search queries (results are security-trimmed to labadmin, who can read the whole library). No other lab user is needed |
+| Roles | `labadmin`: **SharePoint Administrator** (from episode 3), **site collection admin** on the site (search schema, re-index), and **Term Store admin** — add labadmin under SharePoint admin center → *Content services → Term store* → *Admins* in set-up if it isn't listed, and remove it in tear-down |
+| Entra | The existing "MG Lab PnP" app registration (delegated) |
+| Licences / trials | lab E5 trial licence for labadmin; cost €0 |
+| Timing | Two sessions: day 1 provisioning + schema mapping + re-index; day 2 (after the crawl, note how long it took) the search tests. Keep the date episode 4's files were generated for `-Today` |
+| Recording machine | The Windows lab laptop: PowerShell 7.4+ with PnP.PowerShell 3.x and Pester; browser with `pipeline/mask.js`, signed in to the lab tenant as labadmin, for the term store, library and search schema screens |
+
 The code scenes are real output from this folder (plan lint, KQL lint, Pester). The four `screen` scenes need the lab
 tenant. **Needs tenant:** `Invoke-MgTaxonomyProvisioning`, `Invoke-MgCategoryColumn`, `Invoke-MgCategoryTagging`,
 `Get-MgSiteSearchMapping`, `Invoke-MgSearchTest`, `Request-PnPReindexList` and every `-SiteUrl` path of
 `Invoke-SearchMetadata.ps1`. Locally they are covered only by Pester tests that mock the real PnP cmdlets (parameter
 names and types are checked).
 
-No VMs and no Azure resources: everything runs on the recording laptop (PowerShell 7 + browser) against the lab tenant.
 Plan **two sessions**: provisioning + mapping + re-index on day 1, the search tests after the crawl (day 2, or a few
 hours later; note how long it took).
 
@@ -15,8 +27,8 @@ hours later; note how long it took).
 |---|---|---|
 | Lab tenant, Microsoft 365 E5 trial | term store, search schema, KQL: any SharePoint plan. No SharePoint Premium | €0 (trial until 20 Dec 2026) |
 | The episode 3 **Contoso Purchasing** site with the episode 4 **Supplier Documents** library filed | run episode 4 with `-IncludeIncomplete` (the Adventure Works contract without expiry date is a test case) and drag in `scan_0001.txt` as in episode 4 | €0 |
-| **Term Store admin** (SharePoint admin center → Term store → *Admins*) for the account running the script | needed to create the term group | €0 |
-| **Site collection admin** on the site | search schema page and re-index | €0 |
+| **Term Store admin** (SharePoint admin center → Term store → *Admins*) for `labadmin` | needed to create the term group | €0 |
+| **Site collection admin** on the site for `labadmin` | search schema page and re-index | €0 |
 | Entra app for PnP with **delegated** permissions | the existing "MG Lab PnP" app | €0 |
 | PowerShell 7.4+ with PnP.PowerShell 3.x and Pester | `Install-Module PnP.PowerShell, Pester -Scope CurrentUser` | €0 |
 
@@ -102,5 +114,5 @@ Remove-PnPField -List 'Supplier Documents' -Identity PurchCategory -Force
 Remove-PnPField -Identity PurchCategory -Force                 # if the content type link blocks it, remove it from 'Purchasing Document' first
 Remove-PnPTermGroup -Identity 'Contoso Purchasing' -Force      # if it refuses because the group isn't empty, delete the term set in the term store first
 ```
-In the search schema, clear the alias and mapping on the four Refinable properties (they're shared by the site
+Remove labadmin from the term store *Admins* if it was added for this episode. In the search schema, clear the alias and mapping on the four Refinable properties (they're shared by the site
 collection). Keep everything if episode 7 builds on it.

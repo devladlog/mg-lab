@@ -104,7 +104,7 @@ Describe 'Test-MgPermissionSnapshot (the drifted lab site)' {
 
     It 'ignores Limited Access: SharePoint assigns it, nobody granted it' {
         $f = Audit $drifted
-        @($f | Where-Object { $_.Message -like "*Megan Bowen*" -and $_.Target -eq 'site' }) | Should -HaveCount 0
+        @($f | Where-Object { $_.Message -like "*Sam Demo*" -and $_.Target -eq 'site' }) | Should -HaveCount 0
         @($f | Where-Object { $_.Message -like '*Contract Managers*Limited*' }) | Should -HaveCount 0
     }
 
@@ -204,8 +204,8 @@ Describe 'Tenant functions (PnP cmdlets mocked)' -Skip:(-not $hasPnP) {
         Mock -ModuleName MgGovernance Get-PnPGroup -ParameterFilter { $AssociatedMemberGroup } { [pscustomobject]@{ Title = 'Contoso Purchasing Members' } }
         Mock -ModuleName MgGovernance Get-PnPGroup -ParameterFilter { $AssociatedVisitorGroup } { [pscustomobject]@{ Title = 'Contoso Purchasing Visitors' } }
         Mock -ModuleName MgGovernance Get-PnPGroup { 'Contoso Purchasing Owners', 'Contoso Purchasing Members', 'Contoso Purchasing Visitors' | ForEach-Object { [pscustomobject]@{ Title = $_ } } }
-        Mock -ModuleName MgGovernance Get-PnPGroupMember { if ("$Group" -like '*Owners') { User 'Alex Demo' 'i:0#.f|membership|alex.demo@contoso.com' } }
-        Mock -ModuleName MgGovernance Get-PnPSiteCollectionAdmin { User 'Alex Demo' 'i:0#.f|membership|alex.demo@contoso.com' }
+        Mock -ModuleName MgGovernance Get-PnPGroupMember { if ("$Group" -like '*Owners') { User 'Lab Admin' 'i:0#.f|membership|labadmin@contoso.com' } }
+        Mock -ModuleName MgGovernance Get-PnPSiteCollectionAdmin { User 'Lab Admin' 'i:0#.f|membership|labadmin@contoso.com' }
         Mock -ModuleName MgGovernance Get-PnPList {
             [pscustomobject]@{ Id = [guid]'11111111-0000-0000-0000-000000000001'; Title = 'Supplier Documents'; HasUniqueRoleAssignments = $true; ItemCount = 2; Hidden = $false; BaseType = 'DocumentLibrary' }
             [pscustomobject]@{ Id = [guid]'11111111-0000-0000-0000-000000000002'; Title = 'Hidden Stuff'; HasUniqueRoleAssignments = $true; ItemCount = 1; Hidden = $true; BaseType = 'GenericList' }
@@ -244,7 +244,7 @@ Describe 'Tenant functions (PnP cmdlets mocked)' -Skip:(-not $hasPnP) {
         Should -Invoke -ModuleName MgGovernance Remove-PnPFileSharingLink -Times 1 -Exactly -ParameterFilter { $Identity -eq '00000000-0000-0000-0000-000000000001' -and $Force }
         Should -Invoke -ModuleName MgGovernance Set-PnPListItemPermission -Times 1 -Exactly -ParameterFilter { $InheritPermissions -and "$List" -eq 'Supplier Documents' }
         Should -Invoke -ModuleName MgGovernance Set-PnPListPermission -Times 1 -Exactly -ParameterFilter { $Group.Name -eq 'Contoso Purchasing Members' -and $RemoveRole -eq 'Edit' }
-        Should -Invoke -ModuleName MgGovernance Set-PnPWebPermission -Times 1 -Exactly -ParameterFilter { $User -like '*lee.gu*' -and $RemoveRole -contains 'Full Control' }
+        Should -Invoke -ModuleName MgGovernance Set-PnPWebPermission -Times 1 -Exactly -ParameterFilter { $User -like '*alex.demo*' -and $RemoveRole -contains 'Full Control' }
         Should -Invoke -ModuleName MgGovernance Set-PnPList -Times 1 -Exactly -ParameterFilter { $ResetRoleInheritance -and "$Identity" -eq 'Purchase Requests' }
         Should -Invoke -ModuleName MgGovernance Remove-PnPGroupMember -Times 1 -Exactly -ParameterFilter { $Group.Name -eq 'Contoso Purchasing Visitors' }
     }
@@ -272,10 +272,10 @@ Describe 'Tenant functions (PnP cmdlets mocked)' -Skip:(-not $hasPnP) {
         }
         Mock Set-PnPListItemPermission { }
         Mock Add-PnPFileOrganizationalSharingLink { }
-        & (Join-Path $PSScriptRoot '..' 'src' 'New-PermissionDrift.ps1') -SiteUrl $site -ClientId ([guid]::Empty) -DirectUser 'lee.gu@contoso.com' `
-            -ShareWithUser 'megan.bowen@contoso.com' -ContractManager 'isaiah.langer@contoso.com' 6>$null
+        & (Join-Path $PSScriptRoot '..' 'src' 'New-PermissionDrift.ps1') -SiteUrl $site -ClientId ([guid]::Empty) -DirectUser 'alex.demo@contoso.com' `
+            -ShareWithUser 'sam.demo@contoso.com' -ContractManager 'jordan.demo@contoso.com' 6>$null
         Should -Invoke Set-PnPTenantSite -Times 1 -Exactly -ParameterFilter { "$SharingCapability" -eq 'ExistingExternalUserSharingOnly' -and "$DefaultSharingLinkType" -eq 'Internal' }
-        Should -Invoke Set-PnPWebPermission -Times 1 -Exactly -ParameterFilter { $User -eq 'lee.gu@contoso.com' -and $AddRole -contains 'Full Control' }
+        Should -Invoke Set-PnPWebPermission -Times 1 -Exactly -ParameterFilter { $User -eq 'alex.demo@contoso.com' -and $AddRole -contains 'Full Control' }
         Should -Invoke Set-PnPList -Times 2 -Exactly -ParameterFilter { $BreakRoleInheritance -and $CopyRoleAssignments }
         Should -Invoke New-PnPGroup -Times 1 -Exactly -ParameterFilter { $Title -eq 'Contract Managers' }
         Should -Invoke Set-PnPListPermission -Times 1 -Exactly -ParameterFilter { $Group.Name -eq 'Contract Managers' -and $AddRole -eq 'Contribute' }

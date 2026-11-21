@@ -3,7 +3,7 @@
 A **Project Request** table defined as code, created through the Dataverse Web API inside a solution, then loaded
 with an import you can run as many times as you like:
 
-- table, money / date / choice columns, a lookup to **Account** and an **alternate key** on `mgl_requestcode`,
+- table, money / date-only / choice columns, a lookup to **Account** and an **alternate key** on `mgl_requestcode`,
   all as JSON payloads that are unit-tested and reviewed like code
 - **upsert by alternate key** (`PATCH .../mgl_projectrequests(mgl_requestcode='PR-0001')`), with create-only
   (`If-None-Match: *`) and update-only (`If-Match: *`) modes
@@ -31,7 +31,7 @@ The same table is used in [episode 2](../02-security-roles-teams/) to explain se
 ```bash
 cd series/dynamics-365/episodes/01-dataverse-deep-dive
 python3 -m pip install --user -r requirements.txt      # requests, msal, pytest
-python3 -m pytest -q tests                              # 41 passed
+python3 -m pytest -q tests                              # 43 passed
 cd src && python3 -m dvlab all --fake                   # provision + import + report against the stand-in
 python3 -m dvlab all --fake --throttle-every 7          # same, with simulated HTTP 429 every 7th request
 ```
@@ -61,6 +61,12 @@ python3 -m dvlab report --page-size 5
   and `EntityKeyIndexStatus` goes Pending → In Progress → Active (or Failed). `provision` polls
   `EntityDefinitions(LogicalName='mgl_projectrequest')/Keys` until it's Active. If it fails (existing duplicates),
   fix the data and call `ReactivateEntityKey`.
+- **A date-only column needs two settings, not one.** `Format: DateOnly` only changes the display; without
+  `DateTimeBehavior: {"Value": "DateOnly"}` Dataverse creates the column with the default **User local** behavior and
+  stores the user's local midnight in UTC (a due date picked in Lisbon in summer is stored as 23:00 the day before).
+  Learn advises against Date only format with User local behavior, and a DateOnly behavior can't be changed after
+  creation. `mgl_duedate` sets both (found in episode 5; the first version of this episode set only the format). In the
+  Web API the column is then an `Edm.Date`, so the import sends `YYYY-MM-DD` as is.
 - **Some characters break GET/PATCH by key**: `/ < > * % & : \ ? +`. The client refuses those values before sending
   (`PR/0019` in the sample), instead of getting a confusing error back.
 - **Don't send key columns in the body of an upsert.** On update they're ignored; on create the values from the URL
@@ -80,6 +86,7 @@ python3 -m dvlab report --page-size 5
 ## References
 - [Create and update table definitions using the Web API](https://learn.microsoft.com/power-apps/developer/data-platform/webapi/create-update-entity-definitions-using-web-api)
 - [Create and update column definitions using the Web API](https://learn.microsoft.com/power-apps/developer/data-platform/webapi/create-update-column-definitions-using-web-api)
+- [Configure the behavior and format of the date and time column by using code](https://learn.microsoft.com/power-apps/developer/data-platform/behavior-format-date-time-attribute)
 - [Create and update table relationships using the Web API](https://learn.microsoft.com/power-apps/developer/data-platform/webapi/create-update-entity-relationships-using-web-api)
 - [Work with alternate keys](https://learn.microsoft.com/power-apps/developer/data-platform/define-alternate-keys-entity) (limits, allowed column types, index status)
 - [Customize tables and columns with the Python SDK — alternate keys](https://learn.microsoft.com/power-apps/developer/data-platform/sdk-python/metadata#alternate-keys) (poll before upserting; `POST .../Keys`)

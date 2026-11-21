@@ -104,8 +104,10 @@ python3 -m apikit remove            # tear-down (keeps the mgl_riskscore column:
   (demo.md) and turns it back on.
 - **Trace log rows live 24 hours** and hold 10 KB of text per run (oldest lines dropped). Turn trace logging on for
   debugging only.
-- **A date that moves (found while writing tests).** Episode 1 created `mgl_duedate` with `Format: DateOnly` and no
-  `DateTimeBehavior`, which defaults to **User local**. A date a Lisbon user picks in summer is stored as 23:00 UTC the
+- **A date that moves (found while writing tests).** Episode 1 first created `mgl_duedate` with `Format: DateOnly` and no
+  `DateTimeBehavior`, which defaults to **User local** (episode 1 now sets *Date only* behavior; tables created
+  before that keep User local, because the behavior can't be changed back once it is Date only and `provision` skips
+  existing tables). A date a Lisbon user picks in summer is stored as 23:00 UTC the
   day before. Learn: "Avoid Date only format with User local behavior." The plug-in uses the nearest UTC midnight
   (right for users between UTC−12 and UTC+12, and harmless for real Date-only values); the proper fix is a one-time
   switch of the column to *Date only* behavior plus `ConvertDateAndTimeBehavior` for existing rows.

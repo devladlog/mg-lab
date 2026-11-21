@@ -1,0 +1,262 @@
+# DEVLADLOG Windows Server - episode 06 (draft: the screen scenes need the lab recording, see demo.md)
+episode: 6
+slug: windows-admin-center
+series_label: "WINDOWS SERVER"
+series_name: "DEVLADLOG Windows Server"
+file_prefix: "windows-server"
+title: "Windows Admin Center"
+subtitle: "A gateway for the whole lab: preflight, silent install, shared connections, SSO and read-only access"
+voice: am_michael
+thumbnail_text: "ONE GATEWAY\nEVERY SERVER\nREAD-ONLY TOO"
+youtube:
+  title: "Windows Admin Center Gateway: Install, SSO and RBAC with PowerShell | DEVLADLOG Windows Server #6"
+  tags: [Windows Admin Center, Windows Server 2025, PowerShell, Kerberos constrained delegation, RBAC, JEA, gateway, Server Core, sysadmin, Pester]
+sources:
+  - https://www.devladlog.com/articles/windows-server/2025-09-16-windows-admin-center-complete-guide-2025/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Five servers, one browser tab"
+    sub: "And a helpdesk login that can look but not touch"
+    short: hook
+    narration: >
+      Four of our five lab servers have no desktop at all. Today they all get one browser tab: Windows Admin Center,
+      installed as a gateway with a script, with shared connections, single sign on, and a helpdesk account that can
+      look at a server but can't change it. And under the hood of that read only access, a familiar friend from the
+      last episode.
+
+  - id: where
+    type: bullets
+    heading: "Where does the gateway go?"
+    bullets:
+      - "Not CON-DC01: a domain controller isn't supported"
+      - "Not the laptop: it isn't in the domain"
+      - "CON-SRV02: domain member, Desktop Experience, Edge"
+      - "Administration Mode: about ten managed nodes"
+      - "Windows Server listens on port 443"
+    narration: >
+      First decision: where to install it. Not on the domain controller: Microsoft says that isn't supported. Not on
+      the recording laptop either: it isn't in the domain, and a gateway is meant to be shared. So CON SRV zero two,
+      a domain member with the Desktop Experience. Administration Mode is sized for about ten managed nodes, and on
+      Windows Server it listens on port four four three.
+
+  - id: preflight
+    type: code
+    heading: "Preflight: ask the gateway first"
+    lang: powershell
+    code: |
+      if ($g.DomainRole -ge 4 -or $g.ProductType -eq 2) {
+          [void]$out.Add((New-WacFinding $name High 'GatewayOnDomainController' "...isn't supported."))
+      }
+      if (-not $g.PartOfDomain) {
+          [void]$out.Add((New-WacFinding $name High 'NotDomainJoined' 'Group-based access and Kerberos delegation need a domain.'))
+      }
+      $others = @($g.Listeners | Where-Object { $_.Port -eq $port })
+      if ($others.Count -and -not $g.WacService) {
+          [void]$out.Add((New-WacFinding $name High 'PortInUse' "Port $port is already used by ..."))
+      }
+      if ($null -eq $cert) {
+          [void]$out.Add((New-WacFinding $name Info 'SelfSignedCertificate' 'self-signed, expires after 60 days'))
+      }
+    narration: >
+      Before installing anything, a collector runs on the future gateway and gathers facts: domain role, port four
+      four three, the certificate, and whether every node answers over Win R M. Pure rules turn those facts into
+      findings. No certificate means the installer makes a self signed one that expires after sixty days: fine for a
+      lab, not for production.
+
+  - id: install
+    type: code
+    heading: "Silent install, Administration Mode"
+    lang: powershell
+    code: |
+      $a = New-Object System.Collections.ArrayList
+      [void]$a.Add('/VERYSILENT')
+      [void]$a.Add("/Mode=$([string](Get-WacProp $Config.Gateway 'Mode' 'Administration'))")
+      if ($port -ne 443) { [void]$a.Add("/HTTPSPortNumber=$port") }
+      if ($thumb) { [void]$a.Add("/CertificateThumbprint=$($thumb.ToUpperInvariant())") }
+
+      $p = Start-Process -FilePath $InstallerPath -ArgumentList $argList -Wait -PassThru
+      if ($p.ExitCode -ne 0) { throw "Windows Admin Center installer exited with code $($p.ExitCode)." }
+      # then wait for the WindowsAdminCenter service to be Running
+    narration: >
+      The install uses the switches documented on Learn: very silent, and the mode, because the installer now has two:
+      Administration Mode for general server management, and Virtualization Mode for Hyper V at scale. You can't
+      switch later without reinstalling. Then the script waits for the Windows Admin Center service.
+
+  - id: installed
+    type: screen
+    heading: "Preflight, install, sign in"
+    image: screens/installed.jpg
+    bar: "Lab · CON-SRV02 · PowerShell + Edge"
+    demo: >
+      On CON-SRV02 (VMConnect, Desktop Experience): left, Windows PowerShell 5.1 elevated showing the end of
+      .\Invoke-WacPreflight.ps1 (findings table + "CON-SRV02: 5 node(s), N finding(s), 0 high.") and
+      .\Deploy-WacLab.ps1 -Step Install returning Url https://con-srv02.lab.contoso.com. Right, Edge on that URL
+      after signing in as the lab Administrator: the All connections page.
+    narration: >
+      On the lab. The preflight passes with zero High findings: the S Q L server is off today, and that's fine
+      because it's marked optional. One command installs the gateway, and Edge opens the All connections page.
+      Rewrite this to the real numbers on screen.
+
+  - id: connections
+    type: code
+    heading: "Connections as a file, checked first"
+    lang: text
+    code: |
+      PS> ConvertTo-WacConnectionCsv -Config $config
+      "name","type","tags","groupId"
+      "con-dc01.lab.contoso.com","msft.sme.connection-type.server","dc|core","global"
+      "con-srv01.lab.contoso.com","msft.sme.connection-type.server","app|core","global"
+      ...
+
+      PS> Test-WacConnectionCsv -Content (Get-Content -Raw learn-sample.csv)
+      Target Severity Check       Message
+      line 3 High     UnknownType Type 'msft.sme.connection-type.windows-server' isn't one of:
+                                  msft.sme.connection-type.server, msft.sme.connection-type.cluster.
+      line 5 High     Malformed   Not 3-4 quoted fields: "myHCIcluster.contoso.com,"msft.sme...
+    narration: >
+      Connections come from the same JSON: fully qualified names, tags, and group I D global so everyone on the gateway
+      shares them. The file is case sensitive, so a validator checks it before import. Fun fact: run it on the example
+      file in the docs and it finds a type the docs' own table doesn't list, and a missing quote.
+
+  - id: imported
+    type: screen
+    heading: "Shared connections, tagged"
+    image: screens/imported.jpg
+    bar: "Lab · CON-SRV02 · Windows Admin Center"
+    demo: >
+      Edge on CON-SRV02: All connections after .\Deploy-WacLab.ps1 -Step Connections (access key typed off camera).
+      Show the five con-*.lab.contoso.com connections with their tags, then filter by tag "core" so only the four
+      Server Core machines remain (CON-SQL01 is listed even if it is switched off).
+    narration: >
+      Imported with Import W A C Connection. Five servers, tagged, shared. Filter on the core tag and the four Server
+      Core machines are right there, each one a click away from a full management view, without a desktop.
+
+  - id: delegation
+    type: code
+    heading: "Gotcha: Set-ADComputer replaces the list"
+    lang: powershell
+    code: |
+      # Learn: "Running Set-ADComputer without specifying the first principal will cause it to get overridden"
+      $c = Get-ADComputer -Identity $n.Name -Properties PrincipalsAllowedToDelegateToAccount, PrimaryGroupID
+      $current[$n.Name] = @($c.PrincipalsAllowedToDelegateToAccount | ForEach-Object { [string]$_ })
+
+      foreach ($row in (Get-WacDelegationPlan -NodeName $names -GatewayDn $gateway.DistinguishedName -Current $current)) {
+          if ($row.Action -eq 'Clear') {
+              Set-ADComputer -Identity $row.Node -PrincipalsAllowedToDelegateToAccount $null
+          }
+          else {   # current principals + the gateway, never just the gateway
+              Set-ADComputer -Identity $row.Node -PrincipalsAllowedToDelegateToAccount ([string[]]$row.Desired)
+          }
+      }
+    short: gotcha
+    narration: >
+      Single sign on from a gateway on Windows Server needs Kerberos delegation. Learn gives a one liner:
+      Set A D Computer with Principals Allowed To Delegate To Account. Here's the catch: that parameter sets the
+      attribute. If another gateway was already allowed, the one liner silently removes it. So we read the current
+      list, add our gateway, and write the whole list back.
+
+  - id: rbac
+    type: bullets
+    heading: "Read-only access is JEA"
+    bullets:
+      - "Apply role-based access control on a node, from the UI"
+      - "It registers a JEA endpoint: Microsoft.Sme.PowerShell"
+      - "Three local groups: Administrators, Hyper-V Administrators, Readers"
+      - "A temporary local admin runs the work, then disappears"
+      - "Readers get no PowerShell and no Remote Desktop tool"
+    short: rbac
+    narration: >
+      Now the helpdesk account. Windows Admin Center role based access control is Just Enough Administration, exactly
+      what we built in episode five. Applying it on a node registers a JEA endpoint called Microsoft dot S M E dot
+      PowerShell, creates three local groups, and runs the work as a temporary local administrator. Readers can look,
+      but the PowerShell and Remote Desktop tools aren't available to them.
+
+  - id: rbac-endpoint
+    type: screen
+    heading: "The endpoint behind the button"
+    image: screens/rbac-endpoint.jpg
+    bar: "Lab · CON-SRV01 · after Apply"
+    demo: >
+      Two parts. 1) Edge on CON-SRV02, connected to con-srv01: Settings > Role-based access control showing status
+      Applied. 2) CON-SRV01 console (VMConnect, sconfig option 15): Get-PSSessionConfiguration -Name
+      Microsoft.Sme.PowerShell | Format-List Name, PSVersion, Permission, then Get-LocalGroup 'Windows Admin Center*',
+      then Get-PSSessionCapability -ConfigurationName Microsoft.Sme.PowerShell -Username CONTOSO\alex.demo |
+      Measure-Object (after .\Deploy-WacLab.ps1 -Step Rbac added alex to Readers).
+    narration: >
+      After Apply, which restarts Win R M, CON SRV zero one has the endpoint and the three groups. Our deploy script
+      adds Alex to the readers group and checks it against the JSON. And the same Get P S Session Capability from the
+      last episode lists exactly what Alex can run behind the scenes. Rewrite to what's on screen.
+
+  - id: readers
+    type: screen
+    heading: "Alex can look, not touch"
+    image: screens/readers.jpg
+    bar: "Lab · Windows Admin Center · managed as CONTOSO\\alex.demo"
+    demo: >
+      Edge on CON-SRV02: connect to con-srv01 with "Manage as" CONTOSO\alex.demo (credentials typed off camera).
+      Show the limited-access indication, the Overview loading, the Services tool listing services, and that the
+      PowerShell and Remote Desktop tools are unavailable. If a Restart button is visible in Services, click it on
+      Spooler and capture the result (expected: denied or not offered for a reader).
+    narration: >
+      Connect as Alex. The overview loads, services are listed, events are readable. The PowerShell and Remote Desktop
+      tools aren't available, and Alex isn't an administrator anywhere. Rewrite this to exactly what the reader role
+      allowed on the recording day.
+
+  - id: showscript
+    type: screen
+    heading: "Every click is PowerShell"
+    image: screens/showscript.jpg
+    bar: "Lab · Windows Admin Center · View PowerShell scripts"
+    demo: >
+      As the lab Administrator, connected to con-srv01, open the Services tool, click the PowerShell icon on the
+      application bar, pick a command from the dropdown (for example the one that lists services) and show the script
+      text. Zoom on the script.
+    narration: >
+      My favourite button. In any tool, the PowerShell icon shows the scripts behind the page. That's how you go from
+      clicking in Windows Admin Center to automating the same thing, and it closes the loop with the last episode.
+
+  - id: tests
+    type: code
+    heading: "Forty-one tests, no gateway"
+    lang: text
+    code: |
+      Describing Connections CSV
+        [+] catches the two typos in the example CSV on Learn
+      Describing Find-WacPowerShellModule
+        [+] shows why we search: the Import-Module line on Learn does not even parse
+      Describing Test-WacGateway (preflight rules)
+        [+] stops a gateway on a domain controller, with port 443 taken and a bad certificate
+      Describing Get-WacDelegationPlan (the attribute is replaced, so carry the full list)
+        [+] adds the gateway and keeps a principal that was already there
+      Describing Set-WacKerberosDelegation (ActiveDirectory mocked)
+        [+] clears the attribute with $null when the gateway was the only principal (tear-down)
+
+      Tests Passed: 41, Failed: 0, Skipped: 0
+    narration: >
+      Forty one Pester tests run on Linux with the Windows parts mocked. One of them is a little embarrassing for the
+      docs: the Import Module line on the PowerShell page doesn't even parse, so our script searches for the module
+      folder instead of trusting a path.
+
+  - id: recap
+    type: bullets
+    heading: "Five rules for a gateway"
+    bullets:
+      - "Never on a domain controller; a domain member you can patch"
+      - "Preflight first: port, certificate, every node over WinRM"
+      - "Connections as a file, validated before import"
+      - "Delegation: read, add, write back the whole list"
+      - "Helpdesk gets Readers, not local admin"
+    narration: >
+      Five rules. Never on a domain controller. Preflight first: the port, the certificate, every node over Win R M.
+      Keep connections in a file and validate it. For delegation, read, add, and write back the whole list. And give
+      helpdesk the readers role, not local admin.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The module, the preflight, the deploy script and the tests are on GitHub, and the complete guide to Windows Admin
+      Center is on devladlog dot com. Next episode: Hyper V virtualization. Subscribe so you don't miss it.

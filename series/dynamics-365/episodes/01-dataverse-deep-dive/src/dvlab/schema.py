@@ -78,6 +78,12 @@ def money_column(schema: str, display: str, description: str = "") -> Dict[str, 
 
 
 def date_column(schema: str, display: str) -> Dict[str, Any]:
+    """A date with no time: Format DateOnly (display) AND DateTimeBehavior DateOnly (storage).
+
+    Without DateTimeBehavior Dataverse defaults to UserLocal, which stores the user's local midnight in UTC
+    (a date picked in Lisbon in summer lands on 23:00 the day before). Learn: avoid Date only format with User
+    local behavior. DateOnly behavior can't be changed after creation, so it has to be right the first time.
+    """
     return {
         "@odata.type": ODATA + "DateTimeAttributeMetadata",
         "AttributeType": "DateTime",
@@ -85,7 +91,8 @@ def date_column(schema: str, display: str) -> Dict[str, Any]:
         "SchemaName": schema,
         "DisplayName": label(display),
         "RequiredLevel": _required(),
-        "Format": "DateOnly",
+        "Format": "DateOnly",                          # DateTimeFormat enum: DateOnly | DateAndTime
+        "DateTimeBehavior": {"Value": "DateOnly"},     # DateTimeBehavior complex type: UserLocal | DateOnly | TimeZoneIndependent
     }
 
 

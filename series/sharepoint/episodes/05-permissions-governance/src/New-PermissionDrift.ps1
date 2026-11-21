@@ -11,7 +11,7 @@
 
 .EXAMPLE
     ./New-PermissionDrift.ps1 -SiteUrl https://contoso.sharepoint.com/sites/Purchasing -ClientId 00000000-0000-0000-0000-000000000000 `
-        -DirectUser lee.gu@contoso.com -ShareWithUser megan.bowen@contoso.com -ContractManager isaiah.langer@contoso.com -WhatIf
+        -DirectUser alex.demo@contoso.com -ShareWithUser sam.demo@contoso.com -ContractManager jordan.demo@contoso.com -WhatIf
 #>
 [CmdletBinding(SupportsShouldProcess)]
 param(

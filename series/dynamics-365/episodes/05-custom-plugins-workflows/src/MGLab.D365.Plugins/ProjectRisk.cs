@@ -98,10 +98,11 @@ namespace MGLab.D365.Plugins
         }
 
         /// <summary>
-        /// Episode 1 created mgl_duedate with Format DateOnly but no behavior, so it got the default, User local:
-        /// a date the user picks is stored as THEIR midnight in UTC (Lisbon in summer: 23:00 the day before).
-        /// Learn says to avoid that combination. Until the column is switched to Date only behavior, take the
-        /// nearest UTC midnight: right for any user between UTC-12 and UTC+12, and a no-op for real date-only values.
+        /// A Date only column left on the default behavior (User local) stores a picked date as the user's
+        /// midnight in UTC (Lisbon in summer: 23:00 the day before). Learn says to avoid that combination.
+        /// Episode 1 now creates mgl_duedate with Date only behavior; this defensive read keeps older environments
+        /// correct: take the nearest UTC midnight, right for any user between UTC-12 and UTC+12, a no-op for real
+        /// Date only values.
         /// </summary>
         public static DateTime? NearestDate(DateTime? stored) =>
             stored.HasValue ? stored.Value.AddHours(12).Date : (DateTime?)null;
