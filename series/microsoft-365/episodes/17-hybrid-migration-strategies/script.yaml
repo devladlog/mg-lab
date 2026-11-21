@@ -1,0 +1,210 @@
+# DEVLADLOG Microsoft 365 — episode 17 (draft: code and tests are real; screen scenes still need the lab recording)
+episode: 17
+slug: hybrid-migration-strategies
+series_label: "MICROSOFT 365"
+series_name: "DEVLADLOG Microsoft 365"
+file_prefix: "microsoft-365"
+title: "Hybrid Migration Strategies"
+subtitle: "Pick the path, fix the directory first, then move mailboxes in safe waves"
+voice: am_michael
+thumbnail_text: "READY TO\nMIGRATE?\nCHECK AD FIRST"
+youtube:
+  title: "Hybrid Migration Strategies: Check Active Directory Before You Move Mail | DEVLADLOG Microsoft 365 #17"
+  tags: [Hybrid migration, Exchange hybrid, cutover migration, staged migration, IMAP migration, directory synchronization, Microsoft Entra Connect, UPN suffix, migration batch, mailbox migration, Microsoft 365 admin, PowerShell, Pester]
+sources:
+  - https://www.devladlog.com/articles/office-365/2025-08-11-hybrid-migration-complete-guide-2025/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Ready to migrate? Check AD first"
+    sub: "Pick the path, fix the directory first, then move mailboxes in safe waves"
+    short: hook
+    narration: >
+      Most migration plans start with a mailbox count and a weekend. The ones that go wrong usually fail earlier, on a
+      user name nobody looked at. In this episode we pick the migration path from Microsoft's own table, check Active
+      Directory before directory synchronization, fix the first problem with a rollback file, and plan the waves.
+
+  - id: paths
+    type: bullets
+    heading: "Five paths, one table"
+    bullets:
+      - "Cutover: under 150 mailboxes, all at once"
+      - "Staged: Exchange 2003 and 2007 only"
+      - "Hybrid: a few users at a time"
+      - "IMAP: email only, any source"
+    narration: >
+      Microsoft documents the choice in a table. Cutover moves everything at once, and Learn suggests staying under one
+      hundred and fifty mailboxes. Staged only works for Exchange 2003 and 2007. Hybrid moves a limited number of users
+      at a time. IMAP works with any source but copies only email. Staged and hybrid both need directory
+      synchronization first.
+
+  - id: strategy-code
+    type: code
+    heading: "The table as a function"
+    lang: powershell
+    code: |
+      'Exchange2010OrLater' {
+          $warn.Add('A staged migration cannot move Exchange 2010 or later mailboxes.')
+          if ($small -and $Pace -eq 'AllAtOnce' -and -not $ManageUsersOnPremises) {
+              $path = 'Cutover'
+          }
+          else {
+              $path = 'Hybrid'
+    narration: >
+      We wrote that table as a function, so the answer is repeatable and has tests. For Exchange 2010 or later it says
+      cutover only when the move is small, fast, and users are not managed on premises. Everything else is hybrid, and
+      staged is never offered.
+
+  - id: strategy-screen
+    type: screen
+    heading: "Same question, three answers"
+    image: screens/strategy.jpg
+    bar: "PowerShell on the lab Windows desktop"
+    demo: >
+      ./Invoke-HybridMigration.ps1 -Mode Strategy three times: -Source Exchange2010OrLater -Mailboxes 120; the same with -Mailboxes 400;
+      -Source Exchange2007 -Mailboxes 800. Show the Strategy line, the reasons and the notes for each. Next to it, the Microsoft Learn page
+      "Decide on a migration path in Exchange Online" with the table. Rewrite the narration to the real output.
+    narration: >
+      Here it is. A hundred and twenty mailboxes on Exchange 2010 or later: cutover. Four hundred: hybrid, because cutover
+      performance suffers past one hundred and fifty. Eight hundred on Exchange 2007: staged, and the note reminds us
+      that Exchange 2007 is out of support and that the staged file holds at most two thousand rows.
+
+  - id: dirsync
+    type: bullets
+    heading: "Directory sync is the real gate"
+    bullets:
+      - "UPN suffix must be a verified domain"
+      - "UPN, mail and proxyAddresses must be unique"
+      - "No spaces or accents in addresses"
+      - "Run the check before Entra Connect"
+    narration: >
+      Directory synchronization is the real gate. Learn says the user principal name must use a routable domain, and
+      that user principal names, mail and proxy addresses must be unique. Spaces and accented letters in addresses are
+      invalid. Break these rules and objects do not sync, or sync with a name you did not choose. Learn even warns that a non routable suffix is synchronized to the on microsoft dot com domain, so the account exists, with the wrong name.
+
+  - id: rule-code
+    type: code
+    heading: "One rule, straight from Learn"
+    lang: powershell
+    code: |
+      $suffix = $u.Upn.Substring($u.Upn.IndexOf('@') + 1).ToLowerInvariant()
+      if ($suffix -notin $verified) {
+          $out.Add((New-Finding 'High' 'UpnNonRoutable' $u "UPN suffix '$suffix' is not a verified domain in the tenant. ..." $true))
+      }
+    narration: >
+      Each rule is a few lines, and each comes from Microsoft's attribute table. This one compares the suffix of every user name with the domains verified in the tenant.
+      The check is pure, so the same code runs on a file in the tests and on real Active Directory in the demo.
+
+  - id: dir-screen
+    type: screen
+    heading: "The check on a real domain"
+    image: screens/directory.jpg
+    bar: "PowerShell 7 on the lab member server, domain lab.contoso.com (lab tenant, masked)"
+    short: directory
+    demo: >
+      On CON-SRV02: ./Invoke-HybridMigration.ps1 -Mode Directory -SearchBase "OU=MG Lab Hybrid,DC=lab,DC=contoso,DC=com" -Server 10.50.0.10 -LiveDomains.
+      Show the findings table and the final line "Ready for directory synchronization: False". Before it, the Entra admin center Domains page
+      with the verified list (tenant name masked). Rewrite the narration to the real findings and counts.
+    narration: >
+      Here is the check on the lab domain. Every account is flagged, because the domain is lab dot contoso dot com, and
+      that is not verified in the tenant. Then the seeded problems: a space in a proxy address, a letter with an accent,
+      two people with the same mail address. The last line says it plainly: not ready for synchronization. We have not installed Entra Connect, and nothing here starts a sync.
+
+  - id: fix-code
+    type: code
+    heading: "A fix with brakes"
+    lang: powershell
+    code: |
+      if ('UpnNonRoutable' -notin @($fx.allowedRules)) { return @() }
+      ...
+      if ($PSCmdlet.ShouldProcess($p.Dn, "Set UserPrincipalName $($p.OldUpn) -> $($p.NewUpn)")) {
+          Set-ADUser -Identity $p.Dn -UserPrincipalName $p.NewUpn @srv -ErrorAction Stop
+          $done.Add([pscustomobject]@{ Dn = $p.Dn; Account = $p.Account; OldUpn = $p.OldUpn; NewUpn = $p.NewUpn })
+          $done | ConvertTo-Json -Depth 4 -AsArray | Set-Content -LiteralPath $RollbackFile -Encoding utf8
+      }
+    narration: >
+      The only fix is the user name suffix, and it has brakes. The config allows nothing by default. The new suffix must
+      be a verified domain. It never creates a duplicate. It supports what if, asks before each account, re reads the
+      user first, and writes a rollback file that is never overwritten.
+
+  - id: fix-screen
+    type: screen
+    heading: "Preview, change, restore"
+    image: screens/fix.jpg
+    bar: "PowerShell 7 and Active Directory Users and Computers on CON-SRV02 (lab tenant, masked)"
+    demo: >
+      ./Invoke-HybridMigration.ps1 -Mode FixUpn -SearchBase "OU=MG Lab Hybrid,..." -ConfigFile ./migration.lab.json -RollbackFile ./rollback.lab.json -WhatIf
+      (What if lines, no file). Same without -WhatIf, answer Yes for one account only. Show that account in Active Directory Users and Computers
+      (UPN tab) and the rollback file. Then -Mode RestoreUpn. Rewrite the narration to the real account.
+    narration: >
+      First with what if: lines of what would change, and no rollback file. Then for real, answering yes for one lab
+      account only. In Active Directory Users and Computers the suffix has changed, and the rollback file holds the old
+      value. One command puts it back.
+
+  - id: wave-code
+    type: code
+    heading: "Waves that keep mailboxes together"
+    lang: powershell
+    code: |
+      $ra = & $find $k; $rb = & $find $t; if ($ra -ne $rb) { $parent[$ra] = $rb }
+      ...
+      & $place $pilot 'Pilot' $false
+      ...
+      & $place $rest 'Production' $false
+      & $place $big 'Large' $true
+    narration: >
+      Now the waves. A shared mailbox must move with the people who use it, so mailboxes linked that way form a group
+      that is never split. The pilot goes first, ordinary waves follow within the size and count caps, and any group
+      holding a very large mailbox gets a wave of its own, last.
+
+  - id: wave-screen
+    type: screen
+    heading: "Waves from real mailboxes"
+    image: screens/waves.jpg
+    bar: "PowerShell on the lab Windows desktop, Exchange admin center (lab tenant, masked)"
+    short: waves
+    demo: >
+      Connected to Exchange Online: ./Invoke-HybridMigration.ps1 -Mode Waves -FromExchangeOnline -PilotUsers alex.demo@<lab domain> -ConfigFile ./migration.lab.json -WaveDirectory ./waves.
+      Show the wave table (pilot first; the shared mailbox in the same wave as sam.demo), one wave CSV (EmailAddress, BadItemLimit, LargeItemLimit) and the printed
+      New-MigrationBatch text marked "Not run". Then the Exchange admin center Migration page, empty. Rewrite the narration to the real waves.
+    narration: >
+      The input is the real mailboxes of the lab tenant, read with Exchange Online PowerShell. The pilot wave is alone,
+      and the shared mailbox travels with its owner. Each wave becomes a C S V with the columns a migration batch accepts,
+      plus the new migration batch command. Notice the label: not run.
+
+  - id: gotcha
+    type: code
+    heading: "The gotcha: what the lab cannot do"
+    lang: powershell
+    code: |
+      # Printed, never run: there is no on-premises Exchange in this lab.
+      New-MigrationBatch -Name 'wave-01' -SourceEndpoint '<your-onprem-endpoint>' `
+          -TargetDeliveryDomain '<tenant>.mail.onmicrosoft.com' `
+          -CSVData ([System.IO.File]::ReadAllBytes('./waves/wave-01.csv'))
+      Start-MigrationBatch -Identity 'wave-01'
+    narration: >
+      Here is the honest part. This lab has no on premises Exchange, so the batch commands are printed, not run. We have
+      tested the plan, the files and the directory fixes against a real domain and a real tenant. The actual remote move
+      needs your own Exchange servers, endpoint and hybrid configuration, and we did not fake it. If you have fewer than two thousand mailboxes, Learn says to check cutover or staged before taking on a hybrid deployment.
+
+  - id: checklist
+    type: bullets
+    heading: "Order of work"
+    bullets:
+      - "1. Choose the path from the table"
+      - "2. Clean the directory, then synchronize"
+      - "3. Pilot wave, then production waves"
+      - "4. Large mailboxes last, with their groups"
+    narration: >
+      The order of work is simple. Choose the path. Clean the directory and only then synchronize. Move a pilot, then
+      production waves, and leave large mailboxes and the groups tied to them for last. Sixty nine Pester tests cover the
+      decisions, the rules, the fix and the waves, without a tenant.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      Code, tests and the shot list are on GitHub, and the hybrid migration guide is on dev lad log dot com. Thanks for
+      watching.
