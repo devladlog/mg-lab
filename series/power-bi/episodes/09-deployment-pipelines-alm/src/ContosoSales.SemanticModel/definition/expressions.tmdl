@@ -1,0 +1,29 @@
+/// SharePoint site that holds the monthly ERP exports. The same value in every stage (a deployment rule would only be needed if the stages used different sites). Replace the placeholder with the lab site before publishing: Transform data > Edit parameters.
+expression ExportSite = "https://contoso.sharepoint.com/sites/ContosoBikesData" meta [IsParameterQuery=true, Type="Text", IsParameterQueryRequired=true]
+
+/// Library folder that is read: "exports-sample" (three months) in Development, "exports" (all 24 months) in Test and Production. Set per stage by a deployment parameter rule.
+expression ExportsFolder = "exports-sample" meta [IsParameterQuery=true, Type="Text", IsParameterQueryRequired=true]
+
+/// Name of the stage, shown on the report so nobody mistakes Test for Production. Set per stage by a deployment parameter rule.
+expression StageName = "DEV" meta [IsParameterQuery=true, Type="Text", IsParameterQueryRequired=true]
+
+/// Function: reads one monthly ERP export (semicolons, decimal comma, dd/MM/yyyy) into a typed table.
+expression fnReadExport =
+		// One monthly ERP export -> typed table. Semicolons, decimal comma, day/month/year dates, TOTAL footer.
+		(file as binary) as table =>
+		let
+		    Source = Csv.Document(file, [Delimiter = ";", Columns = 19, Encoding = 65001, QuoteStyle = QuoteStyle.Csv]),
+		    Promoted = Table.PromoteHeaders(Source, [PromoteAllScalars = true]),
+		    NoTotals = Table.SelectRows(Promoted, each [OrderNumber] <> "TOTAL"),
+		    Cleaned = Table.TransformColumns(NoTotals, {
+		        {"OrderDate", each Date.FromText(_, [Format = "dd'/'MM'/'yyyy", Culture = "pt-PT"]), type date}
+		    }),
+		    TextColumns = {"OrderNumber", "StoreName", "Channel", "Category"},
+		    Typed = Table.TransformColumnTypes(
+		        Cleaned,
+		        List.Transform(TextColumns, each {_, type text})
+		            & {{"LineNumber", Int64.Type}, {"Quantity", Int64.Type}, {"UnitPrice", Currency.Type}, {"UnitCost", Currency.Type}},
+		        "pt-PT"
+		    )
+		in
+		    Typed

@@ -1,0 +1,15 @@
+/// One row with the stage name (parameter StageName), so a visual can show which stage the report was opened in.
+table Environment
+
+	column Stage
+		dataType: string
+		summarizeBy: none
+		sourceColumn: Stage
+
+	partition Environment = m
+		mode: import
+		source =
+				let
+				    Source = #table(type table [Stage = text], {{StageName}})
+				in
+				    Source

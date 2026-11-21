@@ -1,0 +1,11 @@
+/// Server of the free Azure SQL Database that holds dbo.Sales. Replace the placeholder with the lab server before publishing: Transform data > Edit parameters.
+expression SqlServer = "contoso-lab-sql.database.windows.net" meta [IsParameterQuery=true, Type="Text", IsParameterQueryRequired=true]
+
+/// Database name.
+expression SqlDatabase = "ContosoBikesIR" meta [IsParameterQuery=true, Type="Text", IsParameterQueryRequired=true]
+
+/// Reserved name, case-sensitive, type DateTime. In Desktop this keeps the model small (one week); the service overrides it for every partition.
+expression RangeStart = #datetime(2026, 11, 1, 0, 0, 0) meta [IsParameterQuery=true, Type="DateTime", IsParameterQueryRequired=true]
+
+/// Reserved name, case-sensitive, type DateTime. The filter uses >= RangeStart and < RangeEnd, never = on both sides.
+expression RangeEnd = #datetime(2026, 11, 8, 0, 0, 0) meta [IsParameterQuery=true, Type="DateTime", IsParameterQueryRequired=true]

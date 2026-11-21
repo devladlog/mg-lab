@@ -1,0 +1,207 @@
+episode: 10
+slug: incremental-refresh-large-datasets
+series_label: "POWER BI"
+series_name: "DEVLADLOG Power BI"
+file_prefix: "power-bi"
+title: "Incremental Refresh & Large Datasets"
+subtitle: "Refresh the last ten days, keep three years, and see the partitions"
+voice: am_michael
+thumbnail_text: "REFRESH\nONLY WHAT\nCHANGED"
+youtube:
+  title: "Power BI Incremental Refresh: RangeStart, Partitions and Enhanced Refresh | DEVLADLOG Power BI #10"
+  tags: [Power BI, incremental refresh, RangeStart, RangeEnd, partitions, enhanced refresh, XMLA, SSMS, large datasets, Azure SQL Database, TMDL, query folding]
+sources:
+  - https://www.devladlog.com/articles/power-bi/2026-04-01-incremental-refresh-complete-guide-2026/
+  - https://learn.microsoft.com/en-us/power-bi/connect-data/incremental-refresh-overview
+  - https://learn.microsoft.com/en-us/power-bi/connect-data/incremental-refresh-xmla
+  - https://learn.microsoft.com/en-us/power-bi/connect-data/asynchronous-refresh
+  - https://learn.microsoft.com/en-us/azure/azure-sql/database/free-tier
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Two million rows. Ten days of refresh."
+    sub: "Incremental refresh, from the policy to the partitions"
+    short: hook
+    narration: >
+      The Contoso Bikes order lines have grown again, and this time the table lives in a database. Reloading
+      two million rows every night to pick up ten days of changes is a waste. Incremental refresh keeps the old years as
+      they are and reloads only the recent days. Let's build it, and then look at what the service really created.
+
+  - id: plan
+    type: bullets
+    heading: "The plan"
+    bullets:
+      - "A fictional two million row table in Azure SQL Database"
+      - "Two parameters, a filter that folds, and a policy"
+      - "Work out the partitions, then see them in S S M S"
+      - "Refresh one partition with the REST A P I"
+    narration: >
+      We load a fictional order table into a free Azure SQL database. We add the two reserved parameters, a filter, and a policy
+      to the model. We calculate which partitions that policy should create, and then compare with the real ones in SQL
+      Server Management Studio. And we refresh a single partition through the REST A P I.
+
+  - id: data
+    type: code
+    heading: "A table that is the same every time"
+    lang: sql
+    code: |
+      SELECT TOP (@Rows) CAST(ROW_NUMBER() OVER (ORDER BY (SELECT NULL)) AS bigint) AS n
+      FROM sys.all_objects AS a CROSS JOIN sys.all_objects AS b CROSS JOIN sys.all_objects AS c
+      DATEADD(second, (o * 104729) % 86400, DATEADD(day, (o * 7919) % 1461, CAST('2023-01-01T00:00:00' AS datetime2(0)))) AS ts,
+      CAST((2000 + (n * 7919) % 98000) / 100.0 AS decimal(10,2))
+    narration: >
+      The data is arithmetic, not random. Row number n always gets the same date, store, and price, so a Python mirror knows the
+      totals without a server. Two million lines over four years, three billion in fictional sales, and a modified
+      date on every row.
+
+  - id: filter
+    type: code
+    heading: "The filter every partition will use"
+    lang: m
+    code: |
+      Source = Sql.Database(SqlServer, SqlDatabase),
+      Sales = Source{[Schema = "dbo", Item = "Sales"]}[Data],
+      InPeriod = Table.SelectRows(Sales, each [OrderTimestamp] >= RangeStart and [OrderTimestamp] < RangeEnd),
+    narration: >
+      RangeStart and RangeEnd are reserved names. They are case sensitive, and they must be date time parameters. The
+      filter uses greater or equal on one side and strictly less on the other, so a row on the boundary lands in exactly one
+      partition. And it has to fold, so the database does the filtering and not Power BI.
+
+  - id: policy
+    type: code
+    heading: "The policy, in the T M D L file"
+    lang: text
+    code: |
+      refreshPolicy
+      policyType: basic
+      rollingWindowGranularity: year
+      rollingWindowPeriods: 3
+      incrementalGranularity: day
+      incrementalPeriods: 10
+      pollingExpression =
+    narration: >
+      Keep three years. Refresh the last ten days. And the polling expression is the detect data changes option, which looks at the
+      maximum modified date in each period. A period that hasn't changed since the last refresh is skipped. Learn says that column must
+      not be the one used for the date filter.
+
+  - id: desktop
+    type: screen
+    heading: "Parameters and the native query"
+    image: screens/desktop-filter.jpg
+    bar: "Power BI Desktop · Power Query · RangeStart, RangeEnd, View Native Query"
+    demo: "Desktop with ContosoSalesIR.pbip, Transform data. The four parameters in the query list (SqlServer, SqlDatabase, RangeStart, RangeEnd) and the Sales query with the filter step. Right-click the filter step > View Native Query is enabled and shows a WHERE clause with both dates. Needs Desktop and Azure SQL."
+    narration: >
+      In Desktop the parameters hold one week, so the model stays small while you build. A quick check is the filter step. If View
+      Native Query is available, the filter folds, and the database receives a where clause with both dates.
+
+  - id: dialog
+    type: screen
+    heading: "Incremental refresh settings"
+    image: screens/policy-dialog.jpg
+    bar: "Power BI Desktop · Table Sales · Incremental refresh and real-time data"
+    demo: "Desktop, Sales table context menu, Incremental refresh. Switch on, archive 3 years, refresh 10 days, detect data changes on the Modified Date column. Leave real-time off and say why: it needs Premium. Needs Desktop."
+    narration: >
+      The same policy in the dialog. Archive three years, refresh the last ten days, detect changes on the modified date.
+      The real time option adds a Direct Query partition, and it is a Premium feature, so it stays off here.
+
+  - id: partitions
+    type: code
+    heading: "Which partitions? Calculate them"
+    lang: python
+    code: |
+      store_from = shift(period_start(today, policy.rolling_granularity), policy.rolling_granularity, -policy.rolling_periods)
+      refresh_from = shift(period_start(today, policy.incremental_granularity), policy.incremental_granularity, -(policy.incremental_periods - 1))
+      while p < refresh_from:
+          for g in reversed(allowed):
+              if period_start(p, g) == p and shift(p, g, 1) <= refresh_from:
+                  p = shift(p, g, 1)
+    short: partitions
+    narration: >
+      Learn describes the rule. The refresh period is the last periods up to today. Everything older is covered by whole
+      periods, the biggest that fit. Years, then quarters, months, and days. Learn's example, the second of February twenty
+      twenty one, gives the years twenty eighteen to twenty twenty, January, the first of February, and today, plus a Direct Query partition when real time is on. The calculator
+      reproduces it. For the lab policy on the twenty first of November, it says twenty eight partitions.
+
+  - id: ssms
+    type: screen
+    heading: "The real partitions"
+    image: screens/ssms-partitions.jpg
+    bar: "SQL Server Management Studio · Tables > Sales > Partitions"
+    demo: "SSMS connected with the workspace connection string copied from the workspace settings (XMLA read-write enabled by the capacity admin), database ContosoSalesIR, Tables > Sales > Partitions. Compare the list with python tools/ir_partitions.py --model ... --date <recording day>. Write down the real partition names: Learn's examples don't settle how months are numbered. Needs tenant, Fabric trial capacity with XMLA read-write, and Azure SQL."
+    narration: >
+      The service doesn't show partitions. SQL Server Management Studio does, through the X M L A endpoint, once the capacity admin has
+      enabled read write. Here are the real ones. We compare them with the calculator, and we write down the names, because the
+      examples on Learn don't say how the month number is written.
+
+  - id: enhanced
+    type: code
+    heading: "Refresh one partition"
+    lang: powershell
+    code: |
+      $body = [ordered]@{ type = $Type; commitMode = $CommitMode }
+      if ($SkipRefreshPolicy) { $body.applyRefreshPolicy = $false }
+      if ($PSBoundParameters.ContainsKey('EffectiveDate')) { $body.effectiveDate = $EffectiveDate.ToString('yyyy-MM-dd') }
+    narration: >
+      The enhanced refresh A P I takes a table and a partition, so a back dated correction doesn't reload three years. Apply
+      refresh policy false leaves the partitions alone, and an effective date pretends it is another day. Learn rules out one
+      combination, partial batch with the policy applied, and the function refuses it before anything is sent.
+
+  - id: after
+    type: screen
+    heading: "Corrections: recent and old"
+    image: screens/after-changes.jpg
+    bar: "Power BI service · ContosoSalesIR · after the second script and a refresh"
+    demo: "Run sql/02-late-changes.sql on the database. Refresh the model in the service: the recent-days correction shows in the report. The March 2023 correction does not, until Invoke-PartitionRefresh.ps1 -Partition <the March 2023 partition name from SSMS> -SkipRefreshPolicy. Record both states of the Sales Amount card. Needs tenant and Azure SQL."
+    narration: >
+      Now the test. One script corrects three recent days and one month in twenty twenty three. A normal refresh picks up the
+      recent days, and the old month keeps its old value. Only a refresh of that one partition brings it in.
+
+  - id: lint
+    type: code
+    heading: "A lint for the policy"
+    lang: python
+    code: |
+      ok_start = re.search(r">=\s*RangeStart|RangeStart\s*<=\s*\[", m_code)
+      ok_end = re.search(r"(?<![<>=])<\s*RangeEnd|RangeEnd\s*>\s*\[", m_code)
+      if not (ok_start and ok_end):
+          out.append(finding("IR003", "error", f"table '{name}': the filter must be >= RangeStart and < RangeEnd (= on one side only), or rows on the boundary are loaded twice or never"))
+    narration: >
+      Most of the mistakes are in the files. Wrong case on the parameter names. A filter with equals on both ends. A polling
+      column that is the filter column. The lint reads the T M D L and reports eleven kinds of problem, and every one has a test
+      that breaks the model on purpose.
+
+  - id: gotcha
+    type: bullets
+    heading: "Gotcha: publish once, then never again"
+    bullets:
+      - "Republishing from Desktop removes the partitions and the data"
+      - "After publishing you can't download the P B I X"
+      - "Fix the schema with a metadata only deployment"
+      - "The service counts the day in U T C"
+    short: gotcha
+    narration: >
+      Here is the gotcha. After the first publish, publishing the same model from Desktop again removes the partitions and
+      the data, and you can't download the file back. Later schema changes go through a metadata only deployment, with A L M
+      Toolkit for example. And the current day is decided in U T C, unless you configure a time zone.
+
+  - id: limits
+    type: bullets
+    heading: "Limits and cost"
+    bullets:
+      - "Scheduled refresh stops at 2 hours on Pro, 5 on Premium"
+      - "Rename an incremental table and a pipeline fails"
+      - "Free Azure SQL: 100,000 vCore seconds a month"
+      - "An open connection keeps the database awake"
+    narration: >
+      Scheduled refresh stops after two hours on Pro and five on Premium, and refreshes through X M L A have no limit. Renaming a
+      table with a policy fails a pipeline deployment, which is what the checker from last time catches. And on the free
+      Azure SQL tier, an open session keeps the database awake and spends the monthly seconds.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The generator, the calculator, the lint and the refresh module are on GitHub, and the complete guide to incremental refresh is on
+      dev lad log dot com. Links in the description. This was DEVLADLOG Power BI, by Momento Galático.

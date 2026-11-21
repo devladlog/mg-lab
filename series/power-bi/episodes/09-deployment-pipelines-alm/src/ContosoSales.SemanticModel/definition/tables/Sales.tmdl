@@ -1,0 +1,92 @@
+/// Fact table, one row per order line, read from the monthly ERP exports in SharePoint. Development reads the sample folder, Test and Production the full one.
+table Sales
+
+	/// Sales amount = sum of quantity x unit price.
+	measure 'Sales Amount' = SUMX(Sales, Sales[Quantity] * Sales[Unit Price])
+		formatString: #,0.00
+		displayFolder: Base
+
+	/// Distinct orders (the degenerate Order Number).
+	measure Orders = DISTINCTCOUNT(Sales[Order Number])
+		formatString: #,0
+		displayFolder: Base
+
+	/// Order lines loaded: what the stage really contains.
+	measure 'Order Lines' = COUNTROWS(Sales)
+		formatString: #,0
+		displayFolder: Base
+
+	/// Name of the stage this copy of the model runs in (from the StageName parameter).
+	measure Stage = SELECTEDVALUE(Environment[Stage], "?")
+		displayFolder: Deployment
+
+	column 'Order Number'
+		dataType: string
+		summarizeBy: none
+		sourceColumn: OrderNumber
+
+	column 'Line Number'
+		dataType: int64
+		isHidden
+		formatString: 0
+		summarizeBy: none
+		sourceColumn: LineNumber
+
+	column 'Order Date'
+		dataType: dateTime
+		formatString: yyyy-mm-dd
+		summarizeBy: none
+		sourceColumn: OrderDate
+
+	column 'Year Month'
+		dataType: string
+		summarizeBy: none
+		sourceColumn: YearMonth
+
+	column Store
+		dataType: string
+		summarizeBy: none
+		sourceColumn: StoreName
+
+	column Channel
+		dataType: string
+		summarizeBy: none
+		sourceColumn: Channel
+
+	column Category
+		dataType: string
+		summarizeBy: none
+		sourceColumn: Category
+
+	column Quantity
+		dataType: int64
+		formatString: #,0
+		summarizeBy: sum
+		sourceColumn: Quantity
+
+	column 'Unit Price'
+		dataType: decimal
+		isHidden
+		formatString: #,0.00
+		summarizeBy: none
+		sourceColumn: UnitPrice
+
+	partition Sales = m
+		mode: import
+		source =
+				let
+				    Files = SharePoint.Files(ExportSite, [ApiVersion = 15]),
+				    InFolder = Table.SelectRows(Files, each Text.EndsWith([Folder Path], "/" & ExportsFolder & "/")),
+				    CsvOnly = Table.SelectRows(InFolder, each Text.Lower([Extension]) = ".csv"),
+				    Read = Table.AddColumn(CsvOnly, "Data",
+				        (file) => Table.AddColumn(fnReadExport(file[Content]), "SourceFile", each file[Name], type text)),
+				    Combined = Table.Combine(Read[Data]),
+				    // Each export re-exports the last days of the previous month with corrections: the newest file wins.
+				    Newest = Table.Sort(Combined, {{"SourceFile", Order.Descending}}),
+				    Buffered = Table.Buffer(Newest),
+				    Deduped = Table.Distinct(Buffered, {"OrderNumber", "LineNumber"}),
+				    WithMonth = Table.AddColumn(Deduped, "YearMonth", each Date.ToText([OrderDate], [Format = "yyyy-MM", Culture = "en-US"]), type text),
+				    Result = Table.SelectColumns(WithMonth, {"OrderNumber", "LineNumber", "OrderDate", "YearMonth", "StoreName",
+				        "Channel", "Category", "Quantity", "UnitPrice"})
+				in
+				    Result

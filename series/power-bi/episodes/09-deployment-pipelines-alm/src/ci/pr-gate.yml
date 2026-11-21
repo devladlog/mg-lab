@@ -1,0 +1,39 @@
+# Pull request gate for the Contoso Sales project (GitHub Actions).
+# It only reads files: it signs in to nothing and needs no secret. The deployment itself
+# (src/pipeline/Invoke-PipelineRelease.ps1) is run by a person or by a separate, approved job.
+name: contoso-sales-pr-gate
+on:
+  pull_request:
+    paths:
+      - 'src/ContosoSales.*/**'
+      - 'src/pipeline/**'
+      - 'src/tools/**'
+permissions:
+  contents: read
+jobs:
+  model-checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Check the model, the report and the stage rules
+        run: python3 src/tools/alm_check.py check --model src/ContosoSales.SemanticModel/definition --report src/ContosoSales.Report --stages src/pipeline/stages.json
+      - name: Incremental refresh tables must not be renamed (compare with the target branch)
+        run: |
+          git fetch --depth=1 origin "${{ github.base_ref }}"
+          rm -rf /tmp/base && mkdir /tmp/base
+          git archive FETCH_HEAD src/ContosoSales.SemanticModel/definition | tar -x -C /tmp/base
+          python3 src/tools/alm_check.py diff /tmp/base/src/ContosoSales.SemanticModel/definition src/ContosoSales.SemanticModel/definition
+      - name: Print the deployment rules to enter in the pipeline
+        run: python3 src/tools/alm_check.py rules --model src/ContosoSales.SemanticModel/definition --stages src/pipeline/stages.json
+  pipeline-module:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Pester tests of the pipeline module (mocked REST calls)
+        shell: pwsh
+        run: |
+          Install-Module Pester -MinimumVersion 5.5 -Scope CurrentUser -Force
+          Invoke-Pester -Path tests/PbiPipelines.Tests.ps1 -CI

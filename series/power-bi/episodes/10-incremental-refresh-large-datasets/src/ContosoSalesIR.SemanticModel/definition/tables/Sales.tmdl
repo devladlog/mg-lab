@@ -1,0 +1,115 @@
+/// Fact table, one row per order line, read from Azure SQL Database. Incremental refresh: keep 3 years, refresh the last 10 days, only if the data changed.
+table Sales
+
+	/// Sales amount = sum of quantity x unit price.
+	measure 'Sales Amount' = SUMX(Sales, Sales[Quantity] * Sales[Unit Price])
+		formatString: #,0.00
+		displayFolder: Base
+
+	/// Distinct orders.
+	measure Orders = DISTINCTCOUNT(Sales[Order Number])
+		formatString: #,0
+		displayFolder: Base
+
+	/// Order lines loaded: what the partitions really contain.
+	measure 'Order Lines' = COUNTROWS(Sales)
+		formatString: #,0
+		displayFolder: Base
+
+	/// Newest order in the model: moves when a refresh loads new days.
+	measure 'Latest Order' = MAX(Sales[Order Timestamp])
+		formatString: yyyy-mm-dd hh:mm
+		displayFolder: Base
+
+	refreshPolicy
+		policyType: basic
+		rollingWindowGranularity: year
+		rollingWindowPeriods: 3
+		incrementalGranularity: day
+		incrementalPeriods: 10
+		pollingExpression =
+				let
+				    Source = Sql.Database(SqlServer, SqlDatabase),
+				    Sales = Source{[Schema = "dbo", Item = "Sales"]}[Data],
+				    InPeriod = Table.SelectRows(Sales, each [OrderTimestamp] >= RangeStart and [OrderTimestamp] < RangeEnd),
+				    Latest = List.Max(InPeriod[ModifiedDate])
+				in
+				    Latest
+		sourceExpression =
+				let
+				    Source = Sql.Database(SqlServer, SqlDatabase),
+				    Sales = Source{[Schema = "dbo", Item = "Sales"]}[Data],
+				    InPeriod = Table.SelectRows(Sales, each [OrderTimestamp] >= RangeStart and [OrderTimestamp] < RangeEnd),
+				    Slim = Table.RemoveColumns(InPeriod, {"SalesId"})
+				in
+				    Slim
+
+	column 'Order Number'
+		dataType: string
+		summarizeBy: none
+		sourceColumn: OrderNumber
+
+	column 'Line Number'
+		dataType: int64
+		isHidden
+		formatString: 0
+		summarizeBy: none
+		sourceColumn: LineNumber
+
+	column 'Order Timestamp'
+		dataType: dateTime
+		formatString: yyyy-mm-dd hh:mm:ss
+		summarizeBy: none
+		sourceColumn: OrderTimestamp
+
+	/// Used by "detect data changes". Learn: the service keeps this column's maximum per period, so it has to stay in the model (reduce its precision if memory matters).
+	column 'Modified Date'
+		dataType: dateTime
+		isHidden
+		formatString: yyyy-mm-dd hh:mm:ss
+		summarizeBy: none
+		sourceColumn: ModifiedDate
+
+	column 'Year Month'
+		dataType: string
+		summarizeBy: none
+		sourceColumn: YearMonth
+
+	column Store
+		dataType: string
+		summarizeBy: none
+		sourceColumn: StoreName
+
+	column Channel
+		dataType: string
+		summarizeBy: none
+		sourceColumn: Channel
+
+	column Category
+		dataType: string
+		summarizeBy: none
+		sourceColumn: Category
+
+	column Quantity
+		dataType: int64
+		formatString: #,0
+		summarizeBy: sum
+		sourceColumn: Quantity
+
+	column 'Unit Price'
+		dataType: decimal
+		isHidden
+		formatString: #,0.00
+		summarizeBy: none
+		sourceColumn: UnitPrice
+
+	partition Sales = m
+		mode: import
+		source =
+				let
+				    Source = Sql.Database(SqlServer, SqlDatabase),
+				    Sales = Source{[Schema = "dbo", Item = "Sales"]}[Data],
+				    InPeriod = Table.SelectRows(Sales, each [OrderTimestamp] >= RangeStart and [OrderTimestamp] < RangeEnd),
+				    Slim = Table.RemoveColumns(InPeriod, {"SalesId"})
+				in
+				    Slim

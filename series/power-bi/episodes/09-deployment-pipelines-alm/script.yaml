@@ -1,0 +1,205 @@
+episode: 9
+slug: deployment-pipelines-alm
+series_label: "POWER BI"
+series_name: "DEVLADLOG Power BI"
+file_prefix: "power-bi"
+title: "Deployment Pipelines & ALM"
+subtitle: "Dev, Test, Prod: same model, different data, no copy and paste"
+voice: am_michael
+thumbnail_text: "DEV\nTEST\nPROD"
+youtube:
+  title: "Power BI Deployment Pipelines: Rules, REST API and Pre-Deploy Checks | DEVLADLOG Power BI #9"
+  tags: [Power BI, deployment pipelines, ALM, CI/CD, deployment rules, parameter rules, Power BI REST API, PBIP, TMDL, Fabric, PowerShell, semantic model]
+sources:
+  - https://www.devladlog.com/articles/power-bi/2026-05-02-deployment-pipelines-complete-guide-2026/
+  - https://learn.microsoft.com/en-us/fabric/cicd/deployment-pipelines/understand-the-deployment-process
+  - https://learn.microsoft.com/en-us/fabric/cicd/deployment-pipelines/create-rules
+  - https://learn.microsoft.com/en-us/fabric/cicd/deployment-pipelines/pipeline-automation
+  - https://learn.microsoft.com/en-us/rest/api/power-bi/pipelines/selective-deploy
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Publish once. Promote twice."
+    sub: "Deployment pipelines, rules and a pre-flight check"
+    short: hook
+    narration: >
+      So far Contoso Bikes had one workspace, and every change went straight to the people reading the report. This time
+      there are three stages, Development, Test and Production. The model is the same in all of them. The data is not,
+      and you never copy a file by hand.
+
+  - id: plan
+    type: bullets
+    heading: "The plan"
+    bullets:
+      - "Make the model's data source a parameter"
+      - "Build the pipeline and set the rules"
+      - "Deploy with the service, then with the REST A P I"
+      - "Check the release before it goes out"
+    narration: >
+      We turn the stage specific values into parameters. We build the pipeline with three workspaces and set a rule per
+      stage. Then we deploy by hand, and again with PowerShell. And last, a check that runs before anything is promoted.
+
+  - id: source
+    type: code
+    heading: "One model, one source, one folder"
+    lang: m
+    code: |
+      Files = SharePoint.Files(ExportSite, [ApiVersion = 15]),
+      InFolder = Table.SelectRows(Files, each Text.EndsWith([Folder Path], "/" & ExportsFolder & "/")),
+      CsvOnly = Table.SelectRows(InFolder, each Text.Lower([Extension]) = ".csv"),
+    narration: >
+      The lab has no data gateway yet, so the monthly exports sit in a SharePoint library, which the service can reach
+      directly. The model reads whatever folder the exports folder parameter names. Nothing about a stage is typed into
+      the query.
+
+  - id: params
+    type: code
+    heading: "Parameters with the Development values"
+    lang: text
+    code: |
+      expression ExportsFolder = "exports-sample" meta [IsParameterQuery=true, Type="Text", IsParameterQueryRequired=true]
+      expression StageName = "DEV" meta [IsParameterQuery=true, Type="Text", IsParameterQueryRequired=true]
+    narration: >
+      Development reads a sample folder with three months. The stage name parameter feeds a one row table, so every page
+      can say which stage it comes from. Both parameters are type Text, and that matters, because a parameter rule on
+      Learn only works with text parameters.
+
+  - id: pipeline
+    type: screen
+    heading: "Three stages, three workspaces"
+    image: screens/pipeline-stages.jpg
+    bar: "Power BI service · Deployment pipelines · Contoso Sales (Lab)"
+    demo: "Power BI service, Deployment pipelines, pipeline 'Contoso Sales (Lab)' with the three stages Development, Test, Production, each with its workspace name (Contoso Sales (Lab) - Dev / - Test / - Prod). Development shows the semantic model and the report. Needs the tenant."
+    narration: >
+      The pipeline has three stages, and each stage is a workspace. Creating a custom pipeline with more or fewer stages is done in the user interface, not by the A P I. Development holds the model and the report we
+      published from the project. Test and Production start empty. A workspace has to be on a Fabric capacity to be
+      assigned, and here that is the trial capacity.
+
+  - id: rules
+    type: screen
+    heading: "Deployment rules per stage"
+    image: screens/rules.jpg
+    bar: "Power BI service · Test stage · Deployment rules · ContosoSales"
+    demo: "Pipeline, Test stage, Deployment rules, semantic model ContosoSales, Parameter rules: ExportsFolder = exports and StageName = TEST. Then Production: ExportsFolder = exports, StageName = PROD. Show that the Development stage has no rules option. Needs the tenant."
+    narration: >
+      Rules are set on the stage you deploy into. Test gets the full exports folder and the name TEST. Production gets the
+      same folder and the name PROD. The development stage offers no rules, because rules can't be created there. And a
+      rule is applied at the next deployment, not the moment you save it.
+
+  - id: deploy
+    type: screen
+    heading: "Compare, then deploy"
+    image: screens/deploy.jpg
+    bar: "Power BI service · Deployment pipelines · Deploy to Test"
+    demo: "Pipeline with Development selected: the compare view shows the model and the report as New. Click Deploy to Test, add a note, and show the finished deployment. Then open the Test report and show it still has no data until the refresh. Needs the tenant."
+    narration: >
+      Items are paired by type and name. The first deployment creates them in Test, and later ones overwrite. A
+      deployment copies the model and the report, and not the data, the refresh schedule, or the credentials. So the Test
+      model is empty until it's refreshed with its own credentials.
+
+  - id: refresh
+    type: bullets
+    heading: "After the deploy: one refresh per stage"
+    bullets:
+      - "Sign in to the SharePoint source for the Test model"
+      - "Refresh Test, then check the Stage card"
+      - "Same for Production, with its own rule values"
+    narration: >
+      After the deployment, each stage needs its own credentials for the SharePoint source, and then its first refresh. We
+      do that for Test, check that the stage card reads TEST, and repeat it for Production. The rules are already in
+      place, so the same model now reads the full folder.
+
+  - id: stages
+    type: screen
+    heading: "The same report, three answers"
+    image: screens/three-stages.jpg
+    bar: "Power BI service · ContosoSales report · Dev, Test, Prod"
+    demo: "Open the report in each stage after the refresh and in the same tab order: the Stage card reads DEV, TEST, PROD. Expected cards from the Python mirror (tools/expected.py): Dev 283 orders, 478 lines, 220,652.08; Test and Prod 2,440 orders, 4,071 lines, 1,862,401.98. Record what is really shown. Needs the tenant."
+    narration: >
+      Here is the result. The stage card says which copy you are looking at. Development has three months of data, Test and
+      Production have all twenty four. The Python mirror of the query says two hundred eighty three orders in Development
+      and two thousand four hundred forty in the other two. The cards have to agree with it.
+
+  - id: rest
+    type: code
+    heading: "The same deployment, as a request"
+    lang: powershell
+    code: |
+      $body = [ordered]@{ sourceStageOrder = $SourceStage }
+      if ($selective) {
+          if ($SemanticModelId.Count) { $body.datasets = @($SemanticModelId | ForEach-Object { @{ sourceId = $_ } }) }
+          if ($ReportId.Count) { $body.reports = @($ReportId | ForEach-Object { @{ sourceId = $_ } }) }
+      }
+      $body.options = [ordered]@{ allowCreateArtifact = (-not $NoCreate.IsPresent); allowOverwriteArtifact = (-not $NoOverwrite.IsPresent) }
+      if ($Note) { $body.note = $Note }
+    short: rest
+    narration: >
+      Behind the button is a REST call, and it is asynchronous, so the script polls the operation until it reports succeeded or failed. Selective Deploy takes the source stage and the items to promote, and options
+      that say whether it may create and overwrite. With no items it is Deploy All. The function builds exactly that body, and
+      its tests run against responses shaped like the samples on Learn.
+
+  - id: release
+    type: code
+    heading: "Compare, check, deploy, refresh"
+    lang: powershell
+    code: |
+      $pairs = @(Compare-PbiStage -PipelineId $pipe.Id -SourceStage $From -TargetStage $to)
+      $findings = @(Test-PbiDeployment -PipelineId $pipe.Id -SourceStage $From -TargetStage $to -ItemId $ids -ReportModel $reportModel)
+      if ($findings | Where-Object Severity -eq 'Error') { Write-Host 'Fix the errors above first.'; exit 1 }
+      $op = Invoke-PbiPipelineDeploy @deploy -WhatIf:$WhatIfPreference -Confirm:$false
+    narration: >
+      The release script compares the stages, runs the checks, deploys, waits for the operation, and then starts a
+      refresh. With the what if switch it prints every request and sends nothing. That is how we rehearse it.
+
+  - id: checks
+    type: code
+    heading: "Catch it in the pull request"
+    lang: python
+    code: |
+      if st["order"] == 0 and (rules or st.get("dataSourceRules")):
+          out.append(finding("AL003", "error", f"stage '{st['name']}' has rules, but rules can't be created in the development stage"))
+      for p in rules:
+          if p not in params:
+              out.append(finding("AL002", "error", f"stage '{st['name']}': rule for parameter '{p}', which the model doesn't have"))
+          elif params[p]["type"] != "Text":
+              out.append(finding("AL001", "error", f"parameter '{p}' is type {params[p]['type']}: parameter rules need Text"))
+    narration: >
+      Some mistakes don't need a tenant to find. A rule for a parameter the model doesn't have. A parameter that isn't
+      text. Rules on the development stage. The checker reads the T M D L files and the stage file, and a git hub workflow
+      runs it on every pull request, without a secret.
+
+  - id: gotcha
+    type: bullets
+    heading: "Gotcha: what a pipeline will not do for you"
+    bullets:
+      - "Data, refresh schedule and credentials are not copied"
+      - "A model on a Dataflow Gen2 (CI/CD) source can't be deployed"
+      - "A service principal can't set up OAuth credentials: no refresh"
+      - "Learn lists P B I R reports as a limitation, and as the default"
+    short: gotcha
+    narration: >
+      Now the honest part. Last time the model read from a dataflow, and Learn says a model that uses a Dataflow Gen2 C I slash C D item as its source can't be deployed by a pipeline. So this episode's model reads files instead. A service
+      principal can't configure OAuth credentials, so a refresh after its deployment can fail. And Learn contradicts itself on
+      the P B I R report format. We deploy one on camera and show what happens.
+
+  - id: limits
+    type: bullets
+    heading: "Limits worth knowing"
+    bullets:
+      - "Up to 300 items per deployment"
+      - "Rules apply at the next deployment"
+      - "No data source rule on a parameterized source"
+      - "Renaming an incremental refresh table fails"
+    narration: >
+      A deployment can carry up to three hundred items. A data source rule isn't supported when the source is already a
+      parameter, so you pick one or the other. And renaming a table that has an incremental refresh policy fails the
+      deployment. We will use that policy in the next episode.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The model, the PowerShell module and the checks are on GitHub, and the complete guide to deployment pipelines is on dev lad
+      log dot com. Links in the description. This was DEVLADLOG Power BI, by Momento Galático.
