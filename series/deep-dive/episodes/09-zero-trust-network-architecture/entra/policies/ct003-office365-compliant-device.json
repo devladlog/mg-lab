@@ -1,0 +1,20 @@
+{
+  "displayName": "CT003 Office 365 needs a compliant Windows device",
+  "state": "enabledForReportingButNotEnforced",
+  "conditions": {
+    "clientAppTypes": ["browser", "mobileAppsAndDesktopClients"],
+    "applications": { "includeApplications": ["Office365"] },
+    "platforms": { "includePlatforms": ["windows"] },
+    "users": {
+      "includeGroups": ["{{pilotGroupId}}"],
+      "excludeGroups": ["{{breakGlassGroupId}}"]
+    }
+  },
+  "grantControls": {
+    "operator": "AND",
+    "builtInControls": ["compliantDevice", "mfa"]
+  },
+  "sessionControls": {
+    "signInFrequency": { "isEnabled": true, "type": "hours", "value": 12 }
+  }
+}

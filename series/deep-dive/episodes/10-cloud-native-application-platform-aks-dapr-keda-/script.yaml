@@ -1,0 +1,262 @@
+# DEVLADLOG Deep Dive, episode 10. Code and test scenes are real (from this folder); screen scenes need the lab
+# recording described in demo.md. Narration ~860 words.
+episode: 10
+slug: cloud-native-application-platform-aks-dapr-keda-
+series_label: "DEEP DIVE"
+series_name: "DEVLADLOG Deep Dive"
+file_prefix: "deep-dive"
+title: "Cloud-native application platform"
+subtitle: "AKS, Dapr, KEDA and Service Bus"
+voice: am_michael
+thumbnail_text: "SCALE TO ZERO\nON A\nSERVICE BUS TOPIC"
+youtube:
+  title: "AKS + Dapr + KEDA + Service Bus: Scale to Zero With Workload Identity | DEVLADLOG Deep Dive #10"
+  tags: [AKS, Azure Kubernetes Service, Dapr, KEDA, Azure Service Bus, workload identity, scale to zero, pub/sub, Kubernetes autoscaling, Bicep, cloud native, solution architecture]
+sources:
+  - https://www.devladlog.com/articles/deep-dive/2026-04-20-cloud-native-application-platform-aks-dapr-keda-azure-service-bus/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Idle at midnight. Forty workers at month end."
+    sub: "scale to zero on a Service Bus topic"
+    short: hook
+    narration: >
+      Contoso's finance review runs a few big purchases on a quiet night, and hundreds at month end. In episode seven,
+      the big ones landed on a Service Bus subscription. Today a worker on Kubernetes drains it, and the cluster
+      scales that worker from zero to ten and back, on its own. This is the DEVLADLOG Deep Dive.
+
+  - id: architecture
+    type: diagram
+    heading: "Who does what"
+    nodes: ["Topic", "Subscription", "KEDA", "Worker pods"]
+    labels: ["purchase-events", "finance-review", "scales 0 to 10", "app + Dapr sidecar"]
+    narration: >
+      Service Bus holds the messages. Dapr delivers them to the app through a sidecar, so the code never touches a
+      Service Bus library. KEDA watches the subscription and sets the replica count, all the way down to zero. And
+      every one of them signs in with workload identity, so there is no connection string anywhere.
+
+  - id: principles
+    type: bullets
+    heading: "Four jobs, four owners"
+    bullets:
+      - "Service Bus: durable, filtered, dead-lettering"
+      - "Dapr: delivery and retry contract, no SDK in the app"
+      - "KEDA: replica count from the backlog"
+      - "Workload identity: federated, no secrets"
+    narration: >
+      Each piece has one job. Service Bus is durable, filters by label and dead letters. Dapr owns the delivery
+      contract. KEDA owns the replica count, so the deployment doesn't even have a replicas field. And workload
+      identity replaces secrets with a federated trust between a service account and an Azure identity.
+
+  - id: component
+    type: code
+    heading: "The Dapr component: no keys"
+    lang: yaml
+    code: |
+      type: pubsub.azure.servicebus.topics
+      metadata:
+        - name: namespaceName
+          value: "{{serviceBusFqdn}}"
+        - name: disableEntityManagement
+          value: "true"
+        - name: consumerID
+          value: "finance-review"
+        - name: maxActiveMessages
+          value: "10"
+        - name: maxConcurrentHandlers
+          value: "5"
+      scopes:
+        - finance-worker
+    narration: >
+      The component names only the namespace address: Entra authentication, nothing secret. Entity management is off,
+      because Bicep already created the subscription and the sidecar should not be allowed to change anything. The
+      consumer id is the subscription name. And the buffer is small, ten messages, so one replica can't hide a whole
+      burst while the new ones wait.
+
+  - id: subscribe
+    type: code
+    heading: "The app: a route and a status"
+    lang: csharp
+    code: |
+      app.MapGet("/dapr/subscribe", () => Results.Json(new[]
+      {
+          new
+          {
+              pubsubname = PubSubName,
+              topic = Topic,
+              routes = new { @default = Route },
+              metadata = new Dictionary<string, string> { ["rawPayload"] = "true" },
+          },
+      }));
+      ...
+      catch (Exception ex) when (ex is not OperationCanceledException)
+      {
+          return DeliveryResult.Retry(ex.Message); // back to the subscription
+      }
+    narration: >
+      The app tells Dapr what to subscribe to, with raw payload on, because the publisher is API Management, not
+      Dapr. Then it answers with a status. Success completes the message. Retry sends it back, and Service Bus dead
+      letters it after five tries. Drop, for a message that can never work, logs a warning and moves on.
+
+  - id: keda
+    type: code
+    heading: "KEDA: the backlog sets the replicas"
+    short: scale
+    lang: yaml
+    code: |
+      spec:
+        podIdentity:
+          provider: azure-workload
+          identityId: "{{kedaClientId}}"
+      ---
+      spec:
+        scaleTargetRef: { name: finance-worker }
+        minReplicaCount: 0
+        maxReplicaCount: 10
+        triggers:
+          - type: azure-servicebus
+            metadata:
+              topicName: purchase-events
+              subscriptionName: finance-review
+              namespace: "{{serviceBusNamespace}}"
+              messageCount: "5"
+    narration: >
+      This is the whole autoscaler. KEDA signs in with its own identity and watches the finance review
+      subscription. For every five messages waiting, it wants another replica, up to ten. With nothing waiting, zero.
+      Note the namespace is the short name, not the host name, exactly as in Learn's tutorial.
+
+  - id: bicep
+    type: code
+    heading: "Trust, declared in Bicep"
+    lang: bicep
+    code: |
+      oidcIssuerProfile: { enabled: true }
+      securityProfile: { workloadIdentity: { enabled: true } }
+      workloadAutoScalerProfile: { keda: { enabled: true } }
+      ...
+      subject: 'system:serviceaccount:${workloadNamespace}:${workloadServiceAccount}'
+      subject: 'system:serviceaccount:kube-system:keda-operator'
+      ...
+      // worker: Azure Service Bus Data Receiver on the topic
+      // KEDA:   Azure Service Bus Data Owner on the namespace (Learn's tutorial)
+      // kubelet: AcrPull on the registry. ACR admin user: off
+    narration: >
+      In Bicep, the cluster turns on the issuer, workload identity and the KEDA add on. Two federated credentials say
+      exactly which service accounts may become which identity. The worker may only receive on the topic. KEDA gets
+      more, data owner on the namespace, because that is what Learn's tutorial uses. Narrowing it is on my list.
+
+  - id: gotcha
+    type: bullets
+    heading: "Gotchas, all from the docs"
+    short: gotcha
+    bullets:
+      - "Dapr extension default: HA with 3 replicas. Turn it off for a lab"
+      - "consumerID must equal KEDA's subscriptionName"
+      - "Raw payload: no CloudEvent tracing or dedupe per messageId"
+      - "KEDA needs its own federated credential and a restart"
+    narration: >
+      The gotchas, all from the docs. The Dapr extension installs in high availability by default, three replicas of
+      each service, which is a lot for a small lab cluster. The subscription name has to be the same in Bicep, in Dapr
+      and in KEDA. Raw payload gives up cloud event features like tracing and de duplication by message id. And the KEDA
+      operator needs its own federated credential, then an annotation and a restart.
+
+  - id: deploy-screen
+    type: screen
+    heading: "The platform, running"
+    image: screens/platform.jpg
+    bar: "Windows Terminal · kubectl and Azure CLI"
+    demo: >
+      Windows Terminal (PowerShell 7) on the lab laptop, one real capture after deployment: az aks show --query
+      "[workloadAutoScalerProfile, securityProfile, oidcIssuerProfile]" showing KEDA enabled, workload identity enabled and the
+      issuer URL (masked); kubectl get pods -n dapr-system and kubectl get pods -n kube-system -l app=keda-operator all Running;
+      kubectl get component,scaledobject,deploy -n contoso-finance. Mask subscription id, tenant id, the issuer URL and registry name.
+    narration: >
+      The cluster, for real. Workload identity and KEDA are on. Dapr's control plane runs in its own namespace, not in
+      high availability, so just a few small pods. And in the finance namespace: our component, the scaled object and
+      the deployment.
+
+  - id: idle-screen
+    type: screen
+    heading: "Nothing to do, nothing running"
+    image: screens/idle.jpg
+    bar: "kubectl · Azure portal · Service Bus"
+    demo: >
+      Two panes. Left: kubectl get scaledobject,deploy,pods -n contoso-finance after the cooldown with an empty subscription:
+      the deployment at 0/0 and no pods, the ScaledObject ready and not active. Right: Edge on the Azure portal, Service Bus >
+      purchase-events > Subscriptions > finance-review with active message count 0. Mask namespace and subscription id.
+    narration: >
+      The empty subscription. Zero messages, zero pods. Kubernetes isn't running a single worker, and the scaled object
+      is just waiting. Be honest about what this saves, though: the two nodes are still there, and still billed. Zero
+      replicas is not zero nodes. Shrinking nodes is a separate job for the cluster autoscaler, and it is not part of
+      this lab.
+
+  - id: scale-screen
+    type: screen
+    heading: "Sixty messages in, ten pods out"
+    image: screens/scale-out.jpg
+    bar: "kubectl · Service Bus"
+    demo: >
+      Run python3 scripts/send_burst.py --namespace <ns> --count 60 --poison 2 in one pane while kubectl get pods -n
+      contoso-finance -w runs in another, and the portal's finance-review active message count refreshes in a third. Capture
+      the pods going from 0 to several Running (the sixty valid messages take 1.5 seconds each per handler, so allow a few
+      minutes) and the count falling to 0. Second take: two minutes later, pods Terminating back to zero. State the actual replica
+      count you saw in the narration if it is not ten.
+    narration: >
+      Now a month end burst: sixty purchase events, plus two broken ones. The subscription fills, KEDA notices within
+      a polling interval, and pods appear. Every worker takes a handful of messages, the count drains, and after the
+      cooldown the pods go away again. Back to zero.
+
+  - id: logs-screen
+    type: screen
+    heading: "Success, and a message that can't work"
+    image: screens/logs.jpg
+    bar: "kubectl logs · Service Bus"
+    demo: >
+      kubectl logs -n contoso-finance -l app=finance-worker -c worker --tail=40 showing "Finance review opened for PR-90xx"
+      lines from several pods and two "Delivery DROP" warnings for the broken messages, from a real run. Then the portal:
+      finance-review active 0 and dead-letter 0, to show the dropped messages are not stuck. Mask pod name suffixes if they
+      carry the subscription id (they do not by default).
+    narration: >
+      The logs. Finance reviews opened, from several pods. And two warnings: drop. Those messages can never be valid, so
+      the worker says so once, instead of failing again and again until they dead letter. Both counts in the portal
+      are at zero.
+
+  - id: tests
+    type: code
+    heading: "Fifty two checks, no cluster needed"
+    lang: text
+    code: |
+      $ dotnet test tests/FinanceReview.Tests -m:1
+        Delivery: raw payload decoded; poison dropped, outage retried; threshold 5000
+        Endpoints: /dapr/subscribe; cloudevents+json post answers 200 + status
+      Passed!  - Failed: 0, Passed: 21
+      $ python3 -m pytest tests/contracts
+        one subscription name in Bicep, Dapr and KEDA; federated subjects match
+        no secrets; roles exactly three; no replicas field; render + burst scripts
+      31 passed
+    narration: >
+      None of this needs a cluster to test. Twenty one dot net tests run the real web pipeline, called the way the
+      sidecar calls it. Thirty one Python tests compile the Bicep and compare it with the manifests, so the
+      subscription name, the federated subjects and the roles can't drift apart.
+
+  - id: recap
+    type: bullets
+    heading: "What to take away"
+    bullets:
+      - "Dapr delivers, KEDA scales, Service Bus holds"
+      - "One subscription name, three places, one test"
+      - "Workload identity: federated trust, no connection strings"
+      - "Lab choices (Free tier, no HA) are not production choices"
+    narration: >
+      To recap. Dapr delivers, KEDA scales, and Service Bus holds. And the replicas are only half of the bill. Keep the subscription name in one test. Use
+      workload identity instead of connection strings. And remember the lab choices, the free tier and no high
+      availability, are for a recording, not for production.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The Bicep, the manifests, the worker and the tests are on GitHub, and the full guide is on devladlog dot com.
+      This was the DEVLADLOG Deep Dive, by Momento Galático.

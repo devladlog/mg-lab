@@ -1,0 +1,32 @@
+# KEDA's operator signs in to Azure as its own identity (federated to kube-system:keda-operator).
+apiVersion: keda.sh/v1alpha1
+kind: TriggerAuthentication
+metadata:
+  name: servicebus-workload-identity
+  namespace: contoso-finance # must be the namespace of the ScaledObject that uses it
+spec:
+  podIdentity:
+    provider: azure-workload
+    identityId: "{{kedaClientId}}"
+---
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: finance-worker
+  namespace: contoso-finance
+spec:
+  scaleTargetRef:
+    name: finance-worker
+  minReplicaCount: 0
+  maxReplicaCount: 10
+  pollingInterval: 15
+  cooldownPeriod: 120
+  triggers:
+    - type: azure-servicebus
+      authenticationRef:
+        name: servicebus-workload-identity
+      metadata:
+        topicName: purchase-events
+        subscriptionName: finance-review
+        namespace: "{{serviceBusNamespace}}" # the namespace NAME, not the host name
+        messageCount: "5"

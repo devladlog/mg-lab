@@ -1,0 +1,26 @@
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: purchase-pubsub
+  namespace: contoso-finance
+spec:
+  type: pubsub.azure.servicebus.topics
+  version: v1
+  metadata:
+    # Microsoft Entra authentication: only the namespace address, no connection string, no secret.
+    - name: namespaceName
+      value: "{{serviceBusFqdn}}"
+    # The subscription already exists (Bicep): Dapr must not try to create or change anything.
+    - name: disableEntityManagement
+      value: "true"
+    # Subscription name on the topic. Same string as KEDA's subscriptionName.
+    - name: consumerID
+      value: "finance-review"
+    # Keep the buffer small. Dapr's default is 1000 messages processing or buffered per replica, so one replica could
+    # hold a whole burst while the replicas KEDA adds sit idle.
+    - name: maxActiveMessages
+      value: "10"
+    - name: maxConcurrentHandlers
+      value: "5"
+scopes:
+  - finance-worker

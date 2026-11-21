@@ -1,0 +1,22 @@
+{
+  "displayName": "CT002 Admin roles need phishing-resistant MFA",
+  "state": "enabledForReportingButNotEnforced",
+  "conditions": {
+    "clientAppTypes": ["all"],
+    "applications": { "includeApplications": ["All"] },
+    "users": {
+      "includeRoles": [
+        "62e90394-69f5-4237-9190-012177145e10",
+        "194ae4cb-b126-40b2-bd5b-6091b380977d",
+        "29232cdf-9323-42fd-ade2-1d097af3e4de",
+        "e8611ab8-c189-46e8-94e1-60213ab1f814",
+        "b1be1c3e-b65d-4f19-8427-f6fa0d97feb9"
+      ],
+      "excludeGroups": ["{{breakGlassGroupId}}"]
+    }
+  },
+  "grantControls": {
+    "operator": "OR",
+    "authenticationStrength": { "id": "{{phishingResistantStrengthId}}" }
+  }
+}

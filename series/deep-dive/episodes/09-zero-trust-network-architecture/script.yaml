@@ -1,0 +1,254 @@
+# DEVLADLOG Deep Dive, episode 09. Code and test scenes are real (from this folder); screen scenes need the lab
+# recording described in demo.md. Narration ~870 words.
+episode: 9
+slug: zero-trust-network-architecture
+series_label: "DEEP DIVE"
+series_name: "DEVLADLOG Deep Dive"
+file_prefix: "deep-dive"
+title: "Zero Trust architecture"
+subtitle: "Conditional Access, Intune compliance, private endpoints"
+voice: am_michael
+thumbnail_text: "NO TRUST\nBY\nLOCATION"
+youtube:
+  title: "Zero Trust on Azure: Conditional Access, Intune, Private Endpoints | DEVLADLOG Deep Dive #9"
+  tags: [Zero Trust, Conditional Access, report-only mode, authentication strength, phishing-resistant MFA, Microsoft Intune, device compliance, Azure Key Vault, private endpoint, network security group, Bicep, Microsoft Graph, solution architecture]
+sources:
+  - https://www.devladlog.com/articles/deep-dive/2026-02-16-zero-trust-network-architecture-azure-ad-conditional-access-intune-defender/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Inside the network is not a reason to trust"
+    sub: "zero trust, in code you can test"
+    short: hook
+    narration: >
+      A finance user signs in from a laptop nobody has checked, on a network nobody owns, and reaches the same key
+      vault as everyone else. In episodes three and seven, Contoso built the purchase platform and its front door.
+      Today we decide who and what may reach it, one request at a time. This is the DEVLADLOG Deep Dive.
+
+  - id: architecture
+    type: diagram
+    heading: "Every request is checked three times"
+    nodes: ["Sign-in", "Identity", "Device", "Network"]
+    labels: ["Conditional Access", "Authentication strength", "Intune compliance", "Private endpoint"]
+    narration: >
+      Conditional Access sits at the sign-in and asks about identity: how strong was the authentication. Intune
+      answers about the device: is it healthy and encrypted. And the network question is answered by what is simply
+      not there: no public address, no inbound rule, a private endpoint for the one service that matters.
+
+  - id: principles
+    type: bullets
+    heading: "Three questions, no exceptions for location"
+    bullets:
+      - "Who is it, and how strongly did they prove it?"
+      - "Is the device healthy, and does the company manage it?"
+      - "Is there a private path, or a public door?"
+      - "Assume breach: the emergency account is the only exception"
+    narration: >
+      Three questions on every request. Who is it, and how strongly did they prove it. Is the device healthy and
+      managed. And is there a private path, or a public door. Being on the office network answers none of them. The
+      only deliberate exception is the break glass account, so you can never lock yourself out.
+
+  - id: policy
+    type: code
+    heading: "One policy, as data"
+    short: policy
+    lang: json
+    code: |
+      "state": "enabledForReportingButNotEnforced",
+      "conditions": {
+        "clientAppTypes": ["browser", "mobileAppsAndDesktopClients"],
+        "applications": { "includeApplications": ["Office365"] },
+        "platforms": { "includePlatforms": ["windows"] },
+        "users": {
+          "includeGroups": ["{{pilotGroupId}}"],
+          "excludeGroups": ["{{breakGlassGroupId}}"]
+        }
+      },
+      "grantControls": { "operator": "AND", "builtInControls": ["compliantDevice", "mfa"] },
+      "sessionControls": {
+        "signInFrequency": { "isEnabled": true, "type": "hours", "value": 12 }
+      }
+    narration: >
+      Here is one of three policies, kept as a json file in the repo. Office three sixty five, from Windows, for the
+      pilot group, break glass excluded. The grant is a compliant device and multifactor, and sessions last twelve
+      hours. And look at the first line: it starts in report only, evaluated but not enforced.
+
+  - id: strength
+    type: code
+    heading: "Admins: phishing-resistant, by role"
+    lang: json
+    code: |
+      "users": {
+        "includeRoles": [
+          "62e90394-69f5-4237-9190-012177145e10",
+          "194ae4cb-b126-40b2-bd5b-6091b380977d",
+          "29232cdf-9323-42fd-ade2-1d097af3e4de",
+          "e8611ab8-c189-46e8-94e1-60213ab1f814",
+          "b1be1c3e-b65d-4f19-8427-f6fa0d97feb9"
+        ],
+        "excludeGroups": ["{{breakGlassGroupId}}"]
+      },
+      "grantControls": {
+        "operator": "OR",
+        "authenticationStrength": { "id": "{{phishingResistantStrengthId}}" }
+      }
+    narration: >
+      Admins get a stricter rule. Five directory roles, by their template ids, must use an authentication strength:
+      the built in phishing resistant one, which means Windows Hello for Business, a fido two key, or a certificate.
+      The id is looked up by name at deploy time. And note there is no mfa control here: Learn says you can't combine
+      it with a strength in one policy.
+
+  - id: publish
+    type: code
+    heading: "The script refuses to enforce by accident"
+    lang: powershell
+    code: |
+      $json = Expand-CaTemplate -Template (Get-Content -LiteralPath $TemplatePath -Raw) -Values $Values
+      $policy = $json | ConvertFrom-Json -Depth 20
+      $issues = @(Test-CaPolicy -Policy $policy -AllowEnforced:$Enforce)
+      if ($issues.Count -gt 0) { throw "Policy '$($policy.displayName)' is not safe to publish: $($issues -join '; ')" }
+      if ($Enforce) { $policy.state = 'enabled'; $json = $policy | ConvertTo-Json -Depth 20 }
+
+      $all = Invoke-MgGraphRequest -Method GET -Uri '/v1.0/identity/conditionalAccess/policies'
+      $existing = @($all.value | Where-Object { $_.displayName -eq $policy.displayName })
+      # one match: PATCH it. none: POST it. same name twice: stop.
+    narration: >
+      The deploy script talks to Microsoft Graph. A linter checks every policy first: break glass excluded,
+      documented values only, nobody targeted by mistake. Anything that is not report only is refused, unless you
+      pass enforce. And it matches by name, so running it twice updates instead of duplicating.
+
+  - id: gotcha
+    type: bullets
+    heading: "Report-only: read the fine print"
+    short: gotcha
+    bullets:
+      - "Report-only compliance checks can prompt macOS, iOS and Android users"
+      - "No policy assigned means compliant, by default"
+      - "mfa and an authentication strength can't share a policy"
+      - "Each sign-in logs: success, failure, user action required"
+    narration: >
+      The gotchas, all from Learn. A report only policy that needs a compliant device can still prompt people on
+      Mac, iOS and Android to pick a certificate, so our policy is limited to Windows. A device with no compliance
+      policy assigned counts as compliant, unless you flip that tenant setting. And report only has four outcomes,
+      including one where the user would have been asked for something.
+
+  - id: ca-screen
+    type: screen
+    heading: "Three policies, all report-only"
+    image: screens/ca-policies.jpg
+    bar: "Microsoft Entra admin center · Conditional Access"
+    demo: >
+      Browser (Edge, 1920x1080, zoom 100 %) on the Entra admin center as the lab Global Administrator: Entra ID >
+      Conditional Access > Policies, showing CT001, CT002 and CT003 with State "Report-only", created by Deploy-ZeroTrust.ps1.
+      Mask the tenant name and id.
+    narration: >
+      Deployed from the script, here they are in the Entra admin center. Three policies, state report only. Nobody was
+      blocked, and that is the point of today's first rule: measure before you enforce.
+
+  - id: intune-screen
+    type: screen
+    heading: "The device says why it is not compliant"
+    image: screens/intune-compliance.jpg
+    bar: "Microsoft Intune admin center · Devices"
+    demo: >
+      Intune admin center > Devices > the Entra-joined lab VM CON-W11-01 > Device compliance > the policy "CT Windows
+      corporate baseline", showing the per-setting status with the one setting that fails (expected: BitLocker, before
+      it is turned on). Mask the tenant name and the device serial number.
+    narration: >
+      A real Windows eleven machine, joined to Entra and enrolled in Intune. The baseline says the disk must be
+      encrypted, secure boot on, and a recent build. Intune shows setting by setting what is missing, so the
+      explanation is not a guess.
+
+  - id: signin-screen
+    type: screen
+    heading: "What would have happened"
+    image: screens/signin-report-only.jpg
+    bar: "Entra sign-in logs · Report-only"
+    demo: >
+      Two captures. (1) Entra ID > Monitoring > Sign-in logs > the Office 365 sign-in of the lab user on CON-W11-01 >
+      Report-only tab: CT003 "Failure" while the device is not compliant. (2) After enabling BitLocker and syncing: the next
+      sign-in shows CT003 "Success". Then Windows Terminal: Get-CaReportOnlyImpact -Hours 2 listing CT001 to CT003 with
+      WouldPass, WouldFail, UserActionNeeded, NotApplied. Mask the tenant and user domain.
+    narration: >
+      The sign-in log, report only tab. Policy three says failure: this sign-in would have been blocked, the device is
+      not compliant. We encrypt the disk, sync, sign in again, and now it says success. The same numbers come out of
+      Graph with one function, so you can count the impact before you enforce anything.
+
+  - id: bicep
+    type: code
+    heading: "The network: what is not there"
+    lang: bicep
+    code: |
+      properties: {
+        enableRbacAuthorization: true
+        publicNetworkAccess: 'Disabled'
+        networkAcls: { defaultAction: 'Deny', bypass: 'None' }
+        softDeleteRetentionInDays: 7
+      }
+      // private endpoint: groupIds: ['vault'], zone privatelink.vaultcore.azure.net
+      // NSG: deny-all-inbound at 4096, deny-internet-outbound at 4000
+      addressPrefix: '10.60.0.0/26'
+      defaultOutboundAccess: false   // private subnet
+      // the VM: SystemAssigned identity, no public IP, role Key Vault Secrets User on this vault only
+    narration: >
+      In Bicep, the key vault has public network access disabled and the firewall on deny. A private endpoint with a
+      private dns zone is the only way in. The subnet is private, the network security group denies all inbound and
+      denies the internet outbound, and the workload is a small virtual machine with an identity that may read secrets
+      in this one vault.
+
+  - id: private-screen
+    type: screen
+    heading: "Outside: forbidden. Inside: works"
+    image: screens/private-access.jpg
+    bar: "Windows Terminal · lab laptop"
+    demo: >
+      Windows Terminal (PowerShell 7) on the lab laptop, one real run of scripts/Test-PrivateAccess.ps1 against the deployed
+      resource group: OUTSIDE the vault name resolves to a public address and the Key Vault call fails with Forbidden;
+      INSIDE (run on the VM through az vm run-command) the name resolves to 10.60.0.x, a token comes from the managed
+      identity, the secret read returns HTTP 200 and the internet call fails. Then the portal: Key Vault > Networking with
+      public network access Disabled and the approved private endpoint connection. Mask subscription id, vault name, tenant.
+    narration: >
+      The same vault, seen twice. From my laptop, the name resolves to a public address and the call is forbidden. From
+      inside, the same name resolves to a private address, the virtual machine gets a token for its own identity, and
+      the secret comes back with a two hundred. Same machine, no way out to the internet. No keys anywhere.
+
+  - id: tests
+    type: code
+    heading: "Fifty seven checks, no tenant needed"
+    lang: text
+    code: |
+      $ pwsh -NoProfile -c 'Invoke-Pester ./tests'
+        Policy templates   every file expands, lints clean, starts report-only, excludes break-glass
+        Test-CaPolicy      enum values, mfa + strength, missing sections, block + other controls
+        Publish-CaPolicy   create, update by name, -WhatIf writes nothing, -Enforce only when asked
+        Get-CaReportOnlyImpact   paging, per-policy counts, last N hours
+        Intune compliance  documented properties only, one block action
+        Infra (bicep build)   public access Disabled, private endpoint, NSG 4096, no public IP
+      Tests Passed: 57, Failed: 0
+    narration: >
+      None of this needs the tenant to test. Pester runs fifty seven checks: the policies lint clean, the script
+      creates, updates and never enforces by itself, the report only counts add up across pages, and the compiled
+      Bicep really has public access disabled, a private endpoint and no public address.
+
+  - id: recap
+    type: bullets
+    heading: "What to take away"
+    bullets:
+      - "Policies as data, linted, report-only first"
+      - "Admins: phishing-resistant strength; break-glass excluded"
+      - "Device health is a signal, and it has reasons"
+      - "Private endpoint, public access off, identity not keys"
+    narration: >
+      To recap. Keep policies as data, lint them, and start in report only. Admins use a phishing resistant strength,
+      and the break glass account is excluded. Device health is a signal, and Intune tells you why. And for the
+      network, a private endpoint, public access off, and an identity instead of keys.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The policies, the deploy script, the Bicep and the tests are on GitHub, and the full guide is on devladlog dot
+      com. Next time: Contoso's cloud native platform, with Kubernetes, Dapr and Kee da. This was the DEVLADLOG Deep
+      Dive, by Momento Galático.

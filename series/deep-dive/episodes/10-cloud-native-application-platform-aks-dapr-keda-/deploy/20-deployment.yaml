@@ -1,0 +1,46 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: finance-worker
+  namespace: contoso-finance
+spec:
+  # KEDA owns the replica count (0 to 10): no replicas field here, or every apply would fight the autoscaler.
+  selector:
+    matchLabels:
+      app: finance-worker
+  template:
+    metadata:
+      labels:
+        app: finance-worker
+        azure.workload.identity/use: "true"
+      annotations:
+        dapr.io/enabled: "true"
+        dapr.io/app-id: "finance-worker"
+        dapr.io/app-port: "8080"
+    spec:
+      serviceAccountName: finance-worker
+      containers:
+        - name: worker
+          image: "{{image}}"
+          ports:
+            - containerPort: 8080
+          env:
+            - name: Work__DelayMs
+              value: "1500"
+          readinessProbe:
+            httpGet: { path: /healthz, port: 8080 }
+          resources:
+            requests: { cpu: 50m, memory: 96Mi }
+            limits: { cpu: 250m, memory: 192Mi }
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+          securityContext:
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+      volumes:
+        - name: tmp
+          emptyDir: {}

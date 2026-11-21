@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: contoso-finance
+---
+# The service account the federated credential trusts: system:serviceaccount:contoso-finance:finance-worker
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: finance-worker
+  namespace: contoso-finance
+  annotations:
+    azure.workload.identity/client-id: "{{appClientId}}"
