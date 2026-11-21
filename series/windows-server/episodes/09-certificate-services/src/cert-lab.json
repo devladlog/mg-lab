@@ -1,0 +1,41 @@
+{
+  "SchemaVersion": 1,
+  "Policy": {
+    "CertWarnDays": 30,
+    "CertCriticalDays": 14,
+    "MinRsaKeyBits": 2048,
+    "WeakSignatureAlgorithms": ["md5RSA", "sha1RSA", "sha1ECDSA"],
+    "CaCertWarnDays": 180,
+    "CrlWarnHours": 24,
+    "RequireHttpCdp": true,
+    "BroadEnrollPrincipals": ["Domain Users", "Domain Computers", "Authenticated Users", "Everyone", "Users"],
+    "AuthenticationEkus": {
+      "1.3.6.1.5.5.7.3.2": "Client Authentication",
+      "1.3.6.1.4.1.311.20.2.2": "Smart Card Logon",
+      "2.5.29.37.0": "Any Purpose"
+    }
+  },
+  "Ca": {
+    "Server": "CON-CA01",
+    "CommonName": "Contoso Lab Issuing CA",
+    "KeyLength": 2048,
+    "CryptoProvider": "RSA#Microsoft Software Key Storage Provider",
+    "HashAlgorithm": "SHA256",
+    "ValidityPeriod": "Years",
+    "ValidityPeriodUnits": 5,
+    "CrlPeriod": "Weeks",
+    "CrlPeriodUnits": 1,
+    "CrlDeltaPeriod": "Days",
+    "CrlDeltaPeriodUnits": 1,
+    "HttpCdpHost": "con-ca01.lab.contoso.com",
+    "HttpCdpPath": "pki"
+  },
+  "Targets": [
+    { "Name": "CON-DC01" },
+    { "Name": "CON-SRV01" },
+    { "Name": "CON-SRV02" },
+    { "Name": "CON-SQL01" },
+    { "Name": "CON-CLI01" },
+    { "Name": "CON-CA01" }
+  ]
+}

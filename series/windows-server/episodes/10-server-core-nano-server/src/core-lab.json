@@ -1,0 +1,26 @@
+{
+  "SchemaVersion": 1,
+  "Policy": {
+    "MaxCoreSystemDriveUsedGB": 16,
+    "RequirePinnedImageTag": true
+  },
+  "DesktopOnlyFeatures": [
+    "Web-Mgmt-Console", "Web-Lgcy-Mgmt-Console", "RDS-Gateway", "RDS-RD-Server", "RDS-Web-Access",
+    "Hyper-V-Tools", "PowerShell-ISE", "Windows-Defender-Gui", "XPS-Viewer", "Search-Service", "Wireless-Networking",
+    "RSAT-ADCS", "RSAT-ADCS-Mgmt", "RSAT-Online-Responder", "RSAT-ADRMS", "RSAT-Fax", "RSAT-File-Services",
+    "RSAT-DFS-Mgmt-Con", "RSAT-FSRM-Mgmt", "RSAT-NFS-Admin", "RSAT-NPAS", "RSAT-Print-Services", "RSAT-VA-Tools",
+    "RSAT-NLB", "RSAT-SNMP", "RSAT-WINS", "WDS-AdminPack", "UpdateServices-UI", "SMTP-Server", "Simple-TCPIP",
+    "TFTP-Client", "WebDAV-Redirector", "Biometric-Framework", "Windows-Identity-Foundation"
+  ],
+  "Targets": [
+    { "Name": "CON-DC01",  "Role": "Domain controller",  "ExpectedInstall": "Core",              "AppCompat": "No" },
+    { "Name": "CON-SRV01", "Role": "Member server",      "ExpectedInstall": "Core",              "AppCompat": "Required", "AppCompatReason": "a vendor tool that needs mmc.exe on the box" },
+    { "Name": "CON-SRV02", "Role": "Admin console",      "ExpectedInstall": "DesktopExperience", "AppCompat": "No", "Reason": "runs the graphical consoles (RSAT, certtmpl.msc, Hyper-V Manager) for the whole lab" },
+    { "Name": "CON-SQL01", "Role": "Database server",    "ExpectedInstall": "Core",              "AppCompat": "No" },
+    { "Name": "CON-CLI01", "Role": "Test client",        "ExpectedInstall": "Core",              "AppCompat": "No" }
+  ],
+  "Setup": {
+    "AppCompatCapability": "ServerCore.AppCompatibility~~~~0.0.1.0",
+    "FodSourcePath": ""
+  }
+}

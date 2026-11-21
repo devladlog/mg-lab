@@ -1,0 +1,221 @@
+# DEVLADLOG Windows Server - episode 10 (draft: the screen scenes need the lab recording, see demo.md)
+episode: 10
+slug: server-core-nano-server
+series_label: "WINDOWS SERVER"
+series_name: "DEVLADLOG Windows Server"
+file_prefix: "windows-server"
+title: "Server Core & Nano Server"
+subtitle: "Audit which servers are really Core, fix what is missing, and check your Nano Server images"
+voice: am_michael
+thumbnail_text: "CORE OR\nDESKTOP?\nCHECK EVERY\nSERVER"
+youtube:
+  title: "Server Core Audit in PowerShell: Footprint, Remoting and Nano Images | DEVLADLOG Windows Server #10"
+  tags: [Windows Server 2025, Server Core, Nano Server, SConfig, Features on Demand, App Compatibility, Windows containers, Dockerfile, PowerShell, WinRM, sysadmin, Pester]
+sources:
+  - https://www.devladlog.com/articles/windows-server/2025-09-13-server-core-nano-server-complete-guide-2025/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Do your servers need a desktop?"
+    sub: "Audit Server Core, check Nano Server images"
+    short: hook
+    narration: >
+      Server Core is the install option Microsoft recommends, and most labs still have a few servers with a desktop
+      they never needed. And Nano Server? You cannot install it on a server at all any more. Today we check which of
+      our lab servers are really Server Core, what the desktop costs us, and what breaks when a container image
+      assumes PowerShell.
+
+  - id: what
+    type: bullets
+    heading: "What the check reads"
+    bullets:
+      - "Core or Desktop Experience, on every server"
+      - "Disk, memory, services, features"
+      - "Remote management and the App Compatibility feature"
+      - "Nano Server: a check for container images"
+    narration: >
+      Same pattern as the earlier episodes. A collector that only reads, pure rules, a report, and a plan before any
+      change. It reads each server over Win R M: is it Core or Desktop Experience, what is installed, how much disk
+      and memory it uses, can it be managed remotely, and is the application compatibility feature on demand there.
+      Nano Server gets its own check, because it is not a server option, it is a container image.
+
+  - id: sconfig
+    type: screen
+    heading: "The real console of a Core server"
+    image: screens/sconfig.jpg
+    bar: "Lab · CON-SRV01 console · SConfig"
+    demo: >
+      Open the console of CON-SRV01 (VMConnect), signed in as the lab Administrator. SConfig is already on screen:
+      show the main menu, then option 4 (Configure remote management) and the page behind it, then back with 15 to
+      the PowerShell prompt. Mask the VMConnect title bar.
+    narration: >
+      This is the real console of a Server Core machine. Since Windows Server twenty twenty two, S config starts by
+      itself when you sign in. It covers the network, the domain, updates and remote management. One catch from
+      Learn: it cannot run inside a remote PowerShell session, so everything it does needs a cmdlet too. Rewrite this
+      to what the lab console really shows.
+
+  - id: collector
+    type: code
+    heading: "Core or Desktop? Ask the registry"
+    lang: powershell
+    code: |
+      $k = Get-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Server\ServerLevels'
+      $levels = @($k.PSObject.Properties |
+          Where-Object { $_.Name -notlike 'PS*' -and [string]$_.Value -eq '1' } |
+          ForEach-Object { [string]$_.Name })
+
+      function Get-CoreInstallType {
+          param([string[]] $ServerLevels)
+          $l = @($ServerLevels)
+          if ($l -contains 'ServerGuiShell') { return 'DesktopExperience' }
+          if ($l -contains 'Server-GuiMgmt') { return 'MinimalInterface' }
+          if ($l -contains 'ServerCore') { return 'Core' }
+          'Unknown'
+      }
+    narration: >
+      How does a script know Core from Desktop Experience? Learn documents a registry key with the server levels. They
+      add up: Server Core is always there, the management interface adds one value, and the graphical shell adds
+      another. The module reads the key, and one small function turns the values into a name. The collector is read
+      only, and a test proves that it calls no command that changes anything.
+
+  - id: before
+    type: screen
+    heading: "The lab, as it is today"
+    image: screens/check-before.jpg
+    bar: "Lab · CON-SRV02 · Invoke-CoreCheck.ps1"
+    demo: >
+      On CON-SRV02, elevated PowerShell in C:\lab\ep10\src: .\Invoke-CoreCheck.ps1 -FactsFile .\facts-before.json
+      -OutFile .\check-before.md -PlanOnly. Show the findings table, the setup plan table and the last line
+      "N server(s), N finding(s), N high.".
+    narration: >
+      On the real lab. Rewrite this to the real findings. The sample data had one server that did not answer, one
+      that needs the application compatibility feature, one with no firewall rules for remote management, and the
+      admin console, which is Desktop Experience on purpose, with the list of features that would stop it moving to
+      Core. Nothing changed: the check only reads.
+
+  - id: plan
+    type: code
+    heading: "The plan: what can be fixed from here"
+    lang: powershell
+    code: |
+      # the generated step for the feature on demand
+      $r = Add-WindowsCapability -Online -Name 'ServerCore.AppCompatibility~~~~0.0.1.0'
+      [pscustomobject]@{ RestartNeeded = [bool]$r.RestartNeeded }
+
+      # in the apply function: a restart is a step of its own
+      if ($s.NeedsSwitch -eq 'AllowRestart' -and -not $AllowRestart) {
+          [pscustomobject]@{ Target = $s.Target; Id = $s.Id; Result = 'Skipped'
+              Detail = 'Restarts the server: run again with -AllowRestart.' }
+          continue
+      }
+    narration: >
+      The setup plan covers what can be fixed from here. The feature on demand is added with Add Windows Capability,
+      from Windows Update, or from an I S O that the config file points at. It needs a restart, and a restart is a
+      step of its own, skipped unless you pass allow restart. A server that does not answer is a manual step,
+      because nobody can fix a missing remote management setting over remote management.
+
+  - id: setup
+    type: screen
+    heading: "WhatIf first, then the real run"
+    image: screens/setup.jpg
+    bar: "Lab · CON-SRV02 → CON-SRV01, CON-SQL01 · Deploy-CoreLab.ps1"
+    demo: >
+      .\Deploy-CoreLab.ps1 -WhatIf (the plan table and the What if lines), then .\Deploy-CoreLab.ps1, then
+      .\Deploy-CoreLab.ps1 -AllowRestart. Show the Result table each time. CON-SRV01 needs the feature on demand from
+      Windows Update, or from the Languages and Optional Features ISO mounted in the VM (set Setup.FodSourcePath).
+    narration: >
+      What If first, then the real run. Rewrite this to what happened: how long the feature took, and whether the
+      restart came back clean. If Windows Update had no source for the feature, say so, and show the I S O path.
+
+  - id: nano
+    type: code
+    heading: "Nano Server: check the Dockerfile"
+    lang: powershell
+    code: |
+      if (($word -eq 'RUN' -or $word -eq 'SHELL' -or $word -eq 'CMD' -or $word -eq 'ENTRYPOINT') -and
+          $rest -match $psPattern) {
+          [void]$findings.Add((New-CoreFinding "${Name}:$($x.Line)" High 'NanoNoPowerShell' `
+              ("$word uses Windows PowerShell in a stage based on '$($current.Base)'. " +
+               'The Nano Server image has no PowerShell (Learn).') `
+              'Build the step in a Server Core stage and copy the result over.'))
+      }
+    short: nano
+    narration: >
+      Nano Server is not an install option. It is a container base image, and Learn says PowerShell, W M I and the
+      Windows servicing stack are not in it. So the check reads Dockerfiles. If a stage built from nanoserver runs
+      Windows PowerShell, that is a high finding, with the line number. It follows stages built from earlier stages,
+      flags a base image with no pinned tag, and tells you when a Server Core image might be worth trying on Nano.
+
+  - id: gotcha
+    type: code
+    heading: "Gotcha: there is no way back to Core"
+    lang: powershell
+    code: |
+      if ($type -ne 'Unknown' -and $type -ne [string]$t.ExpectedInstall) {
+          & $add $name 'Rebuild' 'Manual' `
+              "Expected $($t.ExpectedInstall), found ${type}: no in-place conversion (Learn). Reinstall, then move the roles." '' ''
+          continue
+      }
+    short: gotcha
+    narration: >
+      The gotcha. If you remember converting a server between Core and Desktop Experience, forget it. Learn says you
+      cannot convert after installation. A clean install is the only way. So when the check finds a Desktop
+      Experience server that should be Core, the plan has no conversion step, only a manual rebuild step. And one more
+      from Learn: Enable P S Remoting in PowerShell seven only configures the PowerShell seven endpoints. Windows
+      PowerShell keeps its own.
+
+  - id: after
+    type: screen
+    heading: "After the fixes, and the footprint"
+    image: screens/check-after.jpg
+    bar: "Lab · CON-SRV02 · Invoke-CoreCheck.ps1"
+    demo: >
+      .\Invoke-CoreCheck.ps1 -OutFile .\check-after.md, then open check-after.md and show the Footprint by install type
+      table. Compare the Core servers with CON-SRV02.
+    narration: >
+      After the fixes. Rewrite this to the real before and after numbers. The footprint table compares the Core
+      servers with the Desktop Experience server on disk, memory and running services. It is a measurement of our
+      servers, not a benchmark: they do not run the same roles.
+
+  - id: tests
+    type: code
+    heading: "Fifty-six tests, no server"
+    lang: text
+    code: |
+      Describing The collector, run for real against stand-ins for the Windows commands
+        [+] builds the facts the rules need
+      Describing The collector is read-only and Windows PowerShell 5.1 safe
+        [+] calls no command that changes state
+      Describing Test-NanoDockerfile
+        [+] passes the fixed file, including a continuation line with a custom escape character
+      Describing Invoke-CoreSetupPlan
+        [+] restarts only with -AllowRestart, once, on the right server
+      Tests Passed: 56, Failed: 0
+    narration: >
+      Fifty six Pester tests run on Linux. They run the real collector code against stand ins for the Windows
+      commands, prove that it is read only and safe for Windows PowerShell five point one, check every rule on three
+      invented fact files, parse every generated script, and check the Dockerfile rules. Docker itself is not part of
+      the tests: no image is built.
+
+  - id: recap
+    type: bullets
+    heading: "Five rules for Core and Nano"
+    bullets:
+      - "Prefer Core, justify every desktop"
+      - "Test remote management before you need it"
+      - "Add the compatibility feature only where needed"
+      - "Nano Server is an image, not a server"
+      - "Restarts need a switch"
+    narration: >
+      Five rules. Prefer Server Core, and write down why a server has a desktop. Make sure remote management works
+      before you need it. Add the compatibility feature only where something needs it. Treat Nano Server as an image,
+      and check the Dockerfile. And put restarts behind a switch.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The module, the check, the deploy script and the tests are on GitHub, and the complete guide to Server Core and
+      Nano Server is on devladlog dot com. Subscribe so you don't miss the next episode.

@@ -1,0 +1,238 @@
+# DEVLADLOG Windows Server - episode 09 (draft: the screen scenes need the lab recording, see demo.md)
+episode: 9
+slug: certificate-services
+series_label: "WINDOWS SERVER"
+series_name: "DEVLADLOG Windows Server"
+file_prefix: "windows-server"
+title: "Certificate Services"
+subtitle: "Build an enterprise CA, then check it, its certificates and its templates before they check you"
+voice: am_michael
+thumbnail_text: "WHO CAN ASK\nFOR WHAT?\nCHECK YOUR CA"
+youtube:
+  title: "AD CS in PowerShell: Build an Enterprise CA, Audit Templates and CRLs | DEVLADLOG Windows Server #9"
+  tags: [Windows Server 2025, Active Directory Certificate Services, AD CS, PKI, certificate templates, CRL, CDP, PowerShell, enterprise CA, certutil, sysadmin, Pester]
+sources:
+  - https://www.devladlog.com/articles/windows-server/2025-10-05-certificate-services-complete-guide-2025/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Who can ask your CA for what?"
+    sub: "Build an enterprise CA, then audit it"
+    short: hook
+    narration: >
+      A certificate authority fails in two quiet ways. A certificate expires and a service stops. Or a template lets
+      anyone ask for a certificate with somebody else's name on it. Today we build an enterprise C A in the lab, and
+      then write the check that looks for both, on every server, before anything breaks.
+
+  - id: what
+    type: bullets
+    heading: "What the check reads"
+    bullets:
+      - "Machine certificates on six servers"
+      - "The CA: service, certificate, CRL, distribution points"
+      - "Every published template, and who can enroll"
+      - "Read only: a plan before any change"
+    narration: >
+      Same pattern as the earlier episodes. A collector that only reads, pure rules, and a report. All of it runs from
+      the admin server, over Win R M, so nothing is installed on the machines it checks. It reads the machine
+      certificates on every server. It reads the C A itself: the service, its own certificate, the revocation
+      list, and where clients are told to fetch it. And it reads every published template, with the permission list.
+
+  - id: collector
+    type: code
+    heading: "A collector you can test on Linux"
+    lang: powershell
+    code: |
+      elseif ($oid -eq '1.3.6.1.4.1.311.20.2') {
+          # v1 template name: a DER BMPString (tag 0x1E, length, UTF-16BE)
+          $raw = [byte[]]$e.RawData
+          if ($raw.Length -ge 2 -and $raw[0] -eq 0x1E) {
+              $tplName = [System.Text.Encoding]::BigEndianUnicode.GetString($raw, 2, [int]$raw[1])
+          }
+      }
+      # the collector takes certificates as a parameter, so the tests feed it
+      # real X509 objects generated on the spot
+    narration: >
+      The certificate collector takes the certificates as a parameter. In production it reads the machine store. In
+      the tests we generate real X five oh nine certificates, with a one thousand twenty four bit key, an expired
+      date, a template name, and run the same code on them. No mocks for the part that reads certificates.
+
+  - id: before
+    type: screen
+    heading: "The lab, as it is today"
+    image: screens/check-before.jpg
+    bar: "Lab · CON-SRV02 · Invoke-CertCheck.ps1"
+    demo: >
+      On CON-SRV02, elevated PowerShell in C:\lab\ep09\src: .\Invoke-CertCheck.ps1 -FactsFile .\facts-before.json
+      -OutFile .\check-before.md -PlanOnly. Show the findings table, the renewal plan table and the last line
+      "N server(s), N finding(s), N high.". The CA must already exist (screens 2 and 3 can be recorded first).
+    narration: >
+      On the real lab. Rewrite this to the real findings. The sample data had an expired certificate with a weak key,
+      two certificates close to expiry, and no H T T P revocation location. Nothing has been changed: the check only
+      reads, and the renewal plan is a table.
+
+  - id: template
+    type: code
+    heading: "The rule: who chooses the name?"
+    lang: powershell
+    code: |
+      $suppliesIdentity = (($flags -band $script:SubjectNameEnrolleeSupplies) -ne 0) -or
+                          (($flags -band $script:SanEnrolleeSupplies) -ne 0)
+      $signsIn = ($ekus.Count -eq 0) -or
+                 (@($ekus | Where-Object { $auth.ContainsKey($_) }).Count -gt 0)
+      $needsApproval = (([int]$Template.EnrollmentFlags -band $script:EnrollmentPendAllRequests) -ne 0) -or
+                       ([int]$Template.RaSignatures -gt 0)
+      if ($broad.Count -gt 0 -and -not $needsApproval) {
+          return , (New-CertFinding $Target High 'TemplateSuppliesIdentity' "Template '$name': ...")
+      }
+    short: template
+    narration: >
+      Here is the rule for templates. If the requester supplies the subject or the alternative name, if the
+      certificate can sign someone in, if nobody approves the request, and if a broad group such as Domain Users or
+      Domain Computers can enroll, that is a high finding. Anyone in that group can ask for a certificate that names
+      someone else. Approval, or a named group, lowers it to a note. This is our policy, written as code: the flag values come from
+      Learn, and the list of broad groups lives in the config file.
+
+  - id: ca
+    type: code
+    heading: "Build the CA from a plan"
+    lang: powershell
+    code: |
+      $p = @{
+          CAType              = 'EnterpriseRootCa'
+          CACommonName        = 'Contoso Lab Issuing CA'
+          CryptoProviderName  = 'RSA#Microsoft Software Key Storage Provider'
+          KeyLength           = 2048
+          HashAlgorithmName   = 'SHA256'
+          ValidityPeriod      = 'Years'
+          ValidityPeriodUnits = 5
+          Force               = $true
+      }
+      Install-AdcsCertificationAuthority @p | Out-Null
+    narration: >
+      The deploy script builds the C A from the same plan format. An enterprise root, two thousand forty eight bit
+      R S A, S H A two fifty six, five years. Because an enterprise C A is integrated with Active Directory, this step
+      is marked irreversible, and the script refuses to run it without a switch that says so.
+
+  - id: ca-build
+    type: screen
+    heading: "WhatIf first, then the real build"
+    image: screens/ca-build.jpg
+    bar: "Lab · CON-SRV02 → CON-CA01 · Deploy-CertLab.ps1 -Step Ca"
+    demo: >
+      .\Deploy-CertLab.ps1 -Step Ca -WhatIf (the plan table with the Irreversible column and the What if lines), then
+      .\Deploy-CertLab.ps1 -Step Ca -AllowCaInstall. Finish with Invoke-Command -ComputerName CON-CA01 { Get-Service
+      CertSvc; certutil -CAInfo name }. CON-CA01 is the extra throwaway Server Core VM from LAB-REQUESTS.md.
+    narration: >
+      What If first: the plan, with the irreversible step marked. Then the real build on a Server Core machine.
+      Rewrite this to what really happened, and how long the install took.
+
+  - id: cdp
+    type: code
+    heading: "Publish revocation over HTTP"
+    lang: powershell
+    code: |
+      $have = @(Get-CACrlDistributionPoint | Where-Object {
+          $_.Uri -eq 'http://con-ca01.lab.contoso.com/pki/<CAName><CRLNameSuffix><DeltaCRLAllowed>.crl' -and
+          $_.AddToCertificateCdp })
+      if (-not $have) {
+          Add-CACrlDistributionPoint -AddToCertificateCdp -AddToFreshestCrl -Force `
+              -Uri 'http://con-ca01.lab.contoso.com/pki/<CAName><CRLNameSuffix><DeltaCRLAllowed>.crl'
+      }
+    narration: >
+      A fresh C A hands out certificates that point at L D A P and a file path. Learn says to publish an H T T P
+      location, so clients outside the domain and clients that are not Windows can check revocation. The step adds the
+      U R L only if it is not already there, because adding it twice creates a duplicate. Remember that it only
+      affects certificates issued after the change.
+
+  - id: http
+    type: screen
+    heading: "Issue a certificate, check the chain"
+    image: screens/cdp-http.jpg
+    bar: "Lab · CON-SRV02 · Deploy-CertLab.ps1 -Step Http"
+    demo: >
+      .\Deploy-CertLab.ps1 -Step Http, then on CON-SRV01: Get-Certificate -Template Machine -CertStoreLocation
+      Cert:\LocalMachine\My, export the certificate to a .cer, and run certutil -verify -urlfetch on it from CON-SRV02.
+      Show the HTTP CRL URL retrieved successfully in the output.
+    narration: >
+      Now a new certificate carries the H T T P address, and certutil with url fetch proves a client can actually
+      download the list. Rewrite this to the real output. Add the response headers if the dot C R L file needed a
+      mime mapping.
+
+  - id: renew
+    type: screen
+    heading: "Renew what is about to expire"
+    image: screens/renew.jpg
+    bar: "Lab · CON-SRV02 · Deploy-CertLab.ps1 -Step Renew"
+    demo: >
+      .\Deploy-CertLab.ps1 -Step Renew -WhatIf (the renewal plan and the What if line for the Enroll step), then
+      without -WhatIf; then .\Invoke-CertCheck.ps1 -OutFile .\check-after.md. Show the High findings gone and the
+      remaining Low ones.
+    narration: >
+      The renewal plan has two kinds of step. Enroll, when the certificate has a template name and is not self signed:
+      the script runs Get-Certificate on the server that owns it. And Manual, for everything else, which the script
+      never touches. Rewrite this to the real before and after counts.
+
+  - id: gotcha
+    type: code
+    heading: "Gotcha: Learn's example does not run as printed"
+    lang: powershell
+    code: |
+      # Learn, Install-AdcsCertificationAuthority, example 2:
+      $params = @{
+          CAType            = EnterpriseRootCa     # a bare word: PowerShell runs it as a command
+          HashAlgorithmName = SHA256
+      }
+      # EnterpriseRootCa: The term 'EnterpriseRootCa' is not recognized as the name
+      # of a cmdlet, function, script file, or executable program.
+      # Ours: CAType = 'EnterpriseRootCa'  (quoted, and a test checks the quotes)
+    short: gotcha
+    narration: >
+      The gotcha. Learn's own example for installing an enterprise root C A writes the values without quotes. In
+      PowerShell a bare word in a hash table is a command, and the example stops with an error. Our plan quotes the
+      values, and a test parses every generated script before it can reach a server. Two more things that bit us:
+      the key size is write only through the PowerShell seven adapter, and this Linux box refuses to sign with S H A
+      one.
+
+  - id: tests
+    type: code
+    heading: "Forty-six tests, no CA"
+    lang: text
+    code: |
+      Describing The certificate collector, run on real X509 certificates
+        [+] decodes the v1 template name (a DER BMPString)
+      Describing The collectors are read-only and Windows PowerShell 5.1 safe
+        [+] calls no command that changes state (Ca)
+      Describing Test-CaFacts and Test-CaTemplate
+        [+] treats approval, an RA signature, or a named group as a mitigation
+      Describing The CA build plan
+        [+] marks the Active Directory step irreversible and stops there
+
+      Tests Passed: 46, Failed: 0
+    narration: >
+      Forty six Pester tests run on Linux. They run the collector on real certificates, prove that the collectors call
+      nothing that changes state, check each rule, and check that the C A build refuses to touch Active Directory
+      without its switch.
+
+  - id: recap
+    type: bullets
+    heading: "Five rules for a CA you can trust"
+    bullets:
+      - "Expiry is a monitored fact, not a surprise"
+      - "Check who chooses the name in every template"
+      - "Revocation needs an HTTP location clients can reach"
+      - "Irreversible steps need a switch"
+      - "Test on real certificates, not stubs"
+    narration: >
+      Five rules. Treat expiry as something you monitor. Check who chooses the name in every template. Publish
+      revocation where clients can reach it. Put irreversible steps behind a switch. And test your collector on real
+      certificates.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The module, the check, the deploy script and the tests are on GitHub, and the complete guide to Certificate
+      Services is on devladlog dot com. Subscribe so you don't miss the next episode.
