@@ -1,0 +1,240 @@
+# DEVLADLOG Deep Dive: episode 16. Code scenes are real excerpts from this folder; screen scenes need the lab recording in demo.md.
+# Narration about 830 words.
+episode: 16
+slug: enterprise-reporting-platform
+series_label: "DEEP DIVE"
+series_name: "DEVLADLOG Deep Dive"
+file_prefix: "deep-dive"
+title: "Enterprise Reporting Platform"
+subtitle: "A Power BI model as code, security, promotion and governance"
+voice: am_michael
+thumbnail_text: "REPORTING\nAS\nCODE"
+youtube:
+  title: "Enterprise Reporting Platform: Power BI as Code, RLS, Governance | DEVLADLOG Deep Dive #16"
+  tags: [enterprise reporting platform, Power BI, TMDL, semantic model, row-level security, deployment pipelines, Fabric, endorsement, certification, scanner API, data governance, solution architecture]
+sources:
+  - https://www.devladlog.com/articles/deep-dive/2025-07-07-enterprise-reporting-platform-power-bi-synapse-analytics-data-governance/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Who may see which numbers?"
+    sub: "Reporting you can review, test and govern"
+    short: hook
+    narration: >
+      The Contoso gold layer from last time is ready. Now every department wants a report, and every department
+      may only see its own purchase requests. Nobody wants forty copies of one model, built by hand, with security
+      nobody can read. In this episode the reporting layer becomes code. A model you can review, a security rule you
+      can test, a promotion path, and a policy that checks the tenant. This is the DEVLADLOG Deep Dive.
+
+  - id: architecture
+    type: diagram
+    heading: "One model, many reports"
+    nodes: ["Gold views", "Semantic model", "Git", "Deployment pipeline", "Viewers"]
+    labels: ["from episode 15", "TMDL files", "review and tests", "dev, test, prod", "row-level security"]
+    narration: >
+      The gold views from episode fifteen feed one semantic model. The model lives in Git as T M D L text files, so
+      a change is a pull request, not a screenshot. A deployment pipeline moves it from development to test to
+      production. Viewers see reports built on one certified model, and security is part of that model.
+
+  - id: choices
+    type: bullets
+    heading: "Honest choices"
+    bullets:
+      - "Import mode: the serverless endpoint is not for interactive queries"
+      - "One certified model, many thin reports"
+      - "Free viewers need a Fabric capacity of F64 or larger"
+      - "The Fabric trial may be only F4"
+    narration: >
+      Some choices first. The model imports the gold views, because serverless SQL is not meant for interactive
+      queries. Reports stay thin and share one certified model. And a licence fact people discover late: Microsoft's
+      documentation says a free licence can view Power BI content only on an F sixty four or larger capacity, or
+      Premium. The Fabric trial is sometimes an F four, so test the viewers early.
+
+  - id: tmdl
+    type: code
+    heading: "The model is text"
+    lang: text
+    code: |
+      /// Share of decided requests that took longer than the SLA (five days in episode 15).
+      measure 'SLA Breach Rate' = DIVIDE(SUM(FactPurchaseRequest[SlaBreached]), [Decided Requests])
+          formatString: 0.0%
+          displayFolder: Service level
+
+      /// Total amount from 1 January of the selected year to the last date in the filter.
+      measure 'Amount YTD' = TOTALYTD([Total Amount], DimDate[Date])
+          formatString: #,0.00
+          displayFolder: Time intelligence
+
+      table DimDate
+          dataCategory: Time
+    narration: >
+      Here is the model. Every measure has a description, a format and a folder, and the date table is marked, which
+      time intelligence needs. The breach rate divides only by decided requests, because an open request has no
+      verdict yet. It is a text file, so a reviewer sees exactly what changed.
+
+  - id: model-screen
+    type: screen
+    heading: "The folder Desktop opens"
+    image: screens/model-folder.jpg
+    bar: "VS Code + Power BI Desktop · TMDL"
+    demo: >
+      Visual Studio Code on the lab laptop with the folder model/ContosoReporting.SemanticModel open, definition/tables/FactPurchaseRequest.tmdl
+      visible. Then Power BI Desktop with the same folder opened as a project (developer mode, TMDL format), TMDL view showing the
+      same measure. Set the three parameters to the lab values off camera, mask the server name.
+    narration: >
+      The same folder, in two tools. In the editor you read it like code. In Power BI Desktop it opens as a project,
+      with the same tables and measures. The three parameters, the endpoint, the database and the lab domain,
+      are set per environment, never in the files.
+
+  - id: rls
+    type: code
+    heading: "Security is one rule"
+    short: rls
+    lang: text
+    code: |
+      role 'Department Reader'
+          modelPermission: read
+
+          tablePermission DimDepartment =
+              DimDepartment[DepartmentKey] IN SELECTCOLUMNS(
+                  FILTER(SecurityMap, SecurityMap[UserPrincipalName] = USERPRINCIPALNAME()),
+                  "k", SecurityMap[DepartmentKey])
+
+          tablePermission SecurityMap = SecurityMap[UserPrincipalName] = USERPRINCIPALNAME()
+    narration: >
+      Row level security is one dynamic rule. A mapping table lists who sees which department, and the role keeps the
+      departments listed for the signed in user. The filter sits on the department table and flows to the facts
+      through the relationship, so there is no second rule to drift. The mapping table filters itself too, so a reader
+      cannot browse everyone else's access.
+
+  - id: rls-screen
+    type: screen
+    heading: "Assign, then prove it"
+    image: screens/rls.jpg
+    bar: "Power BI service · Security, then terminal"
+    demo: >
+      Power BI service (Fabric trial workspace, lab tenant, names masked): the semantic model's More options > Security, role
+      Department Reader, add the lab users alex.demo, sam.demo, jordan.demo and riley.demo as members. Then Test as role with
+      Now viewing as alex.demo showing only Finance. Then Windows Terminal: Invoke-RlsCheck printing Expected, Actual and Pass
+      for the four users. Show the callers are not workspace Admin, Member or Contributor.
+    narration: >
+      Members are added in the service, because Desktop cannot assign users. Then the proof. Test as role shows
+      one department. And a script asks the model for the request count as each user, through the execute queries
+      API, and compares it with the count we expect from the mapping. Four users, four passes.
+
+  - id: tests
+    type: code
+    heading: "A model you can test"
+    lang: text
+    code: |
+      $ dotnet test
+      Passed!  - Failed: 0, Passed: 23
+      $ Invoke-Pester ./tests
+      Tests Passed: 23, Failed: 0
+      the TMDL folder loads with the official serializer
+      every DAX reference resolves             (a typo in a column name fails it)
+      the role filters the dimension, not the fact
+      the mapping table is hidden and filtered to the caller
+    narration: >
+      Twenty three tests load the T M D L folder with the same serializer the tools use. Every measure is documented,
+      every reference resolves, the role filters the dimension, and the mapping is hidden. A typo in a column name
+      fails the build. Twenty three Pester tests cover the scripts. They cannot run the DAX engine. The service does that.
+
+  - id: pipeline
+    type: code
+    heading: "Promote with a request"
+    lang: powershell
+    code: |
+      $body = New-DeployRequest -SourceStageId $dev -TargetStageId $test `
+          -Item @([pscustomobject]@{ SourceItemId = $modelId; ItemType = 'SemanticModel' }) `
+          -Note 'Add Amount Prior Year'
+      Invoke-PipelineDeploy -PipelineId $pipelineId -Body $body -AccessToken $token
+      # POST /v1/deploymentPipelines/{id}/deploy -> 202, then follow the Location header
+    narration: >
+      Promotion is a request. The Fabric deployment pipelines API takes a source stage, a target stage, and
+      optionally the items. It answers with an accepted status, and the script follows the long running operation
+      until it ends. There is a limit of ten calls a minute, so a script waits instead of looping.
+
+  - id: pipeline-screen
+    type: screen
+    heading: "Dev, test, prod"
+    image: screens/pipeline.jpg
+    bar: "Microsoft Fabric · Deployment pipelines"
+    demo: >
+      Fabric portal (trial capacity, names masked): deployment pipeline with three stages and a workspace assigned to each. Compare
+      development and test, showing the changed semantic model; deploy with a note. Then open Deployment rules for the test stage
+      and show the data source rule setting the SynapseServer parameter. Show the deployment history entry.
+    narration: >
+      The real pipeline. Three stages, a workspace in each. Compare shows what changed, and the deploy carries a note
+      that lands in the history. The part that matters is the deployment rule, which swaps the endpoint
+      parameter per stage, so the same model points at the right data everywhere.
+
+  - id: governance
+    type: code
+    heading: "A policy that reads the tenant"
+    lang: text
+    code: |
+      PS> Get-GovernanceFindings -ScanResultPath scan.json -PolicyPath policy.json | Where Severity -eq Error | Format-Table Rule, Workspace, Item
+      Rule                     Workspace                        Item
+      ProdOnCapacity           Contoso Adhoc Spend [PROD]       Contoso Adhoc Spend [PROD]
+      ProdModelCertified       Contoso Adhoc Spend [PROD]       Spend adhoc
+      ProdLabelRequired        Contoso Adhoc Spend [PROD]       Spend adhoc
+      ReportOnUncertifiedModel Contoso Adhoc Spend [PROD]       Spend by vendor
+      CertifierNotAllowed      Contoso Finance Certified [PROD] Finance model
+    narration: >
+      Governance is a policy file and a scan. The scanner API returns workspaces with their models, reports,
+      endorsement and sensitivity labels. The policy says production models must be certified, labelled, on a
+      capacity, and certified only by the people on the list. A report on an uncertified model is flagged too.
+
+  - id: governance-screen
+    type: screen
+    heading: "Scan, then certify"
+    image: screens/governance.jpg
+    bar: "Terminal + Power BI service · scanner and endorsement"
+    demo: >
+      Windows Terminal: the scanner API run for the lab workspaces (getInfo, wait for scanResult), then Get-GovernanceFindings
+      output on the real result, names masked. Then the Power BI service on the production semantic model: Settings, Endorsement and
+      discovery, show Promoted, and Certified when the lab user is in the certification security group. Admin portal tenant settings
+      for Certification are only shown if the lab admin chooses to; otherwise blur.
+    narration: >
+      The real scan on the lab workspaces, and the findings. Then endorsement on the production model. Anyone with
+      write access can promote. Certification is only for the security groups the admin chose, and that list is
+      exactly what the policy checks.
+
+  - id: gotcha
+    type: bullets
+    heading: "What bit us"
+    short: gotcha
+    bullets:
+      - "Row-level security applies to Viewers only"
+      - "Admins, Members and Contributors see every row"
+      - "Deployment does not copy role members or endorsement"
+      - "A service principal cannot query a model with RLS"
+    narration: >
+      The honest part. Row level security restricts only users with the Viewer role. Workspace admins, members and
+      contributors see everything, so a test from your own account proves nothing. Second, deployment copies the model,
+      but not the role members and not the endorsement, so after every first deploy to a stage you assign people
+      again and certify again. And a service principal cannot run queries on a model with row level security, so the
+      check uses a person.
+
+  - id: recap
+    type: bullets
+    heading: "What to take away"
+    bullets:
+      - "Keep the model in Git as TMDL, test it in the build"
+      - "One role on the dimension, driven by a mapping table"
+      - "Promote with a pipeline, vary the endpoint with rules"
+      - "Check the tenant against a policy, on a schedule"
+    narration: >
+      To recap. Keep the model as text and test it in the build. Put security in one role on the dimension, driven by
+      a mapping. Promote through a pipeline and let rules change the endpoint. And check the tenant against a
+      written policy, not against memory.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The model, the tests and the governance scripts are on GitHub, and the full guide is on devladlog dot com.
+      Thanks for watching, and see you in the next series.

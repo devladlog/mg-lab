@@ -1,0 +1,17 @@
+{
+  "type": "Parquet",
+  "linkedServiceName": { "referenceName": "ls_lake", "type": "LinkedServiceReference" },
+  "parameters": {
+    "FolderPath": { "type": "string" },
+    "FileName": { "type": "string" }
+  },
+  "typeProperties": {
+    "location": {
+      "type": "AzureBlobFSLocation",
+      "fileSystem": "lake",
+      "folderPath": { "value": "@dataset().FolderPath", "type": "Expression" },
+      "fileName": { "value": "@dataset().FileName", "type": "Expression" }
+    },
+    "compressionCodec": "snappy"
+  }
+}

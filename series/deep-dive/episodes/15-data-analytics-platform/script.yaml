@@ -1,0 +1,252 @@
+# DEVLADLOG Deep Dive: episode 15. Code scenes are real excerpts from this folder; screen scenes need the lab recording in demo.md.
+# Narration about 840 words.
+episode: 15
+slug: data-analytics-platform
+series_label: "DEEP DIVE"
+series_name: "DEVLADLOG Deep Dive"
+file_prefix: "deep-dive"
+title: "Data Analytics Platform"
+subtitle: "Data Factory, a lake, serverless SQL and a model that scores"
+voice: am_michael
+thumbnail_text: "LAKE\nTO\nDASHBOARD"
+youtube:
+  title: "Data Analytics Platform: Data Factory, Synapse Serverless, ML Scoring | DEVLADLOG Deep Dive #15"
+  tags: [data analytics platform, Azure Data Factory, incremental load, watermark, Azure Data Lake Storage Gen2, Synapse serverless SQL pool, OPENROWSET, Parquet, medallion architecture, Power BI, machine learning, solution architecture]
+sources:
+  - https://www.devladlog.com/articles/deep-dive/2025-06-23-data-analytics-platform-synapse-power-bi-data-factory-ml/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Which requests will be late?"
+    sub: "Answer it from the data, end to end"
+    short: hook
+    narration: >
+      Contoso approves purchase requests, and some of them take too long. Finance wants to know, before the deadline,
+      which open requests will be late. That is a data platform question: get the data out of the operational system,
+      clean it, model it, score it, and put it in front of people. In this episode we build that, small and real.
+      This is the DEVLADLOG Deep Dive.
+
+  - id: architecture
+    type: diagram
+    heading: "From a table to a score"
+    nodes: ["Azure SQL", "Data Factory", "Data lake", "Serverless SQL", "Power BI"]
+    labels: ["source", "watermark copy", "bronze Parquet", "silver, gold, score", "import"]
+    narration: >
+      The source is the purchase request table. Data Factory copies only what changed into the lake, as Parquet.
+      Synapse serverless SQL turns those files into silver and gold views, and a small model adds a risk score.
+      Power BI imports the gold layer. No server stays running between runs.
+
+  - id: choices
+    type: bullets
+    heading: "Honest platform choices"
+    bullets:
+      - "Serverless SQL: billed by data processed, no idle compute"
+      - "No tables there: views over files only"
+      - "Microsoft calls Fabric its strategic platform"
+      - "No Synapse retirement announced, so check before you commit"
+    narration: >
+      A choice first. Serverless SQL is billed by the data a query processes, with a ten megabyte minimum, and nothing
+      is reserved while it sits idle. It has no tables, only views over files. And Microsoft's own pages call Fabric
+      the strategic platform for new analytics, while saying no Synapse retirement has been announced. So we use Synapse
+      for what it does cheaply here, and we keep every rule in plain SQL, which moves.
+
+  - id: watermark
+    type: code
+    heading: "Copy only what changed"
+    lang: sql
+    code: |
+      SELECT RequestId, DepartmentCode, Category, VendorName, Amount, Currency,
+             Status, SubmittedOn, ApprovedOn, ModifiedOn
+      FROM dbo.PurchaseRequests
+      WHERE ModifiedOn >  '@{activity('LookupOldWatermark').output.firstRow.WatermarkValue}'
+        AND ModifiedOn <= '@{activity('LookupNewWatermark').output.firstRow.NewWatermark}'
+
+      -- LookupNewWatermark:
+      SELECT COALESCE(MAX(ModifiedOn),
+             (SELECT WatermarkValue FROM etl.Watermark WHERE TableName = '@{pipeline().parameters.TableName}'))
+             AS NewWatermark FROM dbo.PurchaseRequests
+    narration: >
+      The pipeline is the pattern from Microsoft Learn. Two lookups, a copy, a stored procedure. The copy takes rows
+      changed after the old watermark, up to and including the newest one we just looked up. Not now, the looked up
+      value. A row that lands during the copy is not lost, the next run takes it. And the coalesce keeps the watermark
+      still when the source is empty.
+
+  - id: adf-screen
+    type: screen
+    heading: "Two runs, two sizes"
+    image: screens/adf-runs.jpg
+    bar: "Azure Data Factory Studio · Monitor"
+    demo: >
+      Azure Data Factory Studio in the browser (lab tenant, factory name masked), Monitor > Pipeline runs: the first run of
+      pl_incremental_purchase_requests succeeded, open its Copy activity details and show rows read 1,089; then the second run
+      after the phase 2 data, rows read 145; then the third run with nothing new, rows read 0. Then the Azure portal storage
+      browser on the lake container showing bronze/purchase_requests/ingest_date=<day>/ with the three requests-<run id>.parquet files.
+    narration: >
+      Here are the real runs. The first copies one thousand and eighty nine rows. After the source changes, the second
+      reads one hundred and forty five, the new requests and the decisions. The third has nothing to do and reads zero.
+      In the lake, each run left its own Parquet file, named with the run id.
+
+  - id: silver
+    type: code
+    heading: "Silver: the latest version, with reasons"
+    short: silver
+    lang: sql
+    code: |
+      WITH ranked AS (
+          SELECT b.*, ROW_NUMBER() OVER (PARTITION BY b.RequestId ORDER BY b.ModifiedOn DESC) AS VersionRank
+          FROM bronze.PurchaseRequest AS b
+      ), latest AS (
+          SELECT RequestId, DepartmentCode, Amount, Status, SubmittedOn, ApprovedOn, ModifiedOn
+          FROM ranked WHERE VersionRank = 1
+      )
+      SELECT l.*,
+          CASE WHEN l.Amount IS NULL OR l.Amount <= 0 THEN 'NonPositiveAmount'
+               WHEN l.DepartmentCode NOT IN (SELECT DepartmentCode FROM ref.Department) THEN 'UnknownDepartment'
+               WHEN l.ApprovedOn < l.SubmittedOn THEN 'ApprovedBeforeSubmitted'
+               ELSE NULL END AS RejectReason
+      FROM latest AS l;
+    narration: >
+      Bronze keeps every version of every row, because every run adds files. Silver keeps the latest version of each
+      request, with a reason when a rule is broken. Nothing is deleted. Bad rows stay visible in a quality view, and
+      they just don't reach gold.
+
+  - id: quality-screen
+    type: screen
+    heading: "Bad rows, counted"
+    image: screens/quality.jpg
+    bar: "SSMS · Synapse serverless SQL endpoint"
+    demo: >
+      SQL Server Management Studio on the lab laptop, connected to the Synapse serverless endpoint (name masked), database
+      contoso_analytics, Microsoft Entra MFA as labadmin. Run SELECT * FROM quality.CheckResult after pipeline run 3 (the four
+      defects): bronze row versions, distinct requests, and the four rejected rows with their reasons. Then SELECT * FROM
+      sys.dm_external_data_processed to show how little data the queries processed.
+    narration: >
+      In the serverless endpoint, the quality view tells the story. More row versions than distinct requests, which is the
+      incremental load at work, and four rejected rows, one for each rule. Then the data processed counter, the thing
+      you are actually billed for. Small.
+
+  - id: gold
+    type: code
+    heading: "Gold: a star Power BI can import"
+    lang: sql
+    code: |
+      SELECT s.RequestId, s.DepartmentCode AS DepartmentKey, s.Category, s.Amount, s.Status,
+             CAST(s.SubmittedOn AS date) AS SubmittedDate,
+             DATEDIFF(day, CAST(s.SubmittedOn AS date), CAST(s.ApprovedOn AS date)) AS CycleDays,
+             CASE WHEN s.Status <> 'Approved' THEN NULL
+                  WHEN DATEDIFF(day, CAST(s.SubmittedOn AS date), CAST(s.ApprovedOn AS date)) > 5 THEN 1
+                  ELSE 0 END AS SlaBreached,
+             -- 0 = Monday, whatever the server language
+             DATEDIFF(day, CAST('1900-01-01' AS date), CAST(s.SubmittedOn AS date)) % 7 AS SubmittedWeekday
+      FROM silver.PurchaseRequest AS s
+      WHERE s.IsValid = 1;
+    narration: >
+      Gold is a fact view and a department dimension. Cycle days, and a breach flag that is empty until the request is
+      decided. Notice the weekday. The built in weekday function depends on a server setting, so we count days from a
+      known Monday instead.
+
+  - id: ml
+    type: code
+    heading: "A model small enough to explain"
+    lang: python
+    code: |
+      df = df.sort_values(["SubmittedDate", "RequestId"])
+      cut = int(len(df) * 0.75)                     # train on the past, judge on the future
+      tr, te = df.iloc[:cut], df.iloc[cut:]
+      clf = LogisticRegression(C=1.0, max_iter=1000).fit(x_tr, y_tr)
+      p = clf.predict_proba(x_te)[:, 1]
+      metrics = {"auc_test": roc_auc_score(y_te, p),
+                 "brier_test": brier_score_loss(y_te, p),
+                 "brier_baseline_constant": brier_score_loss(y_te, np.full(len(te), y_tr.mean()))}
+      # then export the coefficients as a T-SQL view: gold.RequestRiskScore
+    narration: >
+      Now the model. Logistic regression, features known at submission only, amount, department, category, weekday and
+      month end. The split is by time, train on the past, judge on the future, against a constant baseline. Then the
+      coefficients are exported as a view, so Synapse scores with plain arithmetic. No model host to run.
+
+  - id: score-screen
+    type: screen
+    heading: "Scoring inside the warehouse"
+    image: screens/score.jpg
+    bar: "Terminal + SSMS · train, export, score"
+    demo: >
+      Windows Terminal on the lab laptop: az storage blob download-batch of the bronze files, then python -m analytics train
+      printing the version and metrics (auc_test, brier_test next to brier_baseline_constant), then python -m analytics export-sql,
+      then sqlcmd deploying 050-risk-score.sql. Switch to SSMS: SELECT TOP 10 RequestId, BreachProbability FROM
+      gold.RequestRiskScore WHERE Status = 'Submitted' ORDER BY BreachProbability DESC. State on screen that the data is synthetic.
+    narration: >
+      The real run, on the lake's own files. Train, print the metrics next to the baseline, export, deploy the view. Then
+      in the endpoint, the open requests most likely to be late, straight from T S Q L. The data is synthetic, so
+      the numbers describe the pipeline, not Contoso.
+
+  - id: powerbi-screen
+    type: screen
+    heading: "Import the gold layer"
+    image: screens/powerbi.jpg
+    bar: "Power BI Desktop · Azure Synapse Analytics SQL"
+    demo: >
+      Power BI Desktop on the lab laptop: Get data > Azure Synapse Analytics SQL, the serverless endpoint (masked), database
+      contoso_analytics, Import mode, Microsoft account sign-in. In the Navigator tick gold.FactPurchaseRequest,
+      gold.DimDepartment and gold.RequestRiskScore. Build two visuals: average CycleDays by department, and a table of open
+      requests sorted by BreachProbability. Do not show the server name.
+    narration: >
+      Power BI connects with the Azure Synapse Analytics connector, in import mode, because Microsoft's guidance is that
+      serverless SQL is not meant for interactive direct query on complex queries. Three views, two visuals. Cycle time by
+      department, and the open requests by risk.
+
+  - id: tests
+    type: code
+    heading: "Rules you can test"
+    lang: text
+    code: |
+      $ python -m pytest -q
+      ..........................................................
+      58 passed
+
+      silver keeps the latest version of each request          (a mutation to ASC fails it)
+      the SLA in SQL is the SLA in Python
+      T-SQL scoring view matches Python to six decimals
+      a row that arrives after the lookup is picked up next run
+      committed SQL is exactly what the committed model exports
+    narration: >
+      Fifty eight Python tests and twelve Pester tests run offline. They execute the pipeline's own queries, run the
+      views over real Parquet files, and check that the scoring view matches Python to six decimals. They can't prove
+      Synapse behaviour. The lab does that.
+
+  - id: gotcha
+    type: bullets
+    heading: "What bit us"
+    short: gotcha
+    bullets:
+      - "Subscription Owner is not data access: grant a blob data role"
+      - "The free database pauses: first connection fails, so retry"
+      - "Open requests are missing from training: recent weeks look too good"
+      - "Serverless has no tables, only views over files"
+    narration: >
+      The gotchas. Owner on the subscription is not data access. Learn says those roles manage the account but don't
+      read the data, so assign a blob data role. The free database pauses, and the first connection to a paused one
+      fails with error forty six thirteen while it resumes, so the activities retry. Training data only contains decided
+      requests, so the newest weeks look better than they are. And serverless has no tables.
+
+  - id: recap
+    type: bullets
+    heading: "What to take away"
+    bullets:
+      - "Watermark upper bound is the looked-up maximum"
+      - "Bronze keeps versions, silver keeps the latest"
+      - "Bad rows stay visible, they just don't reach gold"
+      - "Score where the data is, split training by time"
+      - "Keep the rules in SQL, they move to Fabric"
+    narration: >
+      To recap. Bound the incremental copy by the value you looked up. Bronze keeps versions, silver keeps the latest.
+      Bad rows stay visible. Split training by time, and score where the data lives. And keep the rules in plain SQL, so
+      they move when the platform does.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The pipeline, the T S Q L, the model and the tests are on GitHub, and the full guide is on devladlog dot com. Next
+      time: an enterprise reporting platform, with Power BI governed as code. See you there.

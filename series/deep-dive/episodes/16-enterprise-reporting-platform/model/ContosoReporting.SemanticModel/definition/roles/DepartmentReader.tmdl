@@ -1,0 +1,7 @@
+/// Dynamic row-level security: a user sees the departments listed for their sign-in name in SecurityMap. Applies to Viewers only.
+role 'Department Reader'
+	modelPermission: read
+
+	tablePermission DimDepartment = DimDepartment[DepartmentKey] IN SELECTCOLUMNS(FILTER(SecurityMap, SecurityMap[UserPrincipalName] = USERPRINCIPALNAME()), "k", SecurityMap[DepartmentKey])
+
+	tablePermission SecurityMap = SecurityMap[UserPrincipalName] = USERPRINCIPALNAME()

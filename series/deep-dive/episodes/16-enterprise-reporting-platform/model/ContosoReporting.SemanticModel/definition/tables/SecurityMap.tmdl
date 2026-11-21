@@ -1,0 +1,29 @@
+/// Who may see which department. Hidden from report authors. Replace the inline table with a governed source (HR data, an Entra group export) before real use.
+table SecurityMap
+	isHidden
+
+	column UserPrincipalName
+		dataType: string
+		sourceColumn: UserPrincipalName
+		summarizeBy: none
+
+	column DepartmentKey
+		dataType: string
+		sourceColumn: DepartmentKey
+		summarizeBy: none
+
+	partition SecurityMap = m
+		mode: import
+		source =
+				let
+				    Source = #table(
+				        type table [UserPrincipalName = text, DepartmentKey = text],
+				        {
+				            {"alex.demo@" & UpnDomain, "FIN"},
+				            {"sam.demo@" & UpnDomain, "OPS"},
+				            {"jordan.demo@" & UpnDomain, "IT"},
+				            {"riley.demo@" & UpnDomain, "HR"},
+				            {"riley.demo@" & UpnDomain, "MKT"}
+				        })
+				in
+				    Source

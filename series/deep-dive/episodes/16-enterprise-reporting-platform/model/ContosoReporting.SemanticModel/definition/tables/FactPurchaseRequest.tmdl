@@ -1,0 +1,121 @@
+table FactPurchaseRequest
+
+	/// Number of purchase requests in the current filter context.
+	measure Requests = COUNTROWS(FactPurchaseRequest)
+		formatString: #,0
+		displayFolder: Volume
+
+	/// Sum of the request amount, in the source currency (the sample data is single currency).
+	measure 'Total Amount' = SUM(FactPurchaseRequest[Amount])
+		formatString: #,0.00
+		displayFolder: Volume
+
+	/// Amount of requests still waiting for a decision.
+	measure 'Open Amount' = CALCULATE([Total Amount], FactPurchaseRequest[Status] = "Submitted")
+		formatString: #,0.00
+		displayFolder: Volume
+
+	/// Requests that have an SLA verdict: approved ones. Open and rejected requests are blank on purpose.
+	measure 'Decided Requests' = COUNTROWS(FILTER(FactPurchaseRequest, NOT ISBLANK(FactPurchaseRequest[SlaBreached])))
+		formatString: #,0
+		displayFolder: Service level
+
+	/// Share of decided requests that took longer than the SLA (five days in episode 15).
+	measure 'SLA Breach Rate' = DIVIDE(SUM(FactPurchaseRequest[SlaBreached]), [Decided Requests])
+		formatString: 0.0%
+		displayFolder: Service level
+
+	/// Average calendar days from submission to approval, over approved requests.
+	measure 'Avg Cycle Days' = AVERAGE(FactPurchaseRequest[CycleDays])
+		formatString: 0.0
+		displayFolder: Service level
+
+	/// Total amount from 1 January of the selected year to the last date in the filter.
+	measure 'Amount YTD' = TOTALYTD([Total Amount], DimDate[Date])
+		formatString: #,0.00
+		displayFolder: Time intelligence
+
+	/// Total amount in the same period one year earlier.
+	measure 'Amount Prior Year' = CALCULATE([Total Amount], SAMEPERIODLASTYEAR(DimDate[Date]))
+		formatString: #,0.00
+		displayFolder: Time intelligence
+
+	column RequestId
+		dataType: string
+		sourceColumn: RequestId
+		summarizeBy: none
+
+	column DepartmentKey
+		dataType: string
+		isHidden
+		sourceColumn: DepartmentKey
+		summarizeBy: none
+
+	column Category
+		dataType: string
+		sourceColumn: Category
+		summarizeBy: none
+
+	column VendorName
+		dataType: string
+		sourceColumn: VendorName
+		summarizeBy: none
+
+	column Amount
+		dataType: decimal
+		isHidden
+		sourceColumn: Amount
+		summarizeBy: none
+
+	column Currency
+		dataType: string
+		sourceColumn: Currency
+		summarizeBy: none
+
+	column Status
+		dataType: string
+		sourceColumn: Status
+		summarizeBy: none
+
+	column SubmittedDate
+		dataType: dateTime
+		isHidden
+		formatString: yyyy-mm-dd
+		sourceColumn: SubmittedDate
+		summarizeBy: none
+
+	column ApprovedDate
+		dataType: dateTime
+		isHidden
+		formatString: yyyy-mm-dd
+		sourceColumn: ApprovedDate
+		summarizeBy: none
+
+	column CycleDays
+		dataType: int64
+		isHidden
+		formatString: 0
+		sourceColumn: CycleDays
+		summarizeBy: none
+
+	column SlaBreached
+		dataType: int64
+		isHidden
+		formatString: 0
+		sourceColumn: SlaBreached
+		summarizeBy: none
+
+	column SubmittedWeekday
+		dataType: int64
+		formatString: 0
+		sourceColumn: SubmittedWeekday
+		summarizeBy: none
+
+	partition FactPurchaseRequest = m
+		mode: import
+		source =
+				let
+				    Source = Sql.Database(SynapseServer, SynapseDatabase),
+				    Fact = Source{[Schema = "gold", Item = "FactPurchaseRequest"]}[Data]
+				in
+				    Fact
