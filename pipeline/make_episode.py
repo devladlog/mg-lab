@@ -354,17 +354,50 @@ def short_panel(scene, ep, W=1080, max_h=760):
     slide = render_slide(scene, ep).convert("RGBA")
     return slide.resize((W, int(W * 9 / 16)), Image.LANCZOS)
 
-def make_short(scene, script, wav, dur, slide_png, out, workdir):
-    """Vertical 1080x1920: slide in the middle, captions burned in below, end card."""
+def short_crop(scene, max_w=960):
+    """Region of a live recording shown in a Short: the scene's short_crop, else the left max_w pixels of the
+    content crop (prompts and most output start at the left), so the text is readable on a phone."""
+    if scene.get("short_crop"):
+        return scene["short_crop"]
+    x, y, w, h = scene["crop"]
+    w = min(w, max_w)
+    return [x, y, w - w % 2, h]
+
+
+def live_short_panel(scene, W=1080, max_h=1000):
+    """Shorts panel for a live recording: heading on top, then a hole the clip is overlaid into at full width."""
+    cw, ch = short_crop(scene)[2:]
+    vh = min(max_h - 90, int(W * ch / cw))
+    vh -= vh % 2
+    img = Image.new("RGBA", (W, 90 + vh), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+    size = 48
+    while size > 30 and d.textlength(scene["heading"], font=font("Inter-Bold.otf", size)) > W - 80:
+        size -= 2
+    d.text((40, 0), scene["heading"], font=font("Inter-Bold.otf", size), fill=WHITE)
+    d.rectangle((40, 66, 200, 72), fill=BLUE)
+    d.rectangle((0, 90, W, 90 + vh), fill=(0, 0, 0, 255))
+    return img, (0, 90, W, vh)
+
+
+def make_short(scene, script, wav, dur, slide_png, out, workdir, clip=None):
+    """Vertical 1080x1920: slide in the middle, captions burned in below, end card. A live screen scene plays its
+    recording (cropped to the text, full width) instead of a still."""
     W, H = 1080, 1920
     chunks = caption_chunks(scene["narration"], 7)
     total_chars = sum(len(c) for c in chunks)
-    slide = short_panel(scene, script["episode"])
+    vbox = None
+    if clip is not None and scene.get("crop"):
+        slide, vbox = live_short_panel(scene)
+        rate = float(scene.get("video_rate", 1.0))
+        extra = max(0.0, video_duration(clip) / rate + 0.5 - dur)
+    else:
+        slide, extra = short_panel(scene, script["episode"]), 0.0
     frames_dir = workdir / f"short_{scene['id']}"
     frames_dir.mkdir(exist_ok=True)
     concat_list, t = [], 0.0
     for i, c in enumerate(chunks):
-        seg = dur * len(c) / total_chars
+        seg = dur * len(c) / total_chars + (extra if i == len(chunks) - 1 else 0.0)
         im = background(W, H)
         d = ImageDraw.Draw(im)
         d.text((60, 110), SERIES["label"], font=font("Inter-Bold.otf", 44), fill=BLUE)
@@ -393,7 +426,7 @@ def make_short(scene, script, wav, dur, slide_png, out, workdir):
     concat_list.append(f"file '{pe.resolve()}'\nduration 2.5\nfile '{pe.resolve()}'\n")
     lst = frames_dir / "list.txt"
     lst.write_text("".join(concat_list))
-    total = dur + 2.5
+    total = dur + extra + 2.5
     music = ASSETS / "music.mp3"
     inputs = ["-f", "concat", "-safe", "0", "-i", str(lst), "-i", str(wav)]
     if music.exists():
@@ -401,7 +434,19 @@ def make_short(scene, script, wav, dur, slide_png, out, workdir):
         af = f"[1:a]apad,atrim=0:{total:.2f}[v1];[2:a]volume=-22dB,atrim=0:{total:.2f},afade=t=out:st={total-1.5:.2f}:d=1.5[m];[v1][m]amix=inputs=2:normalize=0[a]"
     else:
         af = f"[1:a]apad,atrim=0:{total:.2f}[a]"
-    run(["ffmpeg", "-y", *inputs, "-filter_complex", f"[0:v]fps=30,format=yuv420p[v];{af}", "-map", "[v]", "-map", "[a]",
+    vf = "[0:v]fps=30,format=yuv420p[v]"
+    if vbox:
+        ci = 3 if music.exists() else 2
+        inputs += ["-i", str(clip)]
+        cx, cy, cw, ch = short_crop(scene)
+        bx, by, bw, bh = vbox
+        oy = 400 + by
+        shown = dur + extra  # the clip plays during the narration, then the end card covers it
+        vf = (f"[0:v]fps=30,format=yuv420p[bg];[{ci}:v]setpts=PTS/{rate},crop={cw}:{ch}:{cx}:{cy},"
+              f"scale={bw}:{bh}:force_original_aspect_ratio=decrease,crop='min(iw,{bw})':'min(ih,{bh})',"
+              f"pad={bw}:{bh}:0:0:color=black,tpad=stop_mode=clone:stop_duration={shown:.2f}[clip];"
+              f"[bg][clip]overlay={bx}:{oy}:enable='lt(t,{shown:.2f})',format=yuv420p[v]")
+    run(["ffmpeg", "-y", *inputs, "-filter_complex", f"{vf};{af}", "-map", "[v]", "-map", "[a]",
          "-t", f"{total:.2f}", "-c:v", "libx264", "-preset", "veryfast", "-crf", "21", "-c:a", "aac", "-b:a", "160k",
          "-movflags", "+faststart", str(out)])
 
@@ -441,6 +486,7 @@ def main():
                 if "crop" not in sc and sc.get("autocrop", True):
                     sc["crop"] = content_crop(clip)
                 sc["_live"] = True
+                sc["_clip"] = str(clip)
             else:
                 print(f"  ! {sc['id']}: video {clip} missing, using the still image", flush=True)
                 clip = None
@@ -487,7 +533,8 @@ def main():
         for sc in script["scenes"]:
             if sc.get("short"):
                 speech, wav, png = durations[sc["id"]]
-                make_short(sc, script, wav, speech, png, out / f"{base}-short-{sc['short']}.mp4", work)
+                make_short(sc, script, wav, speech, png, out / f"{base}-short-{sc['short']}.mp4", work,
+                           Path(sc["_clip"]) if sc.get("_clip") else None)
                 print("short:", sc["short"], flush=True)
     print("done ->", out)
 
