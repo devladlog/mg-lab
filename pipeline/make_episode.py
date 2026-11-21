@@ -140,6 +140,10 @@ def render_slide(scene, ep, W=1920, H=1080):
             d.text((W / 2, y + 70), scene["sub"], font=font("Inter-Medium.otf", 48), fill=MUTED, anchor="ma")
     else:
         live = t == "screen" and scene.get("_live")
+        if live and scene.get("video_full"):
+            # dense app UIs (Power BI, browsers) get the whole frame; the narration names the step
+            scene["_video_box"] = (0, 0, W, H)
+            return im
         if live:  # live recordings get most of the frame: smaller heading, wider window
             d.text((80, 112), scene["heading"], font=font("Inter-Bold.otf", 56), fill=WHITE)
             d.rectangle((80, 188, 260, 194), fill=BLUE)
@@ -260,6 +264,50 @@ def still_segment(img_path, wav, dur, out, size="1920x1080", zoom=True):
 
 def video_duration(path):
     return float(subprocess.check_output(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", str(path)]).decode())
+
+
+def compact_clip(clip, out, max_still=0.6, min_still=1.2, thresh=0.02, cuts=None):
+    """App and browser takes: shorten every stretch where nothing on screen changes (waiting between actions) to
+    max_still seconds; every change on screen is kept, in order. Returns the compacted file (cached by mtime)."""
+    import numpy as np
+    out = Path(out)
+    if out.exists() and out.stat().st_mtime >= Path(clip).stat().st_mtime:
+        return out
+    fps = 10
+    W, H = 320, 180   # analysis size only (aspect ignored)
+    raw = subprocess.check_output(["ffmpeg", "-v", "error", "-i", str(clip), "-vf", f"fps={fps},scale={W}:{H},format=gray",
+                                   "-f", "rawvideo", "-"])
+    frames = np.frombuffer(raw, np.uint8)
+    frames = frames[: len(frames) // (W * H) * W * H].reshape(-1, H, W).astype(np.int16)
+    diff = np.r_[255, np.abs(np.diff(frames, axis=0)).mean(axis=(1, 2))]
+    moving = diff > thresh
+    keep, i, n = [], 0, len(moving)
+    while i < n:
+        j = i
+        while j < n and moving[j] == moving[i]:
+            j += 1
+        a, b = i / fps, j / fps
+        if moving[i] or (b - a) < min_still:
+            keep.append((a, b))
+        else:                       # a still stretch: keep the start of it, drop the rest
+            keep.append((a, a + max_still))
+        i = j
+    merged = []
+    for a, b in keep:
+        if merged and a - merged[-1][1] < 0.05:
+            merged[-1] = (merged[-1][0], b)
+        else:
+            merged.append((a, b))
+    expr = "+".join(f"between(t,{a:.2f},{b:.2f})" for a, b in merged)
+    tmp = out.with_name(out.stem + "_c.mp4") if cuts else out
+    run(["ffmpeg", "-y", "-i", str(clip), "-vf", f"select='{expr}',setpts=N/FRAME_RATE/TB", "-an", "-c:v", "libx264",
+         "-preset", "veryfast", "-crf", "18", "-pix_fmt", "yuv420p", str(tmp)])
+    if cuts:  # video_cuts: [[from, to], ...] in seconds of the compacted take, e.g. a detour that isn't part of the demo
+        keep = "+".join(f"between(t,{a},{b})" for a, b in cuts)
+        run(["ffmpeg", "-y", "-i", str(tmp), "-vf", f"select='not({keep})',setpts=N/FRAME_RATE/TB", "-an", "-c:v",
+             "libx264", "-preset", "veryfast", "-crf", "18", "-pix_fmt", "yuv420p", str(out)])
+        tmp.unlink()
+    return out
 
 
 def content_crop(clip, pad=18, min_aspect=2.6, bg_thresh=40):
@@ -501,6 +549,8 @@ def main():
                 if "crop" not in sc and sc.get("autocrop", True):
                     sc["crop"] = content_crop(clip)
                 sc["_live"] = True
+                if sc.get("video_compact") or sc.get("video_cuts"):
+                    clip = compact_clip(clip, work / f"{i:02d}_{sc['id']}_take.mp4", cuts=sc.get("video_cuts"))
                 sc["_clip"] = str(clip)
             else:
                 print(f"  ! {sc['id']}: video {clip} missing, using the still image", flush=True)
