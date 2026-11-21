@@ -22,7 +22,8 @@
       "commands": [
         "./Invoke-ServerBaseline.ps1 -ComputerName CON-DC01, CON-SRV01, CON-SRV02 -SnapshotDir ./snapshots -OutFile ./report.md",
         "#pause 3"
-      ]
+      ],
+      "kind": "terminal"
     },
     {
       "name": "report",
@@ -33,7 +34,8 @@
       "commands": [
         "Get-Content ./report.md",
         "#pause 4"
-      ]
+      ],
+      "kind": "terminal"
     },
     {
       "name": "fixed",
@@ -45,7 +47,8 @@
         "Invoke-Command -ComputerName CON-SRV02 { Uninstall-WindowsFeature FS-SMB1; Set-NetFirewallProfile -Profile Public -Enabled True }",
         "./Invoke-ServerBaseline.ps1 -ComputerName CON-DC01, CON-SRV01, CON-SRV02 -OutFile ./report.md",
         "#pause 3"
-      ]
+      ],
+      "kind": "terminal"
     },
     {
       "name": "hotfix",
@@ -57,7 +60,8 @@
         "# Windows Update history (what Settings > Update history shows):",
         "$s = (New-Object -ComObject Microsoft.Update.Session).CreateUpdateSearcher(); $s.QueryHistory(0, $s.GetTotalHistoryCount()) | Select-Object -First 8 Date, Title | Format-Table -AutoSize -Wrap",
         "#pause 4"
-      ]
+      ],
+      "kind": "terminal"
     }
   ],
   "teardown": [
@@ -65,5 +69,8 @@
     "Invoke-Command -VMName CON-SRV01 -Credential $cred { Uninstall-WindowsFeature Web-Server | Out-Null }",
     "Invoke-Command -VMName CON-DC01 -Credential $cred { Remove-ADUser alex.demo -Confirm:$false -ErrorAction SilentlyContinue }",
     "Invoke-Command -VMName CON-CLI01 -Credential $cred { Remove-Item C:\\lab\\ep01 -Recurse -Force -ErrorAction SilentlyContinue }"
+  ],
+  "needs": [
+    "lab-vms"
   ]
 }
