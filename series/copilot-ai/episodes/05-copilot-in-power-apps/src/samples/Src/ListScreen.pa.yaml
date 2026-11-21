@@ -1,0 +1,61 @@
+# Hand-written in the shape of Power Apps source (*.pa.yaml): App, Screens, Children, Control, Properties.
+# It is NOT output of Copilot or of Studio. It contains the kinds of formulas Copilot writes, some of them
+# wrong on purpose, so the tests and the CLI have something to find.
+Screens:
+  ListScreen:
+    Properties:
+      OnVisible: =Refresh(Loans)
+    Children:
+      - txtSearch:
+          Control: TextInput
+          Properties:
+            HintText: ="Search borrower"
+      - galLoans:
+          Control: Gallery
+          Properties:
+            Items: =Filter(Loans, IsBlank(ReturnedOn), StartsWith(Borrower, txtSearch.Text))
+      - lblOverdue:
+          Control: Label
+          Properties:
+            Text: =CountRows(Filter(Loans, IsBlank(ReturnedOn) && DueDate < Today())) & " overdue"
+      - lblDue:
+          Control: Label
+          Properties:
+            Text: =Text(galLoans.Selected.DueDate, "dd mmm yyyy")
+      - btnReturn:
+          Control: Button
+          Properties:
+            OnSelect: |
+              =IfError(
+                  Patch(Loans, galLoans.Selected, {ReturnedOn: Today(), Status: "Returned"}),
+                  Notify("Could not save the return", NotificationType.Error)
+              )
+      - btnRemind:
+          Control: Button
+          Properties:
+            OnSelect: |
+              =Patch(Loans, galLoans.Selected, {Status: "Reminded"})
+      - btnMail:
+          Control: Button
+          Properties:
+            OnSelect: =Office365Outlook.SendEmailV2("alex.demo@contoso.example", "Overdue", "Please return " & galLoans.Selected.Item)
+      - lblWrongType:
+          Control: Label
+          Properties:
+            Text: =LookUp(Loans, Borrower = txtSearch.Text)
+      - lblTypo:
+          Control: Label
+          Properties:
+            Text: =galLoans.Selected.Borrowr
+      - galNextTen:
+          Control: Gallery
+          Properties:
+            Items: =FirstN(Sort(Filter(Loans, Len(Borrower) > 2), DueDate), 10)
+      - icoBadge:
+          Control: Icon
+          Properties:
+            Visible: =Text(CountRows(Filter(Loans, DueDate < Today())))
+      - lblSyntax:
+          Control: Label
+          Properties:
+            Text: =Text(CountRows(Filter(Loans, DueDate < Today())

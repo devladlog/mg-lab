@@ -1,0 +1,240 @@
+# DEVLADLOG Copilot & AI - episode 05 (draft: screen scenes need the recording described in demo.md)
+episode: 5
+slug: copilot-in-power-apps
+series_label: "COPILOT & AI"
+series_name: "DEVLADLOG Copilot & AI"
+file_prefix: "copilot-ai"
+title: "Copilot in Power Apps"
+subtitle: "Build it, explain it, then check what it wrote"
+voice: am_michael
+thumbnail_text: "COPILOT\nIN POWER\nAPPS"
+youtube:
+  title: "Copilot in Power Apps: Build, Explain and Check the Power Fx It Writes | DEVLADLOG Copilot & AI #5"
+  tags: [Copilot in Power Apps, Power Apps, Power Fx, canvas apps, Dataverse, Copilot formula bar, delegation, Power Platform admin center, generative AI, low-code]
+next_episode: "Copilot in Power Automate"
+sources:
+  - "https://learn.microsoft.com/power-apps/copilot-landing-page"
+  - "https://learn.microsoft.com/power-apps/maker/canvas-apps/ai-overview"
+  - "https://learn.microsoft.com/power-apps/maker/canvas-apps/ai-conversations-create-app"
+  - "https://learn.microsoft.com/power-apps/maker/canvas-apps/ai-formulas-formulabar"
+  - "https://learn.microsoft.com/power-platform/admin/geographical-availability-copilot"
+  - "https://learn.microsoft.com/power-apps/maker/canvas-apps/delegation-overview"
+  - "https://learn.microsoft.com/power-apps/maker/canvas-apps/microsoft-365-copilot-canvas-app"
+  - "https://learn.microsoft.com/microsoft-copilot-studio/apps-experience/apps-overview"
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Copilot in Power Apps"
+    sub: "Build it, explain it, then check what it wrote"
+    short: hook
+    narration: >
+      Contoso's facilities team wants an equipment loan app. Copilot can build the tables and the app in minutes, and
+      then write formulas that look right. But looking right is not the same as being right. In this episode we use
+      Copilot in Power Apps on a real environment, see what it needs, and check every formula it writes with the
+      Power Fx engine. Welcome to Dev Lad Log, Copilot and A I.
+
+  - id: does
+    type: bullets
+    heading: "What Copilot does for a maker"
+    bullets:
+      - "Describe tables in words: Dataverse tables, columns, sample rows"
+      - "Build a canvas app from that data"
+      - "Formula bar: explain a formula, or write one from a comment"
+      - "Plans: tables, apps and flows from one description"
+    narration: >
+      What does Copilot do for a maker today? You describe tables in plain words and it creates Dataverse tables,
+      columns and sample rows. You build a canvas app on top. In the formula bar it explains a formula, or writes one
+      from a code comment. And Plans can generate a whole solution from one description. Some of these are still preview.
+
+  - id: needs
+    type: bullets
+    heading: "What it needs"
+    bullets:
+      - "A Dataverse database in the environment"
+      - "System customizer role, to create tables"
+      - "Outside the US: maybe allow data movement across regions"
+      - "Generally available features: on, only Microsoft Support turns them off"
+      - "Preview features: off per environment or per tenant"
+    narration: >
+      What does it need? A Dataverse database, and the system customizer role to create tables. Outside the United States,
+      you may have to allow data movement across regions. Learn says generally available Copilot features are on by
+      default, and only Microsoft Support can turn them off. Preview features have admin switches.
+
+  - id: data-screen
+    type: screen
+    heading: "Tables from a sentence"
+    image: screens/copilot-data.jpg
+    bar: "make.powerapps.com · DEV · Start with data · Create new data"
+    demo: "Browser as labadmin on make.powerapps.com, environment DEV. Home, Start with data, Create new data: the Create new tables workspace with the Copilot panel. Prompt: 'Create tables to track equipment loans at Contoso: item, borrower, borrower email, due date, returned on date and status (Out, Returned, Lost)'. Capture the prompt, the generated table with its columns and sample rows. Do not edit before the capture. Mask the org URL."
+    narration: >
+      Here it is on the lab environment. We ask for tables to track equipment loans, with item, borrower, due date,
+      returned on date and status. Copilot proposes the table, the columns and sample rows. Review them before you
+      save. The name of a column is a decision you will live with in every formula.
+
+  - id: formula-screen
+    type: screen
+    heading: "The formula bar: comment in, formula out"
+    image: screens/copilot-formula.jpg
+    bar: "Power Apps Studio · Equipment loans · formula bar · Copilot"
+    demo: "Power Apps Studio, canvas app built on the new table. Select the gallery, property Items. In the formula bar type the comment: // show the loans that are not returned and are due before today. Wait for the grey suggestion, capture it, press Tab to accept. Then use the Copilot menu next to fx, Explain this formula, and capture Copilot's explanation. Zoom so the formula and the explanation are readable."
+    narration: >
+      In the app, the formula bar is where Copilot earns its keep. We type a comment, show the loans that are not
+      returned and are due before today, and Copilot suggests a formula. Tab accepts it. The same menu can explain a
+      formula in plain language. Learn lists limits: one control and one property, and the existing formula is not
+      taken into account.
+
+  - id: trust
+    type: bullets
+    heading: "Looks right is not right"
+    bullets:
+      - "Check it: syntax, names, result type"
+      - "Run it on sample rows, not on your imagination"
+      - "Then let Studio have the last word"
+    narration: >
+      So we check it. Microsoft publishes the Power Fx engine as a dot net package. Our small tool, Power Fx Review,
+      reads the formulas from the app's source files, checks syntax, names and the type of the result, and can run a
+      formula on sample rows. It is not Studio, and I will say where it differs.
+
+  - id: context-code
+    type: code
+    heading: "Tell the engine what the app contains"
+    lang: json
+    code: |
+      {
+        "tables": {
+          "Loans": {
+            "datasource": true,
+            "columns": { "Item": "string", "Borrower": "string",
+                         "DueDate": "date", "ReturnedOn": "date", "Status": "string" }
+          }
+        },
+        "controls": {
+          "txtSearch": { "fields": { "Text": "string" } },
+          "galLoans":  { "fields": { "Selected": { "record": "Loans" } } }
+        }
+      }
+    narration: >
+      The standalone engine knows nothing about your app, so a small context file lists the tables, their columns, and
+      the controls the formulas mention. Mark a table as a data source, and the tool also watches for delegation.
+
+  - id: check-code
+    type: code
+    heading: "The real parser and type checker"
+    lang: csharp
+    code: |
+      var engine = new RecalcEngine();
+      var scope  = ctx.ToRecordType(screens);          // tables, controls, variables
+      var check  = engine.Check(formula, scope,
+                       new ParserOptions { AllowsSideEffects = item.IsBehavior });
+
+      if (check.IsSuccess)
+          CheckReturnType(item, check.ReturnType, findings);   // Text, Visible, Items
+      else
+          foreach (var e in check.Errors)
+              findings.Add(new Finding("PF001", Severity.Error,
+                  $"{e.Message} [{e.Span.GetFragment(formula)}]"));
+    narration: >
+      The core is the engine's Check method. It parses the formula, binds every name against the context, and tells
+      us the type of the result. A label whose text returns a record, or a column with a typo, is reported before the
+      app runs. Then our own rules look for hard coded addresses, unhandled Patch calls, and delegation.
+
+  - id: check-screen
+    type: screen
+    heading: "Check and run, in the terminal"
+    image: screens/check-run.jpg
+    bar: "PowerShell 7 · PowerFxReview check / run"
+    short: check
+    demo: "Terminal (dark, 18 pt, 1600x900) in the repo folder. First: dotnet run --project src/PowerFxReview -- check '<the formula Copilot suggested in the formula bar, pasted>' --property Items --context <your context.json>. Then the run command on src/samples/sample-data.json for a count of overdue loans and the borrower list. Visible: OK with the result type, then the result on sample rows. If the real Copilot formula has errors, that is the better take: keep it."
+    narration: >
+      Here is the formula Copilot wrote, pasted into the checker. It parses, the names exist, and it returns a table,
+      which is what Items wants. Then we run it on five fictional rows. Two loans are overdue, the one due today is
+      not. That is the answer to check against what Copilot's explanation promised.
+
+  - id: findings
+    type: bullets
+    heading: "What the checker finds"
+    bullets:
+      - "Syntax error, unknown column, wrong result type"
+      - "Hard-coded e-mail address or GUID"
+      - "Patch or SubmitForm with no IfError"
+      - "FirstN or Len on a data source: delegation"
+    narration: >
+      On the sample app it finds the usual suspects. A missing parenthesis. A column called Borrowr. A label that
+      returns a record. A typed e-mail address. A Patch with nothing to catch a failure. And FirstN on a data
+      source, which Learn lists as not delegable.
+
+  - id: delegation-screen
+    type: screen
+    heading: "Delegation: Studio has the last word"
+    image: screens/delegation.jpg
+    bar: "Power Apps Studio · gallery Items · delegation warning"
+    short: gotcha
+    demo: "Power Apps Studio, same app. Set the gallery Items to FirstN(Sort(Filter(Loans, Len(Borrower) > 2), DueDate), 10) using the real table and column names. Capture whether Studio shows the yellow delegation triangle and hover its message. Then show the same formula in the terminal with the check command: PF004 warning. If Studio shows no triangle, say so: Learn notes that not every nondelegable case shows a warning, and the Live monitor is the next tool."
+    narration: >
+      Delegation is the trap. Learn says a nondelegable query only sees the first five hundred rows, or up to ten
+      thousand if you raise the limit. Studio shows a yellow triangle for most cases, but Learn also says not every
+      case shows a warning. Our tool warns about the functions Learn lists. Studio, and the Live monitor, have the
+      last word.
+
+  - id: gotcha
+    type: bullets
+    heading: "Gotcha: it is not Studio"
+    bullets:
+      - "Filter with several predicates: Learn says canvas combines them, the engine refuses"
+      - "Navigate, Patch, Set: recognised, not run"
+      - "A colon in a one-line YAML formula breaks the file"
+      - "Variables made by Set must be declared in the context"
+    narration: >
+      Now the honest part. The standalone engine rejected a Filter with several predicates, which Learn says canvas
+      apps accept and combine with And, so the tool reports that as a difference, not an error. Navigate, Patch and Set
+      only exist in the host, so those formulas are checked in part. And in the source files, a colon in a one line
+      formula breaks the YAML; use a multi line block.
+
+  - id: licence
+    type: bullets
+    heading: "Licence and cost"
+    bullets:
+      - "Learn: no licence needed to build canvas apps"
+      - "Users running a Dataverse app need premium rights"
+      - "Microsoft Copilot inside apps: Microsoft 365 Copilot licence"
+      - "Apps built in Copilot Studio: Copilot Credits"
+    narration: >
+      What does it cost? Learn says you do not need a licence to build canvas apps, but users who run an app on
+      Dataverse need premium use rights. The newer Microsoft Copilot inside canvas apps, still in preview, needs a
+      Microsoft 365 Copilot licence for the user. And apps built in Copilot Studio use usage based billing in
+      Copilot Credits. We did not record those two; the lab has neither.
+
+  - id: renamed
+    type: bullets
+    heading: "Names are moving"
+    bullets:
+      - "Copilot control for canvas apps: no new apps since 2 February 2026"
+      - "Replacement: Microsoft Copilot in canvas apps (preview)"
+      - "Power Apps vibe (preview): US, Australia, Asia, India, English only"
+      - "App building is moving to Copilot Cowork and Copilot Studio"
+    narration: >
+      Names are moving. The Copilot control for canvas apps cannot be added to new apps since the second of
+      February twenty twenty six, and Microsoft Copilot in canvas apps replaces it. The Power Apps vibe experience is
+      a preview in a few regions only, and Learn now points app building to Copilot Cowork and Copilot Studio. Check
+      the page for your region, the day you record.
+
+  - id: monday
+    type: bullets
+    heading: "What to do on Monday"
+    bullets:
+      - "Let Copilot draft, never publish"
+      - "Pull the source, run the checker, read the warnings"
+      - "Test with more than five hundred rows"
+    narration: >
+      On Monday, let Copilot draft the tables and the first formulas. Download a copy of the app, open the source
+      files, and run a check before you share it. And test with more than five hundred rows. Next episode, the same
+      question for Power Automate.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The checker, the samples and the tests are on GitHub, and the Microsoft Learn pages are in the description. This
+      was Dev Lad Log, Copilot and A I, by Momento Galático.

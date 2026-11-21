@@ -1,0 +1,245 @@
+# DEVLADLOG Copilot & AI - episode 06 (draft: screen scenes need the recording described in demo.md)
+episode: 6
+slug: copilot-in-power-automate
+series_label: "COPILOT & AI"
+series_name: "DEVLADLOG Copilot & AI"
+file_prefix: "copilot-ai"
+title: "Copilot in Power Automate"
+subtitle: "Describe a flow, then review what it built"
+voice: am_michael
+thumbnail_text: "COPILOT\nIN POWER\nAUTOMATE"
+youtube:
+  title: "Copilot in Power Automate: Build a Flow from a Sentence, Then Review It | DEVLADLOG Copilot & AI #6"
+  tags: [Copilot in Power Automate, Power Automate, cloud flows, Copilot designer, expression assistant, Troubleshoot in Copilot, workflow expressions, formatDateTime, Power Platform, low-code]
+next_episode: "Copilot in Power BI and Fabric"
+sources:
+  - "https://learn.microsoft.com/power-automate/copilot-overview"
+  - "https://learn.microsoft.com/power-automate/create-cloud-flow-using-copilot"
+  - "https://learn.microsoft.com/power-automate/copilot-cloud-flows-tips"
+  - "https://learn.microsoft.com/power-automate/faq-copilot-cloud-flows"
+  - "https://learn.microsoft.com/power-automate/regions-overview"
+  - "https://learn.microsoft.com/power-automate/expressions-copilot"
+  - "https://learn.microsoft.com/power-automate/fix-flow-failures"
+  - "https://learn.microsoft.com/azure/logic-apps/workflow-definition-language-functions-reference"
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Copilot in Power Automate"
+    sub: "Describe a flow, then review what it built"
+    short: hook
+    narration: >
+      Type one sentence and Copilot builds the trigger and the actions of a cloud flow. At Contoso, that sentence is
+      remind every borrower of an overdue equipment loan. It works, but the flow it builds is a draft. We use it on the real lab, then review the result with code. Welcome to
+      Dev Lad Log, Copilot and A I.
+
+  - id: does
+    type: bullets
+    heading: "What Copilot does in cloud flows"
+    bullets:
+      - "Create a flow from a prompt, with its connections"
+      - "Edit it in the designer's Copilot pane"
+      - "Explain what a flow does, suggest a description"
+      - "Troubleshoot in Copilot, on a failed run"
+      - "Expression assistant (preview)"
+    narration: >
+      What does it do? On the Home page you describe the flow, Copilot suggests a trigger and actions, and sets up the
+      connections. Inside the designer, a Copilot pane edits the flow, answers what does my flow do, and suggests a
+      description. On a failed run, Troubleshoot in Copilot explains the error. And the expression assistant, still
+      in preview, writes expressions.
+
+  - id: needs
+    type: bullets
+    heading: "What it needs"
+    bullets:
+      - "The new designer: the classic designer has no Copilot"
+      - "A work or school account, not a personal one"
+      - "Optimised for English"
+      - "Licence: standalone, seeded Microsoft 365, or Power Apps or Dynamics"
+      - "Europe: on by default, unless an admin opts out of cross-geo"
+    narration: >
+      What does it need? The new designer, because the classic one has no Copilot. A work or school account. English is
+      what it is optimised for. Learn lists a standalone Power Automate licence, a seeded Microsoft three six five
+      licence, or a Power Apps or Dynamics licence. In Europe it is on by default, unless an admin opts out of cross
+      geo data sharing.
+
+  - id: create-screen
+    type: screen
+    heading: "Create with Copilot"
+    image: screens/create-flow.jpg
+    bar: "make.powerautomate.com · DEV · Create with Copilot"
+    demo: "Browser as labadmin on make.powerautomate.com, environment DEV, Home. Create with Copilot. Prompt: 'Every weekday at 8:00, get the overdue items from the SharePoint list Equipment loans, email each borrower a reminder with Outlook, then post the number of overdue loans in the Teams channel General.' Capture the prompt, the suggested trigger and actions, Keep it and continue, the connections step with green checks, Create flow, and the designer with the Copilot pane. Mask the site URL and tenant name."
+    narration: >
+      Here is the prompt we use. Every weekday at eight, get the overdue loans from a SharePoint list, email each
+      borrower with Outlook, then post the count in a Teams channel. Copilot proposes the structure. We keep it,
+      check that the connections have green ticks, and create the flow. Learn says to write when X happens, do Y, and
+      to name the connector.
+
+  - id: tips
+    type: bullets
+    heading: "Prompts that work, and prompts that do not"
+    bullets:
+      - "Create: describe it in detail, name the connector"
+      - "Edit: one request per message, start with a verb"
+      - "Give field names and values"
+      - "Not: fix my flow, why did it fail, what columns does my list have"
+    narration: >
+      Learn's advice is specific. On the Home page, describe the flow in detail and name the connector. Inside the
+      designer, give one instruction at a time, start with a verb, and include the field names. And do not ask it to
+      fix my flow, or why a run failed, or what columns your list has.
+
+  - id: cannot
+    type: bullets
+    heading: "What it cannot do yet (Learn)"
+    bullets:
+      - "Debug runtime errors from the designer"
+      - "Read your lists, tables or databases"
+      - "Fix expired connections"
+      - "Reliably edit deeply nested logic"
+      - "Write complex nested expressions"
+    narration: >
+      Microsoft Learn is honest about the limits. From the designer it cannot debug runtime errors, it cannot read
+      your lists or tables, it cannot fix an expired connection, it can get deeply nested logic wrong, and complex
+      nested expressions are often incorrect or incomplete.
+
+  - id: draft-code
+    type: code
+    heading: "A first draft has the habits of a draft"
+    lang: json
+    code: |
+      "Every_weekday_at_8": {
+        "type": "Recurrence",
+        "recurrence": { "frequency": "Week", "interval": 1,
+          "schedule": { "weekDays": ["Monday", "Tuesday", "Wednesday",
+                                     "Thursday", "Friday"],
+                        "hours": ["8"], "minutes": [0] } }
+      },
+      ...
+      "emailMessage/To": "@items('Apply_to_each')?['BorrowerEmail']",
+      "emailMessage/Cc": "facilities@contoso.example",
+      "emailMessage/Body": "... @{formatDateTime(items('Apply_to_each')?['DueDate'], 'DD-MM-YYYY')} ..."
+    narration: >
+      This is a hand written draft, in the shape of such a flow. The recurrence has no time zone. A copy address is
+      typed into the action. There is no path for failure. And a date format that looks fine, and is not. Let us write the review as code.
+
+  - id: review-code
+    type: code
+    heading: "Rule: no path for failure"
+    lang: python
+    code: |
+      side_effects = [p for p, a, _ in actions if a.get("type") in ("OpenApiConnection", "ApiConnection")
+                      and operation_of(a) and not operation_of(a).startswith(READ_PREFIXES)]
+      has_failure_path = any(
+          status in ("Failed", "TimedOut")
+          for _, a, _ in actions for statuses in (a.get("runAfter") or {}).values() for status in statuses
+      )
+      if side_effects and not has_failure_path:
+          findings.append(Finding("FR002", "warning", "flow",
+              f"{len(side_effects)} action(s) with side effects and no action that runs after a failure. "
+              "Wrap the work in a Scope and add a second Scope that runs after Failed or TimedOut"))
+    narration: >
+      The reviewer reads the flow definition as Json. One rule: if the flow sends or changes something, is there any
+      action that runs after a failure? Learn's tips page describes the fix, a scope for the work and a second scope
+      with run after set to failed. Copilot can add it if you ask. It does not add it by itself.
+
+  - id: review-screen
+    type: screen
+    heading: "Export, unpack, review"
+    image: screens/review-draft.jpg
+    bar: "PowerShell 7 · pac solution unpack · copilot_flow_review flow"
+    short: review
+    demo: "Terminal (dark, 18 pt, 1600x900). The flow Copilot just created is in the solution Loan reminders, exported unmanaged to LoanReminders.zip. Run: pac solution unpack --zipfile LoanReminders.zip --folder unpacked ; then python -m copilot_flow_review flow unpacked  (run from src/). Visible: which findings the REAL Copilot flow produced (FR001 FR002 FR005 and whatever else), with the summary line. If the real flow is cleaner than the sample, say so: that is the result."
+    narration: >
+      Now the real flow. We put it in a solution, export it, and unpack it with the Power Platform command line, which
+      needs no sign in. The reviewer reads every flow in the folder. These are the findings for what Copilot really
+      built. Warnings are for a person to decide; only a broken expression is an error.
+
+  - id: expr-code
+    type: code
+    heading: "Expressions: D is not a date format"
+    lang: python
+    code: |
+      def check_date_format(pattern: str, where: str = "format") -> list[Finding]:
+          if len(pattern) == 1:
+              return []   # a single character is a standard format specifier
+          literal = pattern.replace("'", "")
+          # d, f, F, g, h, H, K, m, M, s, t, y, z, : and / are specifiers.
+          # D, Y and S are not, so they are copied into the result as letters.
+          wrong = sorted({ch for ch in literal if ch in "DYS"})
+          if wrong:
+              return [Finding("EX003", "warning", where,
+                  f"Pattern '{pattern}': {', '.join(wrong)} is not a .NET custom format specifier ...")]
+    narration: >
+      Expressions next. Learn's own sample prompt for the expression assistant is, format trigger date to D D dash M M.
+      The format argument of format date time is a dot net pattern, and in those patterns a capital D is not a
+      specifier. Our checker also knows the function list from Learn, and finds missing brackets.
+
+  - id: expr-screen
+    type: screen
+    heading: "Ask the expression assistant, then run it"
+    image: screens/expression.jpg
+    bar: "Power Automate designer · Compose · fx · Create expression with Copilot"
+    short: gotcha
+    demo: "In the designer, add a Compose action. Click the field, fx, Create expression with Copilot. Prompt: Format TriggerDate to 'DD-MM' format (use a Compose holding utcNow() as the date, or the real trigger date). Capture the expression Copilot returns, OK, Save, Test with a manual or recent run, and open the Compose output. Then run the same expression text through: python -m copilot_flow_review expr \"<expression>\" . Capture what the flow really returned. If Copilot already wrote dd-MM, say that; if it wrote DD-MM, show the real output next to it."
+    narration: >
+      The real assistant. We ask for the Learn sample prompt, and see what expression comes back. Then we do the only
+      real evaluation there is: we run the flow and open the output of the Compose action. Our checker only warns. Whatever the output shows is the truth, so the screen shows it, whether Copilot got it right or not.
+
+  - id: troubleshoot-screen
+    type: screen
+    heading: "Troubleshoot in Copilot"
+    image: screens/troubleshoot.jpg
+    bar: "Power Automate · run history · Troubleshoot in Copilot"
+    demo: "Make the flow fail on purpose: in the Teams action point the channel at a channel the connection cannot post to, or break the list name, then Test. In the failed run open the red action and select Troubleshoot in Copilot (new designer). Capture the error, Copilot's summary and its suggested fix. Then restore the flow. If Copilot's suggestion is wrong, keep it: Learn says the feature might not work in all scenarios."
+    narration: >
+      Troubleshoot in Copilot lives on the run, not in the designer pane. We break the Teams action on purpose, run
+      the flow, and ask. It gives a readable summary of the error and, when it can, a fix. Learn says it might not work
+      in every scenario, so read the suggestion before you apply it.
+
+  - id: gotcha
+    type: bullets
+    heading: "Gotcha: not every flow opens with Copilot"
+    bullets:
+      - "Legacy connections (APIConnection): no Copilot editing"
+      - "Solution flows must use connection references"
+      - "A flow with a comment, or some hybrid triggers"
+      - "Perform a changeset request, Power Pages component"
+    narration: >
+      Here is the gotcha. The Copilot F A Q lists flows the designer with Copilot cannot edit. Older connections
+      that show A P I Connection in Peek code. Solution flows that use connections instead of connection references.
+      Flows with a comment, some triggers, and a few Dataverse actions. Our reviewer flags the first two, because they
+      are visible in the Json. The rest, Studio will tell you.
+
+  - id: licence
+    type: bullets
+    heading: "Licence, cost, and names"
+    bullets:
+      - "Designer Copilot: no extra licence listed on Learn"
+      - "Prompts inside flows: Copilot Credits"
+      - "Copilot Studio agents can be called from flows"
+      - "Flows as plugins in Microsoft 365 Copilot (preview)"
+    narration: >
+      What does it cost? The Learn pages for the designer list the licences we saw, and no extra charge. Copilot Credits
+      are documented for A I prompts and models used inside flows, which is a different feature. Related pieces are
+      Copilot Studio agents called from a flow, and flows as plugins in Microsoft three six five Copilot, in preview.
+     
+
+  - id: monday
+    type: bullets
+    heading: "What to do on Monday"
+    bullets:
+      - "Prompt in detail, then edit one step at a time"
+      - "Export, unpack, run the review"
+      - "Test the flow: Copilot does not run it for you"
+    narration: >
+      On Monday, prompt in detail, then edit one step at a time. Put the flow in a solution, unpack it, and run the
+      review. And test the flow with real data, because Copilot builds it, and does not run it. Next episode, Copilot in
+      Power B I and Fabric.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The reviewer, the samples and the tests are on GitHub, and the Microsoft Learn pages are in the description. This
+      was Dev Lad Log, Copilot and A I, by Momento Galático.
