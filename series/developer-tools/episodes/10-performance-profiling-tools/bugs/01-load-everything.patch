@@ -1,0 +1,29 @@
+diff --git a/src/Contoso.Orders.Api/Reports.cs b/src/Contoso.Orders.Api/Reports.cs
+index e790e9a..1035751 100644
+--- a/src/Contoso.Orders.Api/Reports.cs
++++ b/src/Contoso.Orders.Api/Reports.cs
+@@ -16,18 +16,13 @@ public static class Reports
+ 
+     public static async Task<MonthlyRevenue> MonthlyRevenueAsync(OrdersDb db, DateOnly firstDay, CancellationToken ct = default)
+     {
+-        var nextMonth = firstDay.AddMonths(1);
+-        // The month is a half-open range: first day of the month up to, not including, the first day of the next one.
+-        // The database filters and groups: one row per customer comes back, not every order of the month.
+-        var rows = await db.Orders.AsNoTracking()
+-            .Where(o => o.Created >= firstDay && o.Created < nextMonth)
+-            .GroupBy(o => o.Customer)
++        var month = firstDay.ToString("yyyy-MM", CultureInfo.InvariantCulture);
++        var everything = await db.Orders.ToListAsync(ct);
++        var orders = everything.Where(o => o.Created.ToString("yyyy-MM", CultureInfo.InvariantCulture) == month).ToList();
++        var customers = orders.GroupBy(o => o.Customer)
+             .Select(g => new RevenueRow(g.Key, g.Count(), g.Sum(o => o.Total)))
+-            .ToListAsync(ct);
+-
+-        var customers = rows.OrderByDescending(r => r.Revenue).ToList();
+-        return new MonthlyRevenue(firstDay.ToString("yyyy-MM", CultureInfo.InvariantCulture), customers.Sum(c => c.Orders),
+-            customers.Sum(c => c.Revenue), customers);
++            .OrderByDescending(r => r.Revenue).ToList();
++        return new MonthlyRevenue(month, orders.Count, customers.Sum(c => c.Revenue), customers);
+     }
+ }
+ 

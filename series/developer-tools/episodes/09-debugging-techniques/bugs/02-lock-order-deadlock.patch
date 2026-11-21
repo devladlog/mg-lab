@@ -1,0 +1,17 @@
+diff --git a/src/Contoso.Orders.Api/Reports.cs b/src/Contoso.Orders.Api/Reports.cs
+index 167d1b1..b46e7c4 100644
+--- a/src/Contoso.Orders.Api/Reports.cs
++++ b/src/Contoso.Orders.Api/Reports.cs
+@@ -83,10 +83,10 @@ public sealed class ReportCache(int holdMs = 0)
+ 
+     public CacheStats Snapshot()
+     {
+-        lock (_entries)
++        lock (_stats)
+         {
+             Hold();
+-            lock (_stats)
++            lock (_entries)
+             {
+                 return new CacheStats(_byMonth.Count, _hits, _misses);
+             }

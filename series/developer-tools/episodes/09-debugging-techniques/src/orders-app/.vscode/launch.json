@@ -1,0 +1,30 @@
+{
+  // F5 on "Orders API (debug)" builds first (tasks.json), starts the API on http://localhost:8080 and attaches the debugger.
+  // "attach" is for an API that is already running (dotnet run, a terminal, another tool): pick its process from the list.
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Orders API (debug)",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "build",
+      "program": "${workspaceFolder}/src/Contoso.Orders.Api/bin/Debug/net10.0/Contoso.Orders.Api.dll",
+      "args": [],
+      "cwd": "${workspaceFolder}/src/Contoso.Orders.Api",
+      "console": "internalConsole",
+      "justMyCode": true,
+      "env": {
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "ASPNETCORE_URLS": "http://localhost:8080",
+        "Orders__Cache__HoldMs": "0"
+      }
+    },
+    {
+      "name": "Orders API (attach to a running process)",
+      "type": "coreclr",
+      "request": "attach",
+      "processId": "${command:pickProcess}",
+      "justMyCode": true
+    }
+  ]
+}

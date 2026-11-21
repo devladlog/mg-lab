@@ -1,0 +1,17 @@
+diff --git a/src/Contoso.Orders.Api/Reports.cs b/src/Contoso.Orders.Api/Reports.cs
+index 98a01f9..6ed79ce 100644
+--- a/src/Contoso.Orders.Api/Reports.cs
++++ b/src/Contoso.Orders.Api/Reports.cs
+@@ -16,10 +16,9 @@ public static class Reports
+ 
+     public static async Task<MonthlyRevenue> MonthlyRevenueAsync(OrdersDb db, DateOnly firstDay, CancellationToken ct = default)
+     {
+-        var nextMonth = firstDay.AddMonths(1);
+-        // The month is a half-open range: first day of the month up to, not including, the first day of the next one.
++        var lastDay = firstDay.AddMonths(1).AddDays(-1);
+         var orders = await db.Orders.AsNoTracking()
+-            .Where(o => o.Created >= firstDay && o.Created < nextMonth)
++            .Where(o => o.Created >= firstDay && o.Created < lastDay)
+             .ToListAsync(ct);
+ 
+         // One month of orders is small: group and sum in memory.

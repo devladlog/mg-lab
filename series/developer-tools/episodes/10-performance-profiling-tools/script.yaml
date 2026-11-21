@@ -1,0 +1,235 @@
+# DEVLADLOG Dev Tools — episode 10. Code excerpts and outputs are real (src/orders-app, bugs/, tests/, run on the build
+# machine on 21 Nov 2026: .NET SDK 10.0.115, dotnet-counters and dotnet-trace 10.0.750501, 100000 seeded orders, Release build,
+# a shared 2 CPU machine: the milliseconds are real but noisy). The three `screen` scenes are recorded later on the Windows
+# recording laptop (Windows Terminal, speedscope.app in a browser): see demo.md.
+episode: 10
+slug: performance-profiling-tools
+series_label: "DEV TOOLS"
+series_name: "DEVLADLOG Dev Tools"
+file_prefix: "developer-tools"
+title: "Performance profiling: measure first, then fix the right line"
+subtitle: "Load, dotnet-counters, dotnet-trace, Speedscope and a guard that cannot flake"
+voice: am_michael
+thumbnail_text: "GREEN TESTS.\nSLOW\nREPORT."
+youtube:
+  title: "Profiling .NET: dotnet-counters, dotnet-trace, Speedscope and EF Core | DEVLADLOG Dev Tools #10"
+  tags: [performance, profiling, dotnet-trace, dotnet-counters, speedscope, EF Core, ASP.NET Core, SQLite, GC, load test, DevTools]
+sources:
+  - https://www.devladlog.com/articles/developer-tools/2025-12-20-performance-profiling-tools-complete-guide-2025/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Green tests. Slow report."
+    sub: "Measure first, then fix"
+    short: hook
+    narration: >
+      Every test is green, and the finance report takes two seconds. Nobody wrote a bug here. The code is
+      just slow, and a guess about why is usually wrong. Last time the report was wrong. This time it is
+      correct, and too slow for the people who wait for it. Today we measure instead, on the same orders A P I.
+      Load, counters, a trace, one fix, and a guard that stays. Welcome to DEVLADLOG Dev Tools.
+
+  - id: plan
+    type: bullets
+    heading: "Measure, then fix"
+    bullets:
+      - "Load: p50 and p95, same every time"
+      - "dotnet-counters: allocations and GC"
+      - "dotnet-trace: where the threads are busy"
+      - "Fix one thing, measure again"
+      - "A test that counts queries and bytes"
+    narration: >
+      The plan. One, a repeatable load, so the numbers mean something. Two, runtime counters, to see
+      allocations and garbage collection. Three, a trace, to see which methods are busy. Four, fix one thing
+      and measure again. And five, a test that keeps it fixed without depending on how fast the machine is.
+
+  - id: load
+    type: code
+    heading: "A load you can repeat"
+    lang: text
+    code: |
+      # tools/load.py: for every request
+      POST /reports/cache/invalidate      # a cached answer measures nothing
+      GET  /reports/monthly?month=2026-03 # timed
+
+      # 100000 orders, Release build, before the fix
+      p50   1846 ms
+      p95   2908 ms
+    narration: >
+      The load is a small script. Before every request it empties the report cache, because a cached answer
+      measures nothing. Then it asks for one month and times it, from two workers at once. Always measure a
+      Release build, because a debug build tells you about the debug build. With one hundred thousand orders,
+      the median is one point eight seconds and the ninety fifth percentile two point nine. That is the
+      number to beat.
+
+  - id: counters
+    type: screen
+    heading: "dotnet-counters while the load runs"
+    image: screens/counters.jpg
+    bar: "Windows Terminal · dotnet-counters collect"
+    demo: >
+      Windows Terminal, src/orders-app, the slow patch applied and the Release API running with 100000 orders. Start
+      tools/load.py in one tab. In another tab run dotnet tool run dotnet-counters monitor -p <pid> --counters
+      System.Runtime and show the live table: allocation rate, GC collections per generation, GC pause time. Then run
+      scripts/profile.sh for the file version and show the counters summary line.
+    narration: >
+      Counters first, because they are cheap. While the load runs, dot net counters shows the allocation rate
+      and the garbage collections as they happen. The numbers are not subtle.
+
+  - id: countersout
+    type: code
+    heading: "What the counters said"
+    lang: text
+    code: |
+      $ python3 tools/counters_summary.py profile/counters.json
+      window 14 s: CPU 7.6 s, allocated 813.2 MB (58.1 MB/s), GC pause 5.54 s, collections gen0/gen1/gen2 12/2/10, working set max 353 MB
+      GET /reports/monthly: server-side p50 about 3726 ms, worst p95 4477 ms
+    narration: >
+      In fourteen seconds the process allocated more than eight hundred megabytes, and the collector paused
+      the program for five and a half seconds. Ten of the collections were generation two, the expensive
+      kind. That is a program loading far more than it needs. The server side median is higher than the
+      load script saw, because the trace was running at the same time. Tracing is not free, so compare
+      like with like.
+
+  - id: trace
+    type: screen
+    heading: "dotnet-trace into Speedscope"
+    image: screens/trace.jpg
+    bar: "Windows Terminal · speedscope.app"
+    demo: >
+      Same session. Show the dotnet-trace collect command from scripts/profile.sh with the dotnet-sampled-thread-time profile
+      and --format Speedscope, then open profile/trace.speedscope.json in https://www.speedscope.app (the file is read in the
+      browser, nothing is uploaded). Switch to the Sandwich view, sort by Self, and point at the Sqlite and ChangeTracking
+      frames at the top. Then show python3 tools/speedscope_top.py output next to it.
+    narration: >
+      Now the trace. Dot net trace samples every thread while the load runs, and converts the result to a
+      Speedscope file. Speedscope is a viewer that opens the file in the browser. Its sandwich view sorts
+      methods by their own time. Look at the top.
+
+  - id: hunch
+    type: code
+    heading: "Gotcha: the hunch was wrong"
+    lang: text
+    code: |
+      Busy thread time in the trace: 31.5 s (all threads added up)
+
+      Top 5 by self time
+       21.6%  SQLitePCL.ISQLite3Provider.sqlite3_data_c…
+       12.9%  Microsoft.Data.Sqlite.SqliteDataReader.GetInt32
+       12.5%  Microsoft.Data.Sqlite.SqliteDataRecord.Read
+        8.0%  EntityFrameworkCore.ChangeTracking.Internal.StateManager.StartTrackin…
+
+      Inclusive time
+       84.2%  EntityFrameworkCore.EntityFrameworkQueryableExtensions.ToListAsync
+        0.1%  System.DateOnly.ToString
+    short: hunch
+    narration: >
+      The gotcha. My hunch was the string formatting, because the code formats a date for every order. The
+      profile says no. Date formatting is a tenth of a percent. Eighty four percent of the busy time is
+      inside To List Async, reading rows from SQLite and tracking each one in the change tracker. The slow
+      part is loading every order. Without the trace I would have optimized the wrong line.
+
+  - id: before
+    type: code
+    heading: "Before: load everything"
+    lang: csharp
+    code: |
+      var month = firstDay.ToString("yyyy-MM", CultureInfo.InvariantCulture);
+      var everything = await db.Orders.ToListAsync(ct);
+      var orders = everything.Where(o => o.Created.ToString("yyyy-MM", CultureInfo.InvariantCulture) == month).ToList();
+      var customers = orders.GroupBy(o => o.Customer)
+          .Select(g => new RevenueRow(g.Key, g.Count(), g.Sum(o => o.Total)))
+          .OrderByDescending(r => r.Revenue).ToList();
+    narration: >
+      Here is the code. It loads the whole table into memory, tracked, then filters in C sharp, then groups.
+      Every month's report pays for every order ever placed. All the tests pass, because the answer is
+      correct. It is only slow.
+
+  - id: fix
+    type: code
+    heading: "After: the database does the work"
+    lang: csharp
+    code: |
+      var rows = await db.Orders.AsNoTracking()
+          .Where(o => o.Created >= firstDay && o.Created < nextMonth)
+          .GroupBy(o => o.Customer)
+          .Select(g => new RevenueRow(g.Key, g.Count(), g.Sum(o => o.Total)))
+          .ToListAsync(ct);
+    narration: >
+      The fix is one query. Filter by date range and group by customer in the database, so only one row per
+      customer comes back. No tracking either, because a report never saves anything. One change, and the
+      range is the same half open range we fixed in the last episode.
+
+  - id: after
+    type: screen
+    heading: "Same load, new numbers"
+    image: screens/after.jpg
+    bar: "Windows Terminal · tools/load.py"
+    demo: >
+      Windows Terminal. Stop the slow API, git apply -R bugs/01-load-everything.patch (or checkout the shipped Reports.cs),
+      rebuild in Release, start the API with Orders__SeedCount=100000 and the same database file, then run the same
+      python3 tools/load.py http://localhost:5080 --requests 30. Show p50 and p95 next to the numbers from before.
+    narration: >
+      Same load, same data, new build. The median is twenty milliseconds and the ninety fifth percentile fifty.
+      That is about ninety times faster at the median, and the garbage collector has nothing to do.
+
+  - id: result
+    type: code
+    heading: "Measured, 100000 orders"
+    lang: text
+    short: result
+    code: |
+      GET /reports/monthly, cache emptied before every request
+
+                   p50       p95
+      before    1846 ms   2908 ms
+      only SQL   128 ms    271 ms     # filter in SQL, still loads every order of the month
+      after       20 ms     50 ms     # filter and group in SQL
+    narration: >
+      Two steps, two measurements. Filtering in the database alone gives one hundred twenty eight
+      milliseconds. Grouping there too gives twenty, and the second step only mattered because the first one
+      made the report fast enough to see it. Those numbers come from a shared two C P U machine, so read
+      them as an order of magnitude, not as a benchmark.
+
+  - id: guard
+    type: code
+    heading: "A guard that cannot flake"
+    lang: csharp
+    code: |
+      var sql = Assert.Single(_sql.Commands);
+      Assert.Contains("WHERE", sql);
+      Assert.Contains("GROUP BY", sql);
+
+      var before = GC.GetTotalAllocatedBytes(precise: true);
+      await Reports.MonthlyRevenueAsync(db, new DateOnly(2026, 4, 1));
+      var allocated = GC.GetTotalAllocatedBytes(precise: true) - before;
+      Assert.True(allocated < AllocationBudgetBytes,
+          ...);
+    narration: >
+      Now keep it fixed. A time limit in a test flakes on a busy build agent. Counting does not. One test
+      captures the S Q L and asserts one query with a where and a group by. Another measures allocated bytes
+      against a budget of one megabyte. The fixed code uses about three hundred forty kilobytes, the slow code
+      six megabytes, so the budget fails the slow version and passes the fast one. The functional tests
+      cannot tell the two apart, and that is exactly why this guard exists.
+
+  - id: recap
+    type: bullets
+    heading: "Five habits"
+    bullets:
+      - "Repeat the same load"
+      - "Counters first, they are cheap"
+      - "Trace, then fix what the trace says"
+      - "One change, then measure again"
+      - "Guard with counts, not seconds"
+    narration: >
+      Five habits. Repeat the same load. Start with counters, they are cheap. Trace, and fix what the trace
+      says, not what you suspect. Change one thing and measure again. And guard it with counts of queries and
+      bytes, not seconds. Sixty two automated tests check all of this before it reaches the recording.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The patch, the tools and every test are on GitHub, and the complete guide is on devladlog dot com.
+      Next time we look at the packages this A P I depends on. Subscribe so you don't miss it. This was DEVLADLOG Dev Tools, by Momento Galático.

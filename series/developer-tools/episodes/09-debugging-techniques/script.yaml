@@ -1,0 +1,283 @@
+# DEVLADLOG Dev Tools — episode 09. Code excerpts and outputs are real (src/orders-app, bugs/, tests/, run on the build
+# machine on 21 Nov 2026: .NET SDK 10.0.115, dotnet-stack and dotnet-dump 10.0.750501, git bisect). The four `screen`
+# scenes are recorded later on the Windows recording laptop (VS Code, Windows Terminal, Docker Desktop): see demo.md.
+episode: 9
+slug: debugging-techniques
+series_label: "DEV TOOLS"
+series_name: "DEVLADLOG Dev Tools"
+file_prefix: "developer-tools"
+title: "Debugging techniques: find the bug, not the person who wrote it"
+subtitle: "Failing test, git bisect, the VS Code debugger, trace ids, a deadlock dump"
+voice: am_michael
+thumbnail_text: "WRONG\nNUMBERS.\nNO CRASH."
+youtube:
+  title: "Debugging .NET: git bisect, VS Code Debugger, Trace IDs and Deadlock Dumps | DEVLADLOG Dev Tools #9"
+  tags: [debugging, git bisect, VS Code, C# Dev Kit, ASP.NET Core, dotnet-dump, dotnet-stack, deadlock, logging, trace id, DevTools]
+sources:
+  - https://www.devladlog.com/articles/developer-tools/2025-12-13-debugging-techniques-complete-guide-2025/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Wrong numbers. No crash."
+    sub: "Five ways to find the bug"
+    short: hook
+    narration: >
+      Last time a test went red and we left it there. Today we find out why. The finance report is missing
+      the orders from the last day of the month. No exception, no crash, just wrong numbers. Here are five
+      techniques that find the cause in minutes, on the same orders A P I. Welcome to DEVLADLOG Dev Tools.
+
+  - id: plan
+    type: bullets
+    heading: "Five ways in"
+    bullets:
+      - "Turn the report into a failing test"
+      - "git bisect finds the commit"
+      - "The debugger shows the state"
+      - "One trace id finds one request"
+      - "A dump explains a hang"
+    narration: >
+      The plan. One, turn the report into a failing test, so the bug cannot hide. Two, let git bisect find the
+      commit that caused it. Three, step through the code in the debugger. Four, follow one request through the
+      logs with its trace id. And five, when the process hangs, read the threads from a dump.
+
+  - id: repro
+    type: code
+    heading: "First, a test that fails"
+    lang: csharp
+    code: |
+      [Fact]
+      public async Task MonthEnd_orders_are_part_of_the_month()
+      {
+          var january = await _client.GetFromJsonAsync<MonthlyRevenue>("/reports/monthly?month=2026-01");
+
+          var expected = Seed.Where(o => o.Created.Month == 1).ToList();
+          Assert.Contains(expected, o => o.Created == new DateOnly(2026, 1, 31));   // the case that went missing
+          Assert.Equal(expected.Count, january!.Orders);
+          Assert.Equal(expected.Sum(o => o.Total), january.Total);
+      }
+
+      // Expected: 30
+      // Actual:   29
+    narration: >
+      Start with a test. Ask for January, expect every seeded order, and name the one that goes missing, the
+      order dated the thirty first. It fails the right way. Expected thirty, actual twenty nine. Over the
+      whole year, seven of two hundred thirty seven orders vanish. A bug with a test is half fixed.
+
+  - id: redtest
+    type: screen
+    heading: "Red in the test explorer"
+    image: screens/redtest.jpg
+    bar: "VS Code · C# Dev Kit · Test Explorer"
+    demo: >
+      VS Code on the laptop, folder src/orders-app with bugs/01-month-end-off-by-one.patch applied (git apply).
+      Testing view: run MonthEnd_orders_are_part_of_the_month and Every_order_lands_in_exactly_one_month.
+      Show both red, the message "Expected: 30 Actual: 29" and the failing line highlighted in the editor.
+    narration: >
+      In VS Code the test explorer says the same thing, one click away from the failing line. Now, which
+      change broke it?
+
+  - id: bisect
+    type: code
+    heading: "git bisect run"
+    lang: bash
+    code: |
+      $ git bisect start HEAD <good-commit>
+      $ git bisect run scripts/bisect-repro.sh
+      running 'scripts/bisect-repro.sh'
+      Failed!  - Failed:     1, Passed:     0, Skipped:     0, Total:     1
+      Bisecting: 0 revisions left to test after this (roughly 1 step)
+      [6af12fc0] docs(api): note the report cache lifetime
+      running 'scripts/bisect-repro.sh'
+      Passed!  - Failed:     0, Passed:     1, Skipped:     0, Total:     1
+      3e895b58878c019f348eb8e00d0f2cd8d1a0d953 is the first bad commit
+          refactor(reports): compute the last day of the month once
+       src/Contoso.Orders.Api/Reports.cs | 5 ++---
+      bisect found first bad commit
+    short: bisect
+    narration: >
+      It worked last month, so let git do the searching. Give it one good commit, one bad commit, and a script
+      that exits zero or one. Six commits to search, two test runs, and git names the refactor that computed
+      the last day of the month once. The change is five lines in one file.
+
+  - id: skip
+    type: code
+    heading: "Gotcha: no test is not a failure"
+    lang: bash
+    code: |
+      if ! dotnet build "$project" --nologo -v q >/dev/null 2>&1; then
+          echo "bisect-repro: does not build, skip" >&2
+          exit 125
+      fi
+      # "dotnet test --filter" with a filter that matches nothing is not an error: it prints a warning and exits 0.
+      # Without this check a commit from before the test existed would be reported as good.
+      if ! grep -qE 'Passed: +1|Failed: +[1-9]' <<<"$out"; then
+          echo "bisect-repro: test $TEST did not run, skip" >&2
+          exit 125
+      fi
+    narration: >
+      One trap. Dot net test with a filter that matches nothing prints a warning and exits with zero, so an old
+      commit from before the test existed would look good. The script checks that the test really ran, and
+      otherwise exits with one twenty five, the code that tells git to skip a commit. A broken build is
+      skipped the same way.
+
+  - id: debugger
+    type: screen
+    heading: "Look at the state, don't guess"
+    image: screens/debugger.jpg
+    bar: "VS Code · F5 · Orders API (debug)"
+    demo: >
+      VS Code, same folder, patch 01 still applied. Run and Debug view, configuration "Orders API (debug)", F5. Breakpoint
+      on the line after the ToListAsync call in Reports.cs. Send GET /reports/monthly?month=2026-01 from the orders.http
+      file (REST Client). Execution stops: show Variables and Watch (orders.Count is 29; firstDay and lastDay), and in the
+      Debug Console evaluate orders.Any(o => o.Created == new DateOnly(2026, 1, 31)), which is false. Then add a logpoint
+      on the return line with the message "{firstDay} has {orders.Count} orders" and a condition breakpoint with
+      firstDay.Month == 1; continue and show the logpoint text appearing in the Debug Console without stopping.
+    narration: >
+      Now the debugger. F5 builds and starts the A P I from the launch configuration. A breakpoint after the
+      query, one request, and the orders are right there in the watch window. The thirty first is simply not
+      in the list. A log point prints a message in the debug console without stopping, and a condition makes a
+      breakpoint stop only for January.
+
+  - id: launch
+    type: code
+    heading: ".vscode/launch.json"
+    lang: json
+    code: |
+      {
+        "name": "Orders API (debug)",
+        "type": "coreclr",
+        "request": "launch",
+        "preLaunchTask": "build",
+        "program": "${workspaceFolder}/src/Contoso.Orders.Api/bin/Debug/net10.0/Contoso.Orders.Api.dll",
+        "cwd": "${workspaceFolder}/src/Contoso.Orders.Api",
+        "justMyCode": true,
+        ...
+      },
+      {
+        "name": "Orders API (attach to a running process)",
+        "type": "coreclr",
+        "request": "attach",
+        "processId": "${command:pickProcess}",
+      }
+    narration: >
+      The launch configuration is a small file in the repository. It builds first, runs the compiled A P I in
+      development mode, and keeps just my code on. The second entry attaches to a process that is already
+      running. A test builds the project the way the task does, and starts the program from that path.
+
+  - id: fix
+    type: code
+    heading: "The fix: a half-open range"
+    lang: csharp
+    code: |
+      var nextMonth = firstDay.AddMonths(1);
+      // The month is a half-open range: first day of the month up to, not including, the first day of the next one.
+      var orders = await db.Orders.AsNoTracking()
+          .Where(o => o.Created >= firstDay && o.Created < nextMonth)
+          .ToListAsync(ct);
+
+      [DebuggerDisplay("Order {Id}: {Customer}, {Total} on {Created}")]
+      public sealed class Order
+    narration: >
+      The fix is one range. A month starts on its first day and ends before the first day of the next month.
+      The test goes green and stays in the suite. And a small gift for the debugger, a debugger display
+      attribute on the order, so you read customer, total and date without expanding anything.
+
+  - id: trace
+    type: screen
+    heading: "One request in a sea of logs"
+    image: screens/trace.jpg
+    bar: "Windows Terminal · Docker Desktop · orders-api"
+    demo: >
+      Windows Terminal. The orders API image from episode 4 running with JSON logs and scopes (docker run -e
+      Logging__Console__FormatterName=json -e Logging__Console__FormatterOptions__IncludeScopes=true). First show the
+      curl -i response of GET /reports/monthly?month=2026-13 with a traceparent header (HTTP 400, the traceId field), then
+      `docker logs orders-api 2>&1 | python tools/trace_lines.py <the traceId value>`: one Warning line, "Rejected month".
+      Show one raw JSON log line with its Scopes array next to it.
+    narration: >
+      A customer sends you the trace id from an error. The A P I logs J S O N with scopes, so every line carries
+      the trace id of its request. Pipe the container logs through a small script, and only the lines of that
+      one request are left.
+
+  - id: traceid
+    type: code
+    heading: "Gotcha: traceId is not the trace id"
+    lang: text
+    code: |
+      # response body (HTTP 400)
+      "traceId": "00-4bf92f3577b34da6a3ce929d0e0e4736-0abc5f20fe987725-01"
+
+      # one log line, Scopes (Logging__Console__FormatterOptions__IncludeScopes=true)
+      {"SpanId":"41c290832a64bade","TraceId":"4bf92f3577b34da6a3ce929d0e0e4736","ParentId":"00f067aa0ba902b7"}
+
+      $ python3 tools/trace_lines.py 00-4bf92f3577b34da6a3ce929d0e0e4736-0abc5f20fe987725-01
+      Warning     Contoso.Orders.Reports: Rejected month 2026-13: expected yyyy-MM
+    narration: >
+      The gotcha. The trace id field in the error is not the trace id. It holds the W three C trace parent form:
+      version, trace id, span id and flags. The logs only have the middle part, so searching for the whole
+      value finds nothing. I checked this by running it. The script accepts both forms.
+
+  - id: hang
+    type: screen
+    heading: "Alive, but nothing answers"
+    image: screens/hang.jpg
+    bar: "Windows Terminal · scripts/triage-hang.sh"
+    demo: >
+      Windows Terminal (Git Bash), patch 02 applied, API started with dotnet run --no-launch-profile and
+      Orders__Cache__HoldMs=50. In two terminals: curl -X POST /reports/cache/invalidate and curl /reports/cache at the same
+      time: both hang, while curl /healthz still answers. Then run scripts/triage-hang.sh with the process id (dotnet-stack ps
+      shows it). Show the thread list, the two stuck threads in Monitor.Enter, the syncblk table with two owners, and the two
+      stack lines with Reports.cs and a line number. Delete the dump afterwards and say why on camera.
+    narration: >
+      Now the nasty one. Someone reordered two locks. Two requests that need both locks wait for each other
+      forever, while the rest of the A P I looks healthy. The script runs dot net stack, takes a dump, and asks
+      who owns which lock.
+
+  - id: triage
+    type: code
+    heading: "Two locks, opposite order"
+    lang: text
+    code: |
+      == threads (dotnet-stack report)
+      threads: 10
+        System.Private.CoreLib!System.Threading.Monitor.Enter(class System.Object,bool&)
+        Contoso.Orders.Api!Contoso.Orders.Api.ReportCache.Invalidate()
+        System.Private.CoreLib!System.Threading.Monitor.Enter(class System.Object,bool&)
+        Contoso.Orders.Api!Contoso.Orders.Api.ReportCache.Snapshot()
+      == lock owners (syncblk) and the stacks that wait (clrstack -all)
+      Index SyncBlock         MonitorHeld Recursion Owning Thread Info
+          6 000055829DAA49D0            3         1 000055829DAF6B50 2278  13
+          7 000055829DAA4A28            3         1 00007FA0C4004DB0 230a  20
+      ReportCache.Invalidate() [Reports.cs @ 76]
+      ReportCache.Snapshot() [Reports.cs @ 89]
+    short: hang
+    narration: >
+      Dot net stack lists every thread, and two of them wait in Monitor dot Enter, one in Invalidate and one in
+      Snapshot. The dump shows two locks, each owned by a different thread, and the stacks name the file and
+      line. A mini dump was not enough for the lock table, so I took one with heap. Dumps are copies of memory.
+      Delete them. The fix is one lock order everywhere, plus a test with a timeout, so a deadlock fails
+      instead of hanging.
+
+  - id: recap
+    type: bullets
+    heading: "Five habits"
+    bullets:
+      - "Reproduce it as a test first"
+      - "Let git bisect search, and teach it to skip"
+      - "Launch from a file in the repo, not from memory"
+      - "Log with scopes, search by trace id"
+      - "Dump a hang, then delete the dump"
+    narration: >
+      Five habits. Reproduce it as a test first. Let git bisect search, and teach it to skip what it cannot
+      test. Keep the launch configuration in the repository. Log with scopes and search by trace id. And when
+      a process hangs, take a dump, read it, and delete it. Seventy automated tests check this before it
+      reaches the recording.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The patches, the scripts and every test are on GitHub, and the complete guide is on devladlog dot com.
+      Next time the report is correct but slow, and we profile it. Subscribe so you don't miss it. This was
+      DEVLADLOG Dev Tools, by Momento Galático.
