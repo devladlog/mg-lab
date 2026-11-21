@@ -68,7 +68,12 @@ def background(W, H):
     return im.convert("RGBA")
 
 
-def header(d, W, ep, label="MG LAB"):
+# Series branding; overridden from script.yaml (series_label / series_name / file_prefix).
+SERIES = {"label": "MG LAB", "name": "MG Lab", "prefix": "mglab"}
+
+
+def header(d, W, ep, label=None):
+    label = label or SERIES["label"]
     d.text((70, 48), "MG", font=font("Inter-Bold.otf", 46), fill=WHITE)
     d.text((160, 62), f"{label}  ·  EPISODE {ep:02d}", font=font("Inter-Medium.otf", 24), fill=MUTED)
     d.text((W - 70, 62), "momentogalatico.com", font=font("Inter-Medium.otf", 24), fill=MUTED, anchor="ra")
@@ -267,7 +272,7 @@ def make_thumbnail(script, out):
     im = background(W, H)
     im = Image.alpha_composite(im, Image.new("RGBA", (W, H), (0, 0, 0, 40)))
     d = ImageDraw.Draw(im)
-    d.text((60, 50), "MG LAB", font=font("Inter-Bold.otf", 40), fill=BLUE)
+    d.text((60, 50), SERIES["label"], font=font("Inter-Bold.otf", 40), fill=BLUE)
     d.text((W - 60, 50), f"#{script['episode']:02d}", font=font("Inter-Bold.otf", 40), fill=WHITE, anchor="ra")
     fb = font("Inter-Bold.otf", 118)
     lines = script.get("thumbnail_text", script["title"]).split("\n")
@@ -315,7 +320,7 @@ def make_short(scene, script, wav, dur, slide_png, out, workdir):
         seg = dur * len(c) / total_chars
         im = background(W, H)
         d = ImageDraw.Draw(im)
-        d.text((60, 110), "MG LAB", font=font("Inter-Bold.otf", 44), fill=BLUE)
+        d.text((60, 110), SERIES["label"], font=font("Inter-Bold.otf", 44), fill=BLUE)
         d.text((W - 60, 110), f"EP {script['episode']:02d}", font=font("Inter-Bold.otf", 44), fill=WHITE, anchor="ra")
         for j, l in enumerate(wrap(d, script["title"], font("Inter-Bold.otf", 64), W - 120)[:2]):
             d.text((60, 220 + j * 76), l, font=font("Inter-Bold.otf", 64), fill=WHITE)
@@ -335,7 +340,7 @@ def make_short(scene, script, wav, dur, slide_png, out, workdir):
     d.text((W / 2, 760), "Full episode", font=font("Inter-Bold.otf", 90), fill=WHITE, anchor="ma")
     d.text((W / 2, 870), "on YouTube", font=font("Inter-Bold.otf", 90), fill=WHITE, anchor="ma")
     d.rectangle((W / 2 - 150, 1000, W / 2 + 150, 1010), fill=BLUE)
-    d.text((W / 2, 1060), "MG Lab · @momentogalatico", font=font("Inter-SemiBold.otf", 48), fill=MUTED, anchor="ma")
+    d.text((W / 2, 1060), f"{SERIES['name']} · @momentogalatico", font=font("Inter-SemiBold.otf", 48), fill=MUTED, anchor="ma")
     pe = frames_dir / "end.png"
     end.convert("RGB").save(pe)
     concat_list.append(f"file '{pe.resolve()}'\nduration 2.5\nfile '{pe.resolve()}'\n")
@@ -368,6 +373,8 @@ def main():
     out = Path(a.out)
     work = out / "work"
     work.mkdir(parents=True, exist_ok=True)
+    SERIES.update(label=script.get("series_label", "MG LAB"), name=script.get("series_name", "MG Lab"),
+                  prefix=script.get("file_prefix", "mglab"))
     ep = script["episode"]
     for sc in script["scenes"]:
         sc["_base"] = str(Path(a.script).parent)
@@ -399,7 +406,7 @@ def main():
         t += dur
         print(f"[{i+1}/{len(script['scenes'])}] {sc['id']}: {speech:.1f}s", flush=True)
 
-    base = f"mglab-ep{ep:02d}-{script['slug']}"
+    base = f"{SERIES['prefix']}-ep{ep:02d}-{script['slug']}"
     if not a.only_shorts:
         concat(parts, out / f"{base}.mp4", ASSETS / "music.mp3")
         (out / f"{base}.srt").write_text(

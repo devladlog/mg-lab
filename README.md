@@ -23,6 +23,11 @@ A video series by [Momento Galático](https://momentogalatico.com), a Microsoft 
 Each episode folder contains the script, the code and a short written guide.
 Everything uses placeholder names and a demo tenant. No client code or data.
 
+## DEVLADLOG category series
+
+One video series and one social Spotlight series per [devladlog.com](https://www.devladlog.com) category (14 in total):
+plans, episode backlogs and episode stubs are in [`series/`](series/).
+
 ## How the videos are made
 
 The [`pipeline/`](pipeline/) folder turns an episode `script.yaml` into a narrated 1080p video,
