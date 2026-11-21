@@ -1,0 +1,82 @@
+episode: 3
+series: "DEVLADLOG Windows Server"
+status: draft-hold-for-review
+ai_label: true
+youtube_url: "{YOUTUBE_URL}"
+linkedin_company:
+  text: |
+    Somebody tightened the security filter on a policy. Now it applies to nobody, and nothing tells you. Group Policy fails quietly.
+
+    Episode 3 of DEVLADLOG Windows Server deploys GPOs from a file, proves they applied on a server, and audits the domain for the quiet failures. The lab is a fictional Contoso domain.
+
+    - Two GPOs described in one JSON file, deployed by a function that reads before it writes and supports WhatIf
+    - Proof on the server: gpresult, the registry value and the PowerShell operational log
+    - A snapshot of every GPO and link, with checks for settings in a disabled half, AD and SYSVOL version mismatches and unlinked or empty GPOs
+    - Backups that also record where each GPO was linked
+    - 27 Pester tests, no domain needed
+
+    The gotcha: remove Authenticated Users to narrow a filter and user policy stops applying, because the computer needs read access to the GPO.
+
+    Watch the episode: {YOUTUBE_URL}
+    Code and tests: {REPO_URL}
+    Written guide: {BLOG_URL}
+
+    Narration uses an AI voice.
+    #GroupPolicy #WindowsServer #PowerShell #ActiveDirectory
+linkedin_personal:
+  text: |
+    The classic Group Policy mistake: you narrow a security filter by removing Authenticated Users, and the policy quietly stops applying to the very users you targeted. Since the June 2016 update MS16-072, Windows reads user policy using the computer account, so the computer needs read on the GPO.
+
+    In the third DEVLADLOG Windows Server episode the deployment replaces Authenticated Users with read-only instead of removing it. One switch, and the filter works. The lesson: filter who applies the policy, never who can read it.
+
+    {YOUTUBE_URL}
+
+    #GroupPolicy #WindowsServer
+    Narration uses an AI voice.
+facebook:
+  text: |
+    A GPO in the console proves nothing. Ask the server.
+
+    In this DEVLADLOG episode we describe GPOs in one JSON file, deploy them with a PowerShell function that is safe to run twice, and prove on a real server that the settings arrived. Then we audit the whole domain for the quiet failures, including the security filter that makes a policy apply to nobody.
+
+    Watch it here: {YOUTUBE_URL}
+
+    #GroupPolicy #WindowsServer
+    Narration uses an AI voice.
+shorts:
+  - id: hook
+    youtube_short_title: "Who changed that GPO? Group Policy fails quietly #Shorts"
+    instagram_reel:
+      caption: |
+        Somebody tightened the security filter on a policy. Now it applies to nobody, and nothing tells you. Someone else disabled the user half of a policy that still holds user settings. Group Policy fails quietly, so we deploy GPOs from a file, prove they applied on a server, and audit the domain.
+
+        Full episode: link in bio
+
+        #GroupPolicy #WindowsServer #PowerShell
+      cover_text: "GPO FAILS QUIETLY"
+    tiktok:
+      caption: "A security filter that applies to nobody. A disabled user half with user settings. Group Policy fails quietly, so we audit it. Full episode on YouTube. #GroupPolicy #WindowsServer #PowerShell"
+  - id: idempotent
+    youtube_short_title: "Deploy GPOs from a JSON file: plan, apply, apply again #Shorts"
+    instagram_reel:
+      caption: |
+        The deployment reads before it writes. Every registry value is compared first, and only a difference triggers a change. Links are matched by GPO ID, and every change goes through ShouldProcess, so WhatIf shows the plan and changes nothing. Run it a second time and every row says no change.
+
+        Full episode: link in bio
+
+        #GroupPolicy #PowerShell #WindowsServer
+      cover_text: "PLAN, APPLY, APPLY AGAIN"
+    tiktok:
+      caption: "Describe GPOs in one JSON file. Compare first, change only differences, WhatIf shows the plan. Second run: no change. Full episode on YouTube. #GroupPolicy #PowerShell #WindowsServer"
+  - id: gotcha
+    youtube_short_title: "Why your user GPO stopped applying after you filtered it #Shorts"
+    instagram_reel:
+      caption: |
+        The classic mistake: remove Authenticated Users to narrow the security filter. The user is in the right group, yet the policy does not apply. Since the June 2016 update MS16-072, Windows reads user policy with the computer's account, so the computer needs read on the GPO. Give Authenticated Users read-only instead of removing it.
+
+        Full episode: link in bio
+
+        #GroupPolicy #WindowsServer #SysAdmin
+      cover_text: "USER POLICY, COMPUTER READ"
+    tiktok:
+      caption: "Removed Authenticated Users from a GPO filter and user policy stopped? Since MS16-072 the computer reads user policy. Keep it read-only. Full episode on YouTube. #GroupPolicy #WindowsServer"

@@ -1,0 +1,82 @@
+episode: 5
+series: "DEVLADLOG Windows Server"
+status: draft-hold-for-review
+ai_label: true
+youtube_url: "{YOUTUBE_URL}"
+linkedin_company:
+  text: |
+    The scheduled task that restarts the web server at 3 AM runs as a domain admin, and the password sits in the task, or worse, in the script.
+
+    Episode 5 of DEVLADLOG Windows Server rebuilds that job so it holds no password, and the only things it can do on the server are the three it needs. The lab is a fictional Contoso domain.
+
+    - A JEA endpoint generated from one JSON file, with a lint that checks the merged roles before anything is registered
+    - A runbook that decides, acts, logs and re-checks, with a circuit breaker after three restarts in 24 hours
+    - A group managed service account that runs it from Task Scheduler, so there is no password to store
+    - JEA transcripts as the audit trail
+    - 47 Pester tests, no servers needed
+
+    The gotcha: JEA sessions run in No Language mode, so the script uses implicit remoting and keeps full language locally.
+
+    Watch the episode: {YOUTUBE_URL}
+    Code and tests: {REPO_URL}
+    Written guide: {BLOG_URL}
+
+    Narration uses an AI voice.
+    #PowerShell #JEA #WindowsServer #SysAdmin
+linkedin_personal:
+  text: |
+    A JEA trap that looks harmless: helpdesk asks to restart the print spooler, so someone adds Restart-Service to the readers role with no constraints. Operators are in both roles, and JEA merges roles to the most permissive set. Now operators can restart any service.
+
+    In the fifth DEVLADLOG Windows Server episode a lint applies the merge rules from Microsoft Learn per group and fails the build. The lesson: check what each group gets after the merge, not each role on its own.
+
+    {YOUTUBE_URL}
+
+    #JEA #PowerShell
+    Narration uses an AI voice.
+facebook:
+  text: |
+    Your 3 AM script is a Domain Admin. Does it have to be?
+
+    In this DEVLADLOG episode we rebuild a nightly restart job with no password at all. A group managed service account runs it, a JEA endpoint limits it to the few commands it needs, and every session leaves a transcript. We also show the role-merging trap that quietly gives operators far too much.
+
+    Watch it here: {YOUTUBE_URL}
+
+    #PowerShell #WindowsServer
+    Narration uses an AI voice.
+shorts:
+  - id: hook
+    youtube_short_title: "Your 3 AM script is a Domain Admin #Shorts"
+    instagram_reel:
+      caption: |
+        The scheduled task that restarts the web server at three in the morning. It runs as a domain admin, and the password sits in the task, or worse, in the script. We rebuild that job so it holds no password at all, and the only things it can do on the server are the three things it needs.
+
+        Full episode: link in bio
+
+        #PowerShell #JEA #WindowsServer
+      cover_text: "3 AM SCRIPT = DOMAIN ADMIN"
+    tiktok:
+      caption: "Your 3 AM restart job runs as a domain admin with a stored password. We rebuild it: gMSA, JEA, three allowed commands. Full episode on YouTube. #PowerShell #JEA #WindowsServer"
+  - id: merge
+    youtube_short_title: "The JEA role merge trap that over-grants access #Shorts"
+    instagram_reel:
+      caption: |
+        Helpdesk asks to restart the print spooler, so someone adds Restart-Service to the reader role with no constraints. Operators are in both roles, and JEA merges roles to the most permissive set. So operators can now restart any service. The lint applies the merge rules from Microsoft Learn per group and fails the build.
+
+        Full episode: link in bio
+
+        #JEA #PowerShell #WindowsServer
+      cover_text: "JEA MERGES ROLES"
+    tiktok:
+      caption: "One unconstrained Restart-Service in a JEA role. Operators are in both roles, JEA merges to the most permissive set. Lint the merge. Full episode on YouTube. #JEA #PowerShell #WindowsServer"
+  - id: gotcha
+    youtube_short_title: "JEA runs in No Language mode: no variables #Shorts"
+    instagram_reel:
+      caption: |
+        The honest gotcha: JEA sessions run in No Language mode. You cannot use variables to store data or inspect object properties, so the obvious Invoke-Command with a variable inside fails. That is why the runbook uses implicit remoting. Import-PSSession brings in proxy commands, and the script keeps full language locally.
+
+        Full episode: link in bio
+
+        #JEA #PowerShell #WindowsServer
+      cover_text: "NO LANGUAGE MODE"
+    tiktok:
+      caption: "JEA sessions run in No Language mode, so no variables inside. Use implicit remoting with Import-PSSession and keep full language locally. Full episode on YouTube. #JEA #PowerShell"

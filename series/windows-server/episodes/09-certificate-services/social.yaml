@@ -1,0 +1,82 @@
+episode: 9
+series: "DEVLADLOG Windows Server"
+status: draft-hold-for-review
+ai_label: true
+youtube_url: "{YOUTUBE_URL}"
+linkedin_company:
+  text: |
+    A certificate authority fails in two quiet ways. A certificate expires and a service stops. Or a template lets anyone ask for a certificate with somebody else's name on it.
+
+    Episode 9 of DEVLADLOG Windows Server builds an enterprise CA in a fictional Contoso lab and writes the check that looks for both, read-only, from the admin server over WinRM.
+
+    - A collector for machine certificates, the CA service, its certificate, the CRL and distribution points, and every published template with its enrollment permissions
+    - Template rule: requester supplies the subject, can sign someone in, no approval, and a broad group can enroll is a High finding
+    - The CA built from a plan, with the irreversible step refused without a switch
+    - An HTTP revocation location added only if it is not already there
+    - 46 Pester tests, using real X.509 certificates instead of mocks
+
+    The gotcha: Learn's example for installing an enterprise root CA writes the values without quotes, and in PowerShell it stops with an error as printed. Our plan quotes the values and a test parses every generated script.
+
+    Watch the episode: {YOUTUBE_URL}
+    Code and tests: {REPO_URL}
+    Written guide: {BLOG_URL}
+
+    Narration uses an AI voice.
+    #ADCS #WindowsServer #PKI #PowerShell
+linkedin_personal:
+  text: |
+    One rule I now check in every certificate template: who chooses the name? If the requester can supply the subject or alternative name, the certificate can sign someone in, nobody approves the request, and a broad group like Domain Users can enroll, anyone in that group can ask for a certificate naming someone else.
+
+    In the ninth DEVLADLOG Windows Server episode that combination is a High finding. Approval or a named group lowers it to a note. The lesson: read the template permissions, not just the expiry dates.
+
+    {YOUTUBE_URL}
+
+    #ADCS #PKI
+    Narration uses an AI voice.
+facebook:
+  text: |
+    Who can ask your CA for what?
+
+    In this DEVLADLOG episode we build an enterprise certificate authority in the lab, then write a read-only check for the two quiet failures: certificates about to expire, and templates that let anyone request a certificate in someone else's name. We also show that Learn's own example for installing the root CA does not run as printed.
+
+    Watch it here: {YOUTUBE_URL}
+
+    #ADCS #WindowsServer
+    Narration uses an AI voice.
+shorts:
+  - id: hook
+    youtube_short_title: "Who can ask your CA for what? #Shorts"
+    instagram_reel:
+      caption: |
+        A certificate authority fails in two quiet ways. A certificate expires and a service stops. Or a template lets anyone ask for a certificate with somebody else's name on it. We build an enterprise CA in the lab, then write the check that looks for both, on every server, before anything breaks.
+
+        Full episode: link in bio
+
+        #ADCS #WindowsServer #PKI
+      cover_text: "WHO CAN ASK YOUR CA?"
+    tiktok:
+      caption: "A CA fails quietly: a certificate expires, or a template lets anyone request someone else's name. We build a check for both. Full episode on YouTube. #ADCS #WindowsServer #PKI"
+  - id: template
+    youtube_short_title: "The certificate template rule: who chooses the name? #Shorts"
+    instagram_reel:
+      caption: |
+        If the requester supplies the subject or the alternative name, if the certificate can sign someone in, if nobody approves the request, and if a broad group such as Domain Users or Domain Computers can enroll, that is a high finding. Anyone in that group can ask for a certificate that names someone else. Approval, or a named group, lowers it to a note.
+
+        Full episode: link in bio
+
+        #ADCS #PKI #WindowsServer
+      cover_text: "WHO CHOOSES THE NAME?"
+    tiktok:
+      caption: "Requester supplies the subject, certificate can sign in, no approval, Domain Users can enroll: High finding. Approval or a named group lowers it. Full episode on YouTube. #ADCS #PKI #WindowsServer"
+  - id: gotcha
+    youtube_short_title: "Learn's enterprise root CA example does not run as printed #Shorts"
+    instagram_reel:
+      caption: |
+        The gotcha: Learn's own example for installing an enterprise root CA writes the values without quotes. In PowerShell a bare word in a hash table is a command, so the example stops with an error. Our plan quotes the values, and a test parses every generated script before it can reach a server.
+
+        Full episode: link in bio
+
+        #ADCS #PowerShell #WindowsServer
+      cover_text: "DOCS EXAMPLE FAILS"
+    tiktok:
+      caption: "Learn's enterprise root CA example leaves values unquoted. In a PowerShell hash table a bare word is a command, so it errors. Quote it. Full episode on YouTube. #ADCS #PowerShell #WindowsServer"

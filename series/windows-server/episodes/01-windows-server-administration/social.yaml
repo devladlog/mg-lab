@@ -1,0 +1,81 @@
+episode: 1
+series: "DEVLADLOG Windows Server"
+status: draft-hold-for-review
+ai_label: true
+youtube_url: "{YOUTUBE_URL}"
+linkedin_company:
+  text: |
+    A pending reboot nobody noticed. A firewall profile switched off during a test. A file server that stopped patching months ago. Is every server where you think it is?
+
+    Episode 1 of DEVLADLOG Windows Server checks every server against one baseline file with a single PowerShell remoting command, on a fictional Contoso lab.
+
+    - A collector runs over Invoke-Command, in parallel, with nothing to install on the targets
+    - The rules live in a JSON baseline: build, patch age, disk space, forbidden and required features
+    - Pure checks turn a snapshot into findings, worst first, in a markdown report
+    - 32 Pester tests run on Linux, with no servers
+
+    The gotcha: the remote side is Windows PowerShell 5.1, so a collector that uses the ternary operator or ?? works locally and fails on every server. A test parses the collector and fails the build if one sneaks in.
+
+    Watch the episode: {YOUTUBE_URL}
+    Code, baseline and tests: {REPO_URL}
+    Written guide: {BLOG_URL}
+
+    Narration uses an AI voice.
+    #WindowsServer #PowerShell #Pester #SysAdmin
+linkedin_personal:
+  text: |
+    The bug that taught me most this month: a PowerShell collector that worked perfectly on my machine and failed on every server. I run PowerShell 7 locally, but the remote session lands in the default endpoint, which is Windows PowerShell 5.1. No ??, no ternary, no pipeline chains there.
+
+    So in the first DEVLADLOG Windows Server episode a Pester test parses the collector and fails the build if any of that syntax appears. The lesson: test for the runtime your code will really run on, not the one on your laptop.
+
+    {YOUTUBE_URL}
+
+    #WindowsServer #PowerShell
+    Narration uses an AI voice.
+facebook:
+  text: |
+    Is every one of your Windows servers where you think it is?
+
+    In this DEVLADLOG episode we write one baseline file and check every server against it with a single PowerShell remoting command. Pending reboots, firewall profiles, forbidden features, disk space, all in a report with the worst findings first. It also covers the update check that does not see every update.
+
+    Watch it here: {YOUTUBE_URL}
+
+    #WindowsServer #PowerShell
+    Narration uses an AI voice.
+shorts:
+  - id: hook
+    youtube_short_title: "Is every Windows Server where you think it is? #Shorts"
+    instagram_reel:
+      caption: |
+        A pending reboot nobody noticed. A firewall profile switched off during a test. A file server that stopped patching in July. One baseline file, every Windows Server checked against it with a single PowerShell remoting command, and the findings written to a report. Built on a fictional Contoso lab.
+
+        Full episode: link in bio
+
+        #WindowsServer #PowerShell #SysAdmin
+      cover_text: "EVERY SERVER, ONE BASELINE"
+    tiktok:
+      caption: "A pending reboot nobody noticed. A firewall profile off. One baseline file checks every Windows Server over PowerShell remoting. Full episode on YouTube. #WindowsServer #PowerShell #SysAdmin"
+  - id: report
+    youtube_short_title: "A server report with the worst findings first #Shorts"
+    instagram_reel:
+      caption: |
+        The baseline check ends in a markdown report: a summary row per server on top, then every finding with the High ones first. SMB 1 installed, the Public firewall profile off, Remote Desktop enabled on a server the baseline only manages remotely. The rules are in a JSON file, so you change the file, not the script.
+
+        Full episode: link in bio
+
+        #WindowsServer #PowerShell #SysAdmin
+      cover_text: "WORST FINDINGS FIRST"
+    tiktok:
+      caption: "One report per run: a row per server, then every finding, High first. SMB 1, firewall off, RDP on. Rules live in a JSON file. Full episode on YouTube. #WindowsServer #PowerShell"
+  - id: gotcha
+    youtube_short_title: "Get-HotFix does not list every Windows update #Shorts"
+    instagram_reel:
+      caption: |
+        The gotcha in our update check: Get-HotFix reads the Win32 Quick Fix Engineering class, and that class only returns updates from Component Based Servicing. Updates delivered by Windows Installer or the Windows Update site are not in it. Good for cumulative updates, so when it finds nothing dated, look at the update history instead.
+
+        Full episode: link in bio
+
+        #WindowsServer #PowerShell #SysAdmin
+      cover_text: "GET-HOTFIX MISSES UPDATES"
+    tiktok:
+      caption: "Get-HotFix only returns updates from Component Based Servicing. MSI and Windows Update site updates are not in it. Check the update history too. #WindowsServer #PowerShell #SysAdmin"

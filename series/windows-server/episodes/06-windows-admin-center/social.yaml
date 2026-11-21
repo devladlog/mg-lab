@@ -1,0 +1,83 @@
+episode: 6
+series: "DEVLADLOG Windows Server"
+status: draft-hold-for-review
+ai_label: true
+youtube_url: "{YOUTUBE_URL}"
+linkedin_company:
+  text: |
+    Four of our five lab servers have no desktop at all. They all get one browser tab: Windows Admin Center, installed as a gateway with a script.
+
+    Episode 6 of DEVLADLOG Windows Server covers the gateway end to end on a fictional Contoso lab.
+
+    - Where to install it: not on a domain controller, which Microsoft does not support, and not on a machine outside the domain
+    - A preflight that checks the domain role, port 443, the certificate and WinRM to every node before anything is installed
+    - Connections kept as a JSON file, validated, then imported and shared with Import-WACConnection
+    - Single sign-on through Kerberos delegation
+    - Read-only helpdesk access through role-based access control
+    - 41 Pester tests, no gateway needed
+
+    The gotcha: the one-liner in the docs, Set-ADComputer with PrincipalsAllowedToDelegateToAccount, replaces the whole list and can silently remove another gateway.
+
+    Watch the episode: {YOUTUBE_URL}
+    Code and tests: {REPO_URL}
+    Written guide: {BLOG_URL}
+
+    Narration uses an AI voice.
+    #WindowsAdminCenter #WindowsServer #PowerShell #SysAdmin
+linkedin_personal:
+  text: |
+    A one-liner from the docs that I will not paste blindly again. Single sign-on from a Windows Admin Center gateway needs Kerberos delegation, and the documented command uses Set-ADComputer with PrincipalsAllowedToDelegateToAccount. That parameter sets the attribute. If another gateway was already allowed, it is silently removed.
+
+    In the sixth DEVLADLOG Windows Server episode the script reads the current list, adds our gateway and writes the whole list back. The lesson: when a cmdlet sets instead of adds, read first.
+
+    {YOUTUBE_URL}
+
+    #WindowsAdminCenter #PowerShell
+    Narration uses an AI voice.
+facebook:
+  text: |
+    Five servers, one browser tab.
+
+    In this DEVLADLOG episode we install Windows Admin Center as a gateway with a script, share the connections through a JSON file, set up single sign-on, and give a helpdesk account read-only access. Four of the five lab servers have no desktop, so one tab is how we manage them. It also shows that the read-only access is built on JEA.
+
+    Watch it here: {YOUTUBE_URL}
+
+    #WindowsAdminCenter #WindowsServer
+    Narration uses an AI voice.
+shorts:
+  - id: hook
+    youtube_short_title: "Five servers, one browser tab: Windows Admin Center #Shorts"
+    instagram_reel:
+      caption: |
+        Four of our five lab servers have no desktop at all. Today they all get one browser tab: Windows Admin Center, installed as a gateway with a script, with shared connections, single sign-on, and a helpdesk account that can look at a server but cannot change it. And under the hood of that read-only access, a familiar friend.
+
+        Full episode: link in bio
+
+        #WindowsAdminCenter #WindowsServer #PowerShell
+      cover_text: "5 SERVERS, 1 BROWSER TAB"
+    tiktok:
+      caption: "Four of five lab servers have no desktop. One browser tab manages all of them: Windows Admin Center, installed by script. Full episode on YouTube. #WindowsAdminCenter #WindowsServer #PowerShell"
+  - id: gotcha
+    youtube_short_title: "Set-ADComputer silently replaces your delegation list #Shorts"
+    instagram_reel:
+      caption: |
+        Single sign-on from a gateway on Windows Server needs Kerberos delegation. The docs give a one-liner: Set-ADComputer with PrincipalsAllowedToDelegateToAccount. That parameter sets the attribute, so if another gateway was already allowed, the one-liner silently removes it. Read the current list, add your gateway, and write the whole list back.
+
+        Full episode: link in bio
+
+        #WindowsAdminCenter #ActiveDirectory #PowerShell
+      cover_text: "SET REPLACES THE LIST"
+    tiktok:
+      caption: "Set-ADComputer -PrincipalsAllowedToDelegateToAccount replaces the list. Read it, add yours, write it all back. Full episode on YouTube. #WindowsAdminCenter #ActiveDirectory #PowerShell"
+  - id: rbac
+    youtube_short_title: "Windows Admin Center read-only access is just JEA #Shorts"
+    instagram_reel:
+      caption: |
+        Windows Admin Center role-based access control is Just Enough Administration. Applying it on a node registers a JEA endpoint called Microsoft.Sme.PowerShell, creates three local groups, and runs the work as a temporary local administrator. Readers can look, but the PowerShell and Remote Desktop tools are not available to them.
+
+        Full episode: link in bio
+
+        #WindowsAdminCenter #JEA #WindowsServer
+      cover_text: "READ-ONLY IS JEA"
+    tiktok:
+      caption: "WAC role-based access control registers a JEA endpoint and three local groups. Readers get no PowerShell or Remote Desktop tool. Full episode on YouTube. #WindowsAdminCenter #JEA #WindowsServer"

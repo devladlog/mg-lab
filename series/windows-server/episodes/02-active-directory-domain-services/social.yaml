@@ -1,0 +1,82 @@
+episode: 2
+series: "DEVLADLOG Windows Server"
+status: draft-hold-for-review
+ai_label: true
+youtube_url: "{YOUTUBE_URL}"
+linkedin_company:
+  text: |
+    An admin account nobody has used since July, with a password that never expires. A recycle bin that was never switched on. A former admin who still does not inherit permissions. Active Directory never complains about any of it.
+
+    Episode 2 of DEVLADLOG Windows Server builds a new forest on Windows Server 2025 and writes a hygiene report that does complain, on a fictional Contoso lab.
+
+    - Promote the forest with PowerShell, after asking the cmdlet which functional levels it accepts
+    - OUs, groups and users from an HR CSV, matched on EmployeeID so the script is safe to run twice
+    - A JSON snapshot of the domain, with protected groups found by well-known SID
+    - Checks for stale accounts, privileged accounts and orphaned admins (adminCount left at 1)
+    - 42 Pester tests with the AD cmdlets mocked
+
+    The gotcha: lastLogonTimestamp is not a stopwatch. It only updates when it is 9 to 14 days old.
+
+    Watch the episode: {YOUTUBE_URL}
+    Code and tests: {REPO_URL}
+    Written guide: {BLOG_URL}
+
+    Narration uses an AI voice.
+    #ActiveDirectory #WindowsServer #PowerShell #SysAdmin
+linkedin_personal:
+  text: |
+    I used to read lastLogonTimestamp as "when did this user last sign in". It is not. It is replicated, and Active Directory only updates it when the value is 9 to 14 days old. For finding stale accounts it is fine. As a stopwatch it is wrong by up to two weeks.
+
+    In the second DEVLADLOG Windows Server episode I sign in twice a few minutes apart and compare it with lastLogon, which lives on a single domain controller. The lesson: know what each attribute cannot tell you.
+
+    {YOUTUBE_URL}
+
+    #ActiveDirectory #WindowsServer
+    Narration uses an AI voice.
+facebook:
+  text: |
+    Your directory remembers everything and complains about nothing.
+
+    In this DEVLADLOG episode we build a new Active Directory forest with PowerShell, load users from a CSV in a way that is safe to run twice, and write a hygiene report. It flags stale and privileged accounts, orphaned admins and the recycle bin nobody enabled. Plus why lastLogonTimestamp is not a stopwatch.
+
+    Watch it here: {YOUTUBE_URL}
+
+    #ActiveDirectory #WindowsServer
+    Narration uses an AI voice.
+shorts:
+  - id: hook
+    youtube_short_title: "Active Directory never complains. This report does. #Shorts"
+    instagram_reel:
+      caption: |
+        An admin account nobody has used since July, with a password that never expires. A recycle bin that was never switched on. A former admin who still does not inherit permissions. Active Directory never complains about any of it, so we build a new forest and write a hygiene report that does.
+
+        Full episode: link in bio
+
+        #ActiveDirectory #WindowsServer #PowerShell
+      cover_text: "AD NEVER COMPLAINS"
+    tiktok:
+      caption: "Stale admin, password never expires, recycle bin off. Active Directory never complains. So we write a report that does. Full episode on YouTube. #ActiveDirectory #WindowsServer #PowerShell"
+  - id: idempotent
+    youtube_short_title: "Provision AD users from a CSV, safe to run twice #Shorts"
+    instagram_reel:
+      caption: |
+        What makes a user provisioning script safe to re-run: match people on EmployeeID, not on names. Someone who changes their surname keeps their account instead of getting a second one. Every logon name already in the domain counts as taken, and WhatIf shows the plan before anything is created. Run it again and everything says exists.
+
+        Full episode: link in bio
+
+        #ActiveDirectory #PowerShell #WindowsServer
+      cover_text: "MATCH ON EMPLOYEEID"
+    tiktok:
+      caption: "Match AD users on EmployeeID, not on names. Surname changes keep the account. WhatIf shows the plan. Run it twice, nothing is created twice. #ActiveDirectory #PowerShell #WindowsServer"
+  - id: gotcha
+    youtube_short_title: "lastLogonTimestamp is not a stopwatch #Shorts"
+    instagram_reel:
+      caption: |
+        We signed in twice, minutes apart. lastLogon, which lives on this domain controller only, shows the second sign-in. lastLogonTimestamp, the replicated one, still shows the first. It is only updated when it is 9 to 14 days old. Great for finding stale accounts, useless as a stopwatch, so the report says it can lag by up to fourteen days.
+
+        Full episode: link in bio
+
+        #ActiveDirectory #WindowsServer #SysAdmin
+      cover_text: "LASTLOGON IS NOT A CLOCK"
+    tiktok:
+      caption: "lastLogonTimestamp only updates when it is 9 to 14 days old. Fine for stale accounts, useless as a stopwatch. Full episode on YouTube. #ActiveDirectory #WindowsServer #SysAdmin"

@@ -1,0 +1,82 @@
+episode: 12
+series: "DEVLADLOG Windows Server"
+status: draft-hold-for-review
+ai_label: true
+youtube_url: "{YOUTUBE_URL}"
+linkedin_company:
+  text: |
+    Two servers do not make a failover cluster that survives a server dying. Count the votes and you find out why.
+
+    Episode 12 of DEVLADLOG Windows Server checks two nodes before building anything, reads the plan, builds a cluster with a witness, then pauses a node while a small prober measures how long the website really went away. The lab is fictional Contoso.
+
+    - Quorum arithmetic printed before the build: two nodes with no witness need both votes, a file share witness makes three votes and lets one node go
+    - A read-only node check, including clock spread, because Kerberos tolerates five minutes by default
+    - A plan in order: validate, create the cluster, witness share, quorum, role
+    - A witness config that is refused if the share sits on a cluster node
+    - 52 Pester tests with the cluster cmdlets mocked, and a prober tested against a throwaway local web server
+
+    The gotcha: cluster creation, role creation and removal cannot run remotely without CredSSP, and CredSSP hands out your credentials. So the script runs those steps on a node.
+
+    Watch the episode: {YOUTUBE_URL}
+    Code and tests: {REPO_URL}
+    Written guide: {BLOG_URL}
+
+    Narration uses an AI voice.
+    #FailoverClustering #WindowsServer #HighAvailability #PowerShell
+linkedin_personal:
+  text: |
+    A planned failover is not zero downtime. It is short, and it deserves a number. In the twelfth DEVLADLOG Windows Server episode a small prober asks the clustered website every half second, records who answered, and calculates the outage from the first failed request to the next good one.
+
+    The other lesson came before the build: two nodes and no witness is two votes, quorum needs both, so losing one node stops the cluster. Count the votes first. Check, plan, build, measure.
+
+    {YOUTUBE_URL}
+
+    #FailoverClustering #WindowsServer
+    Narration uses an AI voice.
+facebook:
+  text: |
+    Two servers, and one vote short.
+
+    In this DEVLADLOG episode we check two nodes before building a failover cluster, read the plan as a table, and add a file share witness so one node can fail. Then we pause a node and a small prober measures how long the website really went away. A planned failover is not zero downtime, and now it has a number.
+
+    Watch it here: {YOUTUBE_URL}
+
+    #FailoverClustering #WindowsServer
+    Narration uses an AI voice.
+shorts:
+  - id: hook
+    youtube_short_title: "Two servers, and one vote short #Shorts"
+    instagram_reel:
+      caption: |
+        Two servers do not make a failover cluster that survives a server dying. Count the votes and you find out why. We check two nodes before building anything, read the plan, and build a cluster with a witness. Then we pause one node, and a small prober measures how long the website really went away.
+
+        Full episode: link in bio
+
+        #FailoverClustering #WindowsServer #PowerShell
+      cover_text: "ONE VOTE SHORT"
+    tiktok:
+      caption: "Two nodes, no witness, two votes. Quorum needs both, so losing one stops the cluster. Count the votes before you build. Full episode on YouTube. #FailoverClustering #WindowsServer"
+  - id: plan
+    youtube_short_title: "A failover cluster build plan, in order #Shorts"
+    instagram_reel:
+      caption: |
+        The plan, in order. Validate first, then create the cluster, then the witness share, then the quorum, then the role. The share comes after the cluster on purpose, because the cluster account has to exist before it can get access. A machine that already runs the cluster service never gets a second cluster.
+
+        Full episode: link in bio
+
+        #FailoverClustering #WindowsServer #PowerShell
+      cover_text: "ORDER MATTERS"
+    tiktok:
+      caption: "Cluster plan order: validate, create cluster, witness share, quorum, role. The share comes after the cluster account exists. Full episode on YouTube. #FailoverClustering #WindowsServer"
+  - id: gotcha
+    youtube_short_title: "You cannot build a cluster remotely without CredSSP #Shorts"
+    instagram_reel:
+      caption: |
+        We wanted to build the cluster from the management server, like every other episode. Learn says cluster creation, role creation and removal cannot run remotely without CredSSP, and CredSSP hands out your credentials. So the script runs those steps on a node, and stops before changing anything anywhere else.
+
+        Full episode: link in bio
+
+        #FailoverClustering #WindowsServer #PowerShell
+      cover_text: "NOT REMOTELY"
+    tiktok:
+      caption: "Cluster creation cannot run remotely without CredSSP, and CredSSP hands out your credentials. Run those steps on a node. Full episode on YouTube. #FailoverClustering #WindowsServer"

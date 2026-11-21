@@ -1,0 +1,80 @@
+episode: 8
+series: "DEVLADLOG Windows Server"
+status: draft-hold-for-review
+ai_label: true
+youtube_url: "{YOUTUBE_URL}"
+linkedin_company:
+  text: |
+    Most security guides give you a long list of settings and a dare. Episode 8 of DEVLADLOG Windows Server does it the other way round: a script reads the lab, writes the plan as a table, and remembers every value it is about to replace, so you can put it all back.
+
+    - A read-only check over WinRM: SMB signing and SMB 1, NTLM level, WDigest, Credential Guard, LDAP signing, process creation auditing, Defender and Windows LAPS policy
+    - Rules that say what they know: a missing LDAP signing value is not a finding, only an explicit zero is High
+    - A rollback file that is the plan reversed, with manual steps where the old value is unknown
+    - Windows LAPS in Active Directory, with the schema update marked irreversible and refused without a switch
+    - 39 Pester tests with remoting, Group Policy and LAPS commands mocked
+
+    The gotcha: two Learn pages disagree about SMB signing defaults on Windows Server 2025, so the check reads the real values on every server instead of assuming.
+
+    Watch the episode: {YOUTUBE_URL}
+    Code and tests: {REPO_URL}
+    Written guide: {BLOG_URL}
+
+    Narration uses an AI voice.
+    #WindowsServer #WindowsLAPS #Security #PowerShell
+linkedin_personal:
+  text: |
+    Two Microsoft Learn pages disagree about SMB signing on Windows Server 2025. One says it requires outbound signing only. The other says outbound and inbound are both required by default. I could pick one and hope.
+
+    In the eighth DEVLADLOG Windows Server episode the check does not assume either. It reads the real values on every server. Requiring signing also turns off guest access, which can break third-party shares. The lesson: never trust a default, read the actual value.
+
+    {YOUTUBE_URL}
+
+    #WindowsServer #Security
+    Narration uses an AI voice.
+facebook:
+  text: |
+    Harden the lab. Then undo it.
+
+    In this DEVLADLOG episode a script reads every server, tells us what is off, writes the plan as a table and remembers each value it replaces, so the whole change can be rolled back. Then we add Windows LAPS, the one step that cannot be undone, behind a switch that has to be asked for.
+
+    Watch it here: {YOUTUBE_URL}
+
+    #WindowsServer #Security
+    Narration uses an AI voice.
+shorts:
+  - id: hook
+    youtube_short_title: "Harden the lab. Then undo it. #Shorts"
+    instagram_reel:
+      caption: |
+        Most security guides give you a long list of settings and a dare. We do it the other way round. A script reads the whole lab, tells us what is off, writes the plan as a table, and remembers every value it is about to replace so we can put it all back. Then we add Windows LAPS, the one step that cannot be undone.
+
+        Full episode: link in bio
+
+        #WindowsServer #Security #PowerShell
+      cover_text: "HARDEN. THEN UNDO."
+    tiktok:
+      caption: "A hardening script that reads first, writes the plan as a table, and remembers every old value so you can roll back. Full episode on YouTube. #WindowsServer #Security #PowerShell"
+  - id: plan
+    youtube_short_title: "A hardening plan that remembers the old value #Shorts"
+    instagram_reel:
+      caption: |
+        Each row of the plan names the server, the fix, the value the script read, and the value it wants. The risky step, NTLM version 2 only, is not in the plan unless you ask for it, because Learn says domain controllers at that level refuse LM and NTLM, and anything still using them stops signing in. The rollback is the plan, reversed.
+
+        Full episode: link in bio
+
+        #WindowsServer #Security #PowerShell
+      cover_text: "THE PLAN KEEPS OLD VALUES"
+    tiktok:
+      caption: "Plan rows show server, fix, old value, new value. NTLMv2-only stays out unless you ask. Rollback is the plan reversed. Full episode on YouTube. #WindowsServer #Security #PowerShell"
+  - id: gotcha
+    youtube_short_title: "Two Learn pages disagree about SMB signing #Shorts"
+    instagram_reel:
+      caption: |
+        The gotcha: two Microsoft Learn pages disagree about Windows Server 2025. One says it requires outbound SMB signing only. The other says outbound and inbound are both required by default. So the check does not assume either, it reads the real values on every server. And requiring signing also turns off guest access, which can break third-party shares.
+
+        Full episode: link in bio
+
+        #WindowsServer #SMB #Security
+      cover_text: "DOCS DISAGREE ON SMB"
+    tiktok:
+      caption: "Two Learn pages disagree on SMB signing defaults for Windows Server 2025. Do not assume: read the real value on each server. Full episode on YouTube. #WindowsServer #SMB #Security"

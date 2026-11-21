@@ -1,0 +1,82 @@
+episode: 7
+series: "DEVLADLOG Windows Server"
+status: draft-hold-for-review
+ai_label: true
+youtube_url: "{YOUTUBE_URL}"
+linkedin_company:
+  text: |
+    Every server in this series is a virtual machine, and so far we only looked at what runs inside them. Episode 7 of DEVLADLOG Windows Server looks underneath, at the Hyper-V host.
+
+    - A read-only audit of the host: a collector gathers facts as JSON and pure rules turn them into findings
+    - A VM built from a JSON spec, validated into an ordered plan with WhatIf support, so running it twice is safe
+    - A virtual TPM step that comes after the key protector it needs
+    - Rules with a reason: limits from Microsoft live in code, our own policy lives in the config file
+    - 40 Pester tests with every Hyper-V cmdlet mocked, using an invented host full of mistakes
+
+    The gotcha: removing a checkpoint returns quickly, but the real work, merging the differencing disk into its parent, goes on in the background. The cleanup waits, watches the live disk chain and warns if it is still deep after the timeout.
+
+    Also covered: with the type set to Production, a failed production checkpoint quietly becomes a Standard one.
+
+    Watch the episode: {YOUTUBE_URL}
+    Code and tests: {REPO_URL}
+    Written guide: {BLOG_URL}
+
+    Narration uses an AI voice.
+    #HyperV #WindowsServer #PowerShell #Virtualization
+linkedin_personal:
+  text: |
+    A checkpoint is really a disk that never stops growing. Each one is another differencing disk stacked on the last. And deleting one in Hyper-V returns quickly, but the merge into the parent disk keeps going in the background, so the disk is not small again yet.
+
+    In the seventh DEVLADLOG Windows Server episode the cleanup script waits and watches the live disk chain, and never deletes disk files by hand. The lesson: wait for the merge, then measure.
+
+    {YOUTUBE_URL}
+
+    #HyperV #WindowsServer
+    Narration uses an AI voice.
+facebook:
+  text: |
+    Your lab runs on a pile of disks.
+
+    In this DEVLADLOG episode we look underneath our lab VMs, at the Hyper-V host. We audit it with a read-only script, build a throwaway VM from a JSON file, and see why checkpoints are really differencing disks that keep growing. The cleanup waits for the merge instead of assuming it finished.
+
+    Watch it here: {YOUTUBE_URL}
+
+    #HyperV #WindowsServer
+    Narration uses an AI voice.
+shorts:
+  - id: hook
+    youtube_short_title: "Your Hyper-V lab runs on a pile of disks #Shorts"
+    instagram_reel:
+      caption: |
+        Every server in this series is a virtual machine, and so far we only looked at what runs inside them. Today we look underneath: the Hyper-V host. We audit it with a script, build a throwaway machine from a JSON file, and learn why a checkpoint is really a disk that never stops growing.
+
+        Full episode: link in bio
+
+        #HyperV #WindowsServer #PowerShell
+      cover_text: "THE HOST UNDERNEATH"
+    tiktok:
+      caption: "Every lab server is a VM. Today we audit the Hyper-V host, build a VM from a JSON file, and see why checkpoints keep growing. Full episode on YouTube. #HyperV #WindowsServer #PowerShell"
+  - id: checkpoints
+    youtube_short_title: "Hyper-V Production vs Standard checkpoints #Shorts"
+    instagram_reel:
+      caption: |
+        Two kinds of checkpoint. Production uses the Volume Shadow Copy Service inside the guest and takes no memory state. Standard captures memory and device state and is not application consistent. The trap: with the type set to Production, a failed production checkpoint quietly becomes a Standard one. ProductionOnly fails instead. Either way, it is not a backup.
+
+        Full episode: link in bio
+
+        #HyperV #WindowsServer #SysAdmin
+      cover_text: "PRODUCTION OR STANDARD?"
+    tiktok:
+      caption: "Hyper-V Production checkpoint fails? It quietly falls back to Standard. ProductionOnly fails instead. Neither is a backup. Full episode on YouTube. #HyperV #WindowsServer #SysAdmin"
+  - id: gotcha
+    youtube_short_title: "Deleting a Hyper-V checkpoint is not done yet #Shorts"
+    instagram_reel:
+      caption: |
+        The gotcha: removing a checkpoint in Hyper-V returns quickly, but the real work, merging the differencing disk into its parent, goes on in the background. If you delete and immediately assume the disk is small again, you are wrong. The cleanup waits and watches the live disk chain, warns if it is still deep after the timeout, and never deletes disk files by hand.
+
+        Full episode: link in bio
+
+        #HyperV #WindowsServer #PowerShell
+      cover_text: "THE MERGE IS NOT DONE"
+    tiktok:
+      caption: "Removing a Hyper-V checkpoint returns fast, but the disk merge continues in the background. Wait and watch the disk chain. Full episode on YouTube. #HyperV #WindowsServer #PowerShell"

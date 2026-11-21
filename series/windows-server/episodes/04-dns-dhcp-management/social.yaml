@@ -1,0 +1,82 @@
+episode: 4
+series: "DEVLADLOG Windows Server"
+status: draft-hold-for-review
+ai_label: true
+youtube_url: "{YOUTUBE_URL}"
+linkedin_company:
+  text: |
+    You add a reservation on one DHCP server. Its failover partner never hears about it. If the partner answers that printer, it does not know the reservation.
+
+    Episode 4 of DEVLADLOG Windows Server builds DNS and DHCP from one file on a fictional Contoso lab and checks them against each other.
+
+    - An isolated Hyper-V private switch, so a test DHCP server can never hand out addresses where it should not
+    - DNS: a computed reverse zone, A and PTR records, aging and scavenging set up properly
+    - DHCP: both servers authorized, a scope, a reservation and a load balanced failover relationship
+    - One snapshot of DNS and DHCP, and a report that flags a static DNS record inside a DHCP pool
+    - 42 Pester tests, no servers needed
+
+    The gotcha: creating a failover relationship copies the scope once. Later changes stay on the server where you made them until you run replication from the primary.
+
+    Watch the episode: {YOUTUBE_URL}
+    Code and tests: {REPO_URL}
+    Written guide: {BLOG_URL}
+
+    Narration uses an AI voice.
+    #DHCP #DNS #WindowsServer #PowerShell
+linkedin_personal:
+  text: |
+    A fact about DHCP failover that surprised me: creating the relationship copies the scope to the partner once. After that, a new reservation or option stays on the server where you added it. The partner has no idea, so one server shows one reservation and the other shows two.
+
+    In the fourth DEVLADLOG Windows Server episode the deployment calls Invoke-DhcpServerv4FailoverReplication from the primary whenever it changes a failover scope, and the report flags the drift as High. The lesson: failover syncs leases, not your edits.
+
+    {YOUTUBE_URL}
+
+    #DHCP #WindowsServer
+    Narration uses an AI voice.
+facebook:
+  text: |
+    Two DHCP servers, two different answers.
+
+    In this DEVLADLOG episode we build DNS and DHCP from one file in a lab and check them against each other. Reverse zones, aging and scavenging that actually works, a failover pair, and a report that catches a static DNS record sitting inside the DHCP pool. It also shows why a reservation added to one server never reaches its partner on its own.
+
+    Watch it here: {YOUTUBE_URL}
+
+    #DHCP #WindowsServer
+    Narration uses an AI voice.
+shorts:
+  - id: hook
+    youtube_short_title: "Two DHCP servers, two different answers #Shorts"
+    instagram_reel:
+      caption: |
+        You add a reservation on one DHCP server and its failover partner never hears about it. A printer has a static DNS record right in the middle of the DHCP pool. Stale records pile up because scavenging was only half switched on. We build DNS and DHCP from one file in a lab and check them against each other.
+
+        Full episode: link in bio
+
+        #DHCP #DNS #WindowsServer
+      cover_text: "TWO SERVERS, TWO ANSWERS"
+    tiktok:
+      caption: "A reservation on one DHCP server that its failover partner never hears about. We build DNS and DHCP from one file and cross-check them. Full episode on YouTube. #DHCP #DNS #WindowsServer"
+  - id: aging
+    youtube_short_title: "DNS scavenging: why stale records stay and live ones vanish #Shorts"
+    instagram_reel:
+      caption: |
+        Aging and scavenging are two switches, and you need both: scavenging on the server, aging on the zone. A record is stale after the no-refresh plus the refresh interval, 14 days by default. Static records have a zero timestamp and are never scavenged. And if both intervals add up to less than a day, records of live machines get deleted.
+
+        Full episode: link in bio
+
+        #DNS #WindowsServer #SysAdmin
+      cover_text: "TWO SWITCHES, NOT ONE"
+    tiktok:
+      caption: "DNS scavenging needs two switches: scavenging on the server, aging on the zone. Under 24 hours total and live records disappear. Full episode on YouTube. #DNS #WindowsServer #SysAdmin"
+  - id: gotcha
+    youtube_short_title: "DHCP failover: the partner never heard about it #Shorts"
+    instagram_reel:
+      caption: |
+        A reservation added by hand on the first DHCP server. The partner has no idea: one reservation here, two there. If the partner answers that printer, it does not know the reservation. The report flags failover drift as High. Replicate from the server with the right settings, and both agree again.
+
+        Full episode: link in bio
+
+        #DHCP #WindowsServer #PowerShell
+      cover_text: "FAILOVER DRIFT"
+    tiktok:
+      caption: "Creating DHCP failover copies the scope once. Later reservations stay put until you run replication from the primary. Full episode on YouTube. #DHCP #WindowsServer #PowerShell"
