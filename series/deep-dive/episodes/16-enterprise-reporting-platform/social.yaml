@@ -1,0 +1,89 @@
+episode: 16
+series: "DEVLADLOG Deep Dive"
+status: draft-hold-for-review
+ai_label: true
+youtube_url: "{YOUTUBE_URL}"
+linkedin_company:
+  text: |
+    Every Contoso department wants a report, and every department may only see its own purchase requests. Nobody wants forty hand-built copies of one model with security nobody can read.
+
+    Deep Dive 16 turns the reporting layer into code:
+    - The Power BI semantic model lives in Git as TMDL text files, so a change is a readable diff in a pull request
+    - Row-level security is one dynamic role on the department table, driven by a hidden mapping table, with no second rule on the fact table
+    - Promotion from development to test to production is a Fabric deployment pipeline request, with parameter rules changing the endpoint per stage
+    - A policy file checks scanner API output: production models certified, labelled and on a capacity
+
+    The code has 23 xUnit tests that load the folder with the TMDL serializer and 23 Pester tests for the scripts. They cannot run the DAX engine, and the episode says so.
+
+    Watch the episode: {YOUTUBE_URL}
+    Code: {REPO_URL}
+    Full guide: {BLOG_URL}
+
+    Narration uses an AI voice.
+
+    #PowerBI #MicrosoftFabric #TMDL #DataGovernance
+linkedin_personal:
+  text: |
+    A row-level security test from your own account proves nothing. Learn says RLS restricts only users with the Viewer role, so workspace admins, members and contributors see every row.
+
+    Two more things that bit me while building a Power BI model as code: a deployment pipeline copies the model but not the role members or the endorsement, so you assign people and certify again after the first deploy to a stage. And a service principal cannot run queries on a model with RLS, so the check has to use a person.
+
+    Deep Dive 16: {YOUTUBE_URL}
+
+    Narration uses an AI voice.
+
+    #PowerBI #RowLevelSecurity
+facebook:
+  text: |
+    Who may see which numbers? In this episode every Contoso department gets a report built on one shared Power BI model, and each department sees only its own purchase requests.
+
+    The model is kept as text in Git, security is a single rule you can test, and a policy file checks the tenant. We also cover why testing security from your own admin account proves nothing.
+
+    Watch: {YOUTUBE_URL}
+
+    Narration uses an AI voice.
+
+    #PowerBI #Microsoft365
+shorts:
+  - id: hook
+    youtube_short_title: "Who may see which numbers? Power BI reporting as code #Shorts"
+    instagram_reel:
+      caption: |
+        The Contoso gold layer is ready. Now every department wants a report, and every department may only see its own purchase requests.
+
+        Nobody wants forty copies of one model, built by hand, with security nobody can read. So the reporting layer becomes code: a model you can review, a security rule you can test, a promotion path, and a policy that checks the tenant.
+
+        Full episode: link in bio
+        #PowerBI #MicrosoftFabric #TMDL
+      cover_text: "Who sees which numbers?"
+    tiktok:
+      caption: "Every department wants a report but may only see its own rows. Power BI model as code: reviewable, testable security, promotion path, tenant policy. #PowerBI #MicrosoftFabric #TMDL"
+  - id: rls
+    youtube_short_title: "Power BI row-level security in one dynamic rule #Shorts"
+    instagram_reel:
+      caption: |
+        Row-level security as one dynamic rule. A mapping table lists who sees which department, and the role keeps the departments listed for the signed-in user, using USERPRINCIPALNAME.
+
+        The filter sits on the department table and flows to the facts through the relationship, so there is no second rule to drift. The mapping table filters itself too, so a reader cannot browse everyone else's access.
+
+        Full episode: link in bio
+        #PowerBI #RowLevelSecurity #DAX
+      cover_text: "RLS in one rule"
+    tiktok:
+      caption: "Power BI RLS in one rule: a mapping table, USERPRINCIPALNAME, a filter on the dimension that flows to the facts. The mapping table filters itself too. #PowerBI #RowLevelSecurity #DAX"
+  - id: gotcha
+    youtube_short_title: "Power BI RLS gotcha: admins see every row #Shorts"
+    instagram_reel:
+      caption: |
+        What bit us with Power BI row-level security:
+        - RLS restricts only users with the Viewer role
+        - Workspace admins, members and contributors see every row, so testing from your own account proves nothing
+        - Deployment copies the model, but not role members or endorsement
+        - A service principal cannot run queries on a model with RLS, so the check uses a person
+
+        Full episode: link in bio
+        #PowerBI #RowLevelSecurity #MicrosoftFabric
+      cover_text: "RLS skips admins"
+    tiktok:
+      caption: "Power BI RLS applies to Viewers only. Admins, members and contributors see every row, so testing from your own account proves nothing. #PowerBI #RowLevelSecurity #MicrosoftFabric"
+  

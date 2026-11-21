@@ -1,0 +1,87 @@
+episode: 9
+series: "DEVLADLOG Dev Tools"
+status: draft-hold-for-review
+ai_label: true
+youtube_url: "{YOUTUBE_URL}"
+linkedin_company:
+  text: |
+    The finance report is missing the orders from the last day of the month. No exception, no crash, just wrong numbers.
+
+    DEVLADLOG Dev Tools episode 9 finds the cause with five techniques on one .NET orders API:
+    - Turn the report into a failing test first: Expected 30, Actual 29
+    - git bisect run names the commit that caused it: six commits, two test runs. The script exits 125 for a commit that does not build or where the test does not exist, because dotnet test with a filter that matches nothing exits 0
+    - The VS Code debugger: launch configuration in the repo, breakpoint, logpoint, conditional breakpoint
+    - One request out of the logs by trace id. The traceId field in the error body is the W3C traceparent form, not the bare trace id
+    - A hang read from dotnet-stack and dotnet-dump: two locks taken in opposite order
+
+    The patches, scripts and 70 automated tests are in the repo.
+
+    Watch the episode: {YOUTUBE_URL}
+    Code: {REPO_URL}
+    Full guide: {BLOG_URL}
+
+    Narration uses an AI voice.
+
+    #DevTools #DotNet #VSCode #Git
+linkedin_personal:
+  text: |
+    A "bug fix" that is really a refactor: someone computed the last day of the month once, and the report quietly lost every order dated the 31st. No exception, just 29 instead of 30.
+
+    The habit that paid off is boring. Write the failing test first, then let git bisect run search for the commit, with a script that exits 125 to skip commits it cannot test. Careful: dotnet test with a filter that matches nothing exits 0, so an old commit would look good.
+
+    Episode 9 of DEVLADLOG Dev Tools: {YOUTUBE_URL}
+
+    Narration uses an AI voice.
+
+    #DotNet #Git #DevTools
+facebook:
+  text: |
+    Wrong numbers, no crash: the monthly report is missing the orders from the last day of the month. This episode finds the cause five ways on the same .NET orders API: a failing test, git bisect, the VS Code debugger, a trace id in the logs, and a memory dump of a hang.
+
+    Short version: reproduce it as a test first.
+
+    Watch: {YOUTUBE_URL}
+
+    Narration uses an AI voice.
+
+    #DotNet #DevTools
+shorts:
+  - id: hook
+    youtube_short_title: "Wrong numbers, no crash: five ways to find the bug #Shorts"
+    instagram_reel:
+      caption: |
+        The finance report is missing the orders from the last day of the month. No exception, no crash, just wrong numbers.
+
+        Five techniques find the cause in minutes on the same .NET orders API: a failing test, git bisect, the VS Code debugger, a trace id in the logs, and a dump of a hang.
+
+        Full episode: link in bio
+        #DotNet #DevTools #Git #VSCode
+      cover_text: "Wrong numbers. No crash."
+    tiktok:
+      caption: "The report is missing the last day of the month. No crash, just wrong numbers. Five ways to find the bug in a .NET API. #DotNet #DevTools #Git"
+  - id: bisect
+    youtube_short_title: "git bisect run: find the bad commit in 2 test runs #Shorts"
+    instagram_reel:
+      caption: |
+        Give git bisect one good commit, one bad commit, and a script that exits zero or one. Six commits to search, two test runs, and git names the refactor that broke the month-end report.
+
+        The trap: dotnet test with a filter that matches nothing prints a warning and exits 0, so an old commit would look good. The script checks that the test really ran, otherwise it exits 125 to skip.
+
+        Full episode: link in bio
+        #Git #DotNet #DevTools
+      cover_text: "git bisect run"
+    tiktok:
+      caption: "git bisect run found the bad commit in 2 test runs. Trap: dotnet test with a filter matching nothing exits 0, so exit 125 to skip. #Git #DotNet #DevTools"
+  - id: hang
+    youtube_short_title: "Two locks, opposite order: reading a .NET deadlock dump #Shorts"
+    instagram_reel:
+      caption: |
+        The API looks healthy but two requests never answer. dotnet-stack lists every thread, and two of them wait in Monitor.Enter, one in Invalidate and one in Snapshot.
+
+        The dump shows two locks, each owned by a different thread, and the stacks name the file and line. The fix is one lock order everywhere, plus a test with a timeout so a deadlock fails instead of hanging. Dumps are copies of memory, so delete them.
+
+        Full episode: link in bio
+        #DotNet #DevTools #Debugging
+      cover_text: "Reading a deadlock dump"
+    tiktok:
+      caption: "API alive but two requests hang? dotnet-stack shows two threads in Monitor.Enter, the dump shows two locks owned by different threads. #DotNet #DevTools #Debugging"

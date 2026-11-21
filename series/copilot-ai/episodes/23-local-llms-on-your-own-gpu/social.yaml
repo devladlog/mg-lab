@@ -1,0 +1,88 @@
+episode: 23
+series: "DEVLADLOG Copilot & AI"
+status: draft-hold-for-review
+ai_label: true
+youtube_url: "{YOUTUBE_URL}"
+linkedin_company:
+  text: |
+    Contoso's accounts payable gets vendor emails with amounts and bank details. Legal asks one question: can an AI read them without the text leaving the building?
+
+    Episode 23 of DEVLADLOG Copilot & AI answers it with a model on your own graphics card, and a small Python toolkit that makes the answer measurable:
+    - Sizing: weights plus the KV cache, which grows with context, checked against free video memory
+    - Benchmark: tokens per second from the server's own timings, with the warm-up run left out and the placement (GPU or CPU) shown next to the speed
+    - Extraction: a JSON schema in the request on an invoice email that carries a prompt-injection line and a bank-detail change, plus a guard that refuses non-local hosts
+    - Probe: which local servers answer (Ollama, LM Studio, Microsoft Foundry Local)
+
+    Gotchas we cover: Ollama's default context is 4096 tokens, so a long email can be cut silently, and Foundry Local is built for one user at a time, not as a server.
+
+    Watch the episode: {YOUTUBE_URL}
+    Code and tests: {REPO_URL}
+
+    Narration uses an AI voice.
+
+    #AzureAI #Ollama #LocalLLM #FoundryLocal
+linkedin_personal:
+  text: |
+    The part of running a model locally that surprised me is not the weights, it is the KV cache. It grows with the context length, so a model that fits at 4096 tokens can spill into system memory at a bigger context, and it still runs, only much slower.
+
+    So I stopped trusting the size on disk. The toolkit in this episode estimates the fit, then asks Ollama where the model really sits, and I read that placement next to the tokens per second.
+
+    Episode 23 of DEVLADLOG Copilot & AI: {YOUTUBE_URL}
+
+    Narration uses an AI voice.
+
+    #Ollama #AzureAI
+facebook:
+  text: |
+    Can an AI read your invoice emails without the text leaving your machine? Yes, with a model on your own graphics card.
+
+    This episode works out whether a model fits in video memory, measures how fast it really runs, and pulls invoice data out of an email on the local machine. It also shows what happens when the email contains a hidden instruction.
+
+    Watch: {YOUTUBE_URL}
+
+    Narration uses an AI voice.
+
+    #AzureAI #Ollama
+shorts:
+  - id: hook
+    youtube_short_title: "Can an AI read your invoices without leaving your machine? #Shorts"
+    instagram_reel:
+      caption: |
+        Contoso's accounts payable gets vendor emails with amounts and bank details. Legal asks: can an AI read them without the text leaving the building?
+
+        Yes, with a model on your own graphics card. The episode works out whether a model fits, measures how fast it really runs, and extracts invoice data locally.
+
+        Full episode: link in bio
+        #Ollama #LocalLLM #AzureAI
+      cover_text: "AI on your own GPU"
+    tiktok:
+      caption: "Can an AI read your invoice emails without the text leaving your machine? A model on your own GPU: does it fit, how fast, what it extracts. #Ollama #LocalLLM #AzureAI"
+  - id: result
+    youtube_short_title: "A fast model on the GPU vs one that spills into RAM #Shorts"
+    instagram_reel:
+      caption: |
+        Tokens per second on its own tells you little. This benchmark prints where each model sits next to its speed: the context length, the load time, prompt speed and generation speed.
+
+        A model that fits on the card and a bigger one that spills into system memory can differ by a large factor, and the table shows it. The warm-up run that includes loading is left out of the median.
+
+        Full episode: link in bio
+        #Ollama #LocalLLM #AzureAI
+      cover_text: "Read the placement column"
+    tiktok:
+      caption: "Tokens per second means little without placement. The benchmark shows where each model sits, GPU or system memory, next to its speed. #Ollama #LocalLLM #AzureAI"
+  - id: gotcha
+    youtube_short_title: "Local LLM gotchas: 4096 context, 5 minute unload, licences #Shorts"
+    instagram_reel:
+      caption: |
+        Gotchas when you run a model on your own GPU:
+        - Ollama's default context is 4096 tokens, so a long email can be silently cut
+        - Models unload after five minutes unless you say otherwise
+        - Read the memory number from your own machine, since NVIDIA lists the laptop RTX 5090 with 24 GB
+        - Microsoft says Foundry Local is for one user at a time, not a server
+        - Every model has a licence, so read it
+
+        Full episode: link in bio
+        #Ollama #LocalLLM #AzureAI
+      cover_text: "Local LLM gotchas"
+    tiktok:
+      caption: "Local LLM gotchas: default context 4096 tokens, models unload after 5 minutes, Foundry Local is for one user, and every model has a licence. #Ollama #LocalLLM #AzureAI"

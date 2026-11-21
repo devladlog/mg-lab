@@ -1,0 +1,84 @@
+episode: 15
+series: "DEVLADLOG Microsoft 365"
+status: draft-hold-for-review
+ai_label: true
+youtube_url: "{YOUTUBE_URL}"
+linkedin_company:
+  text: |
+    Every project starts the same way: someone creates a plan, adds the same buckets, types the same tasks, and forgets to assign half of them.
+
+    DEVLADLOG Microsoft 365 episode 15 makes the plan one JSON file and drives Planner and To Do with Microsoft Graph and PowerShell:
+    - A loader checks the file against the documented Planner limits, then creates only what is missing. It never touches a task people edited by hand
+    - An audit reads the plan back and flags overdue, unassigned and undated tasks
+    - A focus script copies your overdue, this-week and urgent tasks into a personal To Do list, with a link back to the Planner task
+    - Gotchas: every Planner update needs an etag in If-Match, and an assignment uses the user ID as the property name
+
+    The module comes with 55 Pester tests that run against a mocked Graph, no tenant needed. Learn also notes the Planner API in Graph covers basic plans only, not premium plans.
+
+    Watch the episode: {YOUTUBE_URL}
+    Code: {REPO_URL}
+    Full guide: {BLOG_URL}
+
+    Narration uses an AI voice.
+
+    #Microsoft365 #MicrosoftPlanner #MicrosoftGraph #PowerShell
+linkedin_personal:
+  text: |
+    The Planner API has a few surprises. An assignment is an open type: the user's object ID is the property name, and you must send @odata.type and an orderHint or you get a bad request. Priority is a number, where 1 means urgent and 9 means low.
+
+    The one that matters most is the etag. Every update needs an If-Match header with the last etag you know, so my patch function reads the current etag, sends the change, and re-reads and retries on a conflict.
+
+    Episode 15 of DEVLADLOG Microsoft 365, a plan built from one file: {YOUTUBE_URL}
+
+    Narration uses an AI voice.
+
+    #MicrosoftGraph #Microsoft365
+facebook:
+  text: |
+    Tired of rebuilding the same Planner plan for every project? In this episode the plan is one file. A PowerShell script builds it through Microsoft Graph, an audit finds tasks that are overdue or that nobody owns, and a second script puts this week's tasks into your personal To Do list.
+
+    Watch: {YOUTUBE_URL}
+
+    Narration uses an AI voice.
+
+    #Microsoft365 #MicrosoftPlanner
+shorts:
+  - id: hook
+    youtube_short_title: "A Planner plan that builds itself from one file #Shorts"
+    instagram_reel:
+      caption: |
+        Every project starts the same way. Someone creates a plan, adds the same buckets, types the same tasks, and forgets to assign half of them.
+
+        Here the plan is one file. A script builds it in Planner, an audit finds the tasks that are overdue or that nobody owns, and a second script puts what matters this week into your personal To Do list.
+
+        Full episode: link in bio
+        #MicrosoftPlanner #Microsoft365 #MicrosoftGraph
+      cover_text: "A plan from one file"
+    tiktok:
+      caption: "A Planner plan that builds itself: one file, a PowerShell script, Microsoft Graph. Plus an audit for overdue and unassigned tasks. #MicrosoftPlanner #Microsoft365 #MicrosoftGraph"
+  - id: gotcha
+    youtube_short_title: "Planner API gotcha: every update needs an etag #Shorts"
+    instagram_reel:
+      caption: |
+        Every Planner update needs an If-Match header with the last etag you know. If someone changed the task in the meantime, the update is rejected with a conflict.
+
+        So the patch function reads the current etag, sends the change, and on a conflict reads again and retries. Task details, like checklists and descriptions, always go through this path. The Pester tests cover the retry against a mocked Graph.
+
+        Full episode: link in bio
+        #MicrosoftGraph #MicrosoftPlanner #PowerShell
+      cover_text: "Planner needs an etag"
+    tiktok:
+      caption: "Planner API gotcha: every update needs an If-Match etag. Read it, patch, and on a conflict read again and retry. #MicrosoftGraph #MicrosoftPlanner #PowerShell"
+  - id: todo
+    youtube_short_title: "Planner tasks into your To Do list with Graph #Shorts"
+    instagram_reel:
+      caption: |
+        The focus script reads the tasks assigned to you, keeps the overdue ones, the ones due this week and the urgent ones, and creates them in one To Do list.
+
+        Each task carries a linked resource with the Planner task ID as the external ID, so the next run recognises it. To Do tasks need a signed-in user, because the create task API doesn't support application permissions.
+
+        Full episode: link in bio
+        #MicrosoftToDo #MicrosoftGraph #Microsoft365
+      cover_text: "Planner to To Do"
+    tiktok:
+      caption: "Script copies your overdue, this-week and urgent Planner tasks into a To Do list, linked back to Planner. Needs a signed-in user. #MicrosoftToDo #MicrosoftGraph #Microsoft365"

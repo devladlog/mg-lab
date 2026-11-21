@@ -1,0 +1,87 @@
+episode: 10
+series: "DEVLADLOG Dev Tools"
+status: draft-hold-for-review
+ai_label: true
+youtube_url: "{YOUTUBE_URL}"
+linkedin_company:
+  text: |
+    Every test is green, and the finance report takes two seconds. Nobody wrote a bug. The code is just slow, and a guess about why is usually wrong.
+
+    DEVLADLOG Dev Tools episode 10 measures instead, on the same .NET orders API with 100,000 seeded orders:
+    - A repeatable load that empties the report cache before every request, so a cached answer does not hide the cost
+    - dotnet-counters for allocations and garbage collection, then dotnet-trace opened in Speedscope
+    - The finding: my hunch was date formatting, and the trace put it at 0.1 percent. About 84 percent of busy time was reading and change-tracking every order
+    - One fix: filter and group in the database. The median went from 1846 ms to 20 ms on a shared two-CPU machine, so read it as an order of magnitude
+    - A guard test that counts queries and allocated bytes instead of seconds, so it cannot flake
+
+    Watch the episode: {YOUTUBE_URL}
+    Code: {REPO_URL}
+    Full guide: {BLOG_URL}
+
+    Narration uses an AI voice.
+
+    #DevTools #DotNet #EFCore #Performance
+linkedin_personal:
+  text: |
+    I was sure the slow report was the date formatting, because the code formats a date for every order. The trace said otherwise: 0.1 percent. About 84 percent of the busy time was inside ToListAsync, loading and change-tracking every order ever placed.
+
+    Without the profile I would have optimised the wrong line. The fix was one query that filters and groups in the database.
+
+    The part I like most is the guard: a test that counts SQL commands and allocated bytes, not seconds, so it does not flake on a busy build agent.
+
+    Episode 10 of DEVLADLOG Dev Tools: {YOUTUBE_URL}
+
+    Narration uses an AI voice.
+
+    #DotNet #DevTools
+facebook:
+  text: |
+    All tests green, report slow. Instead of guessing, this episode measures a .NET API with a repeatable load, dotnet-counters and dotnet-trace, then fixes the one thing the trace points at.
+
+    My guess was wrong, which is the lesson. The timings come from a shared two-CPU machine, so read them as an order of magnitude.
+
+    Watch: {YOUTUBE_URL}
+
+    Narration uses an AI voice.
+
+    #DotNet #DevTools
+shorts:
+  - id: hook
+    youtube_short_title: "Green tests, slow report: measure first, then fix #Shorts"
+    instagram_reel:
+      caption: |
+        Every test is green, and the finance report takes two seconds. Nobody wrote a bug here. The code is just slow, and a guess about why is usually wrong.
+
+        So we measure: a repeatable load, runtime counters, a trace, one fix, and a guard that stays, all on the same .NET orders API.
+
+        Full episode: link in bio
+        #DotNet #DevTools #Performance
+      cover_text: "Green tests. Slow report."
+    tiktok:
+      caption: "All tests green, report takes 2 seconds. Nobody wrote a bug, the code is just slow. Measure first: load, counters, trace, one fix. #DotNet #DevTools #Performance"
+  - id: hunch
+    youtube_short_title: "My profiling hunch was wrong: 0.1% vs 84% #Shorts"
+    instagram_reel:
+      caption: |
+        My hunch was the string formatting, because the code formats a date for every order. The profile says no: date formatting is a tenth of a percent.
+
+        About 84 percent of the busy time is inside ToListAsync, reading rows from SQLite and tracking each one in the change tracker. The slow part is loading every order. Without the trace I would have optimised the wrong line.
+
+        Full episode: link in bio
+        #DotNet #EFCore #Performance
+      cover_text: "My hunch was wrong"
+    tiktok:
+      caption: "I blamed date formatting. The trace said 0.1 percent. 84 percent of busy time was ToListAsync loading and tracking every order. #DotNet #EFCore #Performance"
+  - id: result
+    youtube_short_title: "Slow .NET report: median 1846 ms to 20 ms with one query #Shorts"
+    instagram_reel:
+      caption: |
+        Measured with 100,000 orders, cache emptied before every request. Before: p50 1846 ms, p95 2908 ms. Filtering in SQL alone: 128 ms and 271 ms. Filtering and grouping in SQL: 20 ms and 50 ms.
+
+        These come from a shared two-CPU machine, so read them as an order of magnitude, not a benchmark.
+
+        Full episode: link in bio
+        #DotNet #EFCore #Performance
+      cover_text: "1846 ms to 20 ms"
+    tiktok:
+      caption: "100,000 orders: median 1846 ms before, 20 ms after filtering and grouping in SQL. Shared 2-CPU machine, so an order of magnitude. #DotNet #EFCore #Performance"

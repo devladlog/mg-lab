@@ -1,0 +1,87 @@
+episode: 15
+series: "DEVLADLOG Deep Dive"
+status: draft-hold-for-review
+ai_label: true
+youtube_url: "{YOUTUBE_URL}"
+linkedin_company:
+  text: |
+    Finance at Contoso wants to know, before the deadline, which open purchase requests will miss the five-day approval SLA. That is a data platform question, not a report.
+
+    Deep Dive 15 builds a small version of the answer, with every rule in plain SQL so it can move to Fabric later:
+    - Azure Data Factory copies only changed rows into the lake as Parquet, bounded by the watermark value it looked up, not by "now"
+    - Synapse serverless SQL turns the files into silver and gold views: bronze keeps every row version, silver keeps the latest, bad rows get a reject reason instead of being deleted
+    - A logistic regression, trained on the past and judged on the future, is exported as a T-SQL view, so scoring needs no model host
+    - Power BI imports the gold layer
+
+    The episode is also upfront about the choice: Microsoft's pages call Fabric the strategic platform and say no Synapse retirement has been announced. The data is synthetic, and the code ships with 58 Python tests and 12 Pester tests that run offline.
+
+    Watch the episode: {YOUTUBE_URL}
+    Code: {REPO_URL}
+    Full guide: {BLOG_URL}
+
+    Narration uses an AI voice.
+
+    #Azure #SQLServer #PowerBI #DataFactory
+linkedin_personal:
+  text: |
+    One line of a Data Factory incremental load decides whether you lose rows: the upper bound of the copy. It should be the maximum you looked up before the copy, not the current time. A row that lands during the copy is then picked up by the next run instead of falling between two runs.
+
+    I also learned a modelling trap. Only decided requests can be labelled, so the newest weeks look better than they are, because the slow ones are still open. Leave a gap before you judge a model.
+
+    Deep Dive 15, a lake-to-dashboard build on synthetic data: {YOUTUBE_URL}
+
+    Narration uses an AI voice.
+
+    #Azure #DataFactory
+facebook:
+  text: |
+    Which open purchase requests will be late? To answer it, we build a small data platform: Data Factory copies only what changed into a lake, Synapse serverless SQL cleans and models it, a small model scores it, and Power BI shows it.
+
+    The episode uses synthetic data and keeps every rule in plain SQL. Along the way it covers what bit us, like why being Owner on a subscription does not give you data access.
+
+    Watch: {YOUTUBE_URL}
+
+    Narration uses an AI voice.
+
+    #Azure #PowerBI
+shorts:
+  - id: hook
+    youtube_short_title: "Which purchase requests will be late? Build it from the data #Shorts"
+    instagram_reel:
+      caption: |
+        Contoso approves purchase requests, and some take too long. Finance wants to know, before the deadline, which open requests will be late.
+
+        That is a data platform question: get the data out of the operational system, clean it, model it, score it, and put it in front of people. We build it small, on synthetic data.
+
+        Full episode: link in bio
+        #Azure #PowerBI #DataFactory
+      cover_text: "Which requests will be late?"
+    tiktok:
+      caption: "Which open purchase requests will be late? Data Factory, a lake, Synapse serverless SQL, a small scoring model and Power BI, built end to end. #Azure #PowerBI #DataFactory"
+  - id: silver
+    youtube_short_title: "Silver layer: keep the latest row version, with a reason #Shorts"
+    instagram_reel:
+      caption: |
+        Bronze keeps every version of every row, because every pipeline run adds files. Silver keeps the latest version of each request, using ROW_NUMBER over the request id ordered by ModifiedOn descending.
+
+        When a rule is broken, silver adds a reject reason instead of deleting the row. Bad rows stay visible in a quality view, and they just don't reach gold.
+
+        Full episode: link in bio
+        #Azure #SQLServer #DataFactory
+      cover_text: "Silver keeps the latest"
+    tiktok:
+      caption: "Bronze keeps every row version. Silver keeps the latest, with a reject reason instead of a delete. Bad rows stay visible but never reach gold. #Azure #SQLServer #DataFactory"
+  - id: gotcha
+    youtube_short_title: "Azure data platform gotchas: Owner is not data access #Shorts"
+    instagram_reel:
+      caption: |
+        What bit us building a small Azure data platform:
+        - Owner on the subscription is not data access. Learn says those roles manage the account but don't read the data, so assign a blob data role
+        - Training data only contains decided requests, so the newest weeks look better than they are
+        - Serverless SQL has no tables, only views over files
+
+        Full episode: link in bio
+        #Azure #SQLServer #DataFactory
+      cover_text: "Owner is not data access"
+    tiktok:
+      caption: "Azure data gotchas: Owner is not data access, so grant a blob data role. Newest weeks look too good because open requests are missing from training. #Azure #SQLServer #DataFactory"

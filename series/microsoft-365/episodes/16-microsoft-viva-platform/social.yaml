@@ -1,0 +1,84 @@
+episode: 16
+series: "DEVLADLOG Microsoft 365"
+status: draft-hold-for-review
+ai_label: true
+youtube_url: "{YOUTUBE_URL}"
+linkedin_company:
+  text: |
+    Every company ends up with the same Viva Engage problem: communities get created by hand, the person who made one leaves, and nobody owns it anymore.
+
+    DEVLADLOG Microsoft 365 episode 16 describes the communities in one JSON file and manages them with Microsoft Graph and PowerShell:
+    - A script creates only the communities that are missing and never sends a delete, because deleting a community removes its group, notebook and plans
+    - Create is asynchronous: a 202 and an operation to poll, with at least 30 seconds between checks per Learn
+    - Owners and members are managed on the connected Microsoft 365 group
+    - An audit flags communities with no owner or too few, privacy drift, and network administrators who are not on your allowed list
+
+    The episode also maps what Graph reaches across Viva and what it does not build: Goals is retired, and Learning and Copilot need licences the lab does not have. 54 Pester tests run against a mocked Graph, no tenant needed.
+
+    Watch the episode: {YOUTUBE_URL}
+    Code: {REPO_URL}
+    Full guide: {BLOG_URL}
+
+    Narration uses an AI voice.
+
+    #Microsoft365 #MicrosoftViva #VivaEngage #MicrosoftGraph
+linkedin_personal:
+  text: |
+    Creating a Viva Engage community through Graph is not instant. You get a 202 Accepted and an operation to follow, and Learn asks you to wait more than 30 seconds between checks. My wait function refuses an interval of 30 seconds or less.
+
+    Another lesson: you cannot add members to the community itself. You add them to the Microsoft 365 group behind it. And because deleting a community removes the group, notebook and plans, the script I wrote never deletes anything.
+
+    Episode 16 of DEVLADLOG Microsoft 365: {YOUTUBE_URL}
+
+    Narration uses an AI voice.
+
+    #VivaEngage #MicrosoftGraph
+facebook:
+  text: |
+    Viva Engage communities get created by hand, the creator leaves, and nobody owns them anymore. In this episode the communities are described in one file. A PowerShell script creates the missing ones through Microsoft Graph, and an audit finds communities without an owner and people with more admin power than they should have.
+
+    Watch: {YOUTUBE_URL}
+
+    Narration uses an AI voice.
+
+    #Microsoft365 #VivaEngage
+shorts:
+  - id: hook
+    youtube_short_title: "Viva Engage communities that manage themselves #Shorts"
+    instagram_reel:
+      caption: |
+        Every company ends up with the same Viva Engage problem. Communities get created by hand, the person who made one leaves, and nobody owns it anymore.
+
+        Here the communities are described in one file. A script creates the missing ones, and an audit finds the communities without an owner and the people who hold more admin power than they should.
+
+        Full episode: link in bio
+        #VivaEngage #Microsoft365 #MicrosoftGraph
+      cover_text: "Communities as code"
+    tiktok:
+      caption: "Viva Engage communities lose their owners. One file, one script to create the missing ones, one audit for ownerless communities and extra admins. #VivaEngage #Microsoft365 #MicrosoftGraph"
+  - id: gotcha
+    youtube_short_title: "Viva Engage API gotcha: create is not instant #Shorts"
+    instagram_reel:
+      caption: |
+        Creating a Viva Engage community with Graph is asynchronous. The answer is a 202 with a header that points to an operation, and Microsoft Learn asks you to wait more than thirty seconds between checks.
+
+        So the wait function refuses an interval of thirty seconds or less. Learn names the header two ways, so we accept both. And on a 429 the request waits for the Retry-After value and tries again.
+
+        Full episode: link in bio
+        #MicrosoftGraph #VivaEngage #PowerShell
+      cover_text: "Create is not instant"
+    tiktok:
+      caption: "Viva Engage create via Graph returns a 202, not a community. Poll the operation, wait over 30 seconds between checks, honour Retry-After on a 429. #MicrosoftGraph #VivaEngage #PowerShell"
+  - id: audit
+    youtube_short_title: "Audit Viva Engage: ownerless communities and extra admins #Shorts"
+    instagram_reel:
+      caption: |
+        The audit reads every community with its owners from the connected group, and the role members from the Engage roles endpoints. A community with no owner is high. One with too few owners is medium.
+
+        Then it counts the network administrators. Too many is a finding, and anyone who is not on your allowed list is a high one. It also reports privacy drift and communities that are not in the file.
+
+        Full episode: link in bio
+        #VivaEngage #Microsoft365 #MicrosoftGraph
+      cover_text: "Who owns this community?"
+    tiktok:
+      caption: "Audit for Viva Engage: no owner is high, too few owners is medium, too many network admins is a finding, and so is privacy drift. #VivaEngage #Microsoft365 #MicrosoftGraph"
