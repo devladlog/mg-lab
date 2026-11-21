@@ -24,7 +24,7 @@ scenes:
     sub: "Measure first, then fix"
     short: hook
     narration: >
-      Every test is green, and the finance report takes two seconds. Nobody wrote a bug here. The code is
+      Every test is green, and on a small server the finance report takes two seconds. Nobody wrote a bug here. The code is
       just slow, and a guess about why is usually wrong. Last time the report was wrong. This time it is
       correct, and too slow for the people who wait for it. Today we measure instead, on the same orders A P I.
       Load, counters, a trace, one fix, and a guard that stays. Welcome to DEVLADLOG Dev Tools.
@@ -58,9 +58,7 @@ scenes:
     narration: >
       The load is a small script. Before every request it empties the report cache, because a cached answer
       measures nothing. Then it asks for one month and times it, from two workers at once. Always measure a
-      Release build, because a debug build tells you about the debug build. With one hundred thousand orders,
-      the median is one point eight seconds and the ninety fifth percentile two point nine. That is the
-      number to beat.
+      Release build, because a debug build tells you about the debug build. With one hundred thousand orders on a small two C P U test machine, the median is one point eight seconds and the ninety fifth percentile two point nine. On the recording laptop, a much faster machine, the same build has a median of about a quarter of a second. Either way, that is the number to beat.
 
   - id: counters
     type: screen
@@ -173,8 +171,7 @@ scenes:
       rebuild in Release, start the API with Orders__SeedCount=100000 and the same database file, then run the same
       python3 tools/load.py http://localhost:5080 --requests 30. Show p50 and p95 next to the numbers from before.
     narration: >
-      Same load, same data, new build. The median is twenty milliseconds and the ninety fifth percentile fifty.
-      That is about ninety times faster at the median, and the garbage collector has nothing to do.
+      Same load, same data. The slow build first: a median of two hundred seventy four milliseconds on this laptop. Then the fixed build: twelve milliseconds, and the ninety fifth percentile drops from about four hundred ninety to ninety three. More than twenty times faster at the median, and the garbage collector has nothing to do.
 
   - id: result
     type: code
@@ -186,13 +183,15 @@ scenes:
 
                    p50       p95
       before    1846 ms   2908 ms
-      only SQL   128 ms    271 ms     # filter in SQL, still loads every order of the month
-      after       20 ms     50 ms     # filter and group in SQL
+      only SQL   128 ms    271 ms     # filter in SQL, still loads every order of the month      after       20 ms     50 ms     # filter and group in SQL
+
+      recording laptop (much faster CPU)
+      before     274 ms    492 ms
+      after       12 ms     93 ms
     narration: >
       Two steps, two measurements. Filtering in the database alone gives one hundred twenty eight
       milliseconds. Grouping there too gives twenty, and the second step only mattered because the first one
-      made the report fast enough to see it. Those numbers come from a shared two C P U machine, so read
-      them as an order of magnitude, not as a benchmark.
+      made the report fast enough to see it. The first three rows come from a shared two C P U machine, the last two from the recording laptop. The milliseconds differ by machine; the pattern, a twenty times or better drop, holds on both.
 
   - id: guard
     type: code
