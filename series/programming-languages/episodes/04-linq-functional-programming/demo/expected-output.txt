@@ -1,0 +1,109 @@
+# Real output captured in the build container (Linux, .NET SDK 10.0.115, EF Core 10.0.15 + SQLite) on 2026-11-21.
+
+$ dotnet test LinqFunctional.slnx -m:1
+Passed!  - Failed:     0, Passed:    34, Skipped:     0, Total:    34, Duration: 2 s - Contoso.Portfolio.Tests.dll (net10.0)
+
+$ dotnet run --project src/Contoso.Portfolio.Cli -- report
+== Totals by department (AggregateBy, .NET 9)
+  IT    4 requests     354,500 EUR
+  SAL   3 requests     211,000 EUR
+  OPS   3 requests     128,000 EUR
+  MKT   2 requests      86,000 EUR
+
+== Every department, also without requests (LeftJoin, .NET 10)
+  Information Technology    4     354,500 EUR
+  Sales                     3     211,000 EUR
+  Operations                3     128,000 EUR
+  Marketing                 2      86,000 EUR
+  Legal                     0           0 EUR
+
+== Requests by status (CountBy, .NET 9)
+  Draft=2  Submitted=4  Approved=5  Rejected=1
+
+== Top 3 by budget (Index, .NET 9)
+  #1  PR-2026-0103     300,000 EUR  New data platform
+  #2  PR-2026-0107     120,000 EUR  Partner portal
+  #3  PR-2026-0102      75,000 EUR  CRM rollout
+
+== Submitted and High priority (a rule passed in as a function)
+  PR-2026-0102      75,000 EUR  CRM rollout
+  PR-2026-0103     300,000 EUR  New data platform
+  PR-2026-0108      64,000 EUR  Fleet telematics
+
+method syntax == query syntax: True
+
+$ dotnet run --project src/Contoso.Portfolio.Cli -- import samples/requests.csv
+== requests.csv: 4 accepted, 4 rejected
+  ok    PR-2026-0201  IT       48,000 EUR  Data warehouse tuning
+  ok    PR-2026-0202  SAL      12,500 EUR  Customer survey
+  ok    PR-2026-0204  MKT      23,000 EUR  Podcast series
+  ok    PR-2026-0208  MKT       8,000 EUR  Translation budget
+  line 4: budget 'abc' is not a positive number
+  line 6: unknown department 'Finance'
+  line 7: date '2026-13-01' is not yyyy-MM-dd
+  line 8: expected 5 fields, found 4
+
+$ dotnet run --project src/Contoso.Portfolio.Cli -- deferred
+== Count(), Sum(), First() on the same query
+  without ToList(): source read 3 times
+  with ToList():    source read 1 time
+
+== The lambda captures the variable, not its value
+  threshold 50,000  -> big.Count() = 5
+  threshold changed to 250,000, same query object -> big.Count() = 1
+
+$ dotnet run --project src/Contoso.Portfolio.Cli -- sql
+SQLite database: portfolio.db (12 requests)
+
+== AtLeast(IQueryable<ProjectRequest>, 50,000)
+    -- parameters: @threshold='?' (DbType = Decimal)
+    SELECT "r"."Id", "r"."Budget", "r"."Code", "r"."DepartmentCode", "r"."Status", "r"."SubmittedOn", "r"."Title"
+    FROM "Requests" AS "r"
+    WHERE ef_compare("r"."Budget", @threshold) >= 0
+  -> 5 results, 5 rows read from the database
+
+== AtLeast(IEnumerable<ProjectRequest>, 50,000)
+    SELECT "r"."Id", "r"."Budget", "r"."Code", "r"."DepartmentCode", "r"."Status", "r"."SubmittedOn", "r"."Title"
+    FROM "Requests" AS "r"
+  -> 5 results, 12 rows read from the database
+
+== LeftJoin (.NET 10), translated by EF Core 10
+    SELECT "d"."Name", "r"."Code", "r"."Budget"
+    FROM "Departments" AS "d"
+    LEFT JOIN "Requests" AS "r" ON "d"."Code" = "r"."DepartmentCode"
+    ORDER BY "d"."Name", "r"."Code"
+  Information Technology   4 requests
+  Legal                    0 requests
+  Marketing                2 requests
+  Operations               3 requests
+  Sales                    3 requests
+
+== CountBy (.NET 9) on a DbSet
+  InvalidOperationException: The LINQ expression 'DbSet<ProjectRequest>() .CountBy( keySelector: r => r.DepartmentCode, comparer: @p)' could not be translated.
+  GroupBy + Count instead:
+    SELECT "r"."DepartmentCode", COUNT(*)
+    FROM "Requests" AS "r"
+    GROUP BY "r"."DepartmentCode"
+    ORDER BY "r"."DepartmentCode"
+  IT=4  MKT=2  OPS=3  SAL=3
+
+== A C# method inside Where
+  InvalidOperationException: The LINQ expression 'DbSet<ProjectRequest>() .Where(p => Policy.IsStrategic(p))' could not be translated.
+  fix (filter in SQL first, then the C# rule in memory): PR-2026-0103
+
+$ ./demo/expect-errors.sh
+demo/Analyzers/MultipleEnumeration.cs(11,32): error CA1851: Possible multiple enumerations of 'IEnumerable' collection. Consider using an implementation that avoids multiple enumerations. (https://learn.microsoft.com/dotnet/fundamentals/code-analysis/quality-rules/ca1851) [demo/Analyzers/Analyzers.csproj]
+demo/Analyzers/MultipleEnumeration.cs(9,21): error CA1851: Possible multiple enumerations of 'IEnumerable' collection. Consider using an implementation that avoids multiple enumerations. (https://learn.microsoft.com/dotnet/fundamentals/code-analysis/quality-rules/ca1851) [demo/Analyzers/Analyzers.csproj]
+ok   CA1851 is a build error (enabled in .editorconfig)
+
+Same project with TreatWarningsAsErrors=false:
+ok   still a warning with TreatWarningsAsErrors=false
+
+== Count(), Sum(), First() on the same query
+  without ToList(): source read 3 times
+  with ToList():    source read 1 time
+
+== The lambda captures the variable, not its value
+  threshold 50,000  -> big.Count() = 5
+  threshold changed to 250,000, same query object -> big.Count() = 1
+(exit code 0)

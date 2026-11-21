@@ -1,0 +1,265 @@
+# DEVLADLOG SQL — episode 04 (draft: screen scenes need the recording described in demo.md)
+episode: 4
+slug: query-optimization
+series_label: "SQL"
+series_name: "DEVLADLOG SQL"
+file_prefix: "sql"
+title: "Query Optimization"
+subtitle: "The right index, the wrong plan: SARGability, conversions, parameter sniffing, Query Store"
+voice: am_michael
+thumbnail_text: "RIGHT INDEX\nWRONG\nPLAN"
+youtube:
+  title: "SQL Server Query Optimization: SARGability, Parameter Sniffing, Query Store | DEVLADLOG SQL #4"
+  tags: [SQL Server, query optimization, parameter sniffing, Query Store, SARGable, implicit conversion, execution plan, OPTION RECOMPILE, T-SQL, query tuning]
+sources:
+  - https://www.devladlog.com/articles/sql/2025-07-27-query-optimization-complete-guide-2025/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Right index. Wrong plan."
+    sub: "Three ways SQL Server ignores a good index, and how to prove each one"
+    short: hook
+    narration: >
+      The index is there. It's the right index. And SQL Server still reads the whole thing, or worse, does sixty
+      thousand lookups to return one customer's orders. In this episode: three ways a query keeps a good index
+      from doing its job, proven from the actual execution plan, and fixed.
+
+  - id: setup
+    type: bullets
+    heading: "Same lab, sensible indexes"
+    bullets:
+      - "Episode 3's database: 200,000 orders, 20,000 customers"
+      - "Contoso Megastore owns 60,000 orders; most customers have 7"
+      - "Indexes on CustomerId, OrderDate and AccountNumber"
+      - "Every run: actual plan, pages read, result check"
+    narration: >
+      Same lab as episode three. Two hundred thousand orders, and one customer, Contoso Megastore, owns sixty
+      thousand of them, while a typical customer has seven. We start from sensible indexes on customer, on order
+      date and on account number. The runner executes each query with the actual plan turned on, checks the
+      plan and the pages read, and checks that the result never changes.
+
+  - id: sargable
+    type: code
+    heading: "A function on the column"
+    lang: sql
+    short: sargable
+    code: |
+      -- q01a: YEAR() and MONTH() run on every OrderDate before the comparison:
+      -- the index on OrderDate can't jump to March. SQL Server reads all of it.
+      SELECT COUNT(*) AS Orders, SUM(TotalAmount) AS Revenue
+      FROM Sales.Orders
+      WHERE YEAR(OrderDate) = 2025
+        AND MONTH(OrderDate) = 3;
+
+      -- q01b: the same question as a range on the bare column. The index can seek.
+      SELECT COUNT(*) AS Orders, SUM(TotalAmount) AS Revenue
+      FROM Sales.Orders
+      WHERE OrderDate >= '2025-03-01'
+        AND OrderDate <  '2025-04-01';
+    narration: >
+      Problem one: a function on the column. Year of order date equals twenty twenty-five reads nicely, but SQL
+      Server has to compute the year for every row before it can compare, so the index on order date can only be
+      scanned. Write the same question as a range on the bare column. Greater or equal to the first of March, less
+      than the first of April. Same answer, and now the index can seek.
+
+  - id: sargable-screen
+    type: screen
+    heading: "Index Scan vs Index Seek, same index"
+    image: screens/q01-plans.jpg
+    bar: "SSMS · CON-SQL01 · ContosoBikesPerf · q01a + q01b actual plans"
+    demo: "SSMS, database ContosoBikesPerf, Include Actual Execution Plan on. q01a and q01b in one window, run together: Results show the same Orders and Revenue twice (4856 / 1238862.24); Execution plan tab shows query 1 with Index Scan on IX_Orders_OrderDate and query 2 with Index Seek on IX_Orders_OrderDate, with SSMS's relative cost per query visible."
+    narration: >
+      Both run against the same index. The function version scans it end to end, the range version seeks
+      straight to March. Same count, same revenue, and the runner confirms the seek reads fewer pages.
+
+  - id: conversion
+    type: code
+    heading: "A number for a text column"
+    lang: sql
+    code: |
+      -- q02a: AccountNumber is varchar; int has higher data type precedence,
+      -- so SQL Server converts the COLUMN (CONVERT_IMPLICIT on every row).
+      SELECT CustomerId, AccountNumber
+      FROM Sales.Customers
+      WHERE AccountNumber = 104242;
+
+      -- q02b: a value of the column's own type: one seek.
+      SELECT CustomerId, AccountNumber
+      FROM Sales.Customers
+      WHERE AccountNumber = '104242';
+    narration: >
+      Problem two hides in the data types. Account numbers are digits, stored as varchar. Pass a number, and SQL
+      Server follows data type precedence: int ranks above varchar, so it converts the column, every row of it, to
+      int. The unique index on account number is sorted as text, so it can't be used to seek a number. Pass the
+      value as text and the conversion disappears.
+
+  - id: conversion-screen
+    type: screen
+    heading: "The warning on the SELECT"
+    image: screens/q02-convert-warning.jpg
+    bar: "SSMS · CON-SQL01 · ContosoBikesPerf · q02a actual plan"
+    demo: "SSMS actual plan of q02a-implicit-conversion.sql: the SELECT operator has the yellow warning triangle; hover it so the tooltip shows the type conversion warning with CONVERT_IMPLICIT(int, ... AccountNumber ...) and the seek plan / cardinality text exactly as SSMS prints it; the scan operator (no seek on UX_Customers_AccountNumber) visible. Optional: q02b's plan below it with Index Seek on UX_Customers_AccountNumber and no warning."
+    narration: >
+      The actual plan says it out loud: a warning on the select operator, a type conversion that affects the plan,
+      and the convert implicit wrapped around account number. No seek. With the text literal: one index seek, no
+      warning. Search your plans for convert implicit. It usually means a parameter of the wrong type.
+
+  - id: procedure
+    type: code
+    heading: "Problem three: one plan for every customer"
+    lang: sql
+    code: |
+      CREATE OR ALTER PROCEDURE Sales.GetCustomerOrders
+          @CustomerId int
+      AS
+      BEGIN
+          SET NOCOUNT ON;
+          SELECT OrderId, OrderDate, Status, TotalAmount, ShipCountry
+          FROM Sales.Orders
+          WHERE CustomerId = @CustomerId
+          ORDER BY OrderDate DESC, OrderId DESC;
+      END;
+    narration: >
+      Problem three looks innocent. A stored procedure returns a customer's orders. SQL Server compiles it for the
+      parameter value it sees on the first call, that's parameter sniffing, and caches the plan for every call
+      after that. For a customer with seven orders, the best plan is a seek plus seven lookups. For the Megastore,
+      with sixty thousand, it's a scan.
+
+  - id: psp
+    type: bullets
+    heading: "Before we break it on purpose"
+    bullets:
+      - "SQL Server 2022, compatibility level 160: PSP optimization is on"
+      - "It can cache several plans per query, one per selectivity range"
+      - "Its skew thresholds aren't published"
+      - "So the lab turns it off: psp-off.sql"
+    narration: >
+      One honest note first. SQL Server twenty twenty-two has parameter sensitive plan optimization, on by default
+      at compatibility level one sixty. It can keep several plans for one query, one per range of selectivity.
+      When it kicks in depends on thresholds Microsoft doesn't publish, so to reproduce the classic problem, the
+      lab turns it off for this database.
+
+  - id: sniffing-screen
+    type: screen
+    heading: "Whoever runs first decides"
+    image: screens/runner-sniffing.jpg
+    bar: "Terminal · tune_lab.py --engine sqlserver"
+    short: first-caller
+    demo: "Terminal (dark theme, 18 pt): `py src/tune_lab.py --engine sqlserver --setup --save-plans plans`, scrolled to the sniffing table: six runs with plan, compiled/runtime, pages read, rows and check columns, all OK. Row 1 Megastore first: Clustered Index Scan, 1/1, 60000 rows. Row 2: Clustered Index Scan, 1/4242, 7 rows. Row 3 after sp_recompile: Index Seek + Key Lookup, 4242/4242. Row 4: Index Seek + Key Lookup, 4242/1, 60000 rows, the largest pages-read value in the table. Rows 5-6: RECOMPILE procedure."
+    narration: >
+      Here is the gotcha. If the Megastore calls first, the plan is a scan, and the next customer scans the whole
+      table to get seven rows. Recompile, let the small customer call first, and the Megastore inherits a seek plan:
+      one key lookup per order, sixty thousand times. Look at the compiled and runtime columns. Same procedure,
+      same index. The only difference is who called first.
+
+  - id: recompile
+    type: code
+    heading: "Fix one: compile for every call"
+    lang: sql
+    code: |
+      CREATE OR ALTER PROCEDURE Sales.GetCustomerOrders_Recompile
+          @CustomerId int
+      AS
+      BEGIN
+          SET NOCOUNT ON;
+          SELECT OrderId, OrderDate, Status, TotalAmount, ShipCountry
+          FROM Sales.Orders
+          WHERE CustomerId = @CustomerId
+          ORDER BY OrderDate DESC, OrderId DESC
+          OPTION (RECOMPILE);
+      END;
+    narration: >
+      Fix one: option recompile. The statement is compiled for the actual value on every call, so the small
+      customer gets the seek and the Megastore gets the scan. The price is a compilation every time. Microsoft's
+      guidance is to assess that cost on the whole workload first. Optimize for a typical value is another option,
+      if you know what typical is.
+
+  - id: checks
+    type: code
+    heading: "The checks read the plan"
+    lang: python
+    code: |
+      Run("4242 first", proc(4242), before=[RECOMPILE], checks=[
+          "has: Index Seek @ IX_Orders_CustomerId", "has: Key Lookup", "compiled: 4242",
+          "fewer pages than: then customer 4242"], expected="proc:4242"),
+      Run("then Megastore", proc(1), checks=[
+          "has: Key Lookup", "compiled: 4242", "runtime: 1", "more pages than: Megastore first"],
+          expected="proc:1"),
+      Run("RECOMPILE, 4242", proc(4242, True), checks=[
+          "has: Index Seek @ IX_Orders_CustomerId"], expected="proc:4242"),
+      Run("RECOMPILE, Megastore", proc(1, True), checks=[
+          "has: Clustered Index Scan @ PK_Orders", "fewer pages than: then Megastore"], expected="proc:1"),
+    narration: >
+      None of this is eyeballed. Each run has checks: the operators, the compiled and runtime parameter values from
+      the plan XML, and pages read compared with earlier runs. Every call also checks the rows it returned against
+      the expected count and revenue. If SQL Server ever picks a different plan, the run fails and tells you why.
+
+  - id: query-store
+    type: code
+    heading: "Fix two: Query Store remembers every plan"
+    lang: sql
+    code: |
+      WITH plans AS (
+          SELECT p.query_id,
+                 p.plan_id,
+                 p.is_forced_plan,
+                 CASE WHEN p.query_plan LIKE N'%PhysicalOp="Key Lookup"%'           THEN N'seek + key lookup'
+                      WHEN p.query_plan LIKE N'%PhysicalOp="Clustered Index Scan"%' THEN N'clustered index scan'
+                      ELSE N'other' END AS PlanShape
+          FROM sys.query_store_plan AS p
+          JOIN sys.query_store_query AS q ON q.query_id = p.query_id
+          WHERE q.object_id = OBJECT_ID(N'Sales.GetCustomerOrders')
+      )
+      -- ... executions and average logical reads per plan from sys.query_store_runtime_stats ...
+      -- tune_lab.py then forces the clustered index scan plan from this list:
+      -- EXEC sp_query_store_force_plan @query_id = <QueryId>, @plan_id = <PlanId>;
+    narration: >
+      Fix two needs no code change. Query Store is on by default for new databases in SQL Server twenty
+      twenty-two, and it has kept both plans this procedure has had, with their executions and average reads. The
+      scan is good enough for everyone; the seek plan is a disaster for the Megastore. So we force the scan.
+
+  - id: forced-screen
+    type: screen
+    heading: "The forced plan, in Query Store"
+    image: screens/query-store-forced.jpg
+    bar: "SSMS · CON-SQL01 · ContosoBikesPerf · Query Store"
+    demo: "SSMS Object Explorer > ContosoBikesPerf > Query Store > Queries With Forced Plans (or Tracked Queries for the procedure's query id): the GetCustomerOrders query with its two plans, the clustered index scan plan marked as forced (check mark). Next to it, or in a second take, the terminal's query-store section: both forced runs with Clustered Index Scan and OK, and the qs-forced-plans.sql table with ForceFailureCount 0."
+    narration: >
+      In Query Store's forced plans view, the scan plan carries the forced mark. Both customers now get the same,
+      predictable plan, whoever calls first, and the forced plans query shows zero forcing failures.
+
+  - id: forcing-rules
+    type: bullets
+    heading: "A forced plan is a decision you now own"
+    bullets:
+      - "Forcing doesn't guarantee that exact plan"
+      - "Drop the index it uses and forcing fails"
+      - "Check force_failure_count regularly"
+      - "Unforce when the query or data changes"
+    narration: >
+      But a forced plan is a decision you now own. Microsoft's documentation is clear: forcing doesn't guarantee
+      that exact plan, and if the index it relies on is dropped, forcing fails and SQL Server compiles normally.
+      Check the failure count regularly, and don't leave manual forcing in place forever.
+
+  - id: recap
+    type: bullets
+    heading: "Four rules"
+    bullets:
+      - "Keep functions off indexed columns: use ranges"
+      - "Match parameter types to column types"
+      - "Know your skew: sniffing is about who calls first"
+      - "Use Query Store to see every plan, force with care"
+    narration: >
+      Four rules. Keep functions off indexed columns and use ranges. Match parameter types to column types. Know
+      where your data is skewed, because parameter sniffing is about who calls first. And use Query Store to see
+      every plan a query has had, and force with care.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The scripts, the runner and the tests are on GitHub, and the complete guide is on dev lad log dot com. Links
+      are in the description. Next time: stored procedures and functions. This was dev lad log SQL, by Momento
+      Galático.

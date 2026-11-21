@@ -1,0 +1,42 @@
+{
+  "_comment": "Single source of truth for episode 3. Read by custkit (Python deploy) and by the form script tests (Node).",
+  "solution": "MGLabDataverse",
+  "publisher_prefix": "mgl",
+  "table": "mgl_projectrequest",
+  "entity_set": "mgl_projectrequests",
+  "column": {
+    "schema_name": "mgl_Justification",
+    "logical_name": "mgl_justification",
+    "display_name": "Business Justification",
+    "description": "Why the budget is needed. Required when the budget is 50,000 or more (business rule).",
+    "max_length": 2000
+  },
+  "webresource": {
+    "name": "mgl_/projectrequest/form.js",
+    "display_name": "Project Request form script",
+    "file": "formscript/dist/mgl_projectrequest_form.js"
+  },
+  "form": {
+    "name": "Information",
+    "onload": "MGL.ProjectRequest.onLoad",
+    "required_fields": [
+      "mgl_requestcode",
+      "mgl_customeraccountid",
+      "mgl_budget",
+      "mgl_justification"
+    ]
+  },
+  "view": {
+    "name": "Open requests over 50,000",
+    "description": "Active project requests with a budget of 50,000 or more, largest first. Created by custkit.",
+    "threshold": 50000,
+    "columns": [
+      ["mgl_requestcode", 120],
+      ["mgl_name", 250],
+      ["mgl_customeraccountid", 180],
+      ["mgl_budget", 120],
+      ["mgl_duedate", 110],
+      ["mgl_justification", 300]
+    ]
+  }
+}

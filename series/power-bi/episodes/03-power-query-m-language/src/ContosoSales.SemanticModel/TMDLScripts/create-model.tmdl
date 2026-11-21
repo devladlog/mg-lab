@@ -1,0 +1,450 @@
+createOrReplace
+
+	/// Folder that receives the monthly ERP exports (sales_yyyy-MM.csv). Keep the trailing backslash.
+	expression ExportFolder = "C:\MGLab\power-bi\exports\" meta [IsParameterQuery = true, Type = "Text", IsParameterQueryRequired = true]
+
+
+	/// Function: reads one monthly ERP export (semicolons, decimal comma, dd/MM/yyyy) into a typed table.
+	expression fnReadExport =
+			// One monthly ERP export -> typed table. Semicolons, decimal comma, day/month/year dates, TOTAL footer.
+			(file as binary) as table =>
+			let
+			    Source = Csv.Document(file, [Delimiter = ";", Columns = 19, Encoding = 65001, QuoteStyle = QuoteStyle.Csv]),
+			    Promoted = Table.PromoteHeaders(Source, [PromoteAllScalars = true]),
+			    NoTotals = Table.SelectRows(Promoted, each [OrderNumber] <> "TOTAL"),
+			    Cleaned = Table.TransformColumns(NoTotals, {
+			        {"ProductCode", each Text.Upper(Text.Trim(_)), type text},
+			        {"CustomerCode", each if Text.Trim(_) = "" then null else Text.Trim(_), type nullable text},
+			        // "/" in a format string is the culture's date separator: quote it to mean a literal slash
+			        {"OrderDate", each Date.FromText(_, [Format = "dd'/'MM'/'yyyy", Culture = "pt-PT"]), type date},
+			        {"ShipDate", each Date.FromText(_, [Format = "dd'/'MM'/'yyyy", Culture = "pt-PT"]), type date}
+			    }),
+			    TextColumns = {"OrderNumber", "CustomerName", "CustomerCity", "CustomerCountry", "StoreName",
+			        "StoreCountry", "Channel", "ProductName", "Subcategory", "Category", "Color"},
+			    Typed = Table.TransformColumnTypes(
+			        Cleaned,
+			        List.Transform(TextColumns, each {_, type text})
+			            & {{"LineNumber", Int64.Type}, {"Quantity", Int64.Type}, {"UnitPrice", Currency.Type}, {"UnitCost", Currency.Type}},
+			        "pt-PT"
+			    )
+			in
+			    Typed
+
+
+	/// Function: distinct members of a business key with a surrogate key starting at 1.
+	expression fnDimension =
+			// Distinct members of a business key + attributes, sorted, with a surrogate key starting at 1.
+			(source as table, businessKey as text, attributes as list, keyName as text) as table =>
+			let
+			    Columns = Table.SelectColumns(source, {businessKey} & attributes),
+			    Known = Table.SelectRows(Columns, each Record.Field(_, businessKey) <> null),
+			    Members = Table.Distinct(Known),
+			    Sorted = Table.Sort(Members, {{businessKey, Order.Ascending}}),
+			    Keyed = Table.AddIndexColumn(Sorted, keyName, 1, 1, Int64.Type),
+			    Result = Table.ReorderColumns(Keyed, {keyName, businessKey} & attributes)
+			in
+			    Result
+
+
+	/// Staging query, not loaded: all monthly exports combined, the newest copy of each order line kept.
+	expression SalesExport =
+			// Staging query (not loaded): every monthly export in the folder, combined and de-duplicated.
+			let
+			    Files = Folder.Files(ExportFolder),
+			    CsvOnly = Table.SelectRows(Files, each Text.Lower([Extension]) = ".csv"),
+			    Read = Table.AddColumn(CsvOnly, "Data",
+			        (file) => Table.AddColumn(fnReadExport(file[Content]), "SourceFile", each file[Name], type text)),
+			    Combined = Table.Combine(Read[Data]),
+			    // Each file re-exports the last days of the previous month with corrections: the newest file wins.
+			    Newest = Table.Sort(Combined, {{"SourceFile", Order.Descending}}),
+			    Buffered = Table.Buffer(Newest),
+			    Deduped = Table.Distinct(Buffered, {"OrderNumber", "LineNumber"}),
+			    Result = Table.RemoveColumns(Deduped, {"SourceFile"})
+			in
+			    Result
+
+
+	/// Fact table, one row per order line. Filters arrive from Date (order date), Customer, Product and Store.
+	table Sales
+
+		measure 'Sales Amount' = SUMX(Sales, Sales[Quantity] * Sales[Unit Price])
+			formatString: #,0.00
+			displayFolder: Sales
+
+		measure 'Total Cost' = SUMX(Sales, Sales[Quantity] * Sales[Unit Cost])
+			formatString: #,0.00
+			displayFolder: Sales
+
+		measure Margin = [Sales Amount] - [Total Cost]
+			formatString: #,0.00
+			displayFolder: Margin
+
+		measure 'Margin %' = DIVIDE([Margin], [Sales Amount])
+			formatString: 0.0%
+			displayFolder: Margin
+
+		measure Units = SUM(Sales[Quantity])
+			formatString: #,0
+			displayFolder: Sales
+
+		measure Orders = DISTINCTCOUNT(Sales[Order Number])
+			formatString: #,0
+			displayFolder: Sales
+
+		/// Degenerate dimension: kept on the fact table for filtering by order.
+		column 'Order Number'
+			dataType: string
+			summarizeBy: none
+			sourceColumn: OrderNumber
+
+		column 'Line Number'
+			dataType: int64
+			isHidden
+			formatString: 0
+			summarizeBy: none
+			sourceColumn: LineNumber
+
+		column 'Order Date'
+			dataType: dateTime
+			isHidden
+			formatString: yyyy-mm-dd
+			summarizeBy: none
+			sourceColumn: OrderDate
+
+		column 'Ship Date'
+			dataType: dateTime
+			isHidden
+			formatString: yyyy-mm-dd
+			summarizeBy: none
+			sourceColumn: ShipDate
+
+		column CustomerKey
+			dataType: int64
+			isHidden
+			formatString: 0
+			summarizeBy: none
+			sourceColumn: CustomerKey
+
+		column ProductKey
+			dataType: int64
+			isHidden
+			formatString: 0
+			summarizeBy: none
+			sourceColumn: ProductKey
+
+		column StoreKey
+			dataType: int64
+			isHidden
+			formatString: 0
+			summarizeBy: none
+			sourceColumn: StoreKey
+
+		column Quantity
+			dataType: int64
+			isHidden
+			formatString: #,0
+			summarizeBy: none
+			sourceColumn: Quantity
+
+		column 'Unit Price'
+			dataType: decimal
+			isHidden
+			formatString: #,0.00
+			summarizeBy: none
+			sourceColumn: UnitPrice
+
+		column 'Unit Cost'
+			dataType: decimal
+			isHidden
+			formatString: #,0.00
+			summarizeBy: none
+			sourceColumn: UnitCost
+
+		partition Sales = m
+			mode: import
+			source =
+					let
+					    Source = SalesExport,
+					    JoinProduct = Table.NestedJoin(Source, {"ProductCode"}, Product, {"ProductCode"}, "P", JoinKind.LeftOuter),
+					    WithProduct = Table.ExpandTableColumn(JoinProduct, "P", {"ProductKey"}),
+					    JoinCustomer = Table.NestedJoin(WithProduct, {"CustomerCode"}, Customer, {"CustomerCode"}, "C", JoinKind.LeftOuter),
+					    WithCustomer = Table.ExpandTableColumn(JoinCustomer, "C", {"CustomerKey"}),
+					    Guests = Table.ReplaceValue(WithCustomer, null, -1, Replacer.ReplaceValue, {"CustomerKey"}),
+					    JoinStore = Table.NestedJoin(Guests, {"StoreName"}, Store, {"Store"}, "S", JoinKind.LeftOuter),
+					    WithStore = Table.ExpandTableColumn(JoinStore, "S", {"StoreKey"}),
+					    Result = Table.SelectColumns(WithStore, {"OrderNumber", "LineNumber", "OrderDate", "ShipDate",
+					        "CustomerKey", "ProductKey", "StoreKey", "Quantity", "UnitPrice", "UnitCost"}),
+					    Typed = Table.TransformColumnTypes(Result, {
+					        {"CustomerKey", Int64.Type}, {"ProductKey", Int64.Type}, {"StoreKey", Int64.Type}
+					    }, "en-US")
+					in
+					    Typed
+
+
+	/// Date dimension: one row per day, full calendar years, marked as the date table. Filters Sales by order date.
+	table Date
+		dataCategory: Time
+
+		column Date
+			dataType: dateTime
+			isKey
+			formatString: yyyy-mm-dd
+			summarizeBy: none
+			sourceColumn: Date
+
+		column Year
+			dataType: int64
+			formatString: 0
+			summarizeBy: none
+			sourceColumn: Year
+
+		column Quarter
+			dataType: string
+			summarizeBy: none
+			sourceColumn: Quarter
+
+		column 'Month Number'
+			dataType: int64
+			isHidden
+			formatString: 0
+			summarizeBy: none
+			sourceColumn: Month Number
+
+		column Month
+			dataType: string
+			summarizeBy: none
+			sourceColumn: Month
+			sortByColumn: 'Month Number'
+
+		column 'Year Month Number'
+			dataType: int64
+			isHidden
+			formatString: 0
+			summarizeBy: none
+			sourceColumn: Year Month Number
+
+		column 'Year Month'
+			dataType: string
+			summarizeBy: none
+			sourceColumn: Year Month
+			sortByColumn: 'Year Month Number'
+
+		column 'Day of Week Number'
+			dataType: int64
+			isHidden
+			formatString: 0
+			summarizeBy: none
+			sourceColumn: Day of Week Number
+
+		column 'Day of Week'
+			dataType: string
+			summarizeBy: none
+			sourceColumn: Day of Week
+			sortByColumn: 'Day of Week Number'
+
+		hierarchy Calendar
+
+			level Year
+				column: Year
+
+			level Quarter
+				column: Quarter
+
+			level Month
+				column: Month
+
+			level Date
+				column: Date
+
+		partition Date = m
+			mode: import
+			source =
+					// Full calendar years covering every order date and ship date (ship dates spill into the next year).
+					let
+					    AllDates = SalesExport[OrderDate] & SalesExport[ShipDate],
+					    FirstDay = #date(Date.Year(List.Min(AllDates)), 1, 1),
+					    LastDay = #date(Date.Year(List.Max(AllDates)), 12, 31),
+					    Days = List.Dates(FirstDay, Duration.Days(LastDay - FirstDay) + 1, #duration(1, 0, 0, 0)),
+					    Rows = List.Transform(Days, (d) => [
+					        Date = d,
+					        Year = Date.Year(d),
+					        Quarter = "Q" & Text.From(Date.QuarterOfYear(d)),
+					        #"Month Number" = Date.Month(d),
+					        Month = Date.ToText(d, [Format = "MMM", Culture = "en-US"]),
+					        #"Year Month" = Date.ToText(d, [Format = "yyyy-MM", Culture = "en-US"]),
+					        #"Year Month Number" = Date.Year(d) * 100 + Date.Month(d),
+					        #"Day of Week Number" = Date.DayOfWeek(d, Day.Monday) + 1,
+					        #"Day of Week" = Date.ToText(d, [Format = "ddd", Culture = "en-US"])
+					    ]),
+					    Calendar = Table.FromRecords(Rows),
+					    Typed = Table.TransformColumnTypes(Calendar, {
+					        {"Date", type date}, {"Year", Int64.Type}, {"Quarter", type text}, {"Month Number", Int64.Type},
+					        {"Month", type text}, {"Year Month", type text}, {"Year Month Number", Int64.Type},
+					        {"Day of Week Number", Int64.Type}, {"Day of Week", type text}
+					    }, "en-US")
+					in
+					    Typed
+
+
+	/// Product dimension. Category and subcategory are flattened into this table (no snowflake).
+	table Product
+
+		column ProductKey
+			dataType: int64
+			isHidden
+			isKey
+			formatString: 0
+			summarizeBy: none
+			sourceColumn: ProductKey
+
+		column 'Product Code'
+			dataType: string
+			summarizeBy: none
+			sourceColumn: ProductCode
+
+		column Product
+			dataType: string
+			summarizeBy: none
+			sourceColumn: Product
+
+		column Subcategory
+			dataType: string
+			summarizeBy: none
+			sourceColumn: Subcategory
+
+		column Category
+			dataType: string
+			summarizeBy: none
+			sourceColumn: Category
+
+		column Color
+			dataType: string
+			summarizeBy: none
+			sourceColumn: Color
+
+		hierarchy 'Product Hierarchy'
+
+			level Category
+				column: Category
+
+			level Subcategory
+				column: Subcategory
+
+			level Product
+				column: Product
+
+		partition Product = m
+			mode: import
+			source =
+					let
+					    Members = fnDimension(SalesExport, "ProductCode", {"ProductName", "Subcategory", "Category", "Color"}, "ProductKey"),
+					    Result = Table.RenameColumns(Members, {{"ProductName", "Product"}})
+					in
+					    Result
+
+
+	/// Customer dimension. Key -1 is the explicit "Unknown customer" row for guest orders.
+	table Customer
+
+		column CustomerKey
+			dataType: int64
+			isHidden
+			isKey
+			formatString: 0
+			summarizeBy: none
+			sourceColumn: CustomerKey
+
+		column 'Customer Code'
+			dataType: string
+			summarizeBy: none
+			sourceColumn: CustomerCode
+
+		column Customer
+			dataType: string
+			summarizeBy: none
+			sourceColumn: Customer
+
+		column City
+			dataType: string
+			summarizeBy: none
+			sourceColumn: City
+
+		column Country
+			dataType: string
+			summarizeBy: none
+			sourceColumn: Country
+
+		partition Customer = m
+			mode: import
+			source =
+					let
+					    Members = fnDimension(SalesExport, "CustomerCode", {"CustomerName", "CustomerCity", "CustomerCountry"}, "CustomerKey"),
+					    Renamed = Table.RenameColumns(Members, {{"CustomerName", "Customer"}, {"CustomerCity", "City"}, {"CustomerCountry", "Country"}}),
+					    // Guest orders have no customer: give them an explicit member instead of a blank row in the visuals.
+					    Result = Table.InsertRows(Renamed, 0, {
+					        [CustomerKey = -1, CustomerCode = "", Customer = "Unknown customer", City = "Unknown", Country = "Unknown"]
+					    })
+					in
+					    Result
+
+
+	/// Store dimension (physical stores and the online shop).
+	table Store
+
+		column StoreKey
+			dataType: int64
+			isHidden
+			isKey
+			formatString: 0
+			summarizeBy: none
+			sourceColumn: StoreKey
+
+		column Store
+			dataType: string
+			summarizeBy: none
+			sourceColumn: Store
+
+		column Country
+			dataType: string
+			summarizeBy: none
+			sourceColumn: Country
+
+		column Channel
+			dataType: string
+			summarizeBy: none
+			sourceColumn: Channel
+
+		partition Store = m
+			mode: import
+			source =
+					let
+					    Members = fnDimension(SalesExport, "StoreName", {"StoreCountry", "Channel"}, "StoreKey"),
+					    Result = Table.RenameColumns(Members, {{"StoreName", "Store"}, {"StoreCountry", "Country"}})
+					in
+					    Result
+
+
+	relationship 'Sales Order Date to Date'
+		fromColumn: Sales.'Order Date'
+		toColumn: Date.Date
+
+
+	relationship 'Sales Ship Date to Date'
+		isActive: false
+		fromColumn: Sales.'Ship Date'
+		toColumn: Date.Date
+
+
+	relationship 'Sales to Customer'
+		fromColumn: Sales.CustomerKey
+		toColumn: Customer.CustomerKey
+
+
+	relationship 'Sales to Product'
+		fromColumn: Sales.ProductKey
+		toColumn: Product.ProductKey
+
+
+	relationship 'Sales to Store'
+		fromColumn: Sales.StoreKey
+		toColumn: Store.StoreKey

@@ -1,0 +1,59 @@
+/// Folder that receives the monthly ERP exports (sales_yyyy-MM.csv). Keep the trailing backslash.
+expression ExportFolder = "C:\MGLab\power-bi\exports\" meta [IsParameterQuery = true, Type = "Text", IsParameterQueryRequired = true]
+
+/// Function: reads one monthly ERP export (semicolons, decimal comma, dd/MM/yyyy) into a typed table.
+expression fnReadExport =
+		// One monthly ERP export -> typed table. Semicolons, decimal comma, day/month/year dates, TOTAL footer.
+		(file as binary) as table =>
+		let
+		    Source = Csv.Document(file, [Delimiter = ";", Columns = 19, Encoding = 65001, QuoteStyle = QuoteStyle.Csv]),
+		    Promoted = Table.PromoteHeaders(Source, [PromoteAllScalars = true]),
+		    NoTotals = Table.SelectRows(Promoted, each [OrderNumber] <> "TOTAL"),
+		    Cleaned = Table.TransformColumns(NoTotals, {
+		        {"ProductCode", each Text.Upper(Text.Trim(_)), type text},
+		        {"CustomerCode", each if Text.Trim(_) = "" then null else Text.Trim(_), type nullable text},
+		        // "/" in a format string is the culture's date separator: quote it to mean a literal slash
+		        {"OrderDate", each Date.FromText(_, [Format = "dd'/'MM'/'yyyy", Culture = "pt-PT"]), type date},
+		        {"ShipDate", each Date.FromText(_, [Format = "dd'/'MM'/'yyyy", Culture = "pt-PT"]), type date}
+		    }),
+		    TextColumns = {"OrderNumber", "CustomerName", "CustomerCity", "CustomerCountry", "StoreName",
+		        "StoreCountry", "Channel", "ProductName", "Subcategory", "Category", "Color"},
+		    Typed = Table.TransformColumnTypes(
+		        Cleaned,
+		        List.Transform(TextColumns, each {_, type text})
+		            & {{"LineNumber", Int64.Type}, {"Quantity", Int64.Type}, {"UnitPrice", Currency.Type}, {"UnitCost", Currency.Type}},
+		        "pt-PT"
+		    )
+		in
+		    Typed
+
+/// Function: distinct members of a business key with a surrogate key starting at 1.
+expression fnDimension =
+		// Distinct members of a business key + attributes, sorted, with a surrogate key starting at 1.
+		(source as table, businessKey as text, attributes as list, keyName as text) as table =>
+		let
+		    Columns = Table.SelectColumns(source, {businessKey} & attributes),
+		    Known = Table.SelectRows(Columns, each Record.Field(_, businessKey) <> null),
+		    Members = Table.Distinct(Known),
+		    Sorted = Table.Sort(Members, {{businessKey, Order.Ascending}}),
+		    Keyed = Table.AddIndexColumn(Sorted, keyName, 1, 1, Int64.Type),
+		    Result = Table.ReorderColumns(Keyed, {keyName, businessKey} & attributes)
+		in
+		    Result
+
+/// Staging query, not loaded: all monthly exports combined, the newest copy of each order line kept.
+expression SalesExport =
+		// Staging query (not loaded): every monthly export in the folder, combined and de-duplicated.
+		let
+		    Files = Folder.Files(ExportFolder),
+		    CsvOnly = Table.SelectRows(Files, each Text.Lower([Extension]) = ".csv"),
+		    Read = Table.AddColumn(CsvOnly, "Data",
+		        (file) => Table.AddColumn(fnReadExport(file[Content]), "SourceFile", each file[Name], type text)),
+		    Combined = Table.Combine(Read[Data]),
+		    // Each file re-exports the last days of the previous month with corrections: the newest file wins.
+		    Newest = Table.Sort(Combined, {{"SourceFile", Order.Descending}}),
+		    Buffered = Table.Buffer(Newest),
+		    Deduped = Table.Distinct(Buffered, {"OrderNumber", "LineNumber"}),
+		    Result = Table.RemoveColumns(Deduped, {"SourceFile"})
+		in
+		    Result

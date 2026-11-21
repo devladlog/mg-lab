@@ -1,0 +1,307 @@
+# DEVLADLOG Microsoft 365 — episode 04 (draft: code and tests are real; screen scenes still need the lab recording)
+episode: 4
+slug: entra-id-governance-identity
+series_label: "MICROSOFT 365"
+series_name: "DEVLADLOG Microsoft 365"
+file_prefix: "microsoft-365"
+title: "Entra ID Governance & Identity"
+subtitle: "PIM, guest access reviews and leaver workflows, as code"
+voice: am_michael
+thumbnail_text: "NO MORE\nSTANDING\nADMINS"
+youtube:
+  title: "Entra ID Governance as Code: PIM, Access Reviews, Lifecycle Workflows | DEVLADLOG Microsoft 365 #4"
+  tags: [Microsoft Entra ID Governance, Privileged Identity Management, PIM, access reviews, lifecycle workflows, guest access, Microsoft Graph, PowerShell, Microsoft 365 E5, identity governance]
+sources:
+  - https://www.devladlog.com/articles/office-365/2026-03-31-entra-id-governance-complete-guide-2026/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Standing access is the risk"
+    sub: "Admins who are always admins, guests nobody reviews, leavers nobody offboards"
+    short: hook
+    narration: >
+      In episode one we counted Global Administrators. Counting isn't governing. An admin who is always an admin, a
+      guest nobody remembers inviting, and an account that still works after someone's last day are the real risk.
+      Today we fix all three with Microsoft Entra I D Governance, from one file: just-in-time admin roles, a recurring
+      review of every guest, and a leaver workflow that runs on the last day.
+
+  - id: licensing
+    type: bullets
+    heading: "Which licence does what"
+    bullets:
+      - "PIM and basic access reviews: Entra ID P2 (in Microsoft 365 E5)"
+      - "Lifecycle workflows: Entra ID Governance or Entra Suite"
+      - "Licences must cover every member in scope; no assignment needed"
+      - "Governance-only features on guests: billed per monthly active guest"
+    narration: >
+      First, licences, because they decide what you can build. Privileged Identity Management and basic access
+      reviews come with Entra I D P2, which is in Microsoft 365 E5. Lifecycle workflows need Entra I D Governance or
+      the Entra Suite. You need enough licences for every member in scope, but you don't have to assign them. And
+      governance-only features used on guests are billed per monthly active guest, through an Azure subscription.
+
+  - id: config
+    type: code
+    heading: "One file for identity governance"
+    lang: json
+    code: |
+      {
+        "emergencyAccessAccountIds": ["00000000-0000-0000-0000-000000000901", "...902"],
+        "eligibleAssignments": [
+          { "principalName": "Alex Demo", "role": "Groups Administrator", "durationDays": 180,
+            "justification": "Owns the Microsoft 365 groups lifecycle (expiration, restore)" }
+        ],
+        "guestReview": { "intervalMonths": 3, "instanceDurationInDays": 14,
+                         "defaultDecision": "Deny", "autoApplyDecisionsEnabled": true },
+        "leaverWorkflow": { "scopeRule": "(department eq 'Sales')", "offsetInDays": 0,
+                            "isSchedulingEnabled": false,
+                            "tasks": ["Revoke all refresh tokens for user", "Remove user from all teams",
+                                      "Remove users from all groups", "Disable user account"] },
+        "licensing": { "governanceLicenceEndsOn": "2026-12-20", "warnDays": 30 }
+      }
+    narration: >
+      Here's the file. Two emergency access accounts. Alex, who ran the groups lifecycle in episode three, becomes
+      eligible for Groups Administrator for one hundred and eighty days, with a justification. Guests get reviewed
+      every quarter, denied by default. Leavers in Sales lose sessions, groups and teams, and are disabled on their
+      last day. And we record when the governance licence ends. That date matters later.
+
+  - id: pim-code
+    type: code
+    heading: "Eligible, not permanent"
+    lang: powershell
+    code: |
+      $role = @($Config.privilegedRoles | Where-Object { $_.name -eq $Assignment.role })[0]
+      [ordered]@{
+          action           = 'adminAssign'
+          justification    = $Assignment.justification
+          roleDefinitionId = $role.templateId
+          directoryScopeId = '/'
+          principalId      = $Assignment.principalId
+          scheduleInfo     = [ordered]@{
+              startDateTime = $Now.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'")
+              expiration    = [ordered]@{ type = 'afterDateTime'; endDateTime = $Now.AddDays([int]$Assignment.durationDays).ToString(...) }
+          }
+      }
+    narration: >
+      The P I M request is a role eligibility schedule request with the admin assign action, the built-in role's
+      template I D, tenant-wide scope, and an end date. The config loader refuses an eligible assignment without a
+      duration or a justification, so nobody gets permanent eligibility from this file by accident.
+
+  - id: pim-facts
+    type: bullets
+    heading: "The rules Microsoft gives for admin roles"
+    short: standing-access
+    bullets:
+      - "Zero permanent active assignments, except emergency access accounts"
+      - "Two cloud-only emergency accounts, Global Administrator, permanent active"
+      - "Activation is time-bound: eight hours at most"
+      - "Fewer than five Global Administrators"
+    narration: >
+      Microsoft's guidance is short. Keep zero permanently active admin assignments, except your emergency access
+      accounts. Keep two cloud-only emergency accounts with Global Administrator as permanent active, not eligible.
+      Everyone else activates when they need it, and an activation lasts eight hours at most. And keep Global
+      Administrators under five.
+
+  - id: pim-screen
+    type: screen
+    heading: "Just-in-time Groups Administrator"
+    image: screens/pim.jpg
+    bar: "PowerShell + Microsoft Entra admin center · PIM (lab tenant, masked)"
+    demo: >
+      Lab tenant. ./Invoke-IdentityGovernance.ps1 -PolicyFile ./governance.lab.json -AssignEligible -WhatIf, then
+      without -WhatIf: table Principal=Alex Demo, Role=Groups Administrator, Result=Provisioned. Then Entra admin
+      center > ID Governance > Privileged Identity Management > Microsoft Entra roles > Assignments > Eligible: Alex
+      Demo, Groups Administrator, end date about 180 days out. Then, signed in as Alex in a second browser profile:
+      My roles > Activate with a justification; show the active assignment with its end time. Mask IDs and tenant name.
+    narration: >
+      In the lab, Alex becomes eligible for Groups Administrator, with an end date six months out. When Alex needs
+      to restore a deleted group, he activates the role with a justification, and it switches itself off again when
+      the activation ends.
+
+  - id: review-code
+    type: code
+    heading: "Every guest, every quarter, decided by owners"
+    lang: powershell
+    code: |
+      scope                    = [ordered]@{
+          '@odata.type' = '#microsoft.graph.accessReviewQueryScope'
+          query         = "./members/microsoft.graph.user/?`$count=true&`$filter=(userType eq 'Guest')"
+          queryType     = 'MicrosoftGraph'
+      }
+      instanceEnumerationScope = [ordered]@{
+          '@odata.type' = '#microsoft.graph.accessReviewQueryScope'
+          query         = "/v1.0/groups?`$filter=(groupTypes/any(c:c+eq+'Unified'))&`$count=true"
+          queryType     = 'MicrosoftGraph'
+      }
+      reviewers                = @([ordered]@{ query = './owners'; queryType = 'MicrosoftGraph' })
+      fallbackReviewers        = @([ordered]@{ query = "/users/$($r.fallbackReviewerId)"; queryType = 'MicrosoftGraph' })
+    narration: >
+      The access review follows Microsoft's guest review tutorial. The scope is guest members, and the instance
+      enumeration scope is every Microsoft 365 group, so each group with guests gets its own review. The group owners
+      decide, with a fallback reviewer for groups without owners, which episode three taught us to expect. Denied
+      guests are removed from the group automatically when the review ends.
+
+  - id: review-screen
+    type: screen
+    heading: "The partner guest gets reviewed"
+    image: screens/review.jpg
+    bar: "Microsoft Entra admin center · ID Governance · Access reviews (lab tenant, masked)"
+    demo: >
+      ./Invoke-IdentityGovernance.ps1 -PolicyFile ./governance.lab.json -CreateGuestReview -StartDate <today> (confirm):
+      Result Created. Entra admin center > ID Governance > Access reviews: "Quarterly review - guests in Microsoft 365
+      groups" with one instance per group that has guests (TEAM_Sales_Partner Portal from episode 2). Open the
+      instance as the owner (myaccess.microsoft.com > Access reviews): the guest listed with Approve / Deny. Mask the
+      guest's email and the tenant name.
+    narration: >
+      Created in the lab, the review already lists the partner portal team from episode two, because it has a guest.
+      Alex, as an owner, sees the guest and decides. If he does nothing for fourteen days, the default decision is
+      deny, and the guest is removed from the group.
+
+  - id: workflow-code
+    type: code
+    heading: "The leaver workflow"
+    lang: powershell
+    code: |
+      executionConditions = [ordered]@{
+          '@odata.type' = '#microsoft.graph.identityGovernance.triggerAndScopeBasedConditions'
+          scope         = [ordered]@{ '@odata.type' = '#microsoft.graph.identityGovernance.ruleBasedSubjectSet'; rule = $w.scopeRule }
+          trigger       = [ordered]@{
+              '@odata.type'      = '#microsoft.graph.identityGovernance.timeBasedAttributeTrigger'
+              timeBasedAttribute = 'employeeLeaveDateTime'
+              offsetInDays       = [int]$w.offsetInDays
+          }
+      }
+      tasks = @(foreach ($t in @($w.tasks)) {
+          [ordered]@{ category = 'leaver'; continueOnError = $t -in $script:ContinueOnError; displayName = $t
+                      isEnabled = $true; taskDefinitionId = $script:LeaverTasks[$t]; arguments = @() } })
+    narration: >
+      The lifecycle workflow triggers on each user's employee leave date, for users that match the scope rule. Every
+      task is a built-in task definition, referenced by its I D: revoke refresh tokens, remove from all teams, remove
+      from all groups, disable the account. Like Microsoft's tutorial, scheduling starts switched off, so we can test
+      it on demand first.
+
+  - id: preflight
+    type: code
+    heading: "Check before you run it"
+    lang: powershell
+    code: |
+      if ((Get-IGProp $User 'userType' 'Member') -ne 'Member') {
+          [pscustomobject]@{ Level = 'Blocker'; Check = 'GuestSubject'; Detail = "$name is a guest: ... billable ..." }
+      }
+      if ($ActiveAssignments.Count -and 'Disable user account' -in $Tasks) {
+          [pscustomobject]@{ Level = 'Blocker'; Check = 'HoldsEntraRole'; Detail = "$name holds $roles. ..." }
+      }
+      foreach ($g in $OwnedGroups) {
+          if ([int](Get-IGProp $g 'ownerCount' 0) -le 1) {
+              [pscustomobject]@{ Level = 'Warning'; Check = 'SoleOwner'; Detail = "$name is the only owner of ..." }
+          }
+      }
+    narration: >
+      One detail changes how you run it. When you run a workflow on demand, its tasks run whether or not the user
+      matches the scope and the trigger. So the script checks the user first. A guest is blocked. Someone who still
+      holds an Entra role is blocked, because the disable user account task doesn't support users with role
+      assignments. And sole owners get a warning, or their groups end up ownerless.
+
+  - id: leaver-screen
+    type: screen
+    heading: "Sam's last day"
+    image: screens/leaver.jpg
+    bar: "PowerShell + Lifecycle workflows · Workflow history (lab tenant, masked)"
+    demo: >
+      Test user Sam Leaver (Sales) holds a time-bound active Groups Administrator assignment and is sole owner of
+      "Sales Pipeline Review". Run ./Invoke-IdentityGovernance.ps1 -PolicyFile ./governance.lab.json -RunLeaver
+      -WorkflowId <id> -UserId <sam>: "Sam Leaver: Blocked" with HoldsEntraRole (Blocker) and SoleOwner (Warning).
+      Remove the role assignment, make Alex a second owner, run again and confirm: "Started". Then Entra admin center >
+      ID Governance > Lifecycle workflows > the workflow > Workflow history: Sam with 4 tasks completed. Mask IDs.
+    narration: >
+      Sam from Sales is leaving. The first run stops: Sam still holds Groups Administrator, and is the only owner of a
+      group. Remove the role, add a second owner, run it again, and the workflow history shows all four tasks
+      completed. Sessions revoked, memberships gone, account disabled.
+
+  - id: gotcha
+    type: screen
+    heading: "The gotcha: when the licence ends"
+    image: screens/audit.jpg
+    bar: "PowerShell · Invoke-IdentityGovernance -Audit (lab tenant, masked)"
+    short: gotcha
+    demo: >
+      ./Invoke-IdentityGovernance.ps1 -PolicyFile ./governance.lab.json -Audit -OutFile ./governance-audit.md. Capture
+      the findings table with the LicenceEnding row (High) and its detail "... eligible assignment(s) will be removed
+      and ... time-bound active assignment(s) become permanent". Rewrite narration numbers to match. Mask names except
+      fictional lab users.
+    narration: >
+      Here's the gotcha, and it's in our own lab: the governance trial ends on December twentieth. When a P2 or
+      governance licence or trial expires, eligible role assignments are removed, and time-bound active assignments
+      become permanent. So the safe setup quietly turns into the unsafe one. The audit warns thirty days ahead and
+      counts exactly what will change.
+
+  - id: billing
+    type: code
+    heading: "The other bill: guests"
+    lang: powershell
+    code: |
+      if ($Kind -eq 'AccessReview') {
+          $guests = "$(Get-IGProp $scope 'query')" -match "userType\s+eq\s+'Guest'"
+          if (-not $guests) { return }
+          if ((Get-IGProp $scope '@odata.type') -eq '#microsoft.graph.accessReviewInactiveUsersQueryScope') {
+              'Guest review scoped to inactive users' }
+          $insights = @(Get-IGProp $Body['settings'] 'recommendationInsightSettings' @())
+          if ($insights | Where-Object { "$(Get-IGProp $_ '@odata.type')" -like '*groupPeerOutlierRecommendationInsightSettings' }) {
+              'Guest review with the user-to-group affiliation helper' }
+      }
+      else {
+          $rule = "$(Get-IGProp (Get-IGProp $Body['executionConditions'] 'scope') 'rule')"
+          if ($rule -match "userType\s+eq\s+'Guest'") { 'Workflow scope rule includes guests (userType eq Guest)' }
+      }
+    narration: >
+      One more cost to know. Some features on guests need the guest governance add-on, with an Azure subscription
+      linked for billing: reviews of inactive guests, the user-to-group affiliation helper, and workflows scoped to
+      guests. Without it, Microsoft blocks creating them. Our guard refuses those settings unless you pass allow guest
+      billing, so a lab or a pilot never starts a meter by accident.
+
+  - id: tests
+    type: code
+    heading: "Fifty-three tests, no tenant"
+    lang: text
+    code: |
+      $ Invoke-Pester ./tests
+      Describing PIM eligibility request
+        [+] is time-bound: afterDateTime, start + durationDays
+      Describing Guest access review definition
+        [+] denies by default and removes denied guests automatically
+      Describing Guest billing guard
+        [+] flags an inactive-guest review
+      Describing Governance findings
+        [+] spells out what the licence end does to PIM
+      Describing Invoke-LeaverWorkflow (mocked Graph)
+        [+] stops before activate when the user still holds an Entra role
+
+      Tests Passed: 53, Failed: 0, Skipped: 0
+    narration: >
+      Fifty-three Pester tests run without a tenant: the request bodies, the billing guard, every finding, the leaver
+      pre-flight, and the create and run calls against a mocked Graph, plus two checks against the real Microsoft
+      Graph PowerShell module.
+
+  - id: recap
+    type: bullets
+    heading: "Five rules for identity governance"
+    bullets:
+      - "Admins are eligible and time-bound; only emergency accounts are permanent"
+      - "Review every guest on a schedule, deny by default"
+      - "Offboard with a leaver workflow, tested on demand first"
+      - "Pre-flight on-demand runs: roles, guests, sole owners"
+      - "Know your licence end date before PIM does"
+    narration: >
+      Five rules. Make admins eligible and time-bound, and keep only the emergency accounts permanent. Review every
+      guest on a schedule, and deny by default. Offboard with a leaver workflow, tested on demand before you switch
+      on the schedule. Check roles, guests and sole owners before every on-demand run. And know your licence end
+      date before P I M finds out for you.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The module, the governance file and the tests are on GitHub, and the complete guide is on dev lad log dot com.
+      Links are in the description. Next in this series: Microsoft Purview compliance. Subscribe so you don't miss
+      it.

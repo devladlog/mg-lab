@@ -1,0 +1,309 @@
+episode: 4
+slug: visualization-design-custom-visuals
+series_label: "POWER BI"
+series_name: "DEVLADLOG Power BI"
+file_prefix: "power-bi"
+title: "Visualization Design & Custom Visuals"
+subtitle: "An accessible theme, a report as code, and a custom visual in TypeScript"
+voice: am_michael
+thumbnail_text: "REPORT DESIGN\nTHAT PASSES\nA LINTER"
+youtube:
+  title: "Power BI Report Design: Accessible Themes, Report as Code, Custom Visual | DEVLADLOG Power BI #4"
+  tags: [Power BI, report design, report theme, accessibility, color blind, PBIR, custom visual, pbiviz, TypeScript, high contrast]
+sources:
+  - https://www.devladlog.com/articles/power-bi/2025-03-04-visualization-design-complete-guide-2025/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Green means good. Unless you can't see green."
+    sub: "Report design you can check, plus a custom visual"
+    short: hook
+    narration: >
+      Green for good, red for bad. For many people with red green colour blindness those two colours look almost the
+      same, and Microsoft's own accessibility guide says to avoid using them together. In this episode we build an
+      accessible report theme, a report page as code, and a custom visual in TypeScript, and we check all three with
+      tools before anyone opens Power BI.
+
+  - id: plan
+    type: bullets
+    heading: "What we're building"
+    bullets:
+      - "Contoso Bikes theme: colours checked for contrast and colour blindness"
+      - "A report page generated from a 12-column grid spec (PBIR)"
+      - "report-lint: alt text, titles, tab order, grid, model fields"
+      - "Target bullet: a custom visual, actual vs target"
+      - "Tested, packaged with pbiviz, imported into Desktop"
+    narration: >
+      Same Contoso Bikes model as episode two. First a report theme, with every colour checked. Then a report page
+      generated from a grid spec, in the enhanced report format, and a linter for it. Then a custom visual, target
+      bullet, written in TypeScript, unit tested, packaged with p b i viz and imported into Desktop.
+
+  - id: theme
+    type: code
+    heading: "The theme: colours, sentiment, text"
+    lang: json
+    code: |
+      {
+        "name": "Contoso Bikes",
+        "dataColors": ["#0B5CAD", "#CC6677", "#7A6A00", "#882255", "#6699CC", "#999933", "#332288", "#44AA99"],
+        "good": "#0B5CAD",
+        "neutral": "#7A6A00",
+        "bad": "#B34700",
+        "background": "#FFFFFF",
+        "foreground": "#252423",
+        "secondLevelElements": "#605E5C",
+        "textClasses": {
+          "callout": { "fontSize": 28, "fontFace": "Segoe UI Semibold", "color": "#252423" },
+          "label": { "fontSize": 10, "fontFace": "Segoe UI", "color": "#3B3A39" }
+        }
+      }
+    narration: >
+      A report theme is a J S O N file. Data colours in the order visuals use them, sentiment colours for good, neutral
+      and bad, and text classes. Good is blue and bad is a burnt orange, not green and red. Power BI validates the file
+      against a published schema when you import it, and our tests validate it against the same schema first.
+
+  - id: gotcha
+    type: code
+    heading: "Gotcha: the documentation's own example"
+    lang: text
+    code: |
+      $ theme-check tests/fixtures/learn-example-theme.json        # example colours from Learn
+        ERROR    TC003  good #1AAB40 vs bad #D64554 (deuteranopia): difference 5.6, needs 20
+        WARNING  TC004  dataColors[1] #12239E vs [3] #6B007B (protanopia): difference 5.4, needs 10
+        WARNING  TC004  dataColors[4] #E044A7 vs [5] #744EC2 (protanopia): difference 8.2, needs 10
+        WARNING  TC004  dataColors[1] #12239E vs [3] #6B007B (deuteranopia): difference 8.3, needs 10
+        WARNING  TC004  dataColors[2] #E66C37 vs [4] #E044A7 (tritanopia): difference 8.1, needs 10
+      Custom Theme: 1 error(s), 4 warning(s)
+
+      $ theme-check src/themes/ContosoBikes.json
+      Contoso Bikes: 0 error(s), 0 warning(s)
+    short: gotcha
+    narration: >
+      Here's the gotcha. The theme documentation's example uses green for good and red for bad. Theme check simulates
+      colour vision deficiency and measures the difference between colours. With normal vision that pair is seventy
+      four apart. Simulated deuteranopia: five point six. Practically the same colour. Our theme passes, and text
+      contrast is checked against the four and a half to one the accessibility checklist asks for.
+
+  - id: grid
+    type: code
+    heading: "The layout is code: a 12-column grid"
+    lang: python
+    code: |
+      PAGE_W, PAGE_H, MARGIN, GUTTER, COLS = 1280, 720, 24, 16, 12
+      COL_W = (PAGE_W - 2 * MARGIN - (COLS - 1) * GUTTER) // COLS          # 88
+
+      def cell(col, span, y, height):
+          return {"x": MARGIN + col * (COL_W + GUTTER), "y": y,
+                  "width": span * (COL_W + GUTTER) - GUTTER, "height": height}
+
+      ("kpiSales", "card", cell(0, 3, ROW1, 112), "Sales amount",
+       "Total sales amount for the selected years.",
+       {"Values": [("Sales", "Sales Amount", "m")]}, None),
+      ("trendSales", "lineChart", cell(0, 8, ROW2, 264), "Sales amount and prior year by month",
+       "Monthly sales amount compared with the same month of the prior year.",
+       {"Category": [("Date", "Year Month", "c")], "Y": [("Sales", "Sales Amount", "m"), ...]}, ...),
+    narration: >
+      The report page is generated. Twelve columns, sixteen pixel gutters, twenty four pixel margins, everything on an
+      eight pixel grid. Each visual is one line: type, grid cell, title, alt text and fields. Change a span, regenerate,
+      and the whole page stays aligned.
+
+  - id: visualjson
+    type: code
+    heading: "One visual in PBIR"
+    lang: json
+    code: |
+      {
+        "$schema": ".../report/definition/visualContainer/2.4.0/schema.json",
+        "name": "kpiSales",
+        "position": { "x": 24, "y": 24, "width": 296, "height": 112, "z": 0, "tabOrder": 0 },
+        "visual": {
+          "visualType": "card",
+          "query": { "queryState": { "Values": { "projections": [ { "field": { "Measure": {
+            "Expression": { "SourceRef": { "Entity": "Sales" } }, "Property": "Sales Amount" } },
+            "queryRef": "Sales.Sales Amount", "nativeQueryRef": "Sales Amount" } ] } } },
+          "visualContainerObjects": {
+            "title":   [ { "properties": { "text": { "expr": { "Literal": { "Value": "'Sales amount'" } } } } } ],
+            "general": [ { "properties": { "altText": { "expr": { "Literal": {
+              "Value": "'Total sales amount for the selected years.'" } } } } } ]
+          }
+        }
+      }
+    narration: >
+      This is what lands on disk: the enhanced report format, one file per visual, each with a public schema. Position
+      and tab order, the query against the model, the title, and the alt text a screen reader reads out. Every file is
+      validated against Microsoft's schemas in the tests.
+
+  - id: reportscreen
+    type: screen
+    heading: "The generated page in Desktop"
+    image: screens/viz-report-overview.jpg
+    bar: "Power BI Desktop · Report view · Sales overview"
+    demo: "Report view, page 'Sales overview', Year slicer = 2025. Three cards across the top (Sales amount 967,472.88, Sales growth vs prior year 8.1%, Orders 1,268) and the Year slicer at the right; line chart Sales amount and prior year by month; bar chart Sales amount by category; products table bottom left; empty space bottom right (for the custom visual). Contoso Bikes theme applied (blue first series). Optionally show View > Selection > Tab order."
+    narration: >
+      Open the project in Desktop and there it is. Cards across the top, the trend and the categories in the middle,
+      products at the bottom, the Contoso Bikes theme applied. Twenty twenty five: nine hundred sixty seven thousand in
+      sales, up eight point one percent. And a free cell at the bottom right, for the custom visual.
+
+  - id: lint
+    type: code
+    heading: "report-lint on a messy page"
+    lang: text
+    code: |
+      $ report-lint tests/fixtures/messy-report --model .../definition --max-visuals 2
+        WARNING  RL009  messy: 3 visuals on the page (team limit 2)
+        ERROR    RL001  messy/chart1: outside the 1280x720 page: x=1100 y=500 w=300 h=300
+        ERROR    RL004  messy/chart1: lineChart has no alt text
+        WARNING  RL006  messy/chart1: lineChart has no title text
+        WARNING  RL008  messy/chart2: hard-coded colour(s) '#FF0000': use theme colours
+        ERROR    RL010  messy/chart2: 'Sales'[Revenue] isn't in the semantic model
+        ERROR    RL005  messy/chart3: alt text is 303 characters (max 250)
+        WARNING  RL002  messy/chart2: overlaps chart3
+        WARNING  RL007  messy: tab order isn't the reading order: chart2 > chart3 > chart1
+        (+ 2 x RL003 not on the 8 px grid)
+      4 error(s), 7 warning(s)
+
+      $ report-lint src/ContosoSales.Report --model ...   ->   0 error(s), 0 warning(s)
+    narration: >
+      Report lint turns the accessibility checklist into rules. A messy page that's perfectly valid for the schema:
+      a chart off the page, no alt text, alt text over the two hundred fifty character limit, a hard coded red instead
+      of a theme colour, a measure that doesn't exist, and a tab order that jumps around. Our page: zero findings.
+
+  - id: logic
+    type: code
+    heading: "Target bullet: the logic is pure TypeScript"
+    lang: typescript
+    code: |
+      export function classify(actual: number | null, target: number | null, tolerance: number) {
+          if (actual === null) return { variance: null, band: "noActual" };
+          if (target === null || target === 0) return { variance: null, band: "noTarget" };
+          const variance = (actual - target) / Math.abs(target);
+          const band: Band = variance > tolerance ? "above" : variance < -tolerance ? "below" : "near";
+          return { variance, band };
+      }
+
+      export function marker(band: Band): string {
+          switch (band) {
+              case "above": return "▲"; // up triangle
+              case "below": return "▼"; // down triangle
+              case "near": return "●";  // circle
+              default: return "–";
+          }
+      }
+    narration: >
+      Now the custom visual. Three data roles: category, actual and target. The logic is pure TypeScript with no Power
+      BI imports, so it runs in plain node tests. No actual is not minus one hundred percent, remember episode two. And
+      every band gets a marker, a triangle or a circle, so colour is never the only cue.
+
+  - id: render
+    type: code
+    heading: "update(): rendering events, no innerHTML"
+    lang: typescript
+    code: |
+      public update(options: VisualUpdateOptions): void {
+          this.events.renderingStarted(options);
+          try {
+              const items = buildItems(readCategorical(options.dataViews?.[0]), tolerance);
+              const tree = renderBullets(items, options.viewport.width, options.viewport.height, this.palette(), ...);
+              this.root.replaceChildren(toDom(tree));
+              this.events.renderingFinished(options);
+          } catch (error) {
+              this.events.renderingFailed(options, String(error));
+              throw error;
+          }
+      }
+      // toDom: createElementNS + setAttribute + textContent. Never innerHTML.
+    narration: >
+      The update method follows the certification rules from Microsoft's documentation: rendering started first,
+      finished or failed at the end, so export to P D F waits for the visual. The view is built as a plain tree and
+      turned into S V G with create element and text content, never inner H T M L.
+
+  - id: highcontrast
+    type: code
+    heading: "High contrast: foreground and background only"
+    lang: typescript
+    code: |
+      private palette(): Palette {
+          const cp = this.host.colorPalette as ISandboxExtendedColorPalette;
+          if (cp.isHighContrast) {
+              const fg = cp.foreground.value;
+              const bg = cp.background.value;
+              return { isHighContrast: true, foreground: fg, background: bg, above: fg, near: fg, below: fg, track: bg };
+          }
+          ...
+      }
+
+      test("high contrast: only foreground and background, outlined bars at least 2 px", ...)
+    narration: >
+      Windows high contrast. When the host says high contrast is on, the visual uses only the foreground and
+      background colours it's given, and draws bars as outlines at least two pixels thick, as Microsoft's guidance for
+      custom visuals describes. A unit test checks that no other colour appears.
+
+  - id: package
+    type: code
+    heading: "Tested and packaged"
+    lang: text
+    code: |
+      $ npm test
+      # tests 16
+      # pass 16
+
+      $ npx pbiviz package --certification-audit
+       info   powerbi-visuals-tools version - 7.2.1
+       info   Running lint check...
+       info   External requests audit:
+       info   No external requests found in the visual.
+       info   Package created!
+       done   Build completed successfully
+
+      dist/contosoTargetBullet7C1E2A9B4D5F4E0A8B3C6D2E1F0A9B8C.1.0.0.0.pbiviz   (6 KB)
+    narration: >
+      Sixteen tests pass. P b i viz package lints the code and builds a six kilobyte p b i viz file, and the
+      certification audit finds no external requests. No fetch, no eval, no web access in the capabilities.
+
+  - id: importscreen
+    type: screen
+    heading: "Import from file: 2025 against prior year"
+    image: screens/viz-target-bullet.jpg
+    bar: "Power BI Desktop · Report view · Target Bullet"
+    demo: "Report view with the Target Bullet in the free bottom-right cell, Category = Product[Category], Actual = Sales Amount, Target = Sales PY, Year slicer = 2025. Rows: Accessories marker up +8.4%, Bikes marker up +9.0%, Clothing circle -3.0% (on target at 5% tolerance). Format pane open on Bands showing On-target tolerance (%) = 5. Then set tolerance to 2: Clothing turns down marker -3.0%."
+    narration: >
+      In Desktop, enable develop a visual for the session, then import a visual from a file. Category, sales amount as
+      actual, prior year sales as target. Bikes up nine percent, accessories up eight point four, clothing down three,
+      which counts as on target at five percent tolerance. Tighten it to two percent and clothing turns into a down
+      triangle.
+
+  - id: hcscreen
+    type: screen
+    heading: "Same visual, Windows high contrast"
+    image: screens/viz-high-contrast.jpg
+    bar: "Power BI Desktop · Windows high contrast"
+    demo: "Windows contrast theme on (Settings > Accessibility > Contrast themes, e.g. Night sky). Desktop applies it automatically. Target Bullet shows outlined bars in the theme foreground colour on the background, markers and percentages still visible. Core visuals next to it also in high contrast."
+    short: highcontrast
+    narration: >
+      And the same report with a Windows contrast theme. Power BI Desktop picks it up automatically, and target bullet
+      follows: outlined bars, one foreground colour, and the markers and percentages still tell you which category is
+      above or below target. Nothing depends on colour alone.
+
+  - id: recap
+    type: bullets
+    heading: "Five rules for report design"
+    bullets:
+      - "Theme colours only; check contrast and colour blindness"
+      - "Never encode meaning in colour alone"
+      - "Alt text, titles and tab order on every data visual"
+      - "Layout from a grid, lint the PBIR files"
+      - "Custom visuals: pure logic, rendering events, high contrast"
+    narration: >
+      Five rules. Use theme colours, and check them for contrast and colour blindness. Never encode meaning in colour
+      alone. Alt text, titles and tab order on every data visual. Generate the layout from a grid and lint the report
+      files. And for custom visuals: pure, tested logic, rendering events, and high contrast support.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The theme, the report generator, both linters and target bullet are on GitHub, and the complete guide to
+      visualization design is on dev lad log dot com. Links in the description. Next time: row level security. This
+      was DEVLADLOG Power BI, by Momento Galático.

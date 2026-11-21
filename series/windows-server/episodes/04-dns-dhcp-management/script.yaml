@@ -1,0 +1,290 @@
+# DEVLADLOG Windows Server - episode 04 (draft: the screen scenes need the lab recording, see demo.md)
+episode: 4
+slug: dns-dhcp-management
+series_label: "WINDOWS SERVER"
+series_name: "DEVLADLOG Windows Server"
+file_prefix: "windows-server"
+title: "DNS & DHCP Management"
+subtitle: "Reverse zones, scavenging that works, and DHCP failover that stays in sync"
+voice: am_michael
+thumbnail_text: "DNS + DHCP\nFAILOVER\nIN SYNC"
+youtube:
+  title: "DNS and DHCP with PowerShell: Scavenging, Failover, Health Report | DEVLADLOG Windows Server #4"
+  tags: [DNS, DHCP, Windows Server 2025, PowerShell, DHCP failover, DNS scavenging, reverse lookup zone, DnsServer module, DhcpServer module, sysadmin]
+sources:
+  - https://www.devladlog.com/articles/windows-server/2025-10-01-dns-dhcp-management-complete-guide-2025/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Two DHCP servers, two different answers"
+    sub: "DNS and DHCP from one file, checked against each other"
+    short: hook
+    narration: >
+      You add a reservation on one DHCP server. Its failover partner never hears about it. A printer has a static
+      DNS record, right in the middle of the DHCP pool. And stale records pile up because scavenging was only half
+      switched on. We build DNS and DHCP from one file, in a real lab, and check them against each other.
+
+  - id: plan
+    type: bullets
+    heading: "What we're building"
+    bullets:
+      - "An isolated network, so test DHCP can't leak"
+      - "DNS: reverse zone, A and PTR records, aging and scavenging"
+      - "DHCP: authorize, bind, scope, reservation, failover"
+      - "One snapshot of DNS and DHCP, one health report"
+      - "Forty-two Pester tests, no servers needed"
+    narration: >
+      The plan. First an isolated network, so a test DHCP server can never hand out addresses where it shouldn't.
+      Then DNS: a reverse zone, records with their PTRs, and aging and scavenging set up properly. Then DHCP with two
+      servers in failover. Then one snapshot of both, and a report that cross checks them.
+
+  - id: lab
+    type: bullets
+    heading: "The lab"
+    bullets:
+      - "CON-DC01: DNS for lab.contoso.com"
+      - "CON-SRV01 and CON-SRV02: DHCP failover partners"
+      - "CON-CLI01: a small Server Core client"
+      - "Private switch MGLab-DHCPTest: 172.16.50.0/24"
+      - "The NAT network keeps its static addresses"
+    narration: >
+      Same lab dot contoso dot com domain. The domain controller runs DNS. The two member servers become DHCP
+      failover partners, and a small Server Core VM is our client. The lab NAT network has no DHCP, and must stay
+      that way, so DHCP gets its own Hyper V private switch: VM to VM only, no host, no internet.
+
+  - id: isolate
+    type: code
+    heading: "A network DHCP can't escape"
+    lang: powershell
+    code: |
+      $switch = Get-VMSwitch -Name $SwitchName -ErrorAction SilentlyContinue
+      if ($switch -and [string]$switch.SwitchType -ne 'Private') {
+          throw "Switch '$SwitchName' exists but is $($switch.SwitchType). The DHCP demo only runs on a Private switch."
+      }
+      if (-not $switch) { New-VMSwitch -Name $SwitchName -SwitchType Private | Out-Null }
+
+      Add-VMNetworkAdapter -VMName $n.VM -Name 'DHCPTest' -SwitchName $SwitchName -StaticMacAddress $n.Mac
+
+      # inside the guest, over PowerShell Direct
+      Set-DnsClient -InterfaceAlias 'DHCPTest' -RegisterThisConnectionsAddress $false
+      New-NetIPAddress -InterfaceAlias 'DHCPTest' -IPAddress $IP -PrefixLength 24   # servers: .2 and .3
+    narration: >
+      The setup script runs on the Hyper V host. It creates the private switch, and refuses to continue if a switch
+      with that name exists but isn't private. Each VM gets a second network card with a fixed MAC address. Inside
+      the guests, over PowerShell Direct, the card is renamed, kept out of DNS registration, and the servers get
+      static addresses.
+
+  - id: dns-code
+    type: code
+    heading: "DNS: compute the reverse zone, then the records"
+    lang: powershell
+    code: |
+      ConvertTo-NetLabReverseZoneName '10.20.0.0/24'        # 0.20.10.in-addr.arpa
+      Get-NetLabPtrName '10.20.0.60' '0.20.10.in-addr.arpa'  # 60
+
+      Add-DnsServerPrimaryZone -ComputerName $cn -NetworkId $rz.NetworkId -ReplicationScope Domain -DynamicUpdate Secure
+      Set-DnsServerZoneAging -ComputerName $cn -Name $z -Aging $true -NoRefreshInterval $noRefresh -RefreshInterval $refresh
+      Set-DnsServerScavenging -ComputerName $cn -ScavengingState $true -ScavengingInterval $interval
+
+      # static on purpose: no -AgeRecord, timestamp zero, never scavenged
+      Add-DnsServerResourceRecordA   -ComputerName $cn -ZoneName $d.ForwardZone -Name $r.Name -IPv4Address $r.Address
+      Add-DnsServerResourceRecordPtr -ComputerName $cn -ZoneName $rzName -Name $ptrName -PtrDomainName $fqdn
+    narration: >
+      DNS. The module computes the reverse zone name itself, ten dot twenty dot zero becomes zero dot twenty dot ten
+      in addr arpa, and looks the zone up by that name. It creates it as an Active Directory integrated zone with
+      secure updates, turns on aging, and enables scavenging on the server. The printer and NAS records are added
+      without age record, so they're static and never scavenged.
+
+  - id: dns-screen
+    type: screen
+    heading: "DNS, applied twice"
+    image: screens/dns.jpg
+    bar: "Lab · CON-SRV02 → CON-DC01 · Invoke-NetLabDnsDeployment"
+    demo: >
+      On CON-SRV02 (RSAT DNS): Invoke-NetLabDnsDeployment -DefinitionPath .\network.json | Format-Table twice. First run:
+      ReverseZone, ZoneAging x2, Scavenging, A x2, PTR x2, CNAME x2 = Done; second run all NoChange. Then
+      Invoke-Command -ComputerName CON-SRV01 { ipconfig /registerdns } and, a minute later,
+      Resolve-DnsName 10.20.0.21 -Server CON-DC01 and Resolve-DnsName printer01.lab.contoso.com -Server CON-DC01.
+    narration: >
+      On the lab. The first run creates the reverse zone, the records and their PTRs, and switches on aging and
+      scavenging. The second run changes nothing. Our member server registers its own PTR as soon as the reverse
+      zone exists, and reverse lookups now answer. Rewrite this to what's on screen.
+
+  - id: aging
+    type: bullets
+    heading: "Why stale records stay, and live ones vanish"
+    short: aging
+    bullets:
+      - "Scavenging on the server AND aging on the zone"
+      - "Stale after no-refresh + refresh: 14 days by default"
+      - "Static records have timestamp zero: never scavenged"
+      - "Under 24 hours total: live records disappear"
+      - "Turning aging on gives one refresh interval of grace"
+    narration: >
+      Aging and scavenging are two switches, and you need both: scavenging on the server, aging on the zone. A
+      record becomes stale after the no refresh plus the refresh interval, fourteen days by default. Static records
+      have a zero timestamp and are never scavenged. And if both intervals add up to less than a day, records of
+      live machines get deleted: a server with a static address only re-registers every twenty four hours.
+
+  - id: dhcp-code
+    type: code
+    heading: "DHCP: authorize, bind, scope"
+    lang: powershell
+    code: |
+      Add-DhcpServerInDC -DnsName $s.DnsName -IPAddress $s.AuthorizeIPAddress
+
+      foreach ($b in @(Get-DhcpServerv4Binding -ComputerName $cn)) {
+          $want = ([string]$b.InterfaceAlias -eq [string]$s.BindInterface)      # only DHCPTest
+          if ([bool]$b.BindingState -ne $want) {
+              Set-DhcpServerv4Binding -ComputerName $cn -InterfaceAlias $b.InterfaceAlias -BindingState $want
+          }
+      }
+
+      Add-DhcpServerv4Scope -ComputerName $primary -Name $sc.Name -StartRange $sc.StartRange -EndRange $sc.EndRange `
+          -SubnetMask $sc.SubnetMask -LeaseDuration ([timespan]$sc.LeaseDuration) -State Active
+      Add-DhcpServerv4ExclusionRange -ComputerName $primary -ScopeId $id -StartRange $x.Start -EndRange $x.End
+      Set-DhcpServerv4OptionValue -ComputerName $primary -ScopeId $id -DnsServer @($sc.Options.DnsServer) -DnsDomain $wantDomain
+      Add-DhcpServerv4Reservation -ComputerName $primary -ScopeId $id -IPAddress $v.IPAddress -ClientId $v.ClientId -Name $v.Name
+    narration: >
+      DHCP. Both servers are authorized in Active Directory, because an unauthorized DHCP server in a domain doesn't
+      lease addresses. Each server binds only to the isolated card. Then the scope on the primary: an exclusion
+      range for static addresses, the DNS server and domain options, and a reservation for the client's fixed MAC.
+
+  - id: dhcp-screen
+    type: screen
+    heading: "Two servers, one scope"
+    image: screens/dhcp.jpg
+    bar: "Lab · CON-SRV02 · Invoke-NetLabDhcpDeployment"
+    demo: >
+      Invoke-NetLabDhcpDeployment -DefinitionPath .\network.json | Format-Table (Authorize x2, Binding x4, Scope,
+      Exclusion, Options, Reservation, Failover = Done). Then Get-DhcpServerv4Failover -ComputerName CON-SRV01 and
+      -ComputerName CON-SRV02 | Format-List Name, PartnerServer, Mode, LoadBalancePercent, State, ScopeId, and
+      Get-DhcpServerv4Scope -ComputerName CON-SRV02 (the scope exists there too).
+    narration: >
+      In the lab, one run authorizes both servers, binds them, builds the scope and creates a load balanced failover
+      relationship, fifty fifty. Creating the relationship copies the scope to the partner, so CON SRV zero two has
+      it too, and both report the relationship as normal. Rewrite this to what's on screen.
+
+  - id: lease-screen
+    type: screen
+    heading: "The client gets its reserved address"
+    image: screens/lease.jpg
+    bar: "Lab · CON-CLI01 (PowerShell Direct) · ipconfig /all"
+    demo: >
+      On the Hyper-V host: Invoke-Command -VMName CON-CLI01 -Credential (lab Administrator) { ipconfig /renew DHCPTest;
+      ipconfig /all }. Show the DHCPTest adapter: IPv4 172.16.50.41, DHCP Server 172.16.50.2 or .3, DNS Servers
+      10.20.0.10, connection-specific suffix lab.contoso.com. Side by side: Get-DhcpServerv4Lease -ComputerName
+      CON-SRV01 -ScopeId 172.16.50.0 and the same on CON-SRV02 (the lease is on both).
+    narration: >
+      And the client. Its isolated card asks for an address and gets point forty one, its reservation, with our DNS
+      server and the lab dot contoso dot com suffix. Both servers list the lease, because failover partners keep
+      their lease databases in sync. Rewrite this to what's on screen.
+
+  - id: replicate-code
+    type: code
+    heading: "Failover copies the scope once"
+    lang: powershell
+    code: |
+      if (-not $failover) {
+          Add-DhcpServerv4Failover @p        # copies the scope to the partner, once
+      }
+      elseif (@($failover.ScopeId | ForEach-Object { [string]$_ }) -notcontains $id) {
+          Add-DhcpServerv4FailoverScope -ComputerName $primary -Name $f.Name -ScopeId $id
+      }
+      elseif ($changed -or $Replicate) {
+          # Learn: changes to a failover-enabled scope must be replicated manually
+          Invoke-DhcpServerv4FailoverReplication -ComputerName $primary -ScopeId $id -Force
+      }
+    narration: >
+      Here's the part people miss. Creating the failover relationship copies the scope once. After that, changes to
+      the scope, a new reservation, a new option, stay on the server where you made them. So whenever the deployment
+      changes a failover scope, it calls Invoke DHCP Server v4 Failover Replication from the primary.
+
+  - id: gotcha
+    type: screen
+    heading: "Gotcha: the partner never heard about it"
+    image: screens/failover-drift.jpg
+    bar: "Lab · CON-SRV02 · reservations on both partners"
+    short: gotcha
+    demo: >
+      Add-DhcpServerv4Reservation -ComputerName CON-SRV01 -ScopeId 172.16.50.0 -IPAddress 172.16.50.42
+      -ClientId 00-15-5d-14-00-42 -Name labprinter (by hand, the usual way). Then Get-DhcpServerv4Reservation on
+      CON-SRV01 (2 rows) and CON-SRV02 (1 row) side by side. Run .\Invoke-NetLabReport.ps1: FailoverDrift High.
+      Then Invoke-DhcpServerv4FailoverReplication -ComputerName CON-SRV01 -ScopeId 172.16.50.0 -Force, list again:
+      2 rows on both.
+    narration: >
+      Watch. A reservation added by hand on the first server. The partner has no idea: one reservation here, two
+      there. If the partner answers that printer, it doesn't know the reservation. The report flags failover drift as
+      High. Replicate from the server with the right settings, and both agree again.
+
+  - id: checks
+    type: code
+    heading: "Checks that look at DNS and DHCP together"
+    lang: powershell
+    code: |
+      # a static DNS record inside a DHCP pool, not excluded, not reserved
+      foreach ($r in @($records | Where-Object { $_.RecordType -eq 'A' -and -not $_.Timestamp })) {
+          if (-not (Test-NetLabIpInRange $r.Data $sc.StartRange $sc.EndRange)) { continue }
+          $excluded = @($sc.Exclusions | Where-Object { Test-NetLabIpInRange $r.Data $_.StartRange $_.EndRange }).Count -gt 0
+          $reserved = @($sc.Reservations | Where-Object { [string]$_.IPAddress -eq [string]$r.Data }).Count -gt 0
+          if (-not $excluded -and -not $reserved) { 'High  StaticInPool' }
+      }
+      # failover partners: same reservations, same options?
+      if ($rd.Count) { $diff += "reservations differ ($($rd -join '; '))" }
+      # plus: InsecureDynamicUpdate, ScavengingDisabled, ZoneAgingDisabled, AgingTooShort, MissingPtr,
+      #       PtrMismatch, NoReverseZone, CnameTargetMissing, StaleRecord, NotAuthorized, ScopeUtilization ...
+    narration: >
+      The snapshot holds DNS and DHCP side by side, so the checks can cross them. A static DNS record inside a DHCP
+      pool, with no exclusion and no reservation, is High: the server can lease that address to someone else.
+      Failover partners are compared reservation by reservation and option by option. Plus the DNS checks:
+      insecure updates, aging, PTRs, dangling aliases.
+
+  - id: tests
+    type: code
+    heading: "Forty-two tests, no servers"
+    lang: text
+    code: |
+      PS> Invoke-Pester ./tests -Output Detailed
+      Describing Health checks (fictional snapshot)
+        [+] flags DHCP failover drift once per relationship, with the missing reservation
+        [+] flags a static DNS record inside a DHCP pool once, and not reserved or excluded ones
+        [+] needs both: server scavenging and zone aging
+      Describing Invoke-NetLabDhcpDeployment (DhcpServer cmdlets mocked)
+        [+] builds the scope on the primary and creates load-balanced failover with the partner
+        [+] replicates to the partner after a scope change (the failover gotcha)
+      Describing Setup scripts (Hyper-V and Windows cmdlets mocked)
+        [+] refuses to use a switch with that name that is not Private
+        [+] changes nothing with -WhatIf, and -Remove takes it away
+
+      Tests Passed: 42, Failed: 0, Skipped: 0
+    narration: >
+      Forty two Pester tests run on Linux. The DNS, DHCP and Hyper V cmdlets are mocked. They prove the deployment
+      replicates after a scope change, that nothing happens with what if, and that the setup script refuses a
+      switch that isn't private. One test caught a real bug: the failover secret came out as one character on
+      Linux, so it's now decoded the portable way.
+
+  - id: report
+    type: screen
+    heading: "The lab network, checked"
+    image: screens/report.jpg
+    bar: "Lab · CON-SRV02 · Invoke-NetLabReport.ps1"
+    demo: >
+      After planting camera01 (static A record 172.16.50.30, see demo.md): .\Invoke-NetLabReport.ps1 -SnapshotFile
+      .\net-snapshot.json -OutFile .\net-report.md, then open net-report.md in a markdown preview. Show the summary
+      line, the DHCP table (both servers, failover Normal) and the findings: StaticInPool High for camera01,
+      NoReverseZone for 172.16.50.0/24, plus whatever else the real lab shows (for example ZoneAgingDisabled on
+      _msdcs.lab.contoso.com).
+    narration: >
+      The real lab, after replication. Rewrite this to the findings on screen. The failover drift is gone. The camera
+      we added with a static DNS record inside the pool comes back as High, exactly the conflict nobody sees until
+      two devices fight over one address.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The NetLab module, the network file, the setup scripts and all forty two tests are on GitHub, and the complete
+      guide to DNS and DHCP management is on devladlog dot com. Links are in the description. Next episode:
+      PowerShell automation, on this same lab. Subscribe so you don't miss it.

@@ -1,0 +1,280 @@
+# DEVLADLOG Microsoft 365 — episode 03 (draft: code and tests are real; screen scenes still need the lab recording)
+episode: 3
+slug: microsoft-365-groups-lifecycle
+series_label: "MICROSOFT 365"
+series_name: "DEVLADLOG Microsoft 365"
+file_prefix: "microsoft-365"
+title: "Microsoft 365 Groups Lifecycle"
+subtitle: "Expire, renew, restore, archive: one file, real Graph calls"
+voice: am_michael
+thumbnail_text: "GROUPS\nNEED AN\nEND DATE"
+youtube:
+  title: "Microsoft 365 Groups Lifecycle: Expire, Renew, Restore (Real Demo) | DEVLADLOG Microsoft 365 #3"
+  tags: [Microsoft 365 groups, group expiration policy, groups lifecycle, Microsoft Entra ID, Microsoft Graph, PowerShell, restore deleted group, archive team, M365 admin, Pester]
+sources:
+  - https://www.devladlog.com/articles/office-365/2025-07-09-groups-lifecycle-complete-guide-2025/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Every group needs an end date"
+    sub: "Without an expiration policy, a Microsoft 365 group never expires"
+    short: hook
+    narration: >
+      Unless you set an expiration policy, a Microsoft 365 group never expires. The project ends, the owner leaves,
+      and the team, the mailbox and the SharePoint site stay forever. In this episode we give every group an end
+      date, find the ones nobody will renew, and bring back a group that was deleted by mistake, all from one file
+      and real Microsoft Graph calls.
+
+  - id: stages
+    type: bullets
+    heading: "The life of a group"
+    bullets:
+      - "Created under a policy (episode two)"
+      - "Renewed: by activity, or by an owner"
+      - "Expired and deleted, if nobody renews it"
+      - "Restorable for thirty days"
+      - "Or archived instead: read-only, still there"
+    narration: >
+      In episode two we controlled how teams are born. Today is the rest of the story. A group gets renewed, either
+      automatically through activity or by an owner. If nobody renews it, it expires and is deleted. For thirty days
+      it can still be restored. And for a team you want to keep but freeze, archiving is the alternative.
+
+  - id: config
+    type: code
+    heading: "One file for the whole lifecycle"
+    lang: json
+    code: |
+      {
+        "expiration": {
+          "groupLifetimeInDays": 180,
+          "managedGroupTypes": "Selected",
+          "alternateNotificationEmails": ["m365-groups-admin@contoso.com"],
+          "selectedGroupIds": ["00000000-0000-0000-0000-000000000201", "..."]
+        },
+        "review": { "expiringWithinDays": 30, "purgeWithinDays": 7 },
+        "endOfLife": { "setSpoSiteReadOnlyForMembers": true }
+      }
+    narration: >
+      Here's the file. Groups live one hundred and eighty days between renewals. We start with selected groups, a
+      pilot, not the whole tenant. Ownerless groups send their notices to an admin mailbox. The audit warns thirty
+      days before expiry, and seven days before a deleted group is gone for good.
+
+  - id: facts
+    type: bullets
+    heading: "What the expiration policy actually is"
+    bullets:
+      - "One policy per tenant"
+      - "Lifetime: 30 days or more"
+      - "All, Selected (up to 500 groups) or None"
+      - "Owners notified 30, 15 and 1 day before expiry"
+      - "No owner: notices go to the alternate email"
+      - "Needs Microsoft Entra ID P1 for the members"
+    narration: >
+      The facts, from Microsoft Learn. There's only one expiration policy per tenant. The lifetime must be thirty
+      days or more. It applies to all groups, to up to five hundred selected groups, or to none. Owners get a notice
+      thirty, fifteen and one day before expiry, and groups without an owner send it to the alternate email. You
+      need Entra I D P1 licences for the members of those groups.
+
+  - id: apply
+    type: code
+    heading: "Patch only what changed"
+    lang: powershell
+    code: |
+      $existing = @(Invoke-GLGraphGet '/v1.0/groupLifecyclePolicies')
+      if ($existing.Count -gt 1) { throw "Expected at most one groupLifecyclePolicy, found $($existing.Count)." }
+      ...
+      $diff = @(Compare-GroupLifecyclePolicy -Current $existing[0] -Desired $desired)
+      $patch = [ordered]@{}; foreach ($k in $diff) { $patch[$k] = $desired[$k] }
+      if ($PSCmdlet.ShouldProcess($policyId, "Update $($diff -join ', ')")) {
+          Invoke-MgGraphRequest -Method PATCH -Uri "/v1.0/groupLifecyclePolicies/$policyId" -Body ($patch | ConvertTo-Json) `
+              -ContentType 'application/json' -ErrorAction Stop | Out-Null
+      }
+      ...
+      # One group per request. 200 OK with true when added (expirationDateTime is then set).
+      $r = Invoke-MgGraphRequest -Method POST -Uri "/v1.0/groupLifecyclePolicies/$policyId/addGroup" `
+          -Body (@{ groupId = $gid } | ConvertTo-Json) -ContentType 'application/json' -OutputType PSObject
+    narration: >
+      Set groups expiration policy reads the tenant's policy, creates it if it's missing, and otherwise patches only
+      the properties that differ. The alternate emails are one string separated by semicolons, so we compare them as
+      a set. Then, for a selected rollout, add group runs once per group, because the API takes one group per request.
+
+  - id: policy-screen
+    type: screen
+    heading: "WhatIf, then apply"
+    image: screens/policy.jpg
+    bar: "PowerShell · Invoke-GroupsLifecycle -ApplyExpirationPolicy (lab tenant, masked)"
+    demo: >
+      Lab tenant. Run ./Invoke-GroupsLifecycle.ps1 -PolicyFile ./lifecycle.lab.json -ApplyExpirationPolicy -WhatIf
+      (impact table + "What if: ... Create: 180 days, Selected ..." or "Update alternateNotificationEmails"), then
+      without -WhatIf and confirm: Step/Target/Result table with Policy Created or Updated and AddGroup Added for the
+      selected groups. Then Entra admin center > Groups > Expiration showing 180 days, Selected, the alternate
+      email and the selected groups. Mask group IDs, policy ID and the tenant name.
+    narration: >
+      In the lab, what if shows the impact and the exact change first. Confirm it, and the policy is created, and
+      every selected group is added. The Entra admin center shows the same thing: one hundred and eighty days,
+      selected groups, and the admin mailbox for ownerless groups.
+
+  - id: activity
+    type: bullets
+    heading: "Most groups renew themselves"
+    bullets:
+      - "Outlook: read or write a group message"
+      - "SharePoint: view, edit, upload or share a file"
+      - "Teams: visit a channel"
+      - "Viva Engage: view a post"
+      - "Renewed around 35 days before expiry, no email sent"
+    narration: >
+      Most active groups never bother their owners. Reading a group message, opening a file in the site, visiting a
+      Teams channel, or viewing a Viva Engage post marks the group as active, and it's renewed around thirty-five
+      days before it expires, without any email. So a group still inside thirty days of expiry is one with no
+      recent activity.
+
+  - id: findings
+    type: code
+    heading: "Who gets the renewal email?"
+    lang: powershell
+    code: |
+      if ($owners -eq 0) {
+          $to = if ($alt.Count) { "only to $($alt -join ', ')" } else { 'to nobody: no alternate notification email is set' }
+          $team = if (Get-GLProp $g 'isTeam' $false) { ' The team also cannot be archived until it has an owner.' } else { '' }
+          ConvertTo-GLFinding High $name 'OwnerlessExpiring' "No owners. Renewal mails for $when go $to.$team"
+      }
+      if ($days -lt 0) {
+          ConvertTo-GLFinding High $name 'Expired' "Expired on $when; it is deleted one day after expiration (restorable for 30 days)."
+      }
+      elseif ($days -le $soon) {
+          ConvertTo-GLFinding Medium $name 'ExpiringSoon' "Expires in $days days ($when) and wasn't auto-renewed ..."
+      }
+    narration: >
+      The audit asks the question that matters: who gets the renewal email? A group with no owner and no alternate
+      email notifies nobody, and it will quietly expire. That's high. A group inside the warning window wasn't renewed
+      by activity, so its owners are being asked right now. That's medium.
+
+  - id: audit
+    type: screen
+    heading: "The audit, live"
+    image: screens/audit.jpg
+    bar: "PowerShell · Invoke-GroupsLifecycle -Audit (lab tenant, masked)"
+    demo: >
+      Lab tenant with the seeded groups from demo.md. Run ./Invoke-GroupsLifecycle.ps1 -PolicyFile ./lifecycle.lab.json
+      -Audit -OutFile ./lifecycle-audit.md. Capture the findings table (Severity, Target, Rule, Detail). Expected at
+      least: Old Offsite 2024 OwnerlessExpiring (High), a deleted group Restorable or PurgeSoon. Rewrite narration
+      numbers to match the screen. Mask group IDs.
+    narration: >
+      Here it is against the lab tenant. The old offsite team from episode two has no owner, so it's flagged high. The
+      deleted test group shows exactly when it will be gone for good. And every finding is in a Markdown report we
+      can attach to a ticket.
+
+  - id: gotcha
+    type: screen
+    heading: "The gotcha: old groups get 35 days"
+    image: screens/rollout.jpg
+    bar: "PowerShell · rollout impact preview (lab tenant, masked)"
+    short: gotcha
+    demo: >
+      Run ./Invoke-GroupsLifecycle.ps1 -PolicyFile ./lifecycle.lab.json -ApplyExpirationPolicy -WhatIf with
+      managedGroupTypes temporarily set to All in the lab copy. Capture the impact table: Group, AgeDays, Outcome
+      = SetTo35Days, ExpiresAround. Do NOT confirm the change. Mask group IDs.
+    narration: >
+      Here's the gotcha. When you first turn expiration on, any group older than the lifetime is set to thirty-five
+      days until expiration, unless it's renewed. Switch a five year old tenant to all groups, and every old group
+      starts a thirty-five day countdown on the same day. So the script previews exactly which groups that hits,
+      before you confirm anything.
+
+  - id: restore
+    type: code
+    heading: "Thirty days to change your mind"
+    lang: powershell
+    code: |
+      $d = Invoke-MgGraphRequest -Method GET -Uri "/v1.0/directory/deletedItems/$GroupId" -OutputType PSObject
+      if ((Get-GLProp $d '@odata.type') -ne '#microsoft.graph.group') { throw "$GroupId is not a deleted group." }
+      if ('Unified' -notin @(Get-GLProp $d 'groupTypes' @())) { throw "$($d.displayName) is not a Microsoft 365 group." }
+      $purge = Get-GroupPurgeDate (Get-GLProp $d 'deletedDateTime')
+      if ($purge -le $Now) { throw "$($d.displayName) was deleted more than 30 days ago." }
+      if (-not $PSCmdlet.ShouldProcess($d.displayName, "Restore deleted group (permanent deletion on ...)")) { return }
+      $r = Invoke-MgGraphRequest -Method POST -Uri "/v1.0/directory/deletedItems/$GroupId/restore" -OutputType PSObject
+    narration: >
+      A deleted group is kept for thirty days, and that period can't be changed. Restore deleted group reads the
+      deleted item first, checks it's a Microsoft 365 group still inside the window, and only then calls restore.
+      Microsoft notes the site and other content can take up to twenty-four hours to come back.
+
+  - id: restore-screen
+    type: screen
+    heading: "Deleted by mistake, back in a minute"
+    image: screens/restore.jpg
+    bar: "Microsoft Entra admin center · Groups · Deleted groups"
+    short: restore
+    demo: >
+      Delete the lab group "Temp Project Kickoff" (demo.md). Show Entra admin center > Groups > Deleted groups with it
+      listed. Then run ./Invoke-GroupsLifecycle.ps1 -Restore <id> and confirm: Status Restored. Refresh: the group is
+      back under All groups. Mask the group ID and the tenant name.
+    narration: >
+      Let's prove it. The group is deleted, and it's listed under deleted groups in the Entra admin center. One
+      command, one confirmation, and it's restored, with its content coming back behind it. Wait thirty-one days,
+      and none of this is possible.
+
+  - id: archive
+    type: code
+    heading: "Archive needs an owner"
+    lang: powershell
+    code: |
+      $owners = @(Invoke-GLGraphGet "/v1.0/groups/$TeamId/owners")
+      if ($owners.Count -eq 0) { throw "Team $TeamId has no owner. Archiving requires the team and group to have an owner: assign one first." }
+      ...
+      $body = @{ shouldSetSpoSiteReadOnlyForMembers = [bool]$SetSpoSiteReadOnlyForMembers } | ConvertTo-Json
+      $resp = Invoke-MgGraphRequest -Method POST -Uri "/v1.0/teams/$TeamId/archive" -Body $body -ContentType 'application/json' `
+          -OutputType HttpResponseMessage -ErrorAction Stop
+      $opUri = Resolve-GLOperationUri $resp.Headers.Location.OriginalString
+    narration: >
+      For a team you want to keep but freeze, archive it. Messages stop, the content stays, and the site can become
+      read-only for members. Archiving is asynchronous, like creating a team, and Microsoft requires the team to have
+      an owner. So an ownerless team can't even be archived, which is one more reason to fix owners first.
+
+  - id: tests
+    type: code
+    heading: "Forty-seven tests, no tenant"
+    lang: text
+    code: |
+      $ Invoke-Pester ./tests
+      Describing Config file
+        [+] rejects a lifetime under 30 days
+        [+] rejects more than 500 selected groups
+      Describing Rollout impact (first time expiration is set)
+        [+] gives groups older than the lifetime 35 days
+      Describing Lifecycle findings
+        [+] says nobody gets the renewal mail when there is no owner and no alternate email
+      Describing Set-GroupsExpirationPolicy (mocked Graph)
+        [+] PATCHes only the properties that differ
+      Describing Renew, restore, archive (mocked Graph)
+        [+] refuses to restore after the 30 days, or a non-Microsoft 365 group
+        [+] refuses to archive a team without an owner
+
+      Tests Passed: 47, Failed: 0, Skipped: 0
+    narration: >
+      Forty-seven Pester tests run without a tenant: the config limits, the thirty-five day preview, every finding,
+      the policy patch, and the renew, restore and archive calls against a mocked Graph. Two of them check our calls
+      against the real Microsoft Graph PowerShell module.
+
+  - id: recap
+    type: bullets
+    heading: "Five rules for the groups lifecycle"
+    bullets:
+      - "Give every group an end date: start with Selected"
+      - "Set an alternate email for ownerless groups"
+      - "Preview the 35-day hit before switching to All"
+      - "Watch deleted groups: 30 days, then gone"
+      - "Archive what you keep, but fix owners first"
+    narration: >
+      Five rules. Give every group an end date, and pilot with selected groups. Set an alternate email so ownerless
+      groups still notify someone. Preview the thirty-five day hit before you switch to all groups. Watch deleted
+      groups, because after thirty days they're gone. And archive the teams you keep, but fix their owners first.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The module, the lifecycle file and the tests are on GitHub, and the complete guide is on dev lad log dot com.
+      Links are in the description. Next in this series: Entra I D governance, with access reviews, lifecycle
+      workflows and privileged identity management. Subscribe so you don't miss it.

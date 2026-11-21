@@ -1,0 +1,180 @@
+/// Fact table, one row per order line. Filters arrive from Date (order date), Customer, Product and Store.
+table Sales
+
+	/// Iterator: quantity x unit price, row by row, then summed.
+	measure 'Sales Amount' = SUMX(Sales, Sales[Quantity] * Sales[Unit Price])
+		formatString: #,0.00
+		displayFolder: Base
+
+	/// Iterator over the same rows with the unit cost.
+	measure 'Total Cost' = SUMX(Sales, Sales[Quantity] * Sales[Unit Cost])
+		formatString: #,0.00
+		displayFolder: Base
+
+	/// Sales Amount minus Total Cost.
+	measure Margin = [Sales Amount] - [Total Cost]
+		formatString: #,0.00
+		displayFolder: Base
+
+	/// Margin as a share of Sales Amount; BLANK when there are no sales.
+	measure 'Margin %' = DIVIDE([Margin], [Sales Amount])
+		formatString: 0.0%
+		displayFolder: Base
+
+	/// Units sold.
+	measure Units = SUM(Sales[Quantity])
+		formatString: #,0
+		displayFolder: Base
+
+	/// Distinct orders (the degenerate Order Number).
+	measure Orders = DISTINCTCOUNT(Sales[Order Number])
+		formatString: #,0
+		displayFolder: Base
+
+	/// Same dates one year earlier (marked Date table).
+	measure 'Sales PY' = CALCULATE([Sales Amount], SAMEPERIODLASTYEAR('Date'[Date]))
+		formatString: #,0.00
+		displayFolder: Time intelligence
+
+	/// Year over year growth. BLANK when there are no current sales (future periods) or no prior year.
+	measure 'Sales YoY %' =
+			VAR CurrentSales = [Sales Amount]
+			VAR PriorSales = [Sales PY]
+			RETURN
+			    IF(NOT ISBLANK(CurrentSales), DIVIDE(CurrentSales - PriorSales, PriorSales))
+		formatString: 0.0%
+		displayFolder: Time intelligence
+
+	/// From 1 January to the last date in the filter context.
+	measure 'Sales YTD' = TOTALYTD([Sales Amount], 'Date'[Date])
+		formatString: #,0.00
+		displayFolder: Time intelligence
+
+	/// The last three whole calendar months, ending with the month of the last date in context.
+	measure 'Sales Last 3 Months' =
+			VAR LastDate = MAX('Date'[Date])
+			VAR FirstDate = EOMONTH(LastDate, -3) + 1
+			RETURN
+			    CALCULATE([Sales Amount], DATESBETWEEN('Date'[Date], FirstDate, LastDate))
+		formatString: #,0.00
+		displayFolder: Time intelligence
+
+	/// Role-playing date: activates the inactive Ship Date relationship for this measure only.
+	measure 'Sales by Ship Date' = CALCULATE([Sales Amount], USERELATIONSHIP(Sales[Ship Date], 'Date'[Date]))
+		formatString: #,0.00
+		displayFolder: Time intelligence
+
+	/// Rank of the product by Sales Amount among the products left by the other Product filters (e.g. its category).
+	measure 'Product Rank' =
+			IF(
+			    NOT ISBLANK([Sales Amount]),
+			    RANKX(ALL('Product'[Product]), [Sales Amount])
+			)
+		formatString: 0
+		displayFolder: Ranking and share
+
+	/// Share of the category: removes every Product filter except Category.
+	measure '% of Category' =
+			DIVIDE(
+			    [Sales Amount],
+			    CALCULATE([Sales Amount], ALLEXCEPT('Product', 'Product'[Category]))
+			)
+		formatString: 0.0%
+		displayFolder: Ranking and share
+
+	/// Known customers whose own Sales Amount in the current context exceeds 1,000. The measure reference
+	/// inside FILTER triggers context transition: it is evaluated for each customer.
+	measure 'Customers Over 1K' =
+			COUNTROWS(
+			    FILTER(
+			        VALUES('Customer'[CustomerKey]),
+			        'Customer'[CustomerKey] <> -1 && [Sales Amount] > 1000
+			    )
+			)
+		formatString: #,0
+		displayFolder: Context transition
+
+	/// Degenerate dimension: kept on the fact table for filtering by order.
+	column 'Order Number'
+		dataType: string
+		summarizeBy: none
+		sourceColumn: OrderNumber
+
+	column 'Line Number'
+		dataType: int64
+		isHidden
+		formatString: 0
+		summarizeBy: none
+		sourceColumn: LineNumber
+
+	column 'Order Date'
+		dataType: dateTime
+		isHidden
+		formatString: yyyy-mm-dd
+		summarizeBy: none
+		sourceColumn: OrderDate
+
+	column 'Ship Date'
+		dataType: dateTime
+		isHidden
+		formatString: yyyy-mm-dd
+		summarizeBy: none
+		sourceColumn: ShipDate
+
+	column CustomerKey
+		dataType: int64
+		isHidden
+		formatString: 0
+		summarizeBy: none
+		sourceColumn: CustomerKey
+
+	column ProductKey
+		dataType: int64
+		isHidden
+		formatString: 0
+		summarizeBy: none
+		sourceColumn: ProductKey
+
+	column StoreKey
+		dataType: int64
+		isHidden
+		formatString: 0
+		summarizeBy: none
+		sourceColumn: StoreKey
+
+	column Quantity
+		dataType: int64
+		isHidden
+		formatString: #,0
+		summarizeBy: none
+		sourceColumn: Quantity
+
+	column 'Unit Price'
+		dataType: decimal
+		isHidden
+		formatString: #,0.00
+		summarizeBy: none
+		sourceColumn: UnitPrice
+
+	column 'Unit Cost'
+		dataType: decimal
+		isHidden
+		formatString: #,0.00
+		summarizeBy: none
+		sourceColumn: UnitCost
+
+	partition Sales = m
+		mode: import
+		source =
+				let
+				    Source = Csv.Document(File.Contents(DataFolder & "fact_sales.csv"), [Delimiter = ",", Encoding = 65001, QuoteStyle = QuoteStyle.Csv]),
+				    Promoted = Table.PromoteHeaders(Source, [PromoteAllScalars = true]),
+				    Typed = Table.TransformColumnTypes(Promoted, {
+				        {"OrderNumber", type text}, {"LineNumber", Int64.Type},
+				        {"OrderDate", type date}, {"ShipDate", type date},
+				        {"CustomerKey", Int64.Type}, {"ProductKey", Int64.Type}, {"StoreKey", Int64.Type},
+				        {"Quantity", Int64.Type}, {"UnitPrice", Currency.Type}, {"UnitCost", Currency.Type}
+				    }, "en-US")
+				in
+				    Typed
+

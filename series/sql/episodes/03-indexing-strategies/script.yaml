@@ -1,0 +1,245 @@
+# DEVLADLOG SQL — episode 03 (draft: screen scenes need the recording described in demo.md)
+episode: 3
+slug: indexing-strategies
+series_label: "SQL"
+series_name: "DEVLADLOG SQL"
+file_prefix: "sql"
+title: "Indexing Strategies"
+subtitle: "Seek, scan, cover, filter, columnstore: measured from the actual plan"
+voice: am_michael
+thumbnail_text: "SAME COLUMNS\nWRONG ORDER\nFULL SCAN"
+youtube:
+  title: "SQL Server Indexing Strategies: Covering, Filtered, Columnstore (Real Plans) | DEVLADLOG SQL #3"
+  tags: [SQL Server, indexing, index design, covering index, filtered index, columnstore, execution plan, key lookup, T-SQL, query performance]
+sources:
+  - https://www.devladlog.com/articles/sql/2025-07-24-indexing-strategies-complete-guide-2025/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "The right columns, in the wrong order"
+    sub: "Indexing strategies you can prove with the execution plan"
+    short: hook
+    narration: >
+      Two indexes. The same three columns. One finds a customer's orders with a single seek. The other makes SQL
+      Server read the entire index. The difference is the order of the columns. In this episode we design
+      indexes for three real queries, and we measure every step from SQL Server's actual execution plan.
+
+  - id: lab
+    type: bullets
+    heading: "The lab: Contoso Bikes, three years later"
+    bullets:
+      - "20,000 customers, 200,000 orders, generated, deterministic"
+      - "Only index: the clustered primary key on OrderId"
+      - "A foreign key on CustomerId, and no index behind it"
+      - "Every step: drop, create, run, read the actual plan"
+    narration: >
+      Contoso Bikes has grown: twenty thousand customers and two hundred thousand orders, all generated, so every
+      result is reproducible. The orders table has one index, the clustered primary key. There is a foreign key on
+      customer, and as we saw in episode two, that doesn't create an index. For each step, a small runner drops the
+      lab indexes, creates one, runs the query, and reads the actual plan.
+
+  - id: checks
+    type: code
+    heading: "Every step has checks"
+    lang: python
+    code: |
+      Scenario("customer-orders", "q01-customer-orders.sql", [
+          # ... "no index" and "narrow index" steps ...
+          Step("covering, wrong key order", "ix02-date-customer-covering.sql", [
+              "has: Index Scan @ IX_Orders_OrderDate_CustomerId",
+              "not: Index Seek",
+              "not: Key Lookup",
+              "fewer pages than: no index",
+              "more pages than: narrow index"]),
+          Step("covering, right key order", "ix03-customer-date-covering.sql", [
+              "has: Index Seek @ IX_Orders_CustomerId_OrderDate",
+              "not: Key Lookup",
+              "not: Sort",
+              "fewer pages than: narrow index"]),
+      ]),
+    narration: >
+      Each step comes with checks, written as plain sentences: which operator must appear, on which index, and
+      whether it reads fewer pages than an earlier step. Pages read come from the plan itself: logical reads per
+      operator, added up. If SQL Server does something else, the run fails. And every step compares the rows
+      with the expected result, because an index must never change the answer.
+
+  - id: q01
+    type: code
+    heading: "Query one: a customer's order history"
+    lang: sql
+    code: |
+      -- q01: the order history page for one customer (customer 4242 has 7 orders).
+      SELECT OrderId, OrderDate, TotalAmount
+      FROM Sales.Orders
+      WHERE CustomerId = 4242
+      ORDER BY OrderDate DESC;
+
+      -- ix01: the obvious first index - the column in the WHERE clause.
+      CREATE NONCLUSTERED INDEX IX_Orders_CustomerId
+          ON Sales.Orders (CustomerId);
+    narration: >
+      Query one is the order history page: seven orders for customer forty-two forty-two, newest first. With no
+      index on customer, the only way to find seven rows is to scan the clustered index, every page of the
+      table. The obvious fix is an index on the column in the where clause.
+
+  - id: scan-screen
+    type: screen
+    heading: "No index: scan. Narrow index: seek plus lookups"
+    image: screens/q01-plans.jpg
+    bar: "SSMS · CON-SQL01 · ContosoBikesPerf · q01 actual execution plans"
+    demo: "SSMS connected to CON-SQL01, database ContosoBikesPerf. Two actual execution plans of q01-customer-orders.sql stacked: first with no lab index (Clustered Index Scan on PK_Orders, plus Sort; keep the green Missing Index text if SSMS shows it), second after ix01 (Index Seek on IX_Orders_CustomerId, Nested Loops, Key Lookup on PK_Orders, Sort). Hover the Key Lookup so the tooltip shows Number of Executions 7."
+    narration: >
+      Here are the two actual plans on SQL Server twenty twenty-two. Without an index: a clustered index scan.
+      With the narrow index: an index seek finds the seven rows, and then a key lookup goes back to the
+      clustered index once per row for the date and the amount. Seven lookups are cheap. Remember them anyway.
+
+  - id: key-order
+    type: code
+    heading: "Same columns, different order"
+    lang: sql
+    short: key-order
+    code: |
+      -- ix02: covers the query, but the leading key is OrderDate:
+      -- the rows for one customer are spread over the whole index.
+      CREATE NONCLUSTERED INDEX IX_Orders_OrderDate_CustomerId
+          ON Sales.Orders (OrderDate DESC, CustomerId)
+          INCLUDE (TotalAmount);
+
+      -- ix03: equality column first, then the ORDER BY column.
+      -- One seek to customer 4242, rows already in OrderDate DESC order.
+      CREATE NONCLUSTERED INDEX IX_Orders_CustomerId_OrderDate
+          ON Sales.Orders (CustomerId, OrderDate DESC)
+          INCLUDE (TotalAmount);
+    narration: >
+      Now the trap. Both indexes cover the query: every column it needs is in the index, so no lookups. But the
+      first one leads with the order date. The rows for one customer are scattered across the whole index, so SQL
+      Server can only scan it. The second puts the equality column first, then the sort column. One seek, rows
+      already in order, no lookup and no sort. Same columns. The order is the design.
+
+  - id: runner-screen
+    type: screen
+    heading: "Four steps, measured"
+    image: screens/runner-customer-orders.jpg
+    bar: "Terminal · index_lab.py --engine sqlserver"
+    demo: "Terminal (dark theme, 18 pt) on the recording laptop: `python src/index_lab.py --engine sqlserver --setup --save-plans plans`, scrolled to the customer-orders table: four steps with plan, pages read, index pages and check columns, all OK; below it the optimizer's missing index request line (or the 'none' line) and 'results: 7 rows, identical to expected/ in every step'. SQL_CONNECTION_STRING set off-screen."
+    narration: >
+      The runner puts the four steps side by side. Look at the pages read column. The full scan reads the whole
+      table. The narrow index reads only what it needs: one seek and seven lookups. The covering index in the wrong order reads its entire leaf level:
+      better than the table, far worse than a seek. And the right order reads the fewest pages of all. Every check
+      passes, and the seven rows are identical in every step.
+
+  - id: filtered
+    type: code
+    heading: "Query two: index only the rows you ask for"
+    lang: sql
+    code: |
+      -- q02: the warehouse screen. Only 1% of orders are Open.
+      SELECT OrderId, CustomerId, OrderDate, TotalAmount
+      FROM Sales.Orders
+      WHERE Status = 'Open' AND OrderDate >= '2026-06-01'
+      ORDER BY OrderDate, OrderId;
+
+      -- ix05: a filtered index - only the Open orders.
+      CREATE NONCLUSTERED INDEX IX_Orders_Open
+          ON Sales.Orders (OrderDate)
+          INCLUDE (CustomerId, TotalAmount)
+          WHERE Status = 'Open';
+    narration: >
+      Query two is the warehouse screen: open orders since June. Only one percent of all orders are open. A
+      full-table index on status and date would work, but it stores all two hundred thousand rows to answer a
+      question about two thousand. A filtered index stores only the open ones. Status doesn't even need to be in
+      it: the query's predicate matches the filter, and status isn't returned.
+
+  - id: filtered-screen
+    type: screen
+    heading: "The same seek, a fraction of the size"
+    image: screens/runner-open-orders.jpg
+    bar: "Terminal · index_lab.py --engine sqlserver"
+    demo: "Same terminal run, scrolled to the open-orders table: no index (Clustered Index Scan), full-table index (Index Seek on IX_Orders_Status_OrderDate) and filtered index (Index Seek on IX_Orders_Open); the index pages column shows the filtered index far smaller than the full-table one; all checks OK, 49 rows identical in every step."
+    narration: >
+      Both indexes give an index seek, and both checks pass. The difference is the index pages column:
+      the filtered index is a small fraction of the full-table one. Smaller to store, cheaper to keep up to date on
+      every insert and update, and its statistics only describe the rows that matter.
+
+  - id: columnstore
+    type: code
+    heading: "Query three: when every row matters"
+    lang: sql
+    code: |
+      -- q03: revenue per year and sales channel, over all 200,000 orders.
+      SELECT YEAR(OrderDate) AS OrderYear, Channel,
+             COUNT(*) AS Orders, SUM(TotalAmount) AS Revenue
+      FROM Sales.Orders
+      GROUP BY YEAR(OrderDate), Channel
+      ORDER BY OrderYear, Channel;
+
+      -- ix06: a nonclustered columnstore index for reporting.
+      CREATE NONCLUSTERED COLUMNSTORE INDEX NCCI_Orders_Reporting
+          ON Sales.Orders (OrderDate, Channel, TotalAmount);
+    narration: >
+      Query three is the finance report. No where clause: it needs every row, so no seek can help. This is where a
+      columnstore index fits. It keeps each column separately and compressed, and the engine processes it in
+      batches of rows instead of one row at a time. A nonclustered columnstore sits next to the normal table, so
+      the order screens keep their B-tree indexes.
+
+  - id: columnstore-screen
+    type: screen
+    heading: "Columnstore scan, batch mode"
+    image: screens/q03-columnstore-plan.jpg
+    bar: "SSMS · CON-SQL01 · ContosoBikesPerf · q03 actual execution plan"
+    demo: "SSMS actual execution plan of q03-revenue-by-year-channel.sql after ix06: Columnstore Index Scan on NCCI_Orders_Reporting selected, Properties pane open showing Actual Execution Mode = Batch and Storage = ColumnStore. Optional inset: the runner's revenue-report table (no index vs columnstore, pages read, both OK)."
+    narration: >
+      The actual plan shows a columnstore index scan in batch mode. The runner counts columnstore segment reads
+      the way statistics I O reports them, as LOB reads, and the columnstore reads fewer pages than the
+      clustered scan, for the same twelve rows.
+
+  - id: missing-index
+    type: bullets
+    heading: "Missing index requests are hints, not designs"
+    short: missing-index
+    bullets:
+      - "Key columns come with no order"
+      - "Never filtered or unique indexes"
+      - "INCLUDE lists with no size check"
+      - "Nothing for trivial plans; 600 groups at most"
+      - "Cleared on restart and when the table's indexes change"
+    narration: >
+      What about the green missing index text in the plan? Treat it as a hint. Microsoft's own documentation lists
+      the limits. Key columns are suggested without an order. Filtered and unique indexes are never suggested.
+      Included columns come without a size check. Trivial plans get no suggestion at all, and the lists are
+      cleared on restart and whenever the table's indexes change. Review it, combine it, then design.
+
+  - id: cost-screen
+    type: screen
+    heading: "Every index has a price"
+    image: screens/runner-final-dmvs.jpg
+    bar: "Terminal · index_lab.py · final design"
+    demo: "End of the same terminal run: the dmv-index-sizes.sql table (PK_Orders, IX_Orders_CustomerId_OrderDate, IX_Orders_Open with Filtered = 1, NCCI_Orders_Reporting with used pages and MB), the dmv-index-usage.sql table (seeks, scans, lookups, updates per index), and the final line '9/9 steps behaved as expected on sqlserver'."
+    narration: >
+      The run ends with the final design and its bill: the size of every index, and how each one has been used.
+      Every index is another structure to update on every insert. The usage view shows which ones earn their
+      keep. Its counters reset when SQL Server restarts, so look at them after a representative period.
+
+  - id: recap
+    type: bullets
+    heading: "Five rules"
+    bullets:
+      - "Measure: the actual plan and pages read, before and after"
+      - "Equality columns first, then range or sort columns"
+      - "Cover the hot queries with INCLUDE, not with everything"
+      - "Filtered indexes for small, well-defined subsets"
+      - "Columnstore for scans and aggregates over all rows"
+    narration: >
+      Five rules. Measure, from the actual plan, before and after. Put equality columns first, then range or sort
+      columns. Cover the hot queries with included columns, not with everything. Use filtered indexes for small,
+      well-defined subsets. And reach for columnstore when a query really has to read every row.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The scripts, the runner and the tests are on GitHub, and the complete guide is on dev lad log dot com. Links
+      are in the description. Next time: query optimization, when the right index is there and SQL Server still
+      doesn't use it. This was dev lad log SQL, by Momento Galático.

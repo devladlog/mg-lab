@@ -1,0 +1,105 @@
+# Real output captured in the build container (Linux, .NET SDK 10.0.115) on 2026-11-21.
+# Timings vary by a few ms per run.
+
+$ dotnet test AsyncPatterns.slnx -m:1
+Passed!  - Failed:     0, Passed:    27, Skipped:     0, Total:    27, Duration: 3 s - Contoso.Approvals.Tests.dll (net10.0)
+
+$ dotnet run --project src/Contoso.Approvals.Cli -- sequential
+sequential: 12 requests in 3.71 s, 9 within budget, 3 over budget
+api saw: StatsSnapshot { Calls = 24, InFlight = 0, MaxInFlight = 2, Aborted = 0, Failed = 0 }
+
+$ dotnet run --project src/Contoso.Approvals.Cli -- unbounded
+  PR-2026-0101  CC-100      18,000 EUR  within budget  -> kim.demo@contoso.com
+  PR-2026-0102  CC-200      75,000 EUR  within budget  -> sam.demo@contoso.com
+  PR-2026-0103  CC-100     300,000 EUR  OVER budget    -> kim.demo@contoso.com
+  PR-2026-0105  CC-400      55,000 EUR  OVER budget    -> lee.demo@contoso.com
+  PR-2026-0106  CC-100       9,500 EUR  within budget  -> kim.demo@contoso.com
+  PR-2026-0104  CC-300      42,000 EUR  within budget  -> alex.demo@contoso.com
+  PR-2026-0108  CC-300      64,000 EUR  within budget  -> alex.demo@contoso.com
+  PR-2026-0107  CC-200     120,000 EUR  OVER budget    -> sam.demo@contoso.com
+  PR-2026-0109  CC-400      31,000 EUR  within budget  -> lee.demo@contoso.com
+  PR-2026-0110  CC-100      27,000 EUR  within budget  -> kim.demo@contoso.com
+  PR-2026-0111  CC-200      16,000 EUR  within budget  -> sam.demo@contoso.com
+  PR-2026-0112  CC-300      22,000 EUR  within budget  -> alex.demo@contoso.com
+all at once (Task.WhenEach): 12 requests in 0.33 s, 9 within budget, 3 over budget
+api saw: StatsSnapshot { Calls = 24, InFlight = 0, MaxInFlight = 24, Aborted = 0, Failed = 0 }
+
+$ dotnet run --project src/Contoso.Approvals.Cli -- bounded
+  PR-2026-0101  CC-100      18,000 EUR  within budget  -> kim.demo@contoso.com
+  PR-2026-0102  CC-200      75,000 EUR  within budget  -> sam.demo@contoso.com
+  PR-2026-0103  CC-100     300,000 EUR  OVER budget    -> kim.demo@contoso.com
+  PR-2026-0104  CC-300      42,000 EUR  within budget  -> alex.demo@contoso.com
+  PR-2026-0105  CC-400      55,000 EUR  OVER budget    -> lee.demo@contoso.com
+  PR-2026-0106  CC-100       9,500 EUR  within budget  -> kim.demo@contoso.com
+  PR-2026-0107  CC-200     120,000 EUR  OVER budget    -> sam.demo@contoso.com
+  PR-2026-0108  CC-300      64,000 EUR  within budget  -> alex.demo@contoso.com
+  PR-2026-0109  CC-400      31,000 EUR  within budget  -> lee.demo@contoso.com
+  PR-2026-0110  CC-100      27,000 EUR  within budget  -> kim.demo@contoso.com
+  PR-2026-0111  CC-200      16,000 EUR  within budget  -> sam.demo@contoso.com
+  PR-2026-0112  CC-300      22,000 EUR  within budget  -> alex.demo@contoso.com
+bounded, 4 at a time: 12 requests in 1.03 s, 9 within budget, 3 over budget
+api saw: StatsSnapshot { Calls = 24, InFlight = 0, MaxInFlight = 8, Aborted = 0, Failed = 0 }
+
+$ dotnet run --project src/Contoso.Approvals.Cli -- timeout --timeout-ms 150
+TimeoutException after 158 ms: Gave up after 150 ms.
+api saw: StatsSnapshot { Calls = 1, InFlight = 0, MaxInFlight = 1, Aborted = 1, Failed = 0 }
+
+$ dotnet run --project src/Contoso.Approvals.Cli -- waitasync --timeout-ms 150
+TimeoutException after 158 ms: The operation has timed out.
+api saw: StatsSnapshot { Calls = 1, InFlight = 0, MaxInFlight = 1, Aborted = 0, Failed = 0 }
+
+$ dotnet run --project src/Contoso.Approvals.Cli -- sequential   (Ctrl+C after ~1.5 s)
+Ctrl+C: cancelling...
+Cancelled after 1.12 s.
+api saw: StatsSnapshot { Calls = 8, InFlight = 0, MaxInFlight = 2, Aborted = 2, Failed = 0 }
+
+# API started with: dotnet run --project src/Contoso.Approvals.Api -- --Api:Flaky=CC-400
+$ dotnet run --project src/Contoso.Approvals.Cli -- bounded
+  PR-2026-0102  CC-200      75,000 EUR  within budget  -> sam.demo@contoso.com
+  PR-2026-0103  CC-100     300,000 EUR  OVER budget    -> kim.demo@contoso.com
+  PR-2026-0104  CC-300      42,000 EUR  within budget  -> alex.demo@contoso.com
+  PR-2026-0101  CC-100      18,000 EUR  within budget  -> kim.demo@contoso.com
+  retry  budget CC-400        attempt 1 failed (503 ServiceUnavailable), waiting 200 ms
+  PR-2026-0107  CC-200     120,000 EUR  OVER budget    -> sam.demo@contoso.com
+  PR-2026-0108  CC-300      64,000 EUR  within budget  -> alex.demo@contoso.com
+  PR-2026-0106  CC-100       9,500 EUR  within budget  -> kim.demo@contoso.com
+  retry  budget CC-400        attempt 1 failed (503 ServiceUnavailable), waiting 200 ms
+  PR-2026-0105  CC-400      55,000 EUR  OVER budget    -> lee.demo@contoso.com
+  PR-2026-0110  CC-100      27,000 EUR  within budget  -> kim.demo@contoso.com
+  PR-2026-0111  CC-200      16,000 EUR  within budget  -> sam.demo@contoso.com
+  PR-2026-0109  CC-400      31,000 EUR  within budget  -> lee.demo@contoso.com
+  PR-2026-0112  CC-300      22,000 EUR  within budget  -> alex.demo@contoso.com
+bounded, 4 at a time: 12 requests in 1.44 s, 9 within budget, 3 over budget
+api saw: StatsSnapshot { Calls = 24, InFlight = 0, MaxInFlight = 8, Aborted = 0, Failed = 2 }
+
+$ ./demo/expect-errors.sh
+demo/Analyzers/AsyncMistakes.cs(16,22): error CA2016: Forward the 'ct' parameter to the 'GetStringAsync' method or pass in 'CancellationToken.None' explicitly to indicate intentionally not propagating the token (https://learn.microsoft.com/dotnet/fundamentals/code-analysis/quality-rules/ca2016) [demo/Analyzers/Analyzers.csproj]
+demo/Analyzers/AsyncMistakes.cs(23,16): error CA1849: 'Task<TResult>.Result' synchronously blocks. Use await instead. (https://learn.microsoft.com/dotnet/fundamentals/code-analysis/quality-rules/ca1849) [demo/Analyzers/Analyzers.csproj]
+demo/Analyzers/AsyncMistakes.cs(9,9): error CS4014: Because this call is not awaited, execution of the current method continues before the call is completed. Consider applying the 'await' operator to the result of the call. [demo/Analyzers/Analyzers.csproj]
+ok   CS4014 is a build error
+ok   CA2016 is a build error
+ok   CA1849 is a build error
+
+Same project with TreatWarningsAsErrors=false:
+ok   build succeeds, the three are only warnings
+
+On a single-threaded SynchronizationContext (like a UI thread):
+  1. .Wait() on async code         -> DEADLOCK (2008 ms, the work needed 100)
+  2. .Wait(), ConfigureAwait(false) -> completed (102 ms, but a thread sat blocked)
+  3. await all the way             -> completed (108 ms, nothing blocked)
+
+# API console (first terminal), excerpts:
+# unbounded run: the 24th call starts while 23 are still running
+[api 04:39:56.963] budget CC-300          start  (in flight 24)
+# timeout run (linked token reaches HttpClient): the server stops working
+[api 04:39:59.357] budget CC-100          start  (in flight 1)
+[api 04:39:59.507] budget CC-100          ABORTED by the client after 150 ms
+# waitasync run: the client gave up after 150 ms, the server finished the call anyway
+[api 04:40:00.073] budget CC-100          start  (in flight 1)
+[api 04:40:00.373] budget CC-100          done    300 ms
+# Ctrl+C during sequential
+[api 04:40:02.169] approver Operations    ABORTED by the client after 184 ms
+[api 04:40:02.176] budget CC-300          ABORTED by the client after 194 ms
+# flaky API (--Api:Flaky=CC-400)
+[api 04:40:10.912] budget CC-400          503 Service Unavailable (flaky on purpose)
+[api 04:40:11.219] budget CC-400          503 Service Unavailable (flaky on purpose)

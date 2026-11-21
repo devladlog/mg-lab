@@ -1,0 +1,46 @@
+{
+  "privilegedRoles": [
+    { "name": "Global Administrator", "templateId": "62e90394-69f5-4237-9190-012177145e10" },
+    { "name": "Privileged Role Administrator", "templateId": "e8611ab8-c189-46e8-94e1-60213ab1f814" },
+    { "name": "User Administrator", "templateId": "fe930be7-5e62-47db-91af-98c3a49a38b1" },
+    { "name": "Groups Administrator", "templateId": "fdd7a751-b60b-444a-984c-02652fe8fa1c" }
+  ],
+  "emergencyAccessAccountIds": [
+    "00000000-0000-0000-0000-000000000901",
+    "00000000-0000-0000-0000-000000000902"
+  ],
+  "eligibleAssignments": [
+    {
+      "principalId": "00000000-0000-0000-0000-000000000101",
+      "principalName": "Alex Demo",
+      "role": "Groups Administrator",
+      "durationDays": 180,
+      "justification": "Owns the Microsoft 365 groups lifecycle (expiration, restore)"
+    }
+  ],
+  "guestReview": {
+    "displayName": "Quarterly review - guests in Microsoft 365 groups",
+    "fallbackReviewerId": "00000000-0000-0000-0000-000000000101",
+    "intervalMonths": 3,
+    "instanceDurationInDays": 14,
+    "defaultDecision": "Deny",
+    "autoApplyDecisionsEnabled": true
+  },
+  "leaverWorkflow": {
+    "displayName": "Leaver - Sales members on their last day",
+    "description": "Revoke sessions, remove group and team memberships, disable the account on employeeLeaveDateTime",
+    "scopeRule": "(department eq 'Sales')",
+    "offsetInDays": 0,
+    "isSchedulingEnabled": false,
+    "tasks": [
+      "Revoke all refresh tokens for user",
+      "Remove user from all teams",
+      "Remove users from all groups",
+      "Disable user account"
+    ]
+  },
+  "licensing": {
+    "governanceLicenceEndsOn": "2026-12-20",
+    "warnDays": 30
+  }
+}

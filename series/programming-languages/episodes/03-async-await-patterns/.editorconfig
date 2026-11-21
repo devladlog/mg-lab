@@ -1,0 +1,12 @@
+root = true
+
+[*.cs]
+# Async guardrails. With TreatWarningsAsErrors these fail the build.
+# CA2016: forward the CancellationToken you were given. Only a suggestion at the default analysis level;
+# AnalysisLevel=latest-recommended already makes it a warning. Pinned here so it stays on.
+dotnet_diagnostic.CA2016.severity = warning
+# CA1849: inside an async method, call the async overload (no .Result / .Wait() / sync I/O).
+# Not reported at latest-recommended: this line is what turns it on.
+dotnet_diagnostic.CA1849.severity = warning
+# CS4014: a Task-returning call that is not awaited (already a warning; listed so nobody turns it off).
+dotnet_diagnostic.CS4014.severity = warning

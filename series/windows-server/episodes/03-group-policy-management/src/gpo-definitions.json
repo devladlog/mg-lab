@@ -1,0 +1,57 @@
+{
+  "Domain": "lab.contoso.com",
+  "DomainDn": "DC=lab,DC=contoso,DC=com",
+  "Gpos": [
+    {
+      "Name": "CON-Servers-Baseline",
+      "Comment": "Managed by GpoLab (DEVLADLOG Windows Server #3). Computer settings only. Edit gpo-definitions.json, not GPMC.",
+      "Status": "UserSettingsDisabled",
+      "Registry": [
+        {
+          "Key": "HKLM\\Software\\Policies\\Microsoft\\Windows\\PowerShell\\ScriptBlockLogging",
+          "ValueName": "EnableScriptBlockLogging",
+          "Type": "DWord",
+          "Value": 1,
+          "Policy": "Windows Components > Windows PowerShell > Turn on PowerShell Script Block Logging"
+        },
+        {
+          "Key": "HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows NT\\Terminal Services",
+          "ValueName": "UserAuthentication",
+          "Type": "DWord",
+          "Value": 1,
+          "Policy": "Remote Desktop Session Host > Security > Require user authentication for remote connections by using Network Level Authentication"
+        }
+      ],
+      "Links": [
+        { "Target": "OU=Servers,OU=Contoso,DC=lab,DC=contoso,DC=com", "Order": 1, "Enforced": false }
+      ],
+      "SecurityFiltering": []
+    },
+    {
+      "Name": "CON-Finance-ScreenLock",
+      "Comment": "Managed by GpoLab (DEVLADLOG Windows Server #3). User settings only, Finance users only.",
+      "Status": "ComputerSettingsDisabled",
+      "Registry": [
+        {
+          "Key": "HKCU\\Software\\Policies\\Microsoft\\Windows\\Control Panel\\Desktop",
+          "ValueName": "ScreenSaverIsSecure",
+          "Type": "String",
+          "Value": "1",
+          "Policy": "Control Panel > Personalization > Password protect the screen saver"
+        },
+        {
+          "Key": "HKCU\\Software\\Policies\\Microsoft\\Windows\\Control Panel\\Desktop",
+          "ValueName": "ScreenSaveTimeOut",
+          "Type": "String",
+          "Value": "900",
+          "Policy": "Control Panel > Personalization > Screen saver timeout"
+        }
+      ],
+      "Links": [
+        { "Target": "OU=Users,OU=Contoso,DC=lab,DC=contoso,DC=com", "Enforced": false }
+      ],
+      "SecurityFiltering": [ "GG-Dept-Finance" ],
+      "ComputerRead": "Authenticated Users"
+    }
+  ]
+}

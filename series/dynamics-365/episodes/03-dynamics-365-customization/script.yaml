@@ -1,0 +1,266 @@
+# DEVLADLOG Dynamics 365 — episode 03. Draft: screen scenes need the lab-tenant capture described in demo.md.
+episode: 3
+slug: dynamics-365-customization
+series_label: "DYNAMICS 365"
+series_name: "DEVLADLOG Dynamics 365"
+file_prefix: "dynamics-365"
+title: "Dynamics 365 Customization"
+subtitle: "The lightest tool for each job, all in one solution"
+voice: am_michael
+thumbnail_text: "NO CODE\nLOW CODE\nTESTED CODE"
+youtube:
+  title: "Dynamics 365 Customization: Business Rules, Form Scripts and Views | DEVLADLOG Dynamics 365 #3"
+  tags: [Dynamics 365, Dataverse, model-driven apps, business rules, form scripts, JavaScript, TypeScript, web resources, FormXml, views, Power Platform, solutions]
+sources:
+  - https://www.devladlog.com/articles/dynamics-365/2025-11-03-dynamics-365-customization-complete-guide-2025/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Customize it so it survives"
+    sub: "No code where you can, tested code where you must"
+    short: hook
+    narration: >
+      A business rule marks a field as required, and an import still saves the record without it. A form script
+      works in development and says function not found in test. Customization goes wrong in small, boring ways.
+      In this episode we customize the project request table from episode one with the lightest tool for each job,
+      all in one solution, and the code parts built, tested and deployed by a script you can run twice.
+
+  - id: toolbox
+    type: bullets
+    heading: "Pick the lightest tool"
+    bullets:
+      - "Layout: form designer, no code"
+      - "Rules on the current record: business rule"
+      - "Other records or the form type: form script"
+      - "Lists: a view, defined as data"
+      - "Everything inside one unmanaged solution"
+    narration: >
+      Here's the rule we follow. Layout belongs in the form designer. Logic that only looks at the current record
+      is a business rule. When you need other records, or the form type, that's a form script. Lists are views,
+      which are just data you can create from code. And everything goes into one unmanaged solution, so it moves
+      between environments as a unit.
+
+  - id: designer
+    type: screen
+    heading: "Layout in the form designer"
+    image: screens/form-designer.jpg
+    bar: "Power Apps · Solutions · MGLabDataverse · Project Request · Information form"
+    demo: >
+      make.powerapps.com, solution MGLabDataverse, table Project Request, main form "Information" open in the
+      modern form designer. The Request section shows Name, Request Code, Customer Account, Budget, Due Date,
+      Priority and Business Justification. Mask tenant and environment name.
+    narration: >
+      First the layout, with no code at all. The main form gets request code, customer account, budget, due date
+      and the new business justification column. That column comes from our deploy script, but placing it on the
+      form is a designer job.
+
+  - id: rule
+    type: screen
+    heading: "Budget over fifty thousand needs a reason"
+    image: screens/business-rule.jpg
+    bar: "Power Apps · Project Request · Business rule · Scope: Entity"
+    demo: >
+      Business rule designer for "Justification for large budgets" on Project Request, scope Entity, condition
+      Budget greater than or equal to 50000. True branch: Set Business Required on Business Justification, plus a
+      nested condition "Business Justification does not contain data" with Show Error Message on Business
+      Justification. False branch: Set Not Business Required. Rule Active. Mask tenant name.
+    narration: >
+      The justification rule is a business rule with scope entity. If the budget is fifty thousand or more, the
+      justification becomes required, and if it's empty, the rule shows an error message. Why both? That's the
+      gotcha.
+
+  - id: gotcha
+    type: bullets
+    heading: "Gotcha: required is a form-only action"
+    bullets:
+      - "Scope Entity runs on forms and on the server"
+      - "Server side: set or clear value, default, error message"
+      - "Form only: required, show or hide, lock"
+      - "Rules skip forms missing one of their columns"
+      - "Rules run before your OnLoad script"
+    short: gotcha
+    narration: >
+      Scope entity means the rule runs on forms and on the server. But only some actions run on the server: setting
+      or clearing a value, a default, and showing an error message. Business required, show or hide, and lock are
+      form only. So an import through the API never sees required. Two more traps: a rule doesn't fire on a form
+      that's missing one of its columns, and rules run before your on load script.
+
+  - id: script
+    type: code
+    heading: "What a business rule can't do"
+    lang: typescript
+    code: |
+      export function onLoad(executionContext: Xrm.Events.EventContext): Promise<string[]> {
+          const formContext = executionContext.getFormContext();
+
+          // The episode 1 alternate key: editable only on create.
+          const codeControl = formContext.getControl<Xrm.Controls.StringControl>(REQUEST_CODE);
+          if (codeControl && formContext.ui.getFormType() !== FORM_TYPE_CREATE) {
+              codeControl.setDisabled(true);
+          }
+
+          const account = formContext.getAttribute<Xrm.Attributes.LookupAttribute>(ACCOUNT);
+          if (account) {
+              account.addOnChange(onAccountChange);
+          }
+          return checkOpenRequests(formContext);
+      }
+    narration: >
+      The form script does only what a rule can't. It locks the request code once the record exists, because
+      that's the alternate key our import uses. It attaches the account on change handler in code, so the form
+      only ever references one function. And it checks the account's other open requests.
+
+  - id: query
+    type: code
+    heading: "Looking at other records"
+    lang: typescript
+    code: |
+      const result = await Xrm.WebApi.retrieveMultipleRecords(
+          TABLE, buildOpenRequestsQuery(accountId, selfId), MAX_LISTED + 1);
+      const codes = result.entities.map((e) => String(e[REQUEST_CODE]));
+      if (codes.length > 0) {
+          formContext.ui.setFormNotification(
+              formatMessage(value[0].name || "This account", codes), "WARNING", NOTE_ID);
+      }
+
+      // _mgl_customeraccountid_value eq <id> and statecode eq 0
+      //   and mgl_projectrequestid ne <this record>      (encoded, braces stripped)
+    narration: >
+      That check is a web API query for active requests of the same account, excluding this record, then a
+      warning notification with their codes. If the call fails, the user gets a quiet info message and carries on.
+      A form script should never block someone because a lookup failed.
+
+  - id: tests
+    type: code
+    heading: "Test the file you ship"
+    lang: javascript
+    code: |
+      const context = vm.createContext({ Xrm: { WebApi: webApi }, encodeURIComponent, console });
+      vm.runInContext(readFileSync(BUNDLE, "utf8"), context);   // dist/mgl_projectrequest_form.js
+
+      test("the OnLoad handler named in customization.json exists in the built web resource", () => {
+        assert.equal(typeof resolveHandler(ctx, CONFIG.form.onload), "function");
+      });
+
+      $ npm test
+      # tests 13
+      # pass 13
+    narration: >
+      TypeScript compiles to one plain script file, and the tests load that exact file into a Node sandbox with a
+      fake form context. The first test resolves the handler name the form will call. Rename the function and
+      forget the form, and the build fails here instead of in front of a user.
+
+  - id: formxml
+    type: code
+    heading: "Register the handler in FormXml, idempotently"
+    lang: python
+    code: |
+      def register_onload(formxml: str, library: str, function: str) -> PatchResult:
+          ...
+          if not any(lib.get("name") == library for lib in libs.findall("Library")):
+              ET.SubElement(libs, "Library", {"name": library,
+                                              "libraryUniqueId": stable_guid("lib", library)})
+          ...
+          if existing is None:
+              ET.SubElement(handlers, "Handler", {
+                  "functionName": function, "libraryName": library,
+                  "handlerUniqueId": stable_guid("onload", library, function),
+                  "enabled": "true", "parameters": "", "passExecutionContext": "true"})
+          else:   # the classic mistake: pass execution context switched off
+              for attr, want in (("enabled", "true"), ("passExecutionContext", "true")):
+                  if existing.get(attr) != want:
+                      existing.set(attr, want)
+    narration: >
+      Registering the library and the on load handler is a small XML edit of the form, the same thing the designer
+      does on the events tab. Stable IDs mean a second run produces no change, and if someone switched off pass
+      execution context, the script turns it back on.
+
+  - id: viewtrap
+    type: code
+    heading: "The view trap: object type code"
+    lang: python
+    code: |
+      def view_layoutxml(cfg, object_type_code: int) -> str:
+          """`object` is the table's ObjectTypeCode. For custom tables it differs between
+          environments, so read it from EntityDefinitions, never hard-code it."""
+          ...
+          return (f'<grid name="resultset" object="{int(object_type_code)}" jump="mgl_name" ...>'
+                  f'<row name="result" id="{table}id">{cells}</row></grid>')
+
+      otc = api.get("EntityDefinitions(LogicalName='mgl_projectrequest')"
+                    "?$select=ObjectTypeCode")["ObjectTypeCode"]
+    short: viewtrap
+    narration: >
+      Views are saved query rows: fetch XML for the data, layout XML for the grid. The trap is the object attribute
+      in the layout. It's the table's object type code, and for custom tables that number differs between
+      environments. Copy a view definition from dev to test with the number baked in, and it breaks. So we read
+      it from metadata every time.
+
+  - id: deploy
+    type: screen
+    heading: "Deploy, then deploy again"
+    image: screens/deploy.jpg
+    bar: "Terminal · python -m custkit deploy (twice)"
+    demo: >
+      Terminal against the lab DEV environment: `python3 -m custkit deploy` showing "+ column mgl_Justification",
+      "+ web resource mgl_/projectrequest/form.js", "~ form Information: added library ...", "added OnLoad handler
+      MGL.ProjectRequest.onLoad", "+ view 'Open requests over 50,000'", "published", summary line; then the second
+      run showing "= ... unchanged" lines and "nothing to publish". If the first run order differs (column must
+      exist before the form step), record the real output and rewrite narration. Mask environment URL.
+    narration: >
+      Against the lab, the first run creates the column, uploads the script, registers the handler, creates the
+      view and publishes, all with the solution header so every piece lands in our solution. The second run changes
+      nothing and publishes nothing. That's what makes it safe in a pipeline.
+
+  - id: app
+    type: screen
+    heading: "On the real form"
+    image: screens/app-form.jpg
+    bar: "Model-driven app · Project Request PR-0004"
+    demo: >
+      Model-driven app with the Project Request table, record PR-0004 (Customer Account = a fictional Contoso
+      account that has other open requests). Visible at the same time: the yellow warning "Contoso Ltd already
+      has N open requests: ..." with the real codes, Request Code locked, Budget 75,000 and Business Justification
+      marked required (red asterisk). Mask tenant name and user avatar.
+    narration: >
+      And on the real form: the warning lists the account's other open requests, the request code is locked, and
+      with a budget of seventy five thousand the justification is required. Three behaviors, two tools, one
+      solution.
+
+  - id: probe
+    type: screen
+    heading: "Does the server say no?"
+    image: screens/probe-rule.jpg
+    bar: "Terminal · python -m custkit probe-rule"
+    demo: >
+      Terminal: `python3 -m custkit probe-rule` with the business rule active. Expected "server refused: HTTP 400:
+      <the rule's error message>". Record the real answer. If the server accepts the record, keep that in the video,
+      rewrite this scene's narration and the gotcha scene to match, and update README "What we learned".
+    narration: >
+      Finally the honest test. The probe creates a request through the API with a budget of one hundred and twenty
+      thousand and no justification. The rule's error message action runs on the server, so the server should
+      refuse it with our message, and here is what the lab answered. The required flag alone would not stop it.
+
+  - id: recap
+    type: bullets
+    heading: "Five habits"
+    bullets:
+      - "Lightest tool first: designer, rule, then script"
+      - "Server enforcement needs a show error message action"
+      - "One OnLoad handler, tested against the built file"
+      - "Read environment-specific values from metadata"
+      - "Deploy idempotently into one solution"
+    narration: >
+      Five habits. Reach for the designer, then a business rule, then a script. If the server must enforce it, use
+      an error message action. Register one on load handler and test it against the file you ship. Read anything
+      environment specific from metadata. And deploy idempotently into one solution.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The form script, the deploy tool and all forty eight tests are on GitHub, and the complete guide to Dynamics
+      three six five customization is on devladlog dot com. Next episode, business process flows on the same
+      table. Subscribe so you don't miss it.

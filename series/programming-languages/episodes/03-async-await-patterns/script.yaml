@@ -1,0 +1,290 @@
+# DEVLADLOG Code — episode 03 (draft; screens are recorded on the Windows laptop, see demo.md)
+episode: 3
+slug: async-await-patterns
+series_label: "CODE"
+series_name: "DEVLADLOG Code"
+file_prefix: "programming-languages"
+title: "Async and await, done properly"
+subtitle: "Concurrency, limits, timeouts, cancellation, and the traps"
+voice: am_michael
+thumbnail_text: "ASYNC\nAWAIT\nTRAPS"
+youtube:
+  title: "C# Async/Await: WhenAll, Bounded Parallelism, Timeouts, Deadlocks (Real Demo) | DEVLADLOG Code #3"
+  tags: [C#, async await, .NET 10, Task.WhenAll, Task.WhenEach, Parallel.ForEachAsync, CancellationToken, TimeProvider, FakeTimeProvider, ConfigureAwait, deadlock, HttpClient, ASP.NET Core]
+sources:
+  - https://www.devladlog.com/articles/programming-languages/2025-06-25-asyncawait-patterns-complete-guide-2025/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Async and await, done properly"
+    sub: "The same twelve requests: 3.7 seconds, or 1"
+    short: hook
+    narration: >
+      Your code is full of async and await. But is it actually concurrent? Does Control C really stop it? And does
+      your timeout stop the work, or just stop waiting for it? In this episode we call a real API from C# and
+      measure everything: twelve requests in three point seven seconds, then in one. Plus a timeout that lies, and a
+      deadlock you can reproduce on demand. Welcome to DEVLADLOG Code.
+
+  - id: plan
+    type: bullets
+    heading: "What we're building"
+    bullets:
+      - "Same Contoso project requests as episodes 1 and 2"
+      - "Before approval: remaining budget + the approver"
+      - "A small Finance API, 300 ms per lookup"
+      - "A client library, a console app, 27 xUnit tests"
+      - ".NET 10, every number measured on screen"
+    narration: >
+      Same Contoso project requests as the last two episodes. Before anybody approves one, we need two things: the
+      remaining budget of the cost center, and who the approver is. Both come from a small Finance API that takes
+      three hundred milliseconds per lookup. We build a client library, a console app, and twenty-seven tests.
+
+  - id: guardrails
+    type: code
+    heading: "Guardrails: let the build catch async mistakes"
+    lang: csharp
+    code: |
+      // CS4014: not awaited. Returns before the file is written; errors are never seen.
+      File.WriteAllTextAsync(path, line);
+
+      // CA2016: we were given a token and didn't pass it on. Ctrl+C won't stop this.
+      return await http.GetStringAsync(uri);
+
+      // CA1849: blocking inside an async method.
+      return load.Result.Length;
+
+      # .editorconfig (+ TreatWarningsAsErrors)
+      dotnet_diagnostic.CA2016.severity = warning
+      dotnet_diagnostic.CA1849.severity = warning
+    narration: >
+      First, guardrails. Three classic mistakes: a call that isn't awaited, a cancellation token that isn't passed
+      on, and a blocking dot Result inside an async method. The compiler and analyzers can catch all three, but
+      CA eighteen forty-nine only shows up because we switch it on in editorconfig. With warnings as errors, all
+      three fail the build.
+
+  - id: client
+    type: code
+    heading: "Pass the token all the way down"
+    lang: csharp
+    code: |
+      public sealed class FinanceClient(HttpClient http) : IFinanceClient
+      {
+          public Task<BudgetInfo> GetBudgetAsync(string costCenter, CancellationToken ct) =>
+              GetAsync<BudgetInfo>($"budget/{Uri.EscapeDataString(costCenter)}", ct);
+
+          private async Task<T> GetAsync<T>(string path, CancellationToken ct)
+          {
+              var value = await http.GetFromJsonAsync<T>(path, ct).ConfigureAwait(false);
+              return value ?? throw new InvalidOperationException($"Empty response from {path}.");
+          }
+      }
+    narration: >
+      The client is a typed HttpClient. Every method takes the caller's cancellation token and hands it to
+      HttpClient, so cancelling really aborts the HTTP request. And because this is library code, every await uses
+      ConfigureAwait false. It never needs to come back to the caller's context. We'll see why that matters at the
+      end.
+
+  - id: overlap
+    type: code
+    heading: "Start both, then await both"
+    lang: csharp
+    code: |
+      public async Task<EnrichedRequest> EnrichAsync(ProjectRequest request, CancellationToken ct)
+      {
+          // Start both calls first, then await: they overlap.
+          Task<BudgetInfo> budget = CallAsync($"budget {request.CostCenter}",
+              c => client.GetBudgetAsync(request.CostCenter, c), ct);
+          Task<Approver> approver = CallAsync($"approver {request.Department}",
+              c => client.GetApproverAsync(request.Department, c), ct);
+
+          await Task.WhenAll(budget, approver).ConfigureAwait(false);
+          return new EnrichedRequest(request, await budget.ConfigureAwait(false), await approver.ConfigureAwait(false));
+      }
+    narration: >
+      For one request, the two lookups don't depend on each other. So we start both tasks first, and then await
+      them together with Task dot When All. Awaiting each call in turn would add the latencies: six hundred
+      milliseconds instead of three hundred, for every single request.
+
+  - id: sequential
+    type: screen
+    heading: "Baseline: one request at a time"
+    image: screens/sequential.jpg
+    bar: "Terminal · API + dotnet run -- sequential"
+    demo: >
+      Windows Terminal split in two panes (dark theme, font 18 pt or larger). Left pane: the Finance API running
+      (dotnet run --project src/Contoso.Approvals.Api), its log lines scrolling ("budget CC-100 start (in flight 1)",
+      "done 300 ms"). Right pane: dotnet run --project src/Contoso.Approvals.Cli -- sequential, ending with
+      "sequential: 12 requests in 3.7 s, 9 within budget, 3 over budget" and "api saw: ... MaxInFlight = 2".
+    narration: >
+      Here's the baseline, running for real. On the left, the Finance API logs every lookup. On the right, the
+      console app processes the twelve requests one after another. Three point seven seconds, and the API never
+      sees more than two calls at a time: the budget and the approver of the same request.
+
+  - id: batch
+    type: code
+    heading: "All at once, or a bounded number at a time"
+    lang: csharp
+    code: |
+      // All at once: one task per request, results as they finish (Task.WhenEach, .NET 9+)
+      List<Task<EnrichedRequest>> tasks = [.. requests.Select(r => enricher.EnrichAsync(r, ct))];
+      await foreach (var finished in Task.WhenEach(tasks).WithCancellation(ct).ConfigureAwait(false))
+          yield return await finished.ConfigureAwait(false);
+
+      // Bounded: at most maxParallel requests in flight, pulled from a stream as slots free up
+      var options = new ParallelOptions { MaxDegreeOfParallelism = maxParallel, CancellationToken = ct };
+      await Parallel.ForEachAsync(requests, options, async (request, token) =>
+      {
+          var enriched = await enricher.EnrichAsync(request, token).ConfigureAwait(false);
+          results.Enqueue(enriched);
+          onCompleted?.Invoke(enriched);
+      }).ConfigureAwait(false);
+    narration: >
+      Two ways to go faster. All at once: start a task per request, and use Task dot When Each, new in dot net nine,
+      to handle results in the order they finish. Or bounded: Parallel dot For Each Async with a maximum degree of
+      parallelism. Set it explicitly. If you don't, the default for For Each Async is the processor count, which
+      has nothing to do with what your API can take.
+
+  - id: bounded
+    type: screen
+    heading: "Fast, and fair to the API"
+    image: screens/bounded.jpg
+    bar: "Terminal · unbounded vs bounded"
+    demo: >
+      Same split terminal. Right pane: run "-- unbounded" (ends "all at once (Task.WhenEach): 12 requests in 0.33 s"
+      and "MaxInFlight = 24"), then "-- bounded" (ends "bounded, 4 at a time: 12 requests in 1.0 s" and
+      "MaxInFlight = 8"). Left pane: the API log showing "(in flight 24)" during the unbounded run.
+      Reference: demo/expected-output.txt.
+    narration: >
+      All at once: a third of a second. Fantastic, until you look at the API. Twenty-four calls in flight at the
+      same moment. With twelve thousand requests, that's twenty-four thousand. Bounded to four requests: about one
+      second, and the API never sees more than eight calls. That's the version you ship.
+
+  - id: timeout
+    type: code
+    heading: "A timeout that actually cancels"
+    lang: csharp
+    code: |
+      public static async Task<T> WithTimeoutAsync<T>(
+          Func<CancellationToken, Task<T>> operation, TimeSpan timeout, TimeProvider time, CancellationToken ct)
+      {
+          using var timeoutCts = new CancellationTokenSource(timeout, time);
+          using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, timeoutCts.Token);
+          try
+          {
+              return await operation(linked.Token).ConfigureAwait(false);
+          }
+          catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested && !ct.IsCancellationRequested)
+          {
+              throw new TimeoutException($"Gave up after {timeout.TotalMilliseconds:N0} ms.");
+          }
+      }
+    narration: >
+      Every lookup gets a timeout. A cancellation token source that fires after the timeout, linked with the
+      caller's token, and that linked token goes into HttpClient. If the timeout fired, we throw a timeout
+      exception. If the caller cancelled, it stays a cancellation. And the clock is a TimeProvider, so tests can
+      control it.
+
+  - id: gotcha
+    type: code
+    heading: "Gotcha: WaitAsync stops waiting, not working"
+    short: gotcha
+    lang: csharp
+    code: |
+      // Looks like a timeout...
+      var call = client.GetBudgetAsync("CC-100", cts.Token);
+      await call.WaitAsync(TimeSpan.FromMilliseconds(150), cts.Token);
+      // TimeoutException after 158 ms. The HTTP call keeps running.
+      // API log: "budget CC-100 done 300 ms"
+
+      // ...versus a timeout that cancels the work:
+      await Resilience.WithTimeoutAsync(
+          c => client.GetBudgetAsync("CC-100", c), TimeSpan.FromMilliseconds(150), TimeProvider.System, cts.Token);
+      // TimeoutException after 158 ms.
+      // API log: "budget CC-100 ABORTED by the client after 150 ms"
+    narration: >
+      Now the trap. Task dot Wait Async with a timeout looks like the same thing, and it's shorter. Both throw a
+      timeout exception after a hundred and fifty milliseconds. But Wait Async only stops waiting. Nobody cancelled
+      the HTTP call, so the API finishes the whole lookup anyway. Do that under load and your timeouts make things
+      worse, not better.
+
+  - id: cancel
+    type: screen
+    heading: "Proof from the server side"
+    image: screens/cancel.jpg
+    bar: "Terminal · timeout, waitasync, Ctrl+C"
+    demo: >
+      Same split terminal. Right pane, in order: "-- timeout --timeout-ms 150" (TimeoutException after ~158 ms,
+      Aborted = 1), "-- waitasync --timeout-ms 150" (TimeoutException, Aborted = 0), then "-- sequential" and press
+      Ctrl+C after about 1.5 s ("Ctrl+C: cancelling...", "Cancelled after 1.1 s"). Left pane must show the matching
+      API lines: "ABORTED by the client after 150 ms", then "start" + "done 300 ms" for the WaitAsync call, then two
+      "ABORTED by the client" lines for the Ctrl+C.
+    narration: >
+      Here's the proof, from the server's point of view. The real timeout: aborted after a hundred and fifty
+      milliseconds. Wait Async: the call runs to completion, three hundred milliseconds. And Control C in the middle
+      of a batch: the console app cancels its token instead of dying, and the API logs both in-flight calls as
+      aborted.
+
+  - id: retry
+    type: code
+    heading: "Retries, tested without waiting"
+    lang: csharp
+    code: |
+      var time = new TimerCountingTimeProvider();   // FakeTimeProvider + a timer counter
+      var task = Resilience.RetryAsync<string>(_ =>
+      {
+          attempts++;
+          return attempts < 3 ? throw Data.Http(HttpStatusCode.ServiceUnavailable) : Task.FromResult("ok");
+      }, maxAttempts: 3, baseDelay: TimeSpan.FromMilliseconds(200), time, CancellationToken.None);
+
+      time.Advance(TimeSpan.FromMilliseconds(199));
+      Assert.Equal(1, attempts);                       // not yet: backoff is 200 ms
+      time.Advance(TimeSpan.FromMilliseconds(1));
+      await Wait.UntilAsync(() => attempts == 2 && time.TimersCreated == 2);
+      time.Advance(TimeSpan.FromMilliseconds(400));
+      Assert.Equal("ok", await task);
+    narration: >
+      A 503 from the API is retried with exponential backoff: two hundred milliseconds, then four hundred. The test
+      uses FakeTimeProvider, so it moves the clock instead of waiting. One lesson we learned the hard way: the
+      retry resumes on the thread pool, so the test must wait until the next timer exists before moving time.
+      Otherwise the timer is created too late, never fires, and the test hangs. Ours did.
+
+  - id: deadlock
+    type: screen
+    heading: "The deadlock, on demand"
+    image: screens/deadlock.jpg
+    bar: "Terminal · demo/expect-errors.sh"
+    short: deadlock
+    demo: >
+      Terminal running ./demo/expect-errors.sh (Git Bash or WSL on the laptop), or the last part alone:
+      dotnet run --project src/Contoso.Approvals.Cli -- deadlock. Visible: the CS4014 / CA2016 / CA1849 error lines
+      and "ok" checks, then "1. .Wait() on async code -> DEADLOCK (2008 ms, the work needed 100)",
+      "2. .Wait(), ConfigureAwait(false) -> completed", "3. await all the way -> completed".
+    narration: >
+      And the famous deadlock, reproduced on purpose. On a single threaded context, like a UI thread, we block on
+      an async method with dot Wait. The method finishes its work in a hundred milliseconds, then needs that same
+      thread to continue. The thread is blocked waiting for it. Deadlock. ConfigureAwait false in the library
+      avoids it. Awaiting all the way avoids the problem entirely.
+
+  - id: recap
+    type: bullets
+    heading: "Five rules"
+    bullets:
+      - "Pass the CancellationToken all the way down"
+      - "Start independent calls, then await them together"
+      - "Bound your concurrency, explicitly"
+      - "Timeouts must cancel the work, not just the wait"
+      - "Never block on async code; ConfigureAwait(false) in libraries"
+    narration: >
+      Five rules. Pass the cancellation token all the way down. Start independent calls, then await them together.
+      Bound your concurrency, and set the number yourself. Make timeouts cancel the work, not just the wait. And
+      never block on async code, with ConfigureAwait false in your libraries.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The API, the client, the twenty-seven tests and the deadlock demo are on GitHub, and the full guide is on
+      devladlog dot com. Links are in the description. Next time: LINQ and functional programming in C#. Subscribe
+      so you don't miss it. This was DEVLADLOG Code, by Momento Galático.

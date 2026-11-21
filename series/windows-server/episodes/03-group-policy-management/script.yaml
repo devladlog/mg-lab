@@ -1,0 +1,277 @@
+# DEVLADLOG Windows Server - episode 03 (draft: the screen scenes need the lab recording, see demo.md)
+episode: 3
+slug: group-policy-management
+series_label: "WINDOWS SERVER"
+series_name: "DEVLADLOG Windows Server"
+file_prefix: "windows-server"
+title: "Group Policy Management"
+subtitle: "GPOs from a file, proof they applied, and the filter that breaks user policy"
+voice: am_michael
+thumbnail_text: "GROUP POLICY\nAS CODE\nNO CLICKING"
+youtube:
+  title: "Group Policy as Code with PowerShell: Deploy, Verify, Audit GPOs | DEVLADLOG Windows Server #3"
+  tags: [Group Policy, GPO, GPMC, Windows Server 2025, PowerShell, Set-GPRegistryValue, security filtering, MS16-072, gpresult, sysadmin]
+sources:
+  - https://www.devladlog.com/articles/windows-server/2025-08-29-group-policy-management-complete-guide-2025/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Who changed that GPO?"
+    sub: "Group Policy from a file, checked and repeatable"
+    short: hook
+    narration: >
+      Somebody tightened the security filter on a policy. Now it applies to nobody, and nothing tells you. Someone
+      else disabled the user half of a policy that still holds user settings. Group Policy fails quietly. In this
+      episode we deploy GPOs from a file, prove they applied on a real server, and audit the whole domain for the
+      quiet failures.
+
+  - id: plan
+    type: bullets
+    heading: "What we're building"
+    bullets:
+      - "GPOs described in one JSON file"
+      - "A deployment that is safe to re-run, with WhatIf"
+      - "Proof on the server: gpresult, registry, event log"
+      - "A snapshot of every GPO and link, and a hygiene report"
+      - "Backups that remember where GPOs were linked"
+    narration: >
+      The plan. Describe our GPOs in one JSON file. Deploy them with a PowerShell function that is safe to run twice
+      and supports what if. Prove on the server that the settings arrived. Then export a snapshot of every GPO and
+      link in the domain, check it, and back it all up.
+
+  - id: lab
+    type: bullets
+    heading: "Same lab, same domain"
+    bullets:
+      - "lab.contoso.com from episode two"
+      - "CON-DC01: domain controller, Server Core"
+      - "CON-SRV01: Server Core, in the Servers OU"
+      - "CON-SRV02: Desktop Experience, GPMC and RSAT"
+      - "Finance users and GG-Dept-Finance from the CSV"
+    narration: >
+      Same lab as last time: the lab dot contoso dot com domain on Windows Server 2025 evaluation. A Server Core
+      domain controller, a Server Core member server, and a second member server with the Desktop Experience, where
+      we run the Group Policy tools. The OUs, the Finance users and their group come from the CSV in episode two.
+
+  - id: definition
+    type: code
+    heading: "Two GPOs, one file"
+    lang: json
+    code: |
+      { "Name": "CON-Servers-Baseline",
+        "Status": "UserSettingsDisabled",
+        "Registry": [
+          { "Key": "HKLM\\Software\\Policies\\Microsoft\\Windows\\PowerShell\\ScriptBlockLogging",
+            "ValueName": "EnableScriptBlockLogging", "Type": "DWord", "Value": 1 } ],
+        "Links": [ { "Target": "OU=Servers,OU=Contoso,DC=lab,DC=contoso,DC=com", "Order": 1 } ] },
+      { "Name": "CON-Finance-ScreenLock",
+        "Status": "ComputerSettingsDisabled",
+        "Registry": [
+          { "Key": "HKCU\\Software\\Policies\\Microsoft\\Windows\\Control Panel\\Desktop",
+            "ValueName": "ScreenSaverIsSecure", "Type": "String", "Value": "1" } ],
+        "Links": [ { "Target": "OU=Users,OU=Contoso,DC=lab,DC=contoso,DC=com" } ],
+        "SecurityFiltering": [ "GG-Dept-Finance" ],
+        "ComputerRead": "Authenticated Users" }
+    narration: >
+      Two GPOs. A server baseline that turns on PowerShell script block logging and requires network level
+      authentication for remote desktop. And a Finance policy that password protects the screen saver. Each setting
+      is a registry key under the Policies branch. H K L M means computer configuration, H K C U means user
+      configuration. The half we don't use is disabled, and the validator refuses a setting in a disabled half.
+
+  - id: deploy
+    type: code
+    heading: "Compare first, then change"
+    lang: powershell
+    code: |
+      $current = Get-GPRegistryValue @common -Name $name -Key $r.Key -ValueName $r.ValueName -ErrorAction SilentlyContinue
+      if (Test-GpoLabValueEqual -Current $current -Wanted $r) { New-GpoLabLog $name 'SetRegistry' $target 'NoChange'; continue }
+      if ($PSCmdlet.ShouldProcess("$name : $target", "Set-GPRegistryValue $($r.Type) $($r.Value)")) {
+          Set-GPRegistryValue @common -Name $name -Key $r.Key -ValueName $r.ValueName -Type $r.Type -Value $r.Value
+      }
+
+      $som = Get-GPInheritance @common -Target $l.Target
+      $existing = @($som.GpoLinks | Where-Object { [string]$_.GpoId -eq [string]$gpo.Id }) | Select-Object -First 1
+      if (-not $existing) {
+          $p = @{ Name = $name; Target = $l.Target; LinkEnabled = 'Yes'; Enforced = $enforced }
+          if ($l.Order) { $p.Order = [int]$l.Order }
+          New-GPLink @common @p | Out-Null
+      }
+    narration: >
+      The deployment reads before it writes. Every registry value is compared with Get G P Registry Value, and only a
+      difference triggers Set G P Registry Value. Links are matched by GPO ID through Get G P Inheritance, then
+      created or repaired. Every change goes through Should Process, so what if shows the plan and changes nothing.
+
+  - id: deploy-screen
+    type: screen
+    heading: "Plan, apply, apply again"
+    image: screens/deploy.jpg
+    bar: "Lab · CON-SRV02 · Invoke-GpoLabDeployment"
+    short: idempotent
+    demo: >
+      Windows PowerShell 5.1 on CON-SRV02 as lab domain admin, in C:\lab\ep03\src. Three runs of
+      Invoke-GpoLabDeployment -DefinitionPath .\gpo-definitions.json | Format-Table Gpo, Action, Target, Result:
+      first with -WhatIf (all WhatIf), then for real (Done rows: 2 CreateGpo, 2 SetStatus, 4 SetRegistry, 2 Link,
+      2 Permission), then again (every row NoChange). Optional cut-in: GPMC with both GPOs linked.
+    narration: >
+      On the lab. With what if, every row says what if, and the domain is untouched. The real run creates both
+      GPOs, four settings, two links and the security filter. Run it again, and every row says no change. Rewrite
+      this to what's on screen.
+
+  - id: applied
+    type: screen
+    heading: "Did it apply? Ask the server"
+    image: screens/applied.jpg
+    bar: "Lab · CON-SRV01 · gpresult and event 4104"
+    demo: >
+      From CON-SRV02: Invoke-Command -ComputerName CON-SRV01 { gpupdate /force; gpresult /r /scope computer }.
+      Show CON-Servers-Baseline under Applied Group Policy Objects. Then Get-ItemProperty on
+      HKLM:\Software\Policies\Microsoft\Windows\PowerShell\ScriptBlockLogging (EnableScriptBlockLogging 1) and
+      Get-WinEvent -LogName Microsoft-Windows-PowerShell/Operational -FilterXPath '*[System[EventID=4104]]' -MaxEvents 3.
+    narration: >
+      A GPO in the console proves nothing. We ask the server. G P result lists the baseline under applied GPOs. The
+      policy value is in the registry. And the PowerShell operational log on the server now records script blocks,
+      event forty one oh four. That's the setting doing its job.
+
+  - id: filtering
+    type: code
+    heading: "Security filtering without breaking it"
+    lang: powershell
+    code: |
+      $wanted = @()
+      foreach ($grp in @($g.SecurityFiltering)) { $wanted += [pscustomobject]@{ Name = $grp; Level = 'GpoApply' } }
+      $wanted += [pscustomobject]@{ Name = $g.ComputerRead; Level = 'GpoRead' }   # computers must read it
+
+      foreach ($w in $wanted) {
+          $have = @($perms | Where-Object { [string]$_.Trustee.Name -eq $w.Name }) | Select-Object -First 1
+          if ($have -and [string]$have.Permission -eq $w.Level) { continue }
+          Set-GPPermission @common -Name $name -TargetName $w.Name -TargetType Group `
+              -PermissionLevel $w.Level -Replace
+      }
+    narration: >
+      Now the Finance filter. GG Dept Finance gets apply group policy. Authenticated Users is not removed. It's
+      replaced with read only, using the replace switch. That one line is the difference between a filter that
+      works and a policy that silently applies to nobody. Here's why.
+
+  - id: gotcha
+    type: screen
+    heading: "Gotcha: user policy is read by the computer"
+    image: screens/ms16072.jpg
+    bar: "Lab · CON-SRV02 · gpresult /scope user"
+    short: gotcha
+    demo: >
+      1) Set-GPPermission -Name CON-Finance-ScreenLock -TargetName 'Authenticated Users' -TargetType Group
+      -PermissionLevel None -Replace (the classic mistake). 2) Sign in to CON-SRV02 as CONTOSO\jgoncalves (Finance),
+      gpresult /r /scope user: the GPO is not in Applied GPOs (capture exactly what gpresult says). 3) Re-run
+      Invoke-GpoLabDeployment (Permission Authenticated Users=GpoRead: Done), sign out and in, gpresult again:
+      applied; reg query "HKCU\Software\Policies\Microsoft\Windows\Control Panel\Desktop" shows ScreenSaverIsSecure 1.
+    narration: >
+      The classic mistake: remove Authenticated Users to narrow the filter. João is in Finance, yet his policy
+      doesn't apply. Since the June twenty sixteen update M S sixteen oh seven two, Windows reads user policy with
+      the computer's account, so the computer needs read on the GPO. Re-run the deployment, it restores read, and
+      the policy applies.
+
+  - id: snapshot
+    type: code
+    heading: "A snapshot of the whole domain"
+    lang: powershell
+    code: |
+      foreach ($g in @(Get-GPO @gp -All)) {
+          [xml]$report = Get-GPOReport @gp -Guid $g.Id -ReportType Xml
+          [pscustomobject]@{
+              Name     = [string]$g.DisplayName
+              Status   = [string]$g.GpoStatus
+              Computer = [pscustomobject]@{ DSVersion = [int]$g.Computer.DSVersion; SysvolVersion = [int]$g.Computer.SysvolVersion
+                                            HasSettings = (Get-GpoLabReportHalf $report 'Computer') }
+              Permissions = @(Get-GPPermission @gp -Guid $g.Id -All | ...)
+          }
+      }
+      $targets = @($domain.DistinguishedName) + @(Get-ADOrganizationalUnit -Filter * | ForEach-Object DistinguishedName)
+      $soms = foreach ($t in $targets) { Get-GPInheritance @gp -Target $t ... }
+    narration: >
+      For the audit, Export G P O Lab Snapshot reads every GPO: its status, the A D and SYSVOL version of each
+      half, whether each half has settings, taken from the GPO report XML, and its permissions. Then every link, from
+      the domain root and every OU. One JSON file, judged anywhere.
+
+  - id: checks
+    type: code
+    heading: "Quiet failures, made loud"
+    lang: powershell
+    code: |
+      if ($info.HasSettings -and -not (Test-GpoLabHalfEnabled -Status $g.Status -Half $half)) {
+          'High   DisabledHalfHasSettings  settings exist but that half is disabled'
+      }
+      if ([int]$info.DSVersion -ne [int]$info.SysvolVersion) {
+          'Medium VersionMismatch          AD and SYSVOL disagree'
+      }
+      if ($enabledLinks.Count -gt 0 -and $hasUser -and -not $computerRead) {
+          'High   UserGpoNoComputerRead    MS16-072: computers cannot read it'
+      }
+      # plus: UnlinkedGpo, EmptyGpo, AllLinksDisabled, NobodyCanApply, EnforcedLink, BlockedInheritance
+    narration: >
+      The checks. Settings in a disabled half are High: they are ignored without a word. A version mismatch between
+      Active Directory and SYSVOL is Medium: a GPO lives in both places, and they replicate separately. User settings
+      that computers can't read are High. Plus unlinked, empty and unappliable GPOs, enforced links and blocked
+      inheritance.
+
+  - id: tests
+    type: code
+    heading: "Twenty-seven tests, no domain"
+    lang: text
+    code: |
+      PS> Invoke-Pester ./tests -Output Detailed
+      Describing Hygiene checks (fictional snapshot)
+        [+] flags user settings that computers cannot read (MS16-072) as High
+        [+] flags settings in a disabled half as High
+      Describing Invoke-GpoLabDeployment (GroupPolicy cmdlets mocked)
+        [+] creates both GPOs, four settings, two links and sets the unused half to disabled
+        [+] filters to the Finance group and keeps Read (not Apply) for Authenticated Users
+        [+] changes nothing with -WhatIf
+        [+] reports NoChange for everything on a second run
+        [+] repairs drift: a disabled link, a changed value, Authenticated Users removed by hand
+      Describing Windows PowerShell 5.1 compatibility
+        [+] GpoLab/GpoLab.psm1 has no PowerShell 7-only syntax
+
+      Tests Passed: 27, Failed: 0, Skipped: 0
+    narration: >
+      Twenty seven Pester tests run on Linux, no domain needed. The Group Policy cmdlets are mocked, and the tests
+      prove the deployment's promises: the right changes on an empty domain, nothing with what if, nothing on a
+      second run, and drift repaired. Another test parses the module and fails on PowerShell seven only syntax,
+      because it runs in Windows PowerShell five point one on the server.
+
+  - id: report
+    type: screen
+    heading: "The lab domain, audited"
+    image: screens/report.jpg
+    bar: "Lab · CON-SRV02 · Invoke-GpoHygieneReport.ps1"
+    demo: >
+      After the planted problems in demo.md (an empty unlinked GPO, a GPO with user settings and its user half
+      disabled): .\Invoke-GpoHygieneReport.ps1 -SnapshotFile .\gpo-snapshot.json -OutFile .\gpo-report.md, then
+      open gpo-report.md in VS Code preview. Show the summary line and the findings table.
+    narration: >
+      The real lab domain. Rewrite this to the findings on screen. The two problems we planted come back as
+      expected: an empty, unlinked test GPO, and a policy whose user settings are switched off. The default domain
+      policies and our two managed GPOs come back clean.
+
+  - id: backup
+    type: bullets
+    heading: "Back up settings and links"
+    bullets:
+      - "Backup-GPO -All into a timestamped folder"
+      - "Import-GPO restores settings, not links"
+      - "links.json next to every backup"
+      - "Run the report on a schedule, fail on High"
+      - "Change the file, not the console"
+    narration: >
+      Last piece, backups. Backup G P O dash all writes every GPO into a timestamped folder. But importing a backup
+      brings the settings back, not the links, so Backup G P O Lab writes a links file next to it. Schedule the
+      report with fail on high. And from now on, change the file, not the console.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The GpoLab module, the definition file and all twenty seven tests are on GitHub, and the complete guide to
+      Group Policy management is on devladlog dot com. Links are in the description. Next episode: DNS and DHCP, on
+      this same lab. Subscribe so you don't miss it.

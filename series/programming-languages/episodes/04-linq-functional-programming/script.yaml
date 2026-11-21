@@ -1,0 +1,301 @@
+# DEVLADLOG Code — episode 04 (draft; screens are recorded on the Windows laptop, see demo.md)
+episode: 4
+slug: linq-functional-programming
+series_label: "CODE"
+series_name: "DEVLADLOG Code"
+file_prefix: "programming-languages"
+title: "LINQ and functional C#, without the surprises"
+subtitle: "Pure pipelines, .NET 9 and 10 operators, and what really runs"
+voice: am_michael
+thumbnail_text: "LINQ\nWHAT REALLY\nRUNS"
+youtube:
+  title: "LINQ and Functional C#: LeftJoin, CountBy, Deferred Execution, IQueryable Traps | DEVLADLOG Code #4"
+  tags: [C#, LINQ, functional programming, .NET 10, .NET 9, CountBy, AggregateBy, LeftJoin, deferred execution, IQueryable, IEnumerable, EF Core 10, SQLite, xUnit]
+sources:
+  - https://www.devladlog.com/articles/programming-languages/2025-06-21-linq-functional-programming-complete-guide-2025/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "LINQ, without the surprises"
+    sub: "Same answer, twelve rows instead of five"
+    short: hook
+    narration: >
+      LINQ looks like it simply reads data. Then a query quietly runs three times. A variable you changed later
+      changes the answer. And one parameter type makes your app download the whole table, with the right result and
+      no warning. In this episode we write functional C# with LINQ, and we look at what really runs. Welcome to
+      DEVLADLOG Code.
+
+  - id: plan
+    type: bullets
+    heading: "What we're building"
+    bullets:
+      - "A portfolio report over the Contoso project requests"
+      - "Pure functions and immutable records"
+      - "New operators: CountBy, AggregateBy, Index (.NET 9), LeftJoin (.NET 10)"
+      - "A CSV import where errors are values"
+      - "The same queries on a real SQLite database with EF Core 10"
+    narration: >
+      Same Contoso project requests as the rest of the series. We build a portfolio report from pure functions and
+      immutable records, using the newest LINQ operators from dot net nine and ten. A CSV import where errors are
+      values, not exceptions. And the same queries against a real SQLite database with Entity Framework Core ten.
+      Thirty-four tests.
+
+  - id: core
+    type: code
+    heading: "A pure function is a pipeline"
+    lang: csharp
+    code: |
+      /// .NET 9 AggregateBy: one pass, one accumulator per key, no intermediate groups.
+      public static IReadOnlyList<DepartmentTotal> TotalsByDepartment(IEnumerable<ProjectRequest> requests) =>
+      [
+          .. requests
+              .AggregateBy(r => r.DepartmentCode, _ => (Count: 0, Total: 0m),
+                  (acc, r) => (acc.Count + 1, acc.Total + r.Budget))
+              .Select(kv => new DepartmentTotal(kv.Key, kv.Value.Count, kv.Value.Total))
+              .OrderByDescending(t => t.Total),
+      ];
+
+      /// .NET 9 CountBy.
+      public static IReadOnlyDictionary<RequestStatus, int> CountByStatus(IEnumerable<ProjectRequest> requests) =>
+          requests.CountBy(r => r.Status).ToDictionary();
+    narration: >
+      The functional core is a set of static, pure functions. Data in, data out. No database, no clock, and the input
+      is never changed. Aggregate By, new in dot net nine, totals the budget per department in one pass, without
+      building groups first. Count By does the same for counting. The result is a new immutable list.
+
+  - id: newops
+    type: code
+    heading: "Index and LeftJoin"
+    lang: csharp
+    code: |
+      // .NET 9 Index(): (position, item), so the rank needs no counter variable.
+      requests.OrderByDescending(r => r.Budget)
+              .Take(count)
+              .Index()
+              .Select(x => new RankedRequest(x.Index + 1, x.Item.Code, x.Item.Title, x.Item.Budget))
+
+      // .NET 10 LeftJoin: every department, also the ones without requests.
+      departments
+          .LeftJoin(TotalsByDepartment(requests), d => d.Code, t => t.DepartmentCode,
+              (d, t) => new DepartmentLine(d.Name, t?.Count ?? 0, t?.Total ?? 0m))
+          .OrderByDescending(l => l.Total)
+          .ThenBy(l => l.Name, StringComparer.Ordinal)
+    narration: >
+      Two more new operators. Index gives you the position and the item together, so a ranking needs no counter
+      variable. And dot net ten finally has Left Join. Before, a left join meant Group Join, Select Many and Default
+      If Empty in exactly the right order. Now it's one call, and Legal shows up with zero requests instead of
+      disappearing.
+
+  - id: report
+    type: screen
+    heading: "The report, from pure functions"
+    image: screens/report.jpg
+    bar: "Terminal · dotnet run -- report"
+    demo: >
+      Windows Terminal (dark theme, font 18 pt or larger): dotnet run --project src/Contoso.Portfolio.Cli -- report.
+      Visible: totals by department (IT 4 requests 354,500 EUR ...), the LeftJoin block with "Legal 0 0 EUR",
+      "Draft=2 Submitted=4 Approved=5 Rejected=1", the top 3 (#1 PR-2026-0103 300,000 EUR) and the last line
+      "method syntax == query syntax: True". Reference: demo/expected-output.txt.
+    narration: >
+      Here it runs. Totals per department, every department including Legal, requests by status, and the top three
+      with their rank. And the last line: the method syntax version and the query syntax version of the same report
+      give exactly the same result. A test pins that down too.
+
+  - id: syntax
+    type: code
+    heading: "Query syntax: same pipeline, different spelling"
+    lang: csharp
+    code: |
+      public static IReadOnlyList<DepartmentTotal> TotalsByDepartmentQuerySyntax(IEnumerable<ProjectRequest> requests) =>
+      [
+          .. from r in requests
+             group r by r.DepartmentCode into g
+             let total = g.Sum(x => x.Budget)
+             orderby total descending
+             select new DepartmentTotal(g.Key, g.Count(), total),
+      ];
+
+      [Fact]
+      public void Method_syntax_and_query_syntax_give_the_same_report() =>
+          Assert.Equal(Reports.TotalsByDepartment(Requests), Reports.TotalsByDepartmentQuerySyntax(Requests));
+    narration: >
+      Query syntax is the same pipeline with a different spelling. The compiler turns from, group, let and select into
+      the same method calls. Use whichever reads better. Let is a nice reason to pick query syntax. But the new
+      operators, Count By, Aggregate By, Left Join, have no keyword, so for those it's method syntax.
+
+  - id: result
+    type: code
+    heading: "Errors as values, in query syntax"
+    lang: csharp
+    code: |
+      public static Result<ProjectRequest> ParseLine(string line, int id, IReadOnlySet<string> departments) =>
+          from fields in Fields(line, expected: 5)
+          from budget in Budget(fields[3])
+          from department in Department(fields[2], departments)
+          from submitted in Date(fields[4])
+          select new ProjectRequest(id, fields[0].Trim(), fields[1].Trim(), department, budget,
+              RequestStatus.Draft, submitted);
+
+      // what makes "from ... from ..." work on our own type:
+      public static Result<TOut> SelectMany<T, TMid, TOut>(
+          this Result<T> result, Func<T, Result<TMid>> bind, Func<T, TMid, TOut> project)
+    narration: >
+      Here's a functional trick. Query syntax isn't only for collections. Our Result type, a value or an error, has
+      Select and Select Many methods, so the compiler lets us write a parser as a query. Each step runs only if the
+      previous one succeeded, and the first error is the answer. No exceptions, no nested ifs.
+
+  - id: import
+    type: screen
+    heading: "Four good lines, four readable errors"
+    image: screens/import.jpg
+    bar: "Terminal · dotnet run -- import"
+    demo: >
+      Terminal: dotnet run --project src/Contoso.Portfolio.Cli -- import samples/requests.csv. Visible:
+      "requests.csv: 4 accepted, 4 rejected", the four "ok" lines, and "line 4: budget 'abc' is not a positive number",
+      "line 6: unknown department 'Finance'", "line 7: date '2026-13-01' is not yyyy-MM-dd",
+      "line 8: expected 5 fields, found 4". Optional split: samples/requests.csv open in VS Code on the left.
+    narration: >
+      The import, on a file with eight lines. Four are accepted. The other four each get one clear message with the
+      line number: a budget that isn't a number, a department that doesn't exist, the thirteenth month, and a missing
+      column.
+
+  - id: deferred
+    type: code
+    heading: "Deferred execution: a query is a recipe"
+    lang: csharp
+    code: |
+      var high = source.Where(r => Policy.PriorityFor(r.Budget) == Priority.High);
+
+      var count = high.Count();          // runs the query
+      var total = high.Sum(r => r.Budget);   // runs it again
+      var first = high.First();          // and again
+      // source read 3 times. With .ToList() first: 1 time.
+
+      # .editorconfig: the analyzer for this exists, but it's off by default in .NET 10
+      dotnet_diagnostic.CA1851.severity = warning
+    narration: >
+      Now, what really runs. A LINQ query is a recipe, not a result. Every time you call Count, Sum or First, the
+      recipe runs again from the start. On a list that's wasted work. On a database query or a file, that's three
+      round trips. The analyzer rule CA eighteen fifty-one catches it, but it's off by default in dot net ten, so
+      we switch it on.
+
+  - id: gotcha
+    type: code
+    heading: "Gotcha: the lambda captures the variable"
+    short: gotcha
+    lang: csharp
+    code: |
+      var threshold = 50_000m;
+      var big = requests.Where(r => r.Budget >= threshold);   // nothing runs here
+
+      var before = big.Count();     // runs now, threshold = 50,000   -> 5
+      threshold = 250_000m;
+      var after = big.Count();      // runs again, threshold = 250,000 -> 1
+
+      // Same query object, different answer.
+    narration: >
+      And this one surprises people. We define a query with a threshold of fifty thousand. Count says five. Then
+      somewhere later, someone changes the threshold variable. Same query object, count again: one. The lambda
+      captured the variable, not its value, and the query only runs when you enumerate it. If you need a snapshot,
+      call To List at that moment.
+
+  - id: deferredrun
+    type: screen
+    heading: "Proof: the analyzer and the counter"
+    image: screens/deferred.jpg
+    bar: "Terminal · CA1851 + dotnet run -- deferred"
+    demo: >
+      Terminal: dotnet build demo/Analyzers -m:1 --no-incremental -v q (two "error CA1851" lines), then
+      dotnet run --project src/Contoso.Portfolio.Cli -- deferred: "without ToList(): source read 3 times",
+      "with ToList(): source read 1 time", "threshold 50,000 -> big.Count() = 5",
+      "threshold changed to 250,000, same query object -> big.Count() = 1".
+    narration: >
+      Here's the proof. The build fails with CA eighteen fifty-one on a method that counts a sequence and then loops
+      over it. And our counting source shows it: read three times without To List, once with it. Then five, and one,
+      from the same query.
+
+  - id: iqueryable
+    type: code
+    heading: "Same body, different type, different SQL"
+    short: iqueryable
+    lang: csharp
+    code: |
+      // IQueryable: the Where becomes a SQL WHERE.
+      public static IQueryable<ProjectRequest> AtLeast(IQueryable<ProjectRequest> requests, decimal threshold) =>
+          requests.Where(r => r.Budget >= threshold);
+
+      // IEnumerable: LINQ to Objects. EF reads the WHOLE table, then filters in memory.
+      public static IEnumerable<ProjectRequest> AtLeast(IEnumerable<ProjectRequest> requests, decimal threshold) =>
+          requests.Where(r => r.Budget >= threshold);
+
+      Queries.AtLeast(db.Requests, 50_000m)                               // 5 rows read
+      Queries.AtLeast((IEnumerable<ProjectRequest>)db.Requests, 50_000m)  // 12 rows read, same 5 results
+    narration: >
+      Now the database. These two methods have the same body. The only difference is the parameter type. With
+      I Queryable, the lambda is an expression tree, and Entity Framework turns the Where into SQL. With I
+      Enumerable, it's a normal delegate: Entity Framework reads every row, and the filter runs in memory. Same
+      answer, no error, no warning.
+
+  - id: sql
+    type: screen
+    heading: "What the database actually received"
+    image: screens/sql.jpg
+    bar: "Terminal · dotnet run -- sql"
+    demo: >
+      Terminal: dotnet run --project src/Contoso.Portfolio.Cli -- sql (creates portfolio.db with SQLite). Visible:
+      the IQueryable block with "WHERE ef_compare("r"."Budget", @threshold) >= 0" and "5 results, 5 rows read",
+      the IEnumerable block with no WHERE and "5 results, 12 rows read", then the LeftJoin SQL with
+      "LEFT JOIN "Requests" AS "r" ON ..." and Legal 0 requests.
+    narration: >
+      This is what SQLite actually received. With I Queryable: a where clause, five rows. SQLite has no decimal
+      type, so Entity Framework registers its own compare function. With I Enumerable: no where clause, twelve rows,
+      for the same five results. With twelve rows nobody notices. With twelve million, everybody does. And dot net
+      ten's Left Join becomes a real left join.
+
+  - id: translate
+    type: code
+    heading: "Not everything translates"
+    lang: csharp
+    code: |
+      // A C# method in Where: compiles, throws when the query runs.
+      db.Requests.Where(r => Policy.IsStrategic(r))
+      // InvalidOperationException: The LINQ expression ... could not be translated.
+
+      // .NET 9 CountBy compiles on a DbSet, but EF Core 10 can't translate it either.
+      db.Requests.CountBy(r => r.DepartmentCode)
+      // Use GroupBy + Count: GROUP BY "r"."DepartmentCode"
+
+      // The fix: filter in SQL first, then run the C# rule in memory, on purpose.
+      var candidates = await db.Requests
+          .Where(r => r.Status == RequestStatus.Submitted || r.Status == RequestStatus.Draft)
+          .ToListAsync(ct);
+      return [.. candidates.Where(Policy.IsStrategic)];
+    narration: >
+      And not everything translates. Put your own C# method inside a Where, and Entity Framework throws when the
+      query runs, not when it compiles. Same with the new Count By on a database set: it compiles, but Entity
+      Framework Core ten can't translate it. Use Group By and Count. The fix for your own rules: filter in SQL first,
+      then switch to memory on purpose.
+
+  - id: recap
+    type: bullets
+    heading: "Five rules"
+    bullets:
+      - "Pure functions and immutable data for business rules"
+      - "Use the new operators: CountBy, AggregateBy, Index, LeftJoin"
+      - "A query is a recipe: materialize once if you reuse it"
+      - "Watch captured variables in deferred queries"
+      - "IQueryable for databases; check the SQL in a test"
+    narration: >
+      Five rules. Pure functions and immutable data for business rules. Use the new operators, they make code shorter
+      and clearer. A query is a recipe, so materialize it once if you use it more than once. Watch captured variables.
+      And keep database queries I Queryable, with a test that checks the SQL.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The report, the import, the thirty-four tests and the SQLite demo are on GitHub, and the full guide is on
+      devladlog dot com. Links are in the description. Next time: design patterns in practice. Subscribe so you don't
+      miss it. This was DEVLADLOG Code, by Momento Galático.

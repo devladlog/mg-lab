@@ -46,12 +46,13 @@ available in the build container). We used DuckDB rather than SQLite because the
 
 ## Run it on SQL Server 2022
 
-```bash
-docker run -e "ACCEPT_EULA=Y" -e "MSSQL_SA_PASSWORD=<strong password>" -p 1433:1433 --name sql1 -d \
-    mcr.microsoft.com/mssql/server:2022-latest
-# run src/sql/00-create-database.sql against master, then:
-export SQL_CONNECTION_STRING="Server=localhost,1433;Database=ContosoTraining;UID=sa;PWD=<strong password>;Encrypt=yes;TrustServerCertificate=yes"
-python3 src/tsql_runner.py --engine sqlserver --setup     # expect 3/3 and 6/6 on sqlserver
+On the shared lab VM **CON-SQL01** (SQL Server 2022 Developer, `10.20.0.30,1433`, see `series/LAB.md`):
+
+```powershell
+# run src/sql/00-create-database.sql against master on 10.20.0.30,1433, then (password typed, never stored):
+$pw = Read-Host -AsSecureString 'sa password'
+$env:SQL_CONNECTION_STRING = "Server=10.20.0.30,1433;Database=ContosoTraining;UID=sa;PWD=$([Net.NetworkCredential]::new('', $pw).Password);Encrypt=yes;TrustServerCertificate=yes"
+python src/tsql_runner.py --engine sqlserver --setup     # expect 3/3 and 6/6 on sqlserver
 ```
 
 The SQL Server path was exercised here up to the network (driver loaded, connection refused: no server). **The first

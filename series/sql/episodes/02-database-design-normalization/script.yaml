@@ -165,7 +165,7 @@ scenes:
     heading: "Five tables, keys and constraints"
     image: screens/object-explorer.jpg
     bar: "VS Code · MSSQL · ContosoTraining · Object Explorer"
-    demo: "VS Code MSSQL Object Explorer (or SSMS) connected to localhost, database ContosoTraining expanded: Tables shows Training.Booking, Training.BookingLine, Training.Company, Training.Course, Training.Customer; Training.BookingLine expanded to show its columns and keys (PK_BookingLine, FK_BookingLine_Booking, FK_BookingLine_Course); Views shows Training.vBookingLines."
+    demo: "VS Code MSSQL Object Explorer (or SSMS) connected to CON-SQL01 (10.20.0.30,1433), database ContosoTraining expanded: Tables shows Training.Booking, Training.BookingLine, Training.Company, Training.Course, Training.Customer; Training.BookingLine expanded to show its columns and keys (PK_BookingLine, FK_BookingLine_Booking, FK_BookingLine_Course); Views shows Training.vBookingLines."
     narration: >
       Here it is on SQL Server twenty twenty-two: five tables in the training schema, each with its keys, and one
       view.
@@ -252,7 +252,7 @@ scenes:
     heading: "Same checks, local and on SQL Server"
     image: screens/runner-sqlserver.jpg
     bar: "Terminal · tsql_runner.py --engine sqlserver"
-    demo: "Terminal, dark theme, 18 pt: `python3 -m pytest tests -q` -> '28 passed', then `python3 src/tsql_runner.py --engine sqlserver --setup` -> 'loaded: Company 4, Customer 7, Course 5, Booking 16, BookingLine 23', three OK lines, '3/3 queries match expected/ on sqlserver', six REJECTED lines, '6/6 constraint checks behaved on sqlserver'. SQL_CONNECTION_STRING set off-screen."
+    demo: "Terminal, dark theme, 18 pt: `python -m pytest tests -q` -> '28 passed', then `python src/tsql_runner.py --engine sqlserver --setup` against CON-SQL01 -> 'loaded: Company 4, Customer 7, Course 5, Booking 16, BookingLine 23', three OK lines, '3/3 queries match expected/ on sqlserver', six REJECTED lines, '6/6 constraint checks behaved on sqlserver'. SQL_CONNECTION_STRING set off-screen."
     narration: >
       Everything is automated. Twenty-eight tests run locally with no server. Then the same runner points at SQL
       Server, loads the schema, checks the three queries and the six rejections. Three out of three, six out of six.

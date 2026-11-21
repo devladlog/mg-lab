@@ -1,0 +1,256 @@
+# DEVLADLOG Dynamics 365 — episode 04. Draft: screen scenes need the lab-tenant capture described in demo.md.
+episode: 4
+slug: business-process-flows
+series_label: "DYNAMICS 365"
+series_name: "DEVLADLOG Dynamics 365"
+file_prefix: "dynamics-365"
+title: "Business Process Flows"
+subtitle: "Designed without code, driven and reported with code"
+voice: am_michael
+thumbnail_text: "WHERE IS\nMY REQUEST\nSTUCK?"
+youtube:
+  title: "Business Process Flows in Dataverse: Branching, Stage Moves and Reports | DEVLADLOG Dynamics 365 #4"
+  tags: [Dynamics 365, Dataverse, business process flows, BPF, model-driven apps, RetrieveActivePath, Web API, Power Platform, Python]
+sources:
+  - https://www.devladlog.com/articles/dynamics-365/2025-10-30-business-process-flows-complete-guide-2025/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Where is my request stuck?"
+    sub: "Business process flows, designed without code, driven with code"
+    short: hook
+    narration: >
+      A project request goes in, and two weeks later nobody knows whether it's waiting for finance or for approval.
+      Business process flows answer that on the form. In this episode we design an approval flow with a branch,
+      then use the Web API to move records through it safely, fix the records that never got one, and report where
+      requests are stuck.
+
+  - id: concepts
+    type: bullets
+    heading: "What a business process flow is"
+    bullets:
+      - "Stages with steps, shown as a bar on the form"
+      - "Branches pick the next stage from the data"
+      - "Each activated flow gets its own table"
+      - "One row per record: active stage and path so far"
+      - "Designed in a solution, in Power Apps"
+    narration: >
+      A business process flow is a set of stages with steps, shown as a bar at the top of the form. Branches choose
+      the next stage based on the data. When you activate a flow, Dataverse creates a table for it, with one row per
+      record that holds the active stage and the path taken so far. You design it inside a solution in Power Apps.
+
+  - id: designer
+    type: screen
+    heading: "Project Approval, with one branch"
+    image: screens/bpf-designer.jpg
+    bar: "Power Apps · Solutions · MGLabDataverse · Project Approval (business process flow)"
+    demo: >
+      Business process flow designer for "Project Approval" on Project Request, in solution MGLabDataverse: stage
+      Submit (steps Request Code, Customer Account, Budget required), a condition "Budget >= 50000", the yes branch to
+      Finance Review (Business Justification required, Due Date), the no branch joining at Approve (Priority), then
+      Close. Status Activated. Mask tenant name.
+    narration: >
+      Here's our flow on the project request table. Submit collects the request code, the account and the budget.
+      Then a condition: fifty thousand or more goes through finance review, where the business justification from
+      episode three is required. Everything else goes straight to approve, and both end at close.
+
+  - id: rules
+    type: bullets
+    heading: "Design rules worth knowing"
+    bullets:
+      - "A branch uses steps from the stage right before it"
+      - "Combine conditions with AND or OR, not both"
+      - "Script changes don't re-evaluate a branch"
+      - "Up to 30 stages, 30 steps each, 5 tables"
+      - "10 activated flows per table by default"
+    narration: >
+      A few rules from the docs. A branch condition must use steps from the stage right before it, which is why
+      budget is a step in submit. One rule combines conditions with and, or with or, never both. Changes made by
+      client script don't re-evaluate a branch. And the limits: thirty stages, thirty steps per stage, five tables,
+      and ten activated flows per table by default.
+
+  - id: definition
+    type: code
+    heading: "Find the flow and its table"
+    lang: python
+    code: |
+      rows = api.get("workflows?$select=workflowid,name,uniquename,primaryentity,statecode"
+                     f"&$filter=category eq {CATEGORY_BPF} and name eq {odata_string(bpf_name)}")["value"]
+      ...
+      meta = api.get(f"EntityDefinitions(LogicalName='{d.unique_name}')?$select=EntitySetName,IsBPFEntity")
+      d.entity_set = meta["EntitySetName"]
+
+      rels = api.get(f"EntityDefinitions(LogicalName='{d.unique_name}')/ManyToOneRelationships"
+                     "?$select=ReferencedEntity,ReferencingAttribute,"
+                     "ReferencingEntityNavigationPropertyName")["value"]
+      rel = next((r for r in to_table if r["ReferencingAttribute"].startswith("bpf_")), to_table[0])
+      d.lookup, d.nav = rel["ReferencingAttribute"], rel["ReferencingEntityNavigationPropertyName"]
+
+      stages = api.get("processstages?$select=processstageid,stagename,primaryentitytypecode"
+                       f"&$filter=processid/workflowid eq {d.workflow_id}")["value"]
+    narration: >
+      In code, the flow is a workflow row with category four. Its unique name is the logical name of the instance
+      table, so we read that table's entity set and its lookup to our record from metadata, instead of guessing the
+      names. Then the stages, from the process stage table.
+
+  - id: path
+    type: code
+    heading: "Gotcha: stages come back unordered"
+    lang: text
+    code: |
+      GET processstages?$select=stagename&$filter=processid/workflowid eq <id>
+        S1, S3, S2                       <- Learn's own example response
+
+      GET RetrieveActivePath(ProcessInstanceId=@p1)?@p1=<instance id>
+        expected for PR-0001, budget 42,000:  Submit, Approve, Close
+        expected for PR-0004, budget 75,000:  Submit, Finance Review, Approve, Close
+    short: path
+    narration: >
+      Here's the first trap. The process stage rows have no guaranteed order. Microsoft's own example returns stage
+      one, stage three, stage two. The order a record really follows comes from retrieve active path, which
+      evaluates the branch against that record's data. A forty two thousand budget skips finance review. A seventy
+      five thousand budget goes through it.
+
+  - id: moves
+    type: code
+    heading: "One stage at a time"
+    lang: python
+    code: |
+      def forward(active_path, current, traversed_text) -> Move:
+          path = [norm(s) for s in active_path]
+          cur, traversed = norm(current), parse_traversed(traversed_text)
+          _check_consistent(path, cur, traversed)
+          i = path.index(cur)
+          if i == len(path) - 1:
+              raise StageMoveError("already at the last stage: use 'finish' instead")
+          nxt = path[i + 1]
+          return Move(nxt, format_traversed(traversed + [nxt]))
+
+      # PATCH mgl_projectapprovals(<instance id>)
+      # {"activestageid@odata.bind": "/processstages(<next>)",
+      #  "traversedpath": "<submit>,<next>"}
+    narration: >
+      Moving a record is a patch on its row in the flow's table: the new active stage and the traversed path,
+      together. The docs allow only the next stage on the active path, or the previous one. If someone lowered the
+      budget and the active stage is no longer on the path, the tool refuses instead of writing a broken path.
+
+  - id: status
+    type: screen
+    heading: "Status and a move, against the lab"
+    image: screens/bpfkit-status.jpg
+    bar: "Terminal · python -m bpfkit status / next"
+    demo: >
+      Terminal against lab DEV: `python3 -m bpfkit status --code PR-0004` showing the "process instance" line and
+      "active path: [>] Submit  [ ] Finance Review  [ ] Approve  [ ] Close"; then `python3 -m bpfkit next --code
+      PR-0004` printing "moved Submit -> Finance Review" and the PATCH body; then `status` again with
+      "[x] Submit  [>] Finance Review". Use the real output; mask environment URL and GUIDs if desired.
+    narration: >
+      Against the lab, status shows every flow on the record and the real path with markers. Next moves the
+      request from submit to finance review, because its budget is seventy five thousand, and status confirms it.
+
+  - id: appbar
+    type: screen
+    heading: "The same move, on the form"
+    image: screens/app-bpf.jpg
+    bar: "Model-driven app · Project Request PR-0004 · process bar"
+    demo: >
+      Model-driven app, PR-0004 open (refresh after the API move): the process bar shows Project Approval with Submit
+      completed and Finance Review active, the stage flyout open with Business Justification (required) and Due Date.
+      Mask tenant name and user avatar.
+    narration: >
+      Refresh the form and the process bar agrees: submit is done, finance review is active, and its flyout asks for
+      the justification. Code and user interface work on the same row.
+
+  - id: gotcha
+    type: bullets
+    heading: "Gotcha: the flow's table has its own security"
+    bullets:
+      - "Organization-scoped table, one per activated flow"
+      - "At first only System Administrator and Customizer"
+      - "Grant Project Approval privileges to your roles"
+      - "No privileges: no process bar"
+      - "Records from before activation have no instance"
+    short: gotcha
+    narration: >
+      Second trap. The flow's table follows the normal security model, it's organization scoped, and when it's
+      created only system administrator and system customizer can use it. Give the project requester role from
+      episode two privileges on project approval, or those users see no process bar at all. And records that
+      existed before you activated the flow didn't get an instance when they were created.
+
+  - id: backfill
+    type: code
+    heading: "Backfill the records that never got one"
+    lang: python
+    code: |
+      existing = list(api.get_all(f"{d.entity_set}?$select={d.lookup_value},traversedpath"))
+      first = check_first_stage(d, cfg["first_stage"], [r.get("traversedpath") or "" for r in existing])
+      have = {path.norm(r.get(d.lookup_value)) for r in existing}
+      for rec in api.get_all(f"{cfg['entity_set']}?$select={table}id,{key}&$filter=statecode eq 0"):
+          if path.norm(rec[f"{table}id"]) not in have:
+              p.missing.append({"id": ..., "code": rec.get(key)})
+
+      # create at the first stage: two binds, exactly like the Learn example
+      body = {f"{d.nav}@odata.bind": f"/{entity_set}({record_id})",
+              "activestageid@odata.bind": f"/processstages({first_stage_id})"}
+    narration: >
+      Backfill finds active records with no row in the flow's table, like the eighteen we imported in episode one,
+      and creates one at the first stage with two binds. Because stage order isn't guaranteed, the first stage is
+      configured by name and checked against the paths of instances that already exist.
+
+  - id: report
+    type: code
+    heading: "Where requests wait"
+    lang: text
+    code: |
+      $ python -m bpfkit report --from-json ../sample/project-approval-instances.json --now 2027-01-15
+      Project Approval: 18 instances (1 aborted, 15 active, 2 finished)
+
+      stage            active  oldest    avg  stuck
+      Submit                4      9d    3.0  1 over 5 d
+      Finance Review        3     10d    6.0  2 over 3 d
+      Approve               6     13d    5.2  2 over 5 d
+      Close                 2      2d    1.5
+
+        PR-0011    Submit           since 2027-01-06 (9 d)
+        PR-0004    Finance Review   since 2027-01-05 (10 d)
+    narration: >
+      And the question from the start. The docs recommend reporting on the flow's own table, so the report reads the
+      active stage and when it started, counts days in stage, and flags anything over a threshold, three days for
+      finance review and five for the rest. With fail on stuck, it exits with one for a scheduled check.
+
+  - id: labreport
+    type: screen
+    heading: "The report on lab data"
+    image: screens/bpfkit-report.jpg
+    bar: "Terminal · python -m bpfkit backfill --apply · report"
+    demo: >
+      Terminal against lab DEV: `python3 -m bpfkit backfill` listing the records without an instance, then
+      `--apply` with "+ PR-00xx: instance at Submit" lines and "created N, failed 0", then `python3 -m bpfkit report`
+      on the real instances (most will be in Submit with 0 d unless stages were moved during setup, see demo.md).
+      Rewrite narration to the real counts. Mask environment URL.
+    narration: >
+      On the lab data, backfill creates the missing instances, and the report shows where every request stands.
+      Same code, real table.
+
+  - id: recap
+    type: bullets
+    heading: "Five rules"
+    bullets:
+      - "Design in a solution; branch on the previous stage's steps"
+      - "Read table, lookup and stages from metadata"
+      - "Order comes from RetrieveActivePath, not processstages"
+      - "Move one stage at a time, with the traversed path"
+      - "Secure and report on the flow's own table"
+    narration: >
+      Five rules. Design in a solution and branch on the previous stage's steps. Read the table, the lookup and the
+      stages from metadata. Take the order from retrieve active path. Move one stage at a time, with the traversed
+      path. And secure and report on the flow's own table.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The tool, the sample data and all twenty nine tests are on GitHub, and the complete guide to business process
+      flows is on devladlog dot com. Next episode, custom plugins and workflows. Subscribe so you don't miss it.

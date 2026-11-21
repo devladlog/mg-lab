@@ -1,0 +1,34 @@
+/// Store dimension (physical stores and the online shop).
+table Store
+
+	column StoreKey
+		dataType: int64
+		isHidden
+		isKey
+		formatString: 0
+		summarizeBy: none
+		sourceColumn: StoreKey
+
+	column Store
+		dataType: string
+		summarizeBy: none
+		sourceColumn: Store
+
+	column Country
+		dataType: string
+		summarizeBy: none
+		sourceColumn: Country
+
+	column Channel
+		dataType: string
+		summarizeBy: none
+		sourceColumn: Channel
+
+	partition Store = m
+		mode: import
+		source =
+				let
+				    Members = fnDimension(SalesExport, "StoreName", {"StoreCountry", "Channel"}, "StoreKey"),
+				    Result = Table.RenameColumns(Members, {{"StoreName", "Store"}, {"StoreCountry", "Country"}})
+				in
+				    Result

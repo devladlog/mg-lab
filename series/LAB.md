@@ -18,7 +18,8 @@ All demos are recorded for real. Use these shared resources before asking for ne
   demos can use `DEV`. Mask the org URL in every capture.
 - Azure subscription: one pay-as-you-go subscription in the lab tenant (Owner). Every demo deploys into its own
   resource group `rg-mglab-<series>-<ep>` (West Europe, or Sweden Central for Azure OpenAI), lists each resource with SKU
-  and estimated cost for the recording window, and deletes the resource group in tear-down. Prefer free tiers.
+  and estimated cost for the recording window, and deletes the resource group in tear-down. Prefer free tiers. A €30/month budget
+  ("mglab-monthly") emails alerts at 50%, 80%, 100% and forecast 100%.
 
 ## Local Hyper-V lab (on the recording laptop, built by `lab/hyperv/Start-MGLab.ps1`)
 Internal NAT network `10.20.0.0/24`, host = `10.20.0.1`, domain `lab.contoso.com` (NetBIOS `CONTOSO`).

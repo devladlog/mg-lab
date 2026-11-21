@@ -43,18 +43,18 @@ python3 -m pytest tests -q                 # 31 passed
 
 ## Run it on SQL Server 2022
 
-```bash
-# SQL Server 2022 Developer in a container (free); see demo.md for the full recording steps
-docker run -e "ACCEPT_EULA=Y" -e "MSSQL_SA_PASSWORD=<strong password>" -p 1433:1433 --name sql1 -d \
-    mcr.microsoft.com/mssql/server:2022-latest
+The recording uses the shared lab VM **CON-SQL01** (SQL Server 2022 Developer, `10.20.0.30,1433`, see
+`series/LAB.md`); see demo.md for the full recording steps.
 
-# 1. run src/sql/00-create-database.sql against master (VS Code MSSQL extension, SSMS or sqlcmd)
-# 2. then, from this folder:
-export SQL_CONNECTION_STRING="Server=localhost,1433;Database=ContosoLab;UID=sa;PWD=<strong password>;Encrypt=yes;TrustServerCertificate=yes"
-python3 src/tsql_runner.py --engine sqlserver --setup     # expect: 10/10 queries match expected/ on sqlserver
+```powershell
+# 1. run src/sql/00-create-database.sql against master on 10.20.0.30,1433 (VS Code MSSQL extension, SSMS or sqlcmd)
+# 2. then, from this folder (password typed, never stored):
+$pw = Read-Host -AsSecureString 'sa password'
+$env:SQL_CONNECTION_STRING = "Server=10.20.0.30,1433;Database=ContosoLab;UID=sa;PWD=$([Net.NetworkCredential]::new('', $pw).Password);Encrypt=yes;TrustServerCertificate=yes"
+python src/tsql_runner.py --engine sqlserver --setup     # expect: 10/10 queries match expected/ on sqlserver
 ```
 
-`TrustServerCertificate=yes` and the `sa` login are for a local lab container only (Learn says the same in the
+`TrustServerCertificate=yes` and the `sa` login are for the isolated lab VM only (Learn says the same in the
 mssql-python quickstart). The SQL Server path was exercised here up to the network: the driver loads and fails with
 `TCP Provider: Error code 0x2749` because there is no server. **The first real run on SQL Server is part of the
 demo** (see [demo.md](demo.md)).

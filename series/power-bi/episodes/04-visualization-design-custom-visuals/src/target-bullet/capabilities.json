@@ -1,0 +1,33 @@
+{
+  "dataRoles": [
+    { "displayName": "Category", "name": "category", "kind": "Grouping" },
+    { "displayName": "Actual", "name": "actual", "kind": "Measure" },
+    { "displayName": "Target", "name": "target", "kind": "Measure" }
+  ],
+  "dataViewMappings": [
+    {
+      "conditions": [{ "category": { "max": 1 }, "actual": { "max": 1 }, "target": { "max": 1 } }],
+      "categorical": {
+        "categories": { "for": { "in": "category" }, "dataReductionAlgorithm": { "top": { "count": 30 } } },
+        "values": { "select": [{ "bind": { "to": "actual" } }, { "bind": { "to": "target" } }] }
+      }
+    }
+  ],
+  "objects": {
+    "bands": {
+      "properties": {
+        "tolerance": { "type": { "numeric": true } },
+        "aboveColor": { "type": { "fill": { "solid": { "color": true } } } },
+        "nearColor": { "type": { "fill": { "solid": { "color": true } } } },
+        "belowColor": { "type": { "fill": { "solid": { "color": true } } } }
+      }
+    },
+    "labels": {
+      "properties": {
+        "show": { "type": { "bool": true } },
+        "fontSize": { "type": { "formatting": { "fontSize": true } } }
+      }
+    }
+  },
+  "privileges": []
+}

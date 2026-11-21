@@ -1,0 +1,115 @@
+/// Fact table, one row per order line. Filters arrive from Date (order date), Customer, Product and Store.
+table Sales
+
+	measure 'Sales Amount' = SUMX(Sales, Sales[Quantity] * Sales[Unit Price])
+		formatString: #,0.00
+		displayFolder: Sales
+
+	measure 'Total Cost' = SUMX(Sales, Sales[Quantity] * Sales[Unit Cost])
+		formatString: #,0.00
+		displayFolder: Sales
+
+	measure Margin = [Sales Amount] - [Total Cost]
+		formatString: #,0.00
+		displayFolder: Margin
+
+	measure 'Margin %' = DIVIDE([Margin], [Sales Amount])
+		formatString: 0.0%
+		displayFolder: Margin
+
+	measure Units = SUM(Sales[Quantity])
+		formatString: #,0
+		displayFolder: Sales
+
+	measure Orders = DISTINCTCOUNT(Sales[Order Number])
+		formatString: #,0
+		displayFolder: Sales
+
+	/// Degenerate dimension: kept on the fact table for filtering by order.
+	column 'Order Number'
+		dataType: string
+		summarizeBy: none
+		sourceColumn: OrderNumber
+
+	column 'Line Number'
+		dataType: int64
+		isHidden
+		formatString: 0
+		summarizeBy: none
+		sourceColumn: LineNumber
+
+	column 'Order Date'
+		dataType: dateTime
+		isHidden
+		formatString: yyyy-mm-dd
+		summarizeBy: none
+		sourceColumn: OrderDate
+
+	column 'Ship Date'
+		dataType: dateTime
+		isHidden
+		formatString: yyyy-mm-dd
+		summarizeBy: none
+		sourceColumn: ShipDate
+
+	column CustomerKey
+		dataType: int64
+		isHidden
+		formatString: 0
+		summarizeBy: none
+		sourceColumn: CustomerKey
+
+	column ProductKey
+		dataType: int64
+		isHidden
+		formatString: 0
+		summarizeBy: none
+		sourceColumn: ProductKey
+
+	column StoreKey
+		dataType: int64
+		isHidden
+		formatString: 0
+		summarizeBy: none
+		sourceColumn: StoreKey
+
+	column Quantity
+		dataType: int64
+		isHidden
+		formatString: #,0
+		summarizeBy: none
+		sourceColumn: Quantity
+
+	column 'Unit Price'
+		dataType: decimal
+		isHidden
+		formatString: #,0.00
+		summarizeBy: none
+		sourceColumn: UnitPrice
+
+	column 'Unit Cost'
+		dataType: decimal
+		isHidden
+		formatString: #,0.00
+		summarizeBy: none
+		sourceColumn: UnitCost
+
+	partition Sales = m
+		mode: import
+		source =
+				let
+				    Source = SalesExport,
+				    JoinProduct = Table.NestedJoin(Source, {"ProductCode"}, Product, {"ProductCode"}, "P", JoinKind.LeftOuter),
+				    WithProduct = Table.ExpandTableColumn(JoinProduct, "P", {"ProductKey"}),
+				    JoinCustomer = Table.NestedJoin(WithProduct, {"CustomerCode"}, Customer, {"CustomerCode"}, "C", JoinKind.LeftOuter),
+				    WithCustomer = Table.ExpandTableColumn(JoinCustomer, "C", {"CustomerKey"}),
+				    Guests = Table.ReplaceValue(WithCustomer, null, -1, Replacer.ReplaceValue, {"CustomerKey"}),
+				    JoinStore = Table.NestedJoin(Guests, {"StoreName"}, Store, {"Store"}, "S", JoinKind.LeftOuter),
+				    WithStore = Table.ExpandTableColumn(JoinStore, "S", {"StoreKey"}),
+				    Result = Table.SelectColumns(WithStore, {"OrderNumber", "LineNumber", "OrderDate", "ShipDate",
+				        "CustomerKey", "ProductKey", "StoreKey", "Quantity", "UnitPrice", "UnitCost"}),
+				    Typed = Table.TransformColumnTypes(Result, {
+				        {"CustomerKey", Int64.Type}, {"ProductKey", Int64.Type}, {"StoreKey", Int64.Type}
+				    }, "en-US")
+				in
+				    Typed

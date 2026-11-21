@@ -1,0 +1,282 @@
+episode: 3
+slug: power-query-m-language
+series_label: "POWER BI"
+series_name: "DEVLADLOG Power BI"
+file_prefix: "power-bi"
+title: "Power Query & M Language"
+subtitle: "From a folder of messy exports to a star schema, in M"
+voice: am_michael
+thumbnail_text: "POWER QUERY\nM THAT YOU\nCAN TEST"
+youtube:
+  title: "Power Query M: Combine Files, Custom Functions, Star Schema and a Linter | DEVLADLOG Power BI #3"
+  tags: [Power BI, Power Query, M language, combine files, custom functions, Table.Distinct, Table.Buffer, query folding, TMDL, star schema]
+sources:
+  - https://www.devladlog.com/articles/power-bi/2025-02-03-power-query-m-complete-guide-2025/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Two million in sales. Or one point eight six?"
+    sub: "Power Query and M, with the right total known in advance"
+    short: hook
+    narration: >
+      Twenty four monthly files, combined in Power Query. The total says two million and twenty thousand. The real
+      number is one million eight hundred sixty two thousand. Nothing failed, no errors, just duplicates. In this
+      episode we turn a folder of messy exports into a star schema in M, and we know the right total before Power BI
+      opens.
+
+  - id: plan
+    type: bullets
+    heading: "What we're building"
+    bullets:
+      - "24 monthly ERP exports, messy on purpose"
+      - "Two custom functions: read one export, build one dimension"
+      - "A staging query that combines and de-duplicates"
+      - "The episode 1 star schema, now built in M"
+      - "pq-lint, tests, and a Python mirror of every step"
+    narration: >
+      In episode one, Python built the star schema. This time the source is what the E R P really drops in a folder:
+      one file per month. We write two custom functions, one staging query, and five tables that load. Then we prove
+      it: a linter built on Microsoft's open source Power Query parser, and a Python mirror of every step.
+
+  - id: mess
+    type: code
+    heading: "What the ERP actually sends"
+    lang: text
+    code: |
+      sales_2025-07.csv
+      OrderNumber;LineNumber;OrderDate;ShipDate;CustomerCode;...;ProductCode;...;Quantity;UnitPrice;UnitCost
+      SO001755;1;29/06/2025;01/07/2025;C0012;...;CL-G-020;...;4;39,90;14,50
+      SO001756;1;29/06/2025;04/07/2025;C0088;...;bk-r-200 ;...;1;1299,00;760,00
+      ...
+      TOTAL;;;;;;;;;;;;;;;;468;;
+
+      + _README.txt in the same folder
+    narration: >
+      Here's July. Semicolons, a decimal comma, day month year dates. The online shop writes product codes in lower
+      case with a trailing space. Every file ends with a total row. Someone left a readme in the folder. And look at
+      the dates: the end of June is exported again in July, because late corrections land there.
+
+  - id: readexport
+    type: code
+    heading: "fnReadExport: one file, typed"
+    lang: text
+    code: |
+      (file as binary) as table =>
+      let
+          Source = Csv.Document(file, [Delimiter = ";", Columns = 19, Encoding = 65001]),
+          Promoted = Table.PromoteHeaders(Source, [PromoteAllScalars = true]),
+          NoTotals = Table.SelectRows(Promoted, each [OrderNumber] <> "TOTAL"),
+          Cleaned = Table.TransformColumns(NoTotals, {
+              {"ProductCode", each Text.Upper(Text.Trim(_)), type text},
+              {"CustomerCode", each if Text.Trim(_) = "" then null else Text.Trim(_)},
+              {"OrderDate", each Date.FromText(_, [Format = "dd'/'MM'/'yyyy", Culture = "pt-PT"])}
+          }),
+          Typed = Table.TransformColumnTypes(Cleaned, {..., {"UnitPrice", Currency.Type}}, "pt-PT")
+      in
+          Typed
+    narration: >
+      The first custom function reads one export. Csv dot Document with a semicolon and nineteen columns. Promote the
+      headers, drop the total row, trim and upper case the product codes, turn empty customer codes into null for guest
+      orders. The prices get typed with the Portuguese culture, so forty seven comma four is forty seven point four on
+      any machine.
+
+  - id: slash
+    type: code
+    heading: "In a date format, a slash isn't a slash"
+    lang: text
+    code: |
+      // custom format strings: "/" = the date separator of the culture
+      Date.FromText("29/06/2025", [Format = "dd/MM/yyyy",     Culture = "pt-PT"])   // separator from pt-PT
+      Date.FromText("29/06/2025", [Format = "dd'/'MM'/'yyyy", Culture = "pt-PT"])   // a literal slash
+
+      // Power BI's own locale table: pt-PT short date = 31-12-2022
+    narration: >
+      A detail worth a scene of its own. In a custom date format, the slash is not a character, it's the date separator
+      of the culture you pass. Microsoft's own table shows Portuguese short dates with dashes. So we quote the slash and
+      the format means exactly what it says. The linter warns about this one.
+
+  - id: combine
+    type: code
+    heading: "SalesExport: combine the folder"
+    lang: text
+    code: |
+      let
+          Files = Folder.Files(ExportFolder),
+          CsvOnly = Table.SelectRows(Files, each Text.Lower([Extension]) = ".csv"),
+          Read = Table.AddColumn(CsvOnly, "Data",
+              (file) => Table.AddColumn(fnReadExport(file[Content]), "SourceFile", each file[Name], type text)),
+          Combined = Table.Combine(Read[Data]),
+          Newest = Table.Sort(Combined, {{"SourceFile", Order.Descending}}),
+          Buffered = Table.Buffer(Newest),
+          Deduped = Table.Distinct(Buffered, {"OrderNumber", "LineNumber"}),
+          Result = Table.RemoveColumns(Deduped, {"SourceFile"})
+      in
+          Result
+    narration: >
+      The staging query. The folder path is a parameter. We keep only C S V files, lower casing the extension, so the
+      readme can't break the combine. Each file goes through the function and keeps its file name. Then the newest file
+      wins: sort by file name, descending, buffer, and remove duplicates on order and line.
+
+  - id: editor
+    type: screen
+    heading: "Queries that load, queries that don't"
+    image: screens/pq-editor-queries.jpg
+    bar: "Power BI Desktop · Power Query editor · SalesExport"
+    demo: "Power Query editor. Queries pane shows ExportFolder (parameter icon), fnReadExport and fnDimension (function icons), SalesExport (right-click menu open showing Enable load unchecked), then Product, Customer, Store, Date, Sales. SalesExport selected, Applied steps pane shows Files, CsvOnly, Read, Combined, Newest, Buffered, Deduped, Result. Highlight the unchecked Enable load and the Buffered step."
+    narration: >
+      In the Power Query editor: a parameter, two functions, and the staging query with enable load switched off.
+      Other queries can use it, but only five tables reach the model. The applied steps have names that say what they do, not changed type
+      one, two and three.
+
+  - id: gotcha
+    type: code
+    heading: "Gotcha: which duplicate survives?"
+    lang: text
+    code: |
+      Table.Distinct docs: "there's no guarantee which specific duplicate will be preserved"
+                           "first buffer the table using Table.Buffer"
+
+      Expected Sales Amount (Python mirror of the queries)
+        no de-duplication          2,019,894.31    4,318 lines
+        oldest copy kept           1,902,513.76    7,549 units
+        newest copy kept           1,862,401.98    7,462 units   = episode 1
+    short: gotcha
+    narration: >
+      Here's the gotcha. Sort then remove duplicates looks like keep the first row. Microsoft's documentation says
+      there's no guarantee which duplicate survives, and to buffer the table first if you need it predictable. The
+      stakes: no de-duplication gives two million and twenty thousand. Keep the older copy, one million nine hundred
+      thousand. Only the newest copy gives the episode one total.
+
+  - id: dimension
+    type: code
+    heading: "fnDimension: write it once, use it three times"
+    lang: text
+    code: |
+      (source as table, businessKey as text, attributes as list, keyName as text) as table =>
+      let
+          Columns = Table.SelectColumns(source, {businessKey} & attributes),
+          Known = Table.SelectRows(Columns, each Record.Field(_, businessKey) <> null),
+          Members = Table.Distinct(Known),
+          Sorted = Table.Sort(Members, {{businessKey, Order.Ascending}}),
+          Keyed = Table.AddIndexColumn(Sorted, keyName, 1, 1, Int64.Type),
+          Result = Table.ReorderColumns(Keyed, {keyName, businessKey} & attributes)
+      in
+          Result
+
+      // Product.pq
+      fnDimension(SalesExport, "ProductCode", {"ProductName", "Subcategory", "Category", "Color"}, "ProductKey")
+    narration: >
+      The second function builds a dimension: pick the business key and attributes, drop nulls, distinct, sort, and add
+      a surrogate key from one. Product, customer and store are each one call. This distinct is over all columns, so
+      it doesn't matter which copy survives, and if an attribute ever disagrees, refresh fails on a duplicate key
+      instead of silently picking one.
+
+  - id: facts
+    type: code
+    heading: "Sales: look up the keys"
+    lang: text
+    code: |
+      JoinProduct = Table.NestedJoin(Source, {"ProductCode"}, Product, {"ProductCode"}, "P", JoinKind.LeftOuter),
+      WithProduct = Table.ExpandTableColumn(JoinProduct, "P", {"ProductKey"}),
+      JoinCustomer = Table.NestedJoin(WithProduct, {"CustomerCode"}, Customer, {"CustomerCode"}, "C", JoinKind.LeftOuter),
+      WithCustomer = Table.ExpandTableColumn(JoinCustomer, "C", {"CustomerKey"}),
+      Guests = Table.ReplaceValue(WithCustomer, null, -1, Replacer.ReplaceValue, {"CustomerKey"}),
+
+      // Customer.pq: the explicit unknown member
+      Table.InsertRows(Renamed, 0, {[CustomerKey = -1, CustomerCode = "", Customer = "Unknown customer", ...]})
+    narration: >
+      The fact table swaps business keys for surrogate keys with left outer joins. Guest orders find no customer, so
+      their key becomes minus one, the explicit unknown customer we insert at the top of the customer table. Same rule
+      as episode one: no blank row in the visuals.
+
+  - id: dates
+    type: code
+    heading: "A date table from the data"
+    lang: text
+    code: |
+      AllDates = SalesExport[OrderDate] & SalesExport[ShipDate],
+      FirstDay = #date(Date.Year(List.Min(AllDates)), 1, 1),
+      LastDay = #date(Date.Year(List.Max(AllDates)), 12, 31),
+      Days = List.Dates(FirstDay, Duration.Days(LastDay - FirstDay) + 1, #duration(1, 0, 0, 0)),
+      Rows = List.Transform(Days, (d) => [
+          Date = d,
+          Year = Date.Year(d),
+          Quarter = "Q" & Text.From(Date.QuarterOfYear(d)),
+          #"Month Number" = Date.Month(d),
+          Month = Date.ToText(d, [Format = "MMM", Culture = "en-US"]),
+          #"Day of Week Number" = Date.DayOfWeek(d, Day.Monday) + 1
+      ]),
+    narration: >
+      The date table comes from the data: full calendar years from the first order to the last ship date, because
+      orders at the end of December ship in January. One record per day, with year, quarter, month and weekday, and an
+      explicit culture so the month names never depend on the PC.
+
+  - id: refresh
+    type: screen
+    heading: "Refresh: the same star as episode 1"
+    image: screens/pq-data-view-rowcounts.jpg
+    bar: "Power BI Desktop · Table view · Sales"
+    demo: "Table view after Refresh, Sales selected. Status bar shows 'Table: Sales (4,071 rows)'. Data pane lists Customer, Date, Product, Sales, Store. Optionally a split showing Customer (301 rows) with 'Unknown customer' key -1 as first row. Highlight the row count."
+    narration: >
+      Point the parameter at the folder and refresh. Twenty four files, four thousand three hundred eighteen lines in,
+      four thousand seventy one order lines out. Three hundred and one customers including the unknown one, nineteen
+      products, five stores, and a date table to the end of twenty twenty six.
+
+  - id: totals
+    type: screen
+    heading: "1,862,401.98, to the cent"
+    image: screens/pq-report-totals.jpg
+    bar: "Power BI Desktop · Report view"
+    demo: "Report view, scratch page with three cards: Sales Amount 1,862,401.98, Orders 2,440, Units 7,462, and a table by Date[Year]: 2024 894,929.10, 2025 967,472.88. Highlight Sales Amount."
+    narration: >
+      And the numbers: one million eight hundred sixty two thousand four hundred and one, ninety eight. Two thousand
+      four hundred forty orders, seven thousand four hundred sixty two units. Exactly episode one, from a completely
+      different path. That's what the Python mirror predicted, and forty tests keep it that way.
+
+  - id: lint
+    type: code
+    heading: "pq-lint on a query the UI generated"
+    lang: text
+    code: |
+      $ pq-lint tests/fixtures/ui-generated
+        ERROR    PQ001  Broken.pq:3   Expected to find one of the following, but a right parenthesis ...
+        WARNING  PQ008  Dates.pq:3    Format "dd/MM/yyyy": "/" and ":" are the culture's separators; ...
+        ERROR    PQ002  Dates.pq:5    "Selected" is not a step, a function argument or a query in ...
+        WARNING  PQ003  Exports.pq:2  Folder.Files("C:\Users\AlexDemo\Downloads\exports"): move the path ...
+        WARNING  PQ006  Exports.pq:2  filter the file list on [Extension] so a stray file can't break ...
+        ERROR    PQ002  Exports.pq:3  "Transform File" is not a step, a function argument or a query ...
+        WARNING  PQ005  Exports.pq:5  pass the culture of the source text, e.g. ...
+        WARNING  PQ004  Exports.pq:7  Table.Distinct keeps an unspecified duplicate; buffer the sorted ...
+        (+ 5 x PQ007: #"Changed Type", #"Sorted Rows", ... rename it after what it does)
+      3 queries: 3 error(s), 10 warning(s)
+
+      $ pq-lint src/queries --strict      ->  9 queries: 0 error(s), 0 warning(s)
+    short: lint
+    narration: >
+      Finally, pq lint, built on Microsoft's open source Power Query parser. Point it at a query the way the editor
+      generates it: a path to someone's downloads folder, no extension filter, a reference to a query that doesn't
+      exist, types without a culture, and sort then distinct with no buffer. Our nine queries pass with zero findings.
+
+  - id: recap
+    type: bullets
+    heading: "Five rules for M"
+    bullets:
+      - "Paths in parameters, files filtered by extension"
+      - "Repeated logic in custom functions"
+      - "Always pass a culture; quote separators in formats"
+      - "Buffer before Distinct when the survivor matters"
+      - "Know the expected totals, lint the M, then refresh"
+    narration: >
+      Five rules. Paths in parameters, and filter the folder by extension. Put repeated logic in custom functions.
+      Always pass a culture, and quote separators in date formats. Buffer before distinct when it matters which row
+      survives. And know the expected totals and lint the M before you refresh.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The queries, the exports, pq lint and the tests are on GitHub, and the complete guide to Power Query and M is on
+      dev lad log dot com. Links in the description. Next time: visualization design and custom visuals. This was
+      DEVLADLOG Power BI, by Momento Galático.
