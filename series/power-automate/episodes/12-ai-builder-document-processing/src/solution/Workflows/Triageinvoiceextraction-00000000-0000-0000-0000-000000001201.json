@@ -1,0 +1,314 @@
+{
+  "properties": {
+    "connectionReferences": {
+      "shared_sharepointonline": {
+        "runtimeSource": "embedded",
+        "connection": {
+          "connectionReferenceLogicalName": "cts_sharedsharepointonline_invoices"
+        },
+        "api": {
+          "name": "shared_sharepointonline"
+        }
+      },
+      "shared_office365": {
+        "runtimeSource": "embedded",
+        "connection": {
+          "connectionReferenceLogicalName": "cts_sharedoffice365_invoices"
+        },
+        "api": {
+          "name": "shared_office365"
+        }
+      }
+    },
+    "definition": {
+      "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+      "contentVersion": "1.0.0.0",
+      "parameters": {
+        "$connections": {
+          "defaultValue": {},
+          "type": "Object"
+        },
+        "$authentication": {
+          "defaultValue": {},
+          "type": "SecureObject"
+        },
+        "Finance site URL (cts_FinanceSiteUrl)": {
+          "defaultValue": "https://contoso.sharepoint.com/sites/Finance",
+          "type": "String",
+          "metadata": {
+            "schemaName": "cts_FinanceSiteUrl",
+            "description": "SharePoint site that holds the Invoice Extractions and Invoices lists, no trailing slash"
+          }
+        },
+        "Extractions list (cts_ExtractionsList)": {
+          "defaultValue": "Invoice Extractions",
+          "type": "String",
+          "metadata": {
+            "schemaName": "cts_ExtractionsList",
+            "description": "Staging list: one row per invoice the AI Builder flow has read"
+          }
+        },
+        "Invoices list (cts_InvoicesList)": {
+          "defaultValue": "Invoices",
+          "type": "String",
+          "metadata": {
+            "schemaName": "cts_InvoicesList",
+            "description": "Posted invoices; also the source for the duplicate check"
+          }
+        },
+        "Reviewer mailbox (cts_ReviewerMailbox)": {
+          "defaultValue": "accounts@contoso.com",
+          "type": "String",
+          "metadata": {
+            "schemaName": "cts_ReviewerMailbox",
+            "description": "Gets the invoices that need a person"
+          }
+        },
+        "Minimum confidence (cts_MinConfidence)": {
+          "defaultValue": "0.8",
+          "type": "String",
+          "metadata": {
+            "schemaName": "cts_MinConfidence",
+            "description": "Every required field must reach this score (0 to 1) to be posted without a person"
+          }
+        },
+        "Amount limit (cts_AmountLimit)": {
+          "defaultValue": "5000",
+          "type": "String",
+          "metadata": {
+            "schemaName": "cts_AmountLimit",
+            "description": "Invoices above this total always go to a person"
+          }
+        },
+        "Maximum invoice age in days (cts_MaxAgeDays)": {
+          "defaultValue": "365",
+          "type": "String",
+          "metadata": {
+            "schemaName": "cts_MaxAgeDays",
+            "description": "Older invoice dates are sent to review"
+          }
+        }
+      },
+      "triggers": {
+        "When_an_extraction_is_added": {
+          "type": "OpenApiConnection",
+          "recurrence": {
+            "interval": 1,
+            "frequency": "Minute"
+          },
+          "splitOn": "@triggerOutputs()?['body/value']",
+          "inputs": {
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+              "connectionName": "shared_sharepointonline",
+              "operationId": "GetOnNewItems"
+            },
+            "parameters": {
+              "dataset": "@parameters('Finance site URL (cts_FinanceSiteUrl)')",
+              "table": "@parameters('Extractions list (cts_ExtractionsList)')"
+            },
+            "authentication": "@parameters('$authentication')"
+          }
+        }
+      },
+      "actions": {
+        "Get_possible_duplicates": {
+          "type": "OpenApiConnection",
+          "runAfter": {},
+          "inputs": {
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+              "connectionName": "shared_sharepointonline",
+              "operationId": "GetItems"
+            },
+            "parameters": {
+              "dataset": "@parameters('Finance site URL (cts_FinanceSiteUrl)')",
+              "table": "@parameters('Invoices list (cts_InvoicesList)')",
+              "$filter": "VendorName eq '@{replace(coalesce(triggerBody()?['VendorName'], ''), '''', '''''')}' and InvoiceId eq '@{replace(coalesce(triggerBody()?['InvoiceId'], ''), '''', '''''')}'",
+              "$top": 1
+            },
+            "authentication": "@parameters('$authentication')"
+          }
+        },
+        "Is_not_an_invoice": {
+          "type": "Compose",
+          "runAfter": {
+            "Get_possible_duplicates": [
+              "Succeeded"
+            ]
+          },
+          "inputs": "@and(empty(triggerBody()?['InvoiceId']), empty(triggerBody()?['VendorName']), equals(triggerBody()?['InvoiceTotal'], null))"
+        },
+        "Is_duplicate": {
+          "type": "Compose",
+          "runAfter": {
+            "Is_not_an_invoice": [
+              "Succeeded"
+            ]
+          },
+          "inputs": "@and(not(empty(triggerBody()?['InvoiceId'])), greater(length(body('Get_possible_duplicates')?['value']), 0))"
+        },
+        "Has_missing_fields": {
+          "type": "Compose",
+          "runAfter": {
+            "Is_duplicate": [
+              "Succeeded"
+            ]
+          },
+          "inputs": "@or(empty(triggerBody()?['InvoiceId']), empty(triggerBody()?['VendorName']), empty(triggerBody()?['InvoiceDate']), equals(triggerBody()?['InvoiceTotal'], null))"
+        },
+        "Has_low_confidence": {
+          "type": "Compose",
+          "runAfter": {
+            "Has_missing_fields": [
+              "Succeeded"
+            ]
+          },
+          "inputs": "@less(min(coalesce(triggerBody()?['InvoiceIdConf'], 0), coalesce(triggerBody()?['VendorNameConf'], 0), coalesce(triggerBody()?['InvoiceDateConf'], 0), coalesce(triggerBody()?['InvoiceTotalConf'], 0)), float(parameters('Minimum confidence (cts_MinConfidence)')))"
+        },
+        "Total_does_not_add_up": {
+          "type": "Compose",
+          "runAfter": {
+            "Has_low_confidence": [
+              "Succeeded"
+            ]
+          },
+          "inputs": "@and(not(equals(triggerBody()?['SubTotal'], null)), not(equals(triggerBody()?['TotalTax'], null)), not(equals(triggerBody()?['InvoiceTotal'], null)), greater(max(sub(add(coalesce(triggerBody()?['SubTotal'], 0), coalesce(triggerBody()?['TotalTax'], 0)), coalesce(triggerBody()?['InvoiceTotal'], 0)), sub(coalesce(triggerBody()?['InvoiceTotal'], 0), add(coalesce(triggerBody()?['SubTotal'], 0), coalesce(triggerBody()?['TotalTax'], 0)))), 0.010001))"
+        },
+        "Is_over_the_limit": {
+          "type": "Compose",
+          "runAfter": {
+            "Total_does_not_add_up": [
+              "Succeeded"
+            ]
+          },
+          "inputs": "@and(not(equals(triggerBody()?['InvoiceTotal'], null)), greater(coalesce(triggerBody()?['InvoiceTotal'], 0), float(parameters('Amount limit (cts_AmountLimit)'))))"
+        },
+        "Has_suspicious_dates": {
+          "type": "Compose",
+          "runAfter": {
+            "Is_over_the_limit": [
+              "Succeeded"
+            ]
+          },
+          "inputs": "@and(not(empty(triggerBody()?['InvoiceDate'])), or(greater(ticks(coalesce(triggerBody()?['InvoiceDate'], '2000-01-01')), ticks(addDays(startOfDay(utcNow()), 1))), less(ticks(coalesce(triggerBody()?['InvoiceDate'], '2000-01-01')), ticks(addDays(startOfDay(utcNow()), mul(-1, int(parameters('Maximum invoice age in days (cts_MaxAgeDays)')))))), less(ticks(coalesce(triggerBody()?['DueDate'], coalesce(triggerBody()?['InvoiceDate'], '2000-01-01'))), ticks(coalesce(triggerBody()?['InvoiceDate'], '2000-01-01')))))"
+        },
+        "Decision": {
+          "type": "Compose",
+          "runAfter": {
+            "Has_suspicious_dates": [
+              "Succeeded"
+            ]
+          },
+          "inputs": "@if(or(outputs('Is_not_an_invoice'), outputs('Is_duplicate')), 'reject', if(or(outputs('Has_missing_fields'), outputs('Has_low_confidence'), outputs('Total_does_not_add_up'), outputs('Is_over_the_limit'), outputs('Has_suspicious_dates')), 'review', 'auto-post'))"
+        },
+        "Record_decision": {
+          "runAfter": {
+            "Decision": [
+              "Succeeded"
+            ]
+          },
+          "inputs": {
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+              "connectionName": "shared_sharepointonline",
+              "operationId": "PatchItem"
+            },
+            "parameters": {
+              "dataset": "@parameters('Finance site URL (cts_FinanceSiteUrl)')",
+              "table": "@parameters('Extractions list (cts_ExtractionsList)')",
+              "id": "@triggerBody()?['ID']",
+              "item/Decision/Value": "@outputs('Decision')"
+            },
+            "authentication": "@parameters('$authentication')"
+          },
+          "type": "OpenApiConnection"
+        },
+        "Route": {
+          "type": "If",
+          "runAfter": {
+            "Record_decision": [
+              "Succeeded"
+            ]
+          },
+          "expression": {
+            "and": [
+              {
+                "equals": [
+                  "@outputs('Decision')",
+                  "auto-post"
+                ]
+              }
+            ]
+          },
+          "actions": {
+            "Post_invoice": {
+              "type": "OpenApiConnection",
+              "runAfter": {},
+              "inputs": {
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                  "connectionName": "shared_sharepointonline",
+                  "operationId": "PostItem"
+                },
+                "parameters": {
+                  "dataset": "@parameters('Finance site URL (cts_FinanceSiteUrl)')",
+                  "table": "@parameters('Invoices list (cts_InvoicesList)')",
+                  "item/Title": "@triggerBody()?['InvoiceId']",
+                  "item/InvoiceId": "@triggerBody()?['InvoiceId']",
+                  "item/VendorName": "@triggerBody()?['VendorName']",
+                  "item/InvoiceDate": "@triggerBody()?['InvoiceDate']",
+                  "item/InvoiceTotal": "@triggerBody()?['InvoiceTotal']"
+                },
+                "authentication": "@parameters('$authentication')"
+              }
+            }
+          },
+          "else": {
+            "actions": {
+              "Needs_a_person": {
+                "type": "If",
+                "runAfter": {},
+                "expression": {
+                  "and": [
+                    {
+                      "equals": [
+                        "@outputs('Decision')",
+                        "review"
+                      ]
+                    }
+                  ]
+                },
+                "actions": {
+                  "Ask_reviewer": {
+                    "type": "OpenApiConnection",
+                    "runAfter": {},
+                    "inputs": {
+                      "host": {
+                        "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365",
+                        "connectionName": "shared_office365",
+                        "operationId": "SendEmailV2"
+                      },
+                      "parameters": {
+                        "emailMessage/To": "@parameters('Reviewer mailbox (cts_ReviewerMailbox)')",
+                        "emailMessage/Subject": "Invoice @{coalesce(triggerBody()?['InvoiceId'], '(no id)')} needs a look",
+                        "emailMessage/Body": "<p>Vendor: <b>@{coalesce(triggerBody()?['VendorName'], '(not read)')}</b>, total @{coalesce(triggerBody()?['InvoiceTotal'], '(not read)')}.</p><p>Open the row in the Invoice Extractions list and compare it with the file.</p>",
+                        "emailMessage/Importance": "Normal"
+                      },
+                      "authentication": "@parameters('$authentication')"
+                    }
+                  }
+                },
+                "else": {
+                  "actions": {}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "templateName": ""
+  },
+  "schemaVersion": "1.0.0.0"
+}

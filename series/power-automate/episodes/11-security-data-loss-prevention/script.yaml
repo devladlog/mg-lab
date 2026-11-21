@@ -1,0 +1,232 @@
+# DEVLADLOG Power Automate — episode 11 (draft: material built and tested locally, demo still to record)
+episode: 11
+slug: security-data-loss-prevention
+series_label: "POWER AUTOMATE"
+series_name: "DEVLADLOG Power Automate"
+file_prefix: "power-automate"
+title: "Your flow is fine. The policy says no."
+subtitle: "Data policies for cloud flows: predict the verdict, keep the classification in Git"
+voice: am_michael
+thumbnail_text: "FLOW\nSUSPENDED\nDLP POLICY"
+youtube:
+  title: "Why Your Power Automate Flow Is Suspended by a Data Policy | DEVLADLOG Power Automate #11"
+  tags: [Power Automate, data loss prevention, DLP, data policies, Power Platform admin center, connectors, suspended flow, PowerShell, Power Platform governance, Power Platform]
+sources:
+  - https://www.devladlog.com/articles/power-automate/2025-08-11-security-dlp-complete-guide-2025/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Saved. Then suspended."
+    sub: "Data policies for cloud flows"
+    short: hook
+    narration: >
+      The flow saves, and then it is marked suspended, although nothing in it is broken. The
+      data policy says these two connectors cannot meet. In this episode we read the rules from Learn, predict
+      the verdict from the flow file before anyone saves it, and keep the policy classification in Git.
+
+  - id: rules
+    type: bullets
+    heading: "Three groups, two rules"
+    bullets:
+      - "Business, Non-business, Blocked"
+      - "Business and Non-business can't share a flow"
+      - "Blocked can't be used at all"
+      - "SharePoint, Outlook, Teams can't be blocked"
+      - "New connectors land in the default group"
+    narration: >
+      A data policy puts each connector in one of three groups. A flow may use connectors from one group only,
+      so Business and Non-business cannot meet, and a blocked connector cannot be used at all. Learn also lists
+      connectors you cannot block, including SharePoint, Outlook, Teams and Approvals. Those can only be Business
+      or Non-business. Everything you never classified sits in the default group.
+
+  - id: policy
+    type: screen
+    heading: "The policy for DEV"
+    image: screens/policy.jpg
+    bar: "Power Platform admin center · Data policy · MG Lab IT DEV"
+    demo: >
+      Power Platform admin center, Security, Data and privacy, Data policy, policy MG Lab IT DEV opened on the
+      Assign connectors step: Business holds SharePoint, Microsoft 365 Outlook, Microsoft 365 Users, Microsoft
+      Teams, Approvals and Dataverse; Non-business is the default group; the scope step shows Add multiple
+      environments with DEV only. Mask the tenant name and every environment ID.
+    narration: >
+      This is the policy for our dev environment. The business connectors are the ones the IT helpdesk lives
+      on. Everything else stays in the default group, and the scope is dev only.
+
+  - id: suspended
+    type: screen
+    heading: "Saved, then suspended"
+    image: screens/suspended.jpg
+    bar: "Power Automate · IT request with weather note"
+    demo: >
+      make.powerautomate.com, environment DEV, signed in as alex.demo. A new cloud flow with the SharePoint
+      trigger When an item is created on IT Requests, then the MSN Weather action Get current weather. Select
+      Save: the flow checker panel lists the data policy violation. Then My flows: the flow shows Suspended.
+      Mask the environment name in the address bar and the tenant name.
+    narration: >
+      Here is what a maker sees. SharePoint trigger, then the M S N Weather action. The flow saves, the flow
+      checker reports the data policy conflict, and the flow is marked suspended. Learn says design time
+      evaluation happens when you save, so the verdict arrives right away.
+
+  - id: predict
+    type: code
+    heading: "Predict the verdict from the file"
+    lang: text
+    code: |
+      $ python -m dlpkit check flows --policy policy/it-dev.json --environment dev
+      OK         acknowledge-it-request.json  (Microsoft 365 Outlook, SharePoint)
+      SUSPENDED  request-asset-lookup.json  (HTTP, SharePoint)
+                 mixed: connectors from different groups can't be used together:
+                 HTTP (Non-business) | SharePoint (Business)
+      OK         request-external-copy.json  (Microsoft 365 Outlook, SharePoint)
+      SUSPENDED  request-weather-note.json  (MSN Weather, Microsoft 365 Outlook, SharePoint)
+                 mixed: connectors from different groups can't be used together:
+                 MSN Weather (Non-business) | Microsoft 365 Outlook, SharePoint (Business)
+      2 flow(s) would be suspended
+    short: predict
+    narration: >
+      Our checker reads the flow files and the policy, and says what the service will say. Two of the four
+      demo flows would be suspended, with the groups that clash. It exits with a failure, so a pipeline can stop
+      before the flow ever reaches an environment.
+
+  - id: multi
+    type: code
+    heading: "Two policies: the strictest wins"
+    lang: text
+    code: |
+      $ python -m dlpkit check flows/request-weather-note.json \
+            --policy policy/it-dev.json --policy policy/baseline.json --environment dev
+      SUSPENDED  request-weather-note.json
+                 blocked: MSN Weather is blocked by 'MG Lab baseline'
+
+      # Learn: a block in any applicable policy wins. Otherwise connectors
+      # must be in the same group in every policy: 2 policies, up to 4 groups.
+    narration: >
+      Add a second policy that blocks M S N Weather, and the verdict changes from mixed to blocked. Learn says
+      that when several policies apply to an environment, a block in any of them wins. Otherwise two connectors
+      only mix if they sit in the same group in every policy, so the groups multiply. We reproduce Learn's
+      three policy example in a test.
+
+  - id: http
+    type: code
+    heading: "HTTP is Non-business until you say otherwise"
+    lang: text
+    code: |
+      $ python -m dlpkit check flows/request-asset-lookup.json --policy policy/it-dev.json
+      SUSPENDED  request-asset-lookup.json  (HTTP, SharePoint)
+                 mixed: ... HTTP (Non-business) | SharePoint (Business)
+
+      $ ... --what-if http=Business
+      OK         request-asset-lookup.json  (HTTP, SharePoint)
+
+      # Business HTTP can reach any URL. Learn: endpoint filtering (preview)
+      # allows only the URLs you list, but not dynamic values.
+    narration: >
+      The classic surprise is the H T T P action. Out of the box it sits in the default group, so a flow that
+      reads SharePoint and calls an internal A P I is suspended. A what if option tries moving H T T P to
+      business. That fixes the flow, and also lets every flow in the environment call any address. Learn
+      describes endpoint filtering to allow only listed U R Ls. It is a preview, and it does not apply to
+      environment variables or dynamic values.
+
+  - id: apply
+    type: screen
+    heading: "Classification as code"
+    image: screens/apply.jpg
+    bar: "Windows PowerShell 5.1 · Apply-DlpPolicy.ps1"
+    demo: >
+      Windows PowerShell 5.1 on the lab laptop, signed in with Add-PowerAppsAccount as labadmin (off camera).
+      Run .\Apply-DlpPolicy.ps1 -PolicyFile ..\policy\it-dev.json -WhatIf, then the same command without
+      WhatIf: MOVE lines for the connectors that differ, then Nothing to change on the third run. Mask the
+      tenant name if it appears.
+    narration: >
+      The classification lives in a file. This script compares it with the policy in the tenant, prints what
+      would move, and applies the difference with the admin module's own cmdlets. A second run has nothing to
+      change.
+
+  - id: script
+    type: code
+    heading: "Only what differs moves"
+    lang: powershell
+    code: |
+      $now = if ($current.ContainsKey($short)) { $current[$short] }
+             else { $effectiveDefault }
+      if ($now -ne $to) {
+          Write-Output ("MOVE     {0}  {1} -> {2}" -f $name, $now, $to)
+          $moves[$to] += $desired[$short]
+      }
+      ...
+      Add-ConnectorsToPolicy -PolicyName $policy.name `
+          -Classification $cls -Connectors $objects
+    narration: >
+      Learn has a quirk. Get D L P Policy does not return connectors that sit in the default group and were never
+      moved. So a connector that is not listed counts as default, and the script treats it that way. Then one
+      add connectors to policy call per group, only for what differs.
+
+  - id: reality
+    type: screen
+    heading: "Fix it, save it again"
+    image: screens/fixed.jpg
+    bar: "Power Automate · IT request with weather note"
+    demo: >
+      After the policy change from the previous capture (MSN Weather no longer in the way: removed from the
+      flow, or the connector moved to Business in the policy), reopen the flow in DEV, select Save: the flow
+      checker shows no data policy error, then turn the flow On. Also show python -m dlpkit check against the
+      exported policy (Export-DlpPolicy.ps1 output) giving the same verdict as the service. Mask environment
+      names and URLs.
+    narration: >
+      Back in the maker portal. After the fix, the same save passes the flow checker and the flow turns on. We
+      also export the real policy from the tenant and run the checker against it, to confirm the prediction
+      matches what the service decided.
+
+  - id: exfil
+    type: code
+    heading: "What a policy can not see"
+    lang: text
+    code: |
+      $ python -m dlpkit check flows --policy policy/it-dev.json --allowed-domain contoso.com
+      OK         request-external-copy.json  (Microsoft 365 Outlook, SharePoint)
+                 WARNING actions.Send_copy_to_partner: emailMessage/To sends to
+                 reports@fabrikam.example, outside contoso.com: a data policy can't see this
+    narration: >
+      One more limit. Learn says data policies are connector aware, but they do not control what a connection
+      is used for. A flow with only SharePoint and Outlook passes every policy, and can still email a list to
+      someone outside the company. So the checker also reads the literal recipients of send email actions.
+      Recipients that come from expressions are listed as not checked, never as safe.
+
+  - id: gotcha
+    type: bullets
+    short: gotcha
+    heading: "Gotcha: not instant, and not PowerShell 7"
+    bullets:
+      - "A policy change reaches existing flows later: usually within the hour"
+      - "Learn: up to 24 hours in the worst case"
+      - "The admin module needs Windows PowerShell 5.1"
+      - "Child flows are checked as a tree"
+      - "Our checker needs the policy and the flow files you give it"
+    narration: >
+      Honest gotchas. Saving a flow is checked at once, but a policy change reaches existing flows through a
+      background job, usually within the hour and up to a day in the worst case. The admin module needs Windows
+      PowerShell five point one, so our Pester tests use stand in cmdlets, and the demo runs the real ones. Child
+      flows are evaluated as a tree by the service, and our checker only reads the files you give it.
+
+  - id: recap
+    type: bullets
+    heading: "Four things to keep"
+    bullets:
+      - "One group per flow, blocked means blocked"
+      - "Predict the verdict before the save"
+      - "Classification in a file, applied by a script"
+      - "Policies don't see where the data goes"
+    narration: >
+      Keep four things. A flow lives in one group, and blocked means blocked. Predict the verdict from the file
+      before the save. Keep the classification in a file and apply it with a script. And remember that a policy
+      knows connectors, not destinations.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The checker, the scripts and their tests that need no tenant are on GitHub, and the complete guide is on
+      dev lad log dot com. Next in the series: A I Builder document processing. Subscribe so you don't miss it.

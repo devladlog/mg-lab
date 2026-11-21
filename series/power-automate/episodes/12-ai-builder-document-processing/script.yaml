@@ -1,0 +1,252 @@
+# DEVLADLOG Power Automate — episode 12 (draft: material built and tested locally, demo still to record)
+episode: 12
+slug: ai-builder-document-processing
+series_label: "POWER AUTOMATE"
+series_name: "DEVLADLOG Power Automate"
+file_prefix: "power-automate"
+title: "The model read it. Should you trust it?"
+subtitle: "AI Builder invoice processing: confidence scores, and the rules that decide what posts itself"
+voice: am_michael
+thumbnail_text: "READ 97%\nTRUST?\nAI BUILDER"
+youtube:
+  title: "AI Builder Invoice Processing: Confidence Scores and Triage | DEVLADLOG Power Automate #12"
+  tags: [Power Automate, AI Builder, invoice processing, document processing, confidence score, Copilot Credits, SharePoint, cloud flow, automation, Power Platform]
+sources:
+  - https://www.devladlog.com/articles/power-automate/2025-06-08-ai-builder-processing-complete-guide-2025/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Read at 97 percent. Wrong anyway."
+    sub: "AI Builder invoice processing"
+    short: hook
+    narration: >
+      AI Builder reads an invoice in seconds and gives every field a confidence score. A score is not a verdict.
+      In this episode we extract invoices with the prebuilt model, then let a flow decide which ones post by
+      themselves and which ones a person must see, with rules we can test on a laptop.
+
+  - id: model
+    type: bullets
+    heading: "What the prebuilt model returns"
+    bullets:
+      - "Invoice ID, vendor, dates, subtotal, tax, total"
+      - "A confidence score from 0 to 1 for each field"
+      - "Text and number versions of every amount"
+      - "Line items, payment details, key value pairs"
+      - "No decision. That part is yours"
+    narration: >
+      The prebuilt invoice model returns the invoice ID, vendor, dates, subtotal, tax and total, and more. Each
+      field comes with a confidence score between zero and one. Amounts and dates arrive twice, as the text
+      written on the page and as a standard number or date. The model decides nothing. It only reads.
+
+  - id: limits
+    type: bullets
+    heading: "What it will accept"
+    bullets:
+      - "PDF, JPEG or PNG"
+      - "20 megabytes at most"
+      - "Images from 50 to 10,000 pixels"
+      - "PDF pages up to 17 by 17 inches"
+      - "One invoice per page range"
+    narration: >
+      Learn lists the limits. The file must be a PDF, JPEG or PNG, under twenty megabytes. Images run from fifty
+      to ten thousand pixels, and a PDF page may be at most seventeen by seventeen inches. A page range must
+      contain one invoice. A file that breaks these rules costs you a failed run, so check first.
+
+  - id: preflight
+    type: code
+    heading: "Preflight before the flow"
+    lang: text
+    code: |
+      $ python -m invoicekit preflight samples/*
+      OK       invoice-clean.pdf
+      OK       invoice-mismatch.pdf
+      ERROR    P05 invoice-oversize.pdf page 1: 20.0 x 20.0 inches is over 17 x 17
+      OK       invoice-scan.png
+      ERROR    P06 invoice-tiny.png: 40 x 40 px is under the 50 x 50 minimum
+      OK       invoice-two-in-one.pdf
+                2 invoices in one file, one flow run each:
+                  Pages = 1     INV-2026-0412
+                  Pages = 2-3   INV-2026-0413
+    narration: >
+      Our checker reads the real file, not its name. An oversized PDF and a forty pixel image are refused with the
+      reason. A PDF that holds two invoices is not an error, but it is a trap, and the next scene shows why.
+
+  - id: pages
+    type: bullets
+    heading: "One invoice, one Pages value"
+    short: pages
+    bullets:
+      - "Pages takes 1 or 3-5"
+      - "Aim it at one invoice only"
+      - "A range with two invoices returns partial data"
+      - "Fewer pages cost less"
+    narration: >
+      The action has a Pages parameter. Learn says to aim it at one invoice, and warns that a range covering two
+      invoices returns partial data from both. It also lowers the cost, because you pay per page. Our checker
+      finds where each invoice starts and prints the Pages value to use.
+
+  - id: extract
+    type: screen
+    heading: "The extraction flow"
+    image: screens/extract.jpg
+    bar: "Power Automate · Extract invoice to staging list"
+    demo: >
+      make.powerautomate.com, environment DEV, signed in as alex.demo. A new cloud flow: SharePoint trigger When
+      a file is created in the Invoice Inbox library, Get file content, the AI Builder action Extract
+      information from invoices with the file content as the invoice file, then Create item in the Invoice
+      Extractions list with the values and confidence scores from the action. Mask the tenant name and the site
+      address.
+    narration: >
+      The flow is short. A file lands in the inbox library, the AI Builder action reads it, and one row goes to a
+      staging list with every value and its score. The model's output stays visible, and the decision lives in a
+      second flow.
+
+  - id: extractions
+    type: screen
+    heading: "Real invoices, real scores"
+    image: screens/extractions.jpg
+    bar: "SharePoint · Invoice Extractions"
+    demo: >
+      SharePoint list Invoice Extractions on the Finance site after dropping our sample files in the inbox: one
+      row per file with Invoice ID, Vendor, dates, Sub total, Total tax, Invoice total and the confidence
+      columns. Show the clean PDF with high scores next to the low quality scan with lower ones. Mask the
+      tenant name.
+    narration: >
+      Here are our sample files after a run. The clean PDF scores high on every field. The noisy scan reads
+      worse, and the lower scores tell you so. That is the signal we build the rules on.
+
+  - id: confidence
+    type: bullets
+    heading: "A score is not a verdict"
+    bullets:
+      - "Confidence is certainty, not correctness"
+      - "Threshold is your choice: ours is 0.8"
+      - "Every required field must pass"
+      - "Money has its own limits"
+      - "Duplicates are checked against posted invoices"
+    narration: >
+      Confidence tells you how sure the model is, not whether the invoice is right. Learn's own example switches
+      to a second model below zero point six five. We chose zero point eight, and every required field must
+      reach it. On top of that, an amount limit, a date check, a duplicate check, and the arithmetic.
+
+  - id: rules
+    type: code
+    heading: "Two rules in Python"
+    lang: python
+    code: |
+      sub, tax, total = _num(x.get("SubTotal")), _num(x.get("TotalTax")), _num(x.get("InvoiceTotal"))
+      if sub is not None and tax is not None and total is not None and abs(sub + tax - total) > cfg.tolerance + EPS:
+          d.reasons.append(Reason("MISMATCH", f"subtotal {sub:g} + tax {tax:g} is not total {total:g}"))
+      if total is not None and total > cfg.amount_limit:
+          d.reasons.append(Reason("OVERLIMIT", f"total {total:g} is over the limit {cfg.amount_limit:g}"))
+    narration: >
+      Here are two of the rules. If subtotal plus tax is not the total, the invoice goes to a person, even when
+      the model read every number correctly. And above the amount limit, a person always looks. The tiny epsilon
+      exists because a hundred plus twenty minus one twenty point zero one is not exactly one cent in floating
+      point.
+
+  - id: flow
+    type: code
+    heading: "The same decision, in the flow"
+    lang: text
+    code: |
+      Decision = if(or(Is_not_an_invoice, Is_duplicate), 'reject',
+        if(or(Has_missing_fields,
+              Has_low_confidence,
+              Total_does_not_add_up,
+              Is_over_the_limit,
+              Has_suspicious_dates),
+          'review', 'auto-post'))
+
+      Has_low_confidence = less(min(coalesce(InvoiceIdConf, 0), ...),
+                                float(parameters('Minimum confidence')))
+    narration: >
+      The flow holds the same rules as Compose actions, with the thresholds in environment variables. Our tests
+      run the flow in a simulator and the Python on the same cases, a grid of more than three hundred, and they
+      must agree. The service itself is only proven in the demo.
+
+  - id: triage
+    type: code
+    heading: "Decisions with reasons"
+    lang: text
+    code: |
+      $ python -m invoicekit triage extractions/*.json --today 2026-11-10
+      AUTO-POST  clean.json
+      REVIEW     low-confidence-total.json
+                 LOWCONF: confidence under 0.8: InvoiceDate, InvoiceTotal
+      REVIEW     total-mismatch.json
+                 MISMATCH: subtotal 170 + tax 34 is not total 250
+      REVIEW     over-limit.json
+                 OVERLIMIT: total 7320 is over the limit 5000
+      REVIEW     missing-vendor.json
+                 MISSING: missing: VendorName
+    narration: >
+      Every decision comes with its reasons. These rows are hand written mocks for the tests, labelled as such.
+      In the demo the rows come from the real model. Three outcomes: post it, send it to a person with the
+      reason, or reject it as a duplicate.
+
+  - id: decision
+    type: screen
+    heading: "Auto-post, or ask a person"
+    image: screens/decision.jpg
+    bar: "SharePoint · Invoice Extractions and Invoices"
+    demo: >
+      The Invoice Extractions list with the Decision column filled by the triage flow for each sample: auto-post
+      for the clean invoice, review for the mismatch and the scan, reject for a second upload of the same
+      invoice. Next to it the Invoices list with the one posted row, and the Outlook message to the reviewer
+      for a review row. Mask the tenant name and mailbox domain.
+    narration: >
+      And here is the second flow on the real tenant. The clean invoice posts to the Invoices list. The mismatch
+      and the scan go to the reviewer by email. A second upload of the same invoice is rejected, because it is
+      already posted.
+
+  - id: cost
+    type: screen
+    heading: "What it costs"
+    image: screens/cost.jpg
+    bar: "Power Automate · AI Builder activity"
+    demo: >
+      Power Automate, Automation Center, Monitor, AI Builder activity: the list of predicts from our sample run
+      with the consumption value for each, in Copilot Credits. Then the Power Platform admin center page for the
+      pay as you go billing plan linked to DEV. Mask the tenant name, subscription name and subscription ID.
+    narration: >
+      Learn prices invoice processing at eight Copilot Credits per page, which is eight cents on pay as you go.
+      The AI Builder activity page shows each run and its consumption. Pay as you go works for production and
+      sandbox environments, so check your environment type before you plan the demo.
+
+  - id: gotcha
+    type: bullets
+    short: gotcha
+    heading: "Gotcha: a good read of a bad invoice"
+    bullets:
+      - "The model can read a wrong total perfectly"
+      - "INV-001 and INV001 are two invoices to our check"
+      - "A poor scan shows up as low scores"
+      - "Our thresholds are choices, not Microsoft's"
+    narration: >
+      Honest gotchas. The model can read a wrong total with high confidence, so the arithmetic rule matters more
+      than the score. Our duplicate check compares exact invoice numbers, so a different spelling of the same
+      number slips through. And the thresholds are ours. Tune them on your own invoices, not on ours.
+
+  - id: recap
+    type: bullets
+    heading: "Four things to keep"
+    bullets:
+      - "Check the file before the model"
+      - "One invoice per Pages range"
+      - "Score, arithmetic, limits, duplicates"
+      - "Keep the decision out of the model flow"
+    narration: >
+      Keep four things. Check the file before you spend credits. Aim the Pages parameter at one invoice. Decide
+      on more than the score, with arithmetic, limits and duplicates. And keep the decision in its own flow,
+      where you can test it.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The checker, the sample invoices, the flow and the tests that need no tenant are on GitHub, and the
+      complete guide is on dev lad log dot com. Next in the series: business process flows. Subscribe so you
+      don't miss it.
