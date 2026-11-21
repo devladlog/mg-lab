@@ -1,0 +1,233 @@
+# DEVLADLOG Dynamics 365 — episode 07. Draft: screen scenes need the lab-tenant capture described in demo.md.
+episode: 7
+slug: dynamics-365-sales
+series_label: "DYNAMICS 365"
+series_name: "DEVLADLOG Dynamics 365"
+file_prefix: "dynamics-365"
+title: "Dynamics 365 Sales"
+subtitle: "From lead to closed-won, and the code that checks the pipeline"
+voice: am_michael
+thumbnail_text: "DYNAMICS 365\nSALES\nLEAD TO WON"
+youtube:
+  title: "Dynamics 365 Sales: Qualify Leads, Pipeline Hygiene, Close as Won with the Web API | DEVLADLOG Dynamics 365 #7"
+  tags: [Dynamics 365, Dynamics 365 Sales, Sales Hub, Dataverse, QualifyLead, WinOpportunity, opportunity, pipeline, Web API, Python]
+sources:
+  - https://www.devladlog.com/articles/dynamics-365/2025-10-08-dynamics-365-sales-complete-guide-2025/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "A pipeline you can trust"
+    sub: "Leads, opportunities, and the rules that keep the numbers honest"
+    short: hook
+    narration: >
+      Every sales forecast is only as good as the opportunities behind it. One with no close date, one with no
+      revenue, one that was due last month. In this episode we take a lead through Dynamics 365 Sales, qualify it
+      from code, check the pipeline for the records that make it lie, and close the deal as won. Everything runs
+      against the real Sales environment in our lab, with fictional customers and lab users only.
+
+  - id: flow
+    type: bullets
+    heading: "The path through Sales"
+    bullets:
+      - "Lead: Jamie at Contoso Retail asks for analytics"
+      - "Qualify: account, contact, opportunity"
+      - "Opportunity: value, close date, probability"
+      - "Close as won: an Opportunity Close activity"
+      - "Same Dataverse as episodes one to six"
+    narration: >
+      The path is the one you know. A lead comes in. Qualifying it creates an account, a contact and an
+      opportunity. The opportunity carries a value, a close date and a probability. And closing it as won creates a
+      close activity. It's all Dataverse, the same platform we've used for six episodes, just with the Sales tables
+      and actions installed. That's why this demo runs in the Sales trial environment and not in our development
+      environment: the lead and opportunity tables and these actions come with the Sales solution.
+
+  - id: lead
+    type: screen
+    heading: "The lead and its process"
+    image: screens/sales-lead-form.jpg
+    bar: "Sales Hub · Leads · Contoso Retail - analytics inquiry"
+    demo: >
+      Sales Hub as Alex Demo, the lead Contoso Retail - analytics inquiry open, Jamie Rivera, company Contoso Retail,
+      the Lead to Opportunity Sales Process bar at the Qualify stage. Mask tenant, org URL and avatar.
+    narration: >
+      Alex, our seller, has a new lead from Contoso Retail. The process bar says qualify. In the app that's a button.
+      Code can do the same, and do it with checks.
+
+  - id: doctor-code
+    type: code
+    heading: "Ask the service, don't assume"
+    lang: python
+    code: |
+      for el in root.iter():
+          if el.tag == EDM + "Action" and el.get("Name") in WANTED:
+              params = [(p.get("Name"), p.get("Type")) for p in el.findall(EDM + "Parameter")]
+              bound = el.get("IsBound") == "true"
+              actions[el.get("Name")] = {"bound": bound, "params": params[1:] if bound else params}
+
+      $ python3 -m salesctl doctor
+        action QualifyLead     bound to mscrm.lead; parameters: ...
+    narration: >
+      Before calling an action, we read its definition from the service. The doctor command parses the metadata
+      document and tells us whether qualify lead is bound to the lead and which parameters it takes. If Sales isn't
+      installed in the environment, the actions are simply missing and it says so.
+
+  - id: qualify-code
+    type: code
+    heading: "QualifyLead, with guardrails"
+    lang: python
+    code: |
+      def body(account, contact, opportunity, suppress_duplicates=False, status=3):
+          if not (account or contact or opportunity):
+              raise ValueError("qualifying must create at least one of account, contact, opportunity")
+          return {"CreateAccount": account, "CreateContact": contact, "CreateOpportunity": opportunity,
+                  "SuppressDuplicateDetection": suppress_duplicates, "Status": status}
+
+      if lead.get("statecode") != LEAD_OPEN:
+          raise ValueError("... qualifying twice is not a safe no-op")
+      api.post(f"leads({lead_id})/Microsoft.Dynamics.CRM.QualifyLead", payload)
+    narration: >
+      Qualifying is one action call. Create the account, the contact, the opportunity, each one a flag. Our wrapper
+      is a dry run until you say apply, refuses a lead that isn't open, and reads the lead back afterwards. Learn is
+      explicit that repeating a qualification isn't a safe no-op. And every opportunity needs an account or a
+      contact, so a call that creates none of the three is refused before it's sent.
+
+  - id: qualify
+    type: screen
+    heading: "Qualify from code"
+    image: screens/salesctl-qualify.jpg
+    bar: "Terminal · python -m salesctl qualify"
+    demo: >
+      Terminal against the Sales trial: salesctl leads --email jamie.rivera@contoso.example, then qualify with no flag
+      (dry run line), then --apply with the read-back line (statecode 1, opportunity, account, contact ids blurred),
+      then the same --apply again showing the refusal. Inset: Sales Hub with the new opportunity. Mask org URL and ids.
+    narration: >
+      Dry run first. Account, contact, opportunity. Then apply, and the lead reads back as qualified, with the
+      opportunity attached. Run it a second time and the tool refuses, instead of creating a second set of records.
+      That's the whole point of wrapping an action: the same call the button makes, with the questions you'd ask
+      yourself built in.
+
+  - id: weighted-code
+    type: code
+    heading: "Weighted value and hygiene rules"
+    lang: python
+    code: |
+      @property
+      def weighted(self) -> float:
+          return self.value * (self.probability or 0) / 100
+
+      if d.close is None:
+          out.append(Finding("error", "H002", d.name, "no estimated close date: it falls out of every forecast"))
+      elif d.close < today:
+          out.append(Finding("error", "H001", d.name, f"estimated close date {d.close} is ... in the past"))
+      if d.value <= 0:
+          out.append(Finding("error", "H003", d.name, "no estimated revenue: it counts for nothing"))
+    narration: >
+      The pipeline report is arithmetic. Estimated revenue times probability gives the weighted value. And a few
+      rules decide whether you can believe it: a close date in the past, no close date at all, no revenue. Those are
+      errors, and the command exits with a failure code, so a scheduled check can fail loudly.
+
+  - id: pipeline
+    type: screen
+    heading: "Pipeline and hygiene"
+    image: screens/salesctl-pipeline.jpg
+    bar: "Terminal · python -m salesctl pipeline · hygiene"
+    demo: >
+      Terminal against the Sales trial: salesctl pipeline (count, value, weighted by close month and by forecast
+      category), then salesctl hygiene with the real findings and the exit message. Keep any error lines. Blur company
+      names that look real.
+    narration: >
+      Here's the lab's open pipeline by close month and by forecast category, then the findings. Every line is a
+      record to fix before anyone trusts the number at the top.
+    short: pipeline
+
+  - id: schedule
+    type: code
+    heading: "A check that can fail a build"
+    lang: python
+    code: |
+      def cmd_hygiene(args, cfg, out=print) -> int:
+          deals = load_deals(args)
+          findings = pipeline.hygiene(deals, today(args), stale_days=cfg["stale_days"],
+                                      large_deal=cfg["large_deal"], soon_days=cfg["soon_days"])
+          for f in findings:
+              out(str(f))
+          errors = sum(f.level == "error" for f in findings)
+          return 1 if errors else 0
+
+      $ python3 -m salesctl hygiene --from-json ../sample/open-opportunities.json --now 2027-01-15
+      14 open opportunities: 3 error(s), 6 warning(s)
+    narration: >
+      Errors make the exit code one, warnings don't. Put the command in a scheduled pipeline and a pipeline with a
+      past close date turns the run red, on Monday morning, before the forecast meeting. The thresholds, thirty days
+      untouched and fifty thousand for a large deal, live in one small config file.
+
+  - id: gotcha
+    type: bullets
+    heading: "Gotchas Learn documents"
+    bullets:
+      - "Repeating a qualification is not a safe no-op"
+      - "Disqualify only works with no opportunity attached"
+      - "Every opportunity needs an account or a contact"
+      - "Closing creates an Opportunity Close activity"
+      - "Weighted value is not Sales Premium forecasting"
+    narration: >
+      A few things worth knowing. Repeating a qualification isn't safe. You can only disqualify a lead that has no
+      opportunity. Every opportunity needs an account or a contact. Closing creates an activity, not just a field
+      change. And our weighted value is plain arithmetic, not the forecasting in Sales Premium.
+    short: gotcha
+
+  - id: close-code
+    type: code
+    heading: "Close as won"
+    lang: python
+    code: |
+      close = {
+          "@odata.type": "Microsoft.Dynamics.CRM.opportunityclose",
+          "subject": "Won by salesctl",
+          "opportunityid@odata.bind": f"/opportunities({opportunity_id})",
+          "actualend": when.strftime("%Y-%m-%dT%H:%M:%SZ"),
+          "actualrevenue": revenue,
+      }
+      return {"Status": 3, "OpportunityClose": close}     # 3 Won; 4 Canceled and 5 Out-Sold for a loss
+    narration: >
+      Closing as won is another action. The body carries an opportunity close record with the actual revenue and
+      date, and the status reason: three for won. A loss uses canceled, or out-sold when you name a competitor. The
+      tool checks the opportunity is still open and reads the result back. A closed opportunity can't be closed
+      again, so the second run stops with a clear message instead of a stack trace from the server.
+
+  - id: won
+    type: screen
+    heading: "Won, and the forecast category follows"
+    image: screens/sales-closed-won.jpg
+    bar: "Sales Hub · Opportunities · Closed Opportunities"
+    demo: >
+      Terminal: salesctl close <id> --won --revenue 48000 --apply with its read-back line (now Won, forecast category
+      Won). Then Sales Hub, Closed Opportunities view: the opportunity as Won with actual revenue 48,000, and Related,
+      Activities, the Opportunity Close activity. Blur ids, mask org URL.
+    narration: >
+      Closed as won, with forty eight thousand in actual revenue. In the app, the forecast category flipped to won by
+      itself, as Learn describes, and the close activity is on the timeline. That's the deal that becomes a project
+      request in our Dataverse environment.
+
+  - id: recap
+    type: bullets
+    heading: "Four rules"
+    bullets:
+      - "Ask the service which actions it has"
+      - "Dry run first, verify after"
+      - "Keep close date, revenue and probability honest"
+      - "Fail a scheduled check on bad pipeline data"
+    narration: >
+      Four rules. Ask the service which actions it has. Dry run first and verify after. Keep close date, revenue and
+      probability honest. And let a scheduled check fail when the pipeline data is bad. None of this replaces the
+      Sales Hub app. It's the part you can test, review in a pull request and run every Monday without opening a
+      browser.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The tool, the sample pipeline and all twenty three tests are on GitHub, and the complete guide to Dynamics 365
+      Sales is on devladlog dot com. Next episode, Dynamics 365 Customer Service. Subscribe so you don't miss it.

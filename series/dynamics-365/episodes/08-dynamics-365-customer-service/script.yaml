@@ -1,0 +1,210 @@
+# DEVLADLOG Dynamics 365 — episode 08. Draft: screen scenes need the lab-tenant capture described in demo.md.
+episode: 8
+slug: dynamics-365-customer-service
+series_label: "DYNAMICS 365"
+series_name: "DEVLADLOG Dynamics 365"
+file_prefix: "dynamics-365"
+title: "Dynamics 365 Customer Service"
+subtitle: "Cases, SLAs, and the code that tells you which ones are late"
+voice: am_michael
+thumbnail_text: "DYNAMICS 365\nCUSTOMER SERVICE\nCASES + SLA"
+youtube:
+  title: "Dynamics 365 Customer Service: Cases, SLA KPIs, Triage and CloseIncident with the Web API | DEVLADLOG Dynamics 365 #8"
+  tags: [Dynamics 365, Dynamics 365 Customer Service, Customer Service Hub, Dataverse, cases, SLA, CloseIncident, Web API, Python, support]
+sources:
+  - https://www.devladlog.com/articles/dynamics-365/2025-10-12-dynamics-365-customer-service-complete-guide-2025/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Which cases are late?"
+    sub: "Cases, SLAs, and a second opinion from code"
+    short: hook
+    narration: >
+      A customer has been waiting four hours for a first answer and nobody has noticed. In this episode, Contoso
+      Retail, the customer from our sales episode, starts raising cases in Dynamics 365 Customer Service. We set up
+      an SLA, then check the queue from code two ways: with our own simple rules, and with what the platform's SLA
+      engine actually decided. Then we resolve a case with the real action.
+
+  - id: where
+    type: bullets
+    heading: "Where Customer Service lives"
+    bullets:
+      - "Cases: the incident table in Dataverse"
+      - "Customer Service Hub, installed with customer engagement apps"
+      - "Needs the Customer service app access role"
+      - "Dataverse-only environments can't host these apps"
+      - "So: the Sales trial environment, not DEV"
+    narration: >
+      Cases are rows in the incident table, in Dataverse, like everything else in this series. Learn says Customer
+      Service Hub is installed automatically in environments that have customer engagement apps, and users need the
+      customer service app access role. A Dataverse only environment can't host these apps, which is why this demo
+      runs in our Sales trial environment and not in the development one. Everything you'll see runs against the real
+      environment, with fictional customers and lab users only.
+
+  - id: sla-config
+    type: screen
+    heading: "The SLA behind the cases"
+    image: screens/service-sla-config.jpg
+    bar: "Copilot Service admin center · Service terms · Contoso standard"
+    demo: >
+      Copilot Service admin center, Operations, Service terms: the two SLA KPIs (First response on FirstResponseByKPI,
+      Resolve on ResolveByKPI), then the SLA Contoso standard, entity Case, type Enhanced, with its SLA items, active
+      and set as default. Mask tenant and user.
+    narration: >
+      First the SLA. Two KPIs, first response and resolve, and one enhanced SLA with items for each. The step people
+      miss is the last one: set it as the default. Learn is clear that without a default SLA, none is applied to a
+      case.
+
+  - id: doctor-code
+    type: code
+    heading: "Ask the environment first"
+    lang: python
+    code: |
+      inc = entities.get("incident")
+      if inc is not None:
+          kpi_lookups = sorted(n.get("Name") for n in inc.findall(EDM + "NavigationProperty")
+                               if n.get("Name", "").lower().endswith("kpiid"))
+
+      $ python3 -m casekit doctor
+        table incident            present
+        action CloseIncident      unbound; parameters: IncidentResolution, Status
+        case KPI lookups          firstresponsebykpiid, resolvebykpiid
+    narration: >
+      Before we query anything, the doctor command reads the environment's metadata. Are the case tables there? Is
+      the close incident action defined, and with which parameters? And which S L A lookups does the case actually
+      have? We don't guess names, we read them. If Customer Service isn't installed, the check fails right there, with
+      a message, before anything else can go wrong.
+
+  - id: triage-code
+    type: code
+    heading: "Our own rule: three columns"
+    lang: python
+    code: |
+      first, resolve = cfg["first_response_hours"][p], cfg["resolve_hours"][p]
+      if not c.first_response_sent and age > first:
+          out.append(Finding("error", "C002", label, f"no first response after {age:.1f} h (target {first} h)"))
+      if age > resolve:
+          out.append(Finding("error", "C001", label, f"open {age:.0f} h, resolve target {resolve} h"))
+      elif age > resolve * cfg["due_soon_ratio"] and c.status != 2:
+          out.append(Finding("warning", "C003", label, f"{age / resolve:.0%} of the {resolve} h resolve target used"))
+    narration: >
+      Our own rule is simple. Priority gives a target in hours. No first response after the target is an error.
+      Open longer than the resolve target is an error. Eighty percent used is a warning. It uses wall clock hours
+      and ignores business hours, so it's a cheap second opinion, not a replacement for the SLA. The targets live in
+      one small config file, so the team can argue about the numbers without touching code. The command exits with a
+      failure code when there are errors, so a schedule can raise the alarm for you.
+
+  - id: triage
+    type: screen
+    heading: "Triage, and what the platform says"
+    image: screens/casekit-triage.jpg
+    bar: "Terminal · python -m casekit triage · sla"
+    demo: >
+      Terminal against the lab: casekit seed with its plus lines, then casekit triage (summary by priority and the
+      findings, with the exit message) and casekit sla (first response and resolve KPI status per case). Keep what
+      it really prints. If nothing is late yet, say so, or show triage on the offline sample and label it. Blur ids.
+    narration: >
+      Five demo cases for Contoso Retail, created only if they're missing. The triage view groups open cases by
+      priority and lists what's late by our rules. Then the S L A view shows what the engine says for the same cases:
+      status per K P I, in progress, nearing noncompliance, succeeded.
+
+  - id: sla-code
+    type: code
+    heading: "Read the KPI instance, not the date columns"
+    lang: python
+    code: |
+      def query(kpis=KPIS) -> str:
+          exp = ",".join(f"{k}($select={KPI_SELECT})" for k in kpis)
+          return ("incidents?$select=ticketnumber,title,prioritycode&$filter=statecode eq 0&"
+                  f"$expand={exp}&$orderby=createdon asc")
+
+      KPI_STATUS = {0: "In Progress", 1: "Noncompliant", 2: "Nearing Noncompliance",
+                    3: "Paused", 4: "Succeeded", 5: "Canceled"}
+    narration: >
+      Here's a trap. You'd expect the case's first response by and resolve by columns to hold the deadlines. In
+      Unified Interface S L As, Learn says they aren't filled by default, because a case can have several K P Is.
+      The truth is in the S L A K P I instance the case points to, with its status, warning time and failure time.
+      So we expand those two lookups. If the environment refuses the expand, the tool says so and points you back
+      to the doctor, instead of printing an empty report that looks like good news.
+
+  - id: case-form
+    type: screen
+    heading: "What the agent sees"
+    image: screens/service-case-form.jpg
+    bar: "Customer Service Hub · Cases · Cannot sign in to the store portal"
+    demo: >
+      Customer Service Hub as Alex Demo: the High-priority case [MGL demo] Cannot sign in to the store portal open,
+      customer Contoso Retail, the SLA timers for first response and resolve visible. Mask tenant and avatar.
+    narration: >
+      And this is Alex, the agent, with the same case open. The timers on the form come from the same K P I
+      instances we just queried. One platform feature, two views of it.
+
+  - id: gotcha
+    type: bullets
+    heading: "Gotchas Learn documents"
+    bullets:
+      - "No default SLA: no SLA on the case"
+      - "First Response By and Resolve By aren't filled by default"
+      - "Pause and resume cancels the KPI instance, makes a new one"
+      - "The case number can't be modified"
+      - "CloseIncident requires Customer Service"
+    short: gotcha
+    narration: >
+      The gotchas, all from Learn. No default SLA, no SLA on the case. The case date columns aren't filled by
+      default. Pausing and resuming a K P I cancels the instance and creates a new one, so a case can have several.
+      The case number can't be modified, so our seed matches by title. And the close incident action needs Customer
+      Service installed.
+
+  - id: resolve-code
+    type: code
+    heading: "Resolve with CloseIncident"
+    lang: python
+    code: |
+      res = {"@odata.type": "Microsoft.Dynamics.CRM.incidentresolution", "subject": subject,
+             "incidentid@odata.bind": f"/incidents({case_id})"}
+      payload = {"IncidentResolution": res, "Status": 5}      # 5 Problem Solved, 1000 Information Provided
+
+      if case.get("statecode") != STATE_ACTIVE:
+          raise ValueError(f"{case.get('ticketnumber')} is not active")
+      api.post("CloseIncident", payload)
+    narration: >
+      Resolving is the close incident action. A resolution record with a subject and the case, and a status:
+      five, problem solved, or one thousand, information provided. The wrapper checks the case is still active, is a
+      dry run unless you say apply, and reads the state back.
+
+  - id: resolve
+    type: screen
+    heading: "Resolved, and the KPI succeeds"
+    image: screens/casekit-resolve.jpg
+    bar: "Terminal · python -m casekit resolve · Customer Service Hub"
+    demo: >
+      Terminal: casekit resolve <id> dry run, then --apply with the read-back line (statecode 1, statuscode 5), then
+      casekit sla. Then Customer Service Hub: the case as Resolved with the case resolution activity on the timeline.
+      Blur ids, mask org URL.
+    narration: >
+      Dry run, apply, and the case reads back resolved. In the app, it's closed with a resolution activity on the
+      timeline, the same thing the resolve button does. If the success criteria were met, the K P I shows as
+      succeeded. And because the wrapper refuses a case that's already resolved, running it twice is harmless.
+    short: resolve
+
+  - id: recap
+    type: bullets
+    heading: "Four rules"
+    bullets:
+      - "Set a default SLA, or nothing is applied"
+      - "Read the SLA KPI instance, not the case date columns"
+      - "Keep a cheap second opinion on late cases"
+      - "Wrap actions: dry run first, verify after"
+    narration: >
+      Four rules. Set a default S L A, or nothing is applied. Read the K P I instance, not the case date columns.
+      Keep a cheap second opinion on late cases. And wrap actions with a dry run first and a check afterwards.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The tool, the sample cases and all eighteen tests are on GitHub, and the complete guide to Dynamics 365
+      Customer Service is on devladlog dot com. Next episode, Power Apps portal integration. Subscribe so you don't
+      miss it.
