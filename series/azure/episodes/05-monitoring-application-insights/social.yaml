@@ -1,0 +1,92 @@
+episode: 5
+series: "DEVLADLOG Azure"
+status: draft-hold-for-review
+ai_label: true
+youtube_url: "{YOUTUBE_URL}"
+linkedin_company:
+  text: |
+    Your API returns 400 for a bad order, and Application Insights calls it a failed request. Your queries count rows, but sampling kept one row in ten. And the alert fires on noise.
+
+    Episode 5 of DEVLADLOG Azure instruments an orders API on .NET 10 with OpenTelemetry:
+    - A custom span, plus an unsampled counter split by channel and never by customer
+    - A processor that stops 400, 404 and 422 from counting as failures, while 500s still do
+    - KQL that counts with sum(ItemCount) so sampling cannot skew it, with every query file type-checked in the build
+    - Availability, failed-request and failure-ratio alerts written in Bicep, with Entra-only ingestion
+    - 43 tests that run without Azure
+
+    Then we break the app on purpose and watch the alerts fire.
+
+    Watch the episode: {YOUTUBE_URL}
+    Code: {REPO_URL}
+    Written guide: {BLOG_URL}
+
+    Narration uses an AI voice.
+
+    #Azure #ApplicationInsights #OpenTelemetry #KQL #DotNet
+linkedin_personal:
+  text: |
+    When sampling keeps one request in ten, each stored row in Application Insights carries an item count of ten. If your alert query uses count(), it is counting the wrong thing.
+
+    For episode 5 of DEVLADLOG Azure I used sum(ItemCount), and I put every KQL file through a type-check in the test run, so a misspelled column fails the build instead of failing at 3 a.m.
+
+    Alert on metrics, diagnose with traces.
+
+    Full episode: {YOUTUBE_URL}
+
+    Narration uses an AI voice.
+
+    #Azure #KQL #ApplicationInsights
+facebook:
+  text: |
+    Is your monitoring telling you the truth?
+
+    In the new DEVLADLOG Azure episode we set up Application Insights with OpenTelemetry on a .NET 10 API. We make sure a bad order (a 400) is not counted as an outage, alert on numbers that sampling cannot touch, and then break the app on purpose to see the alerts fire.
+
+    Watch it here: {YOUTUBE_URL}
+
+    Narration uses an AI voice.
+
+    #Azure #ApplicationInsights #OpenTelemetry
+shorts:
+  - id: hook
+    youtube_short_title: "Application Insights calls your 400 a failure. Sampling skews counts too #Shorts"
+    instagram_reel:
+      caption: |
+        Your API returns 400 for a bad order, and Application Insights calls it a failed request. Your queries count rows, but sampling kept one row in ten. And your alert fires on noise.
+
+        In this episode we instrument an API with OpenTelemetry, alert on numbers that sampling can't touch, and test our KQL before it runs at 3 a.m.
+
+        Full episode: link in bio
+
+        #Azure #ApplicationInsights #OpenTelemetry #KQL
+      cover_text: "Is it up? Is it right?"
+    tiktok:
+      caption: "A 400 is not an outage, and sampling means count() lies. We fix both in Application Insights with OpenTelemetry and test the KQL. #Azure #ApplicationInsights #OpenTelemetry"
+  - id: sampling
+    youtube_short_title: "KQL tip: count with sum(ItemCount), not count(), when sampling is on #Shorts"
+    instagram_reel:
+      caption: |
+        When sampling keeps one request in ten, each stored row carries an item count of ten. So count with sum of ItemCount, never with count().
+
+        This query feeds the failure ratio alert and ignores windows with fewer than twenty requests. Every query file is type-checked against the workspace schema, so a misspelled column fails the build.
+
+        Full episode: link in bio
+
+        #Azure #KQL #ApplicationInsights #AzureMonitor
+      cover_text: "sum(ItemCount), not count()"
+    tiktok:
+      caption: "Sampling kept 1 row in 10? Each row has ItemCount = 10. Use sum(ItemCount), never count(), in KQL alerts. #Azure #KQL #ApplicationInsights"
+  - id: gotcha
+    youtube_short_title: "ExportTarget.None doesn't mean no exporter: 6 tests, zero spans #Shorts"
+    instagram_reel:
+      caption: |
+        With no connection string, my first draft set the exporter target to None. Six telemetry tests failed with zero spans.
+
+        None does not mean no exporter. It means no pipeline at all, so even the in-memory exporter the tests had added got nothing. Locally the app now uses the Console exporter, and you see every span in the terminal.
+
+        Full episode: link in bio
+
+        #Azure #OpenTelemetry #DotNet #ApplicationInsights
+      cover_text: "None means nothing"
+    tiktok:
+      caption: "Gotcha: ExportTarget.None doesn't switch the exporter off, it switches telemetry off. 6 tests failed with zero spans. Use Console locally. #Azure #OpenTelemetry #DotNet"

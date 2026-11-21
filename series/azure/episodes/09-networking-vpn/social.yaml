@@ -1,0 +1,91 @@
+episode: 9
+series: "DEVLADLOG Azure"
+status: draft-hold-for-review
+ai_label: true
+youtube_url: "{YOUTUBE_URL}"
+linkedin_company:
+  text: |
+    An internal service should have no public address, no open port, and nothing for a scanner to find. Episode 9 of DEVLADLOG Azure builds the network that lets a laptop reach it anyway, through a point-to-site VPN.
+
+    What the episode builds:
+    - Hub and spoke: the VPN gateway in the hub, one small Linux VM with a private address only in the spoke
+    - Peering with gateway transit, written as two directional Bicep resources
+    - A network security group with one allow rule from the VPN client pool, then deny
+    - Certificates made with OpenSSL, with the private keys kept on the laptop
+    - An address plan checked in code before anything is deployed, so overlapping ranges fail in a second instead of after a long gateway deployment
+    - Network Watcher IP flow verify and next hop for when it does not work
+
+    Watch the episode: {YOUTUBE_URL}
+    Code: {REPO_URL}
+    Written guide: {BLOG_URL}
+
+    Narration uses an AI voice.
+
+    #Azure #AzureVPN #AzureNetworking #Bicep #NetworkSecurity
+linkedin_personal:
+  text: |
+    Overlapping address ranges are the oldest way to break a hybrid network, and you usually find out after the gateway deployment, which can take a long time.
+
+    For episode 9 of DEVLADLOG Azure I made the address plan a JSON file and wrote a checker for the rules Microsoft Learn documents: five reserved addresses per subnet, a GatewaySubnet of /27 or larger, and no overlaps between networks that connect, including the VPN client pool.
+
+    A bad plan now fails in a second, before anything is deployed.
+
+    Episode: {YOUTUBE_URL}
+
+    Narration uses an AI voice.
+
+    #Azure #AzureVPN #Bicep
+facebook:
+  text: |
+    How do you reach a server that has no public address at all?
+
+    In the new DEVLADLOG Azure episode we build a hub and spoke network with a point-to-site VPN gateway, a Linux VM with a private IP only, and a network security group with a single allow rule. We also check the address plan in code first, so overlapping ranges get caught early.
+
+    Watch it here: {YOUTUBE_URL}
+
+    Narration uses an AI voice.
+
+    #Azure #AzureVPN #AzureNetworking
+shorts:
+  - id: hook
+    youtube_short_title: "A server with no public address, reached from my laptop (Azure VPN) #Shorts"
+    instagram_reel:
+      caption: |
+        The orders service has an internal side that must never face the internet. No public address, no open port, nothing for a scanner to find.
+
+        In this episode we set up a point-to-site VPN gateway so a laptop can reach it anyway, and we look at which settings make that work and which one silently breaks it.
+
+        Full episode: link in bio
+
+        #Azure #AzureVPN #AzureNetworking #Bicep
+      cover_text: "No public IP. Still reachable."
+    tiktok:
+      caption: "A VM with no public IP, reached from a laptop through an Azure point-to-site VPN. Hub and spoke, gateway transit, one NSG allow rule. #Azure #AzureVPN #Bicep"
+  - id: peering
+    youtube_short_title: "Azure peering gateway transit: miss one half and the spoke has no route #Shorts"
+    instagram_reel:
+      caption: |
+        Peering is directional, so each direction is its own resource in Bicep. The hub allows gateway transit. The spoke says to use the remote gateway.
+
+        Miss either half and the spoke simply has no route to your VPN clients. Microsoft Learn also says gateway transit does not work with the Basic gateway SKU, and the spoke must not have a gateway of its own.
+
+        Full episode: link in bio
+
+        #Azure #AzureVPN #VNetPeering #Bicep
+      cover_text: "Peering needs two halves"
+    tiktok:
+      caption: "Azure VNet peering is directional. Hub: allowGatewayTransit. Spoke: useRemoteGateways. Miss either half and the spoke has no route to VPN clients. #Azure #AzureVPN #Bicep"
+  - id: gotcha
+    youtube_short_title: "Changed Azure peering? Re-download the VPN client or lose routes #Shorts"
+    instagram_reel:
+      caption: |
+        Microsoft Learn says that after you create or change peering, Windows clients must download and install the VPN client package again, or they keep the old routes.
+
+        The symptom is a silent timeout, not an error. Our script regenerates the package for that reason. One limit: this episode is point-to-site only, with no site-to-site tunnel.
+
+        Full episode: link in bio
+
+        #Azure #AzureVPN #AzureNetworking #VNetPeering
+      cover_text: "Silent timeout, no error"
+    tiktok:
+      caption: "Changed VNet peering? Windows VPN clients keep the old routes until you download and install the client package again. The symptom is a silent timeout. #Azure #AzureVPN #AzureNetworking"

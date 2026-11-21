@@ -1,0 +1,91 @@
+episode: 6
+series: "DEVLADLOG Azure"
+status: draft-hold-for-review
+ai_label: true
+youtube_url: "{YOUTUBE_URL}"
+linkedin_company:
+  text: |
+    The bill is decided at deploy time. The lab profile from our earlier episode costs about 25 euros a month before anyone sends a request. The prod profile costs 246. Both numbers come from the same template, and both are knowable before you deploy.
+
+    Episode 6 of DEVLADLOG Azure covers three moments to save money:
+    - Before deploy: a Python tool prices the what-if with the public Azure Retail Prices API and exits 1 when the month is over budget
+    - While running: a Bicep budget filtered by workload tag, with actual and forecast thresholds
+    - After: Resource Graph queries find the unused plan, public IP and disks, each with a monthly price
+    - 51 tests that run without Azure
+
+    Along the way: why a zero-row answer from the price API must never be treated as zero euros.
+
+    Watch the episode: {YOUTUBE_URL}
+    Code: {REPO_URL}
+    Written guide: {BLOG_URL}
+
+    Narration uses an AI voice.
+
+    #Azure #FinOps #CostManagement #Bicep #AzureResourceGraph
+linkedin_personal:
+  text: |
+    My first cost estimator for episode 6 of DEVLADLOG Azure had a quiet bug. I filtered the Azure Retail Prices API on the ARM SKU name for an App Service B1 plan. The API answered with an empty list, and an estimator that sums whatever comes back would have said zero euros.
+
+    For App Service that field is empty for B1. So the tool now demands exactly one price row per question. Zero rows or two, and it stops with exit code 2.
+
+    A tool that can't price something should say so, not guess.
+
+    Episode: {YOUTUBE_URL}
+
+    Narration uses an AI voice.
+
+    #Azure #FinOps #Python
+facebook:
+  text: |
+    What will this Azure deployment cost, before you deploy it?
+
+    In the new DEVLADLOG Azure episode we price a deployment from its what-if using the public Azure Retail Prices API, fail the pipeline when it's over budget, set a budget by tag, and then hunt down the leftovers that were still running after the project ended.
+
+    Watch it here: {YOUTUBE_URL}
+
+    Narration uses an AI voice.
+
+    #Azure #FinOps #CostManagement
+shorts:
+  - id: hook
+    youtube_short_title: "Azure lab ~25 EUR/month, prod 246: both known before you deploy #Shorts"
+    instagram_reel:
+      caption: |
+        A lab profile costs about 25 euros a month before anyone sends a single request. The prod profile costs 246. Both numbers come from the same template, and both are knowable before you deploy.
+
+        In this episode we price a deployment from its what-if, gate it on a budget, and then hunt down what was left running after the project ended.
+
+        Full episode: link in bio
+
+        #Azure #FinOps #CostManagement #Bicep
+      cover_text: "Price it before you deploy"
+    tiktok:
+      caption: "Same Bicep template: about 25 EUR/month for lab, 246 for prod. You can know that before deploying by pricing the what-if. #Azure #FinOps #Bicep"
+  - id: gotcha
+    youtube_short_title: "Azure Retail Prices API: zero rows is not zero euros #Shorts"
+    instagram_reel:
+      caption: |
+        My first query filtered on the ARM SKU name, B1. The API answered with an empty list, and an estimator that sums whatever comes back would have said zero euros.
+
+        For App Service that field is empty for B1, and the SKU name alone returns both Linux and Windows rows. So the tool demands exactly one row per question. Zero rows, or two, and it stops with exit code 2.
+
+        Full episode: link in bio
+
+        #Azure #FinOps #CostManagement #Python
+      cover_text: "Zero rows is not 0 EUR"
+    tiktok:
+      caption: "Gotcha: the Azure Retail Prices API returns an empty list for App Service B1 if you filter on armSkuName. A naive estimator says 0 EUR. Demand exactly one row. #Azure #FinOps #Python"
+  - id: waste
+    youtube_short_title: "Find forgotten Azure resources with Resource Graph, priced per month #Shorts"
+    instagram_reel:
+      caption: |
+        Resource Graph finds the leftovers: a plan whose apps are gone, an IP attached to nothing, and two loose disks.
+
+        But look at the last line. An empty managed disk has no storage allocated until it is first used, so it costs nothing. The disk left behind by a deleted VM does. Same query result, different bill.
+
+        Full episode: link in bio
+
+        #Azure #FinOps #AzureResourceGraph #CostManagement
+      cover_text: "Leftovers, with a price"
+    tiktok:
+      caption: "Resource Graph finds the unused plan, loose IP and unattached disks left after a project. An empty never-used disk costs 0, an orphaned OS disk doesn't. #Azure #FinOps #KQL"

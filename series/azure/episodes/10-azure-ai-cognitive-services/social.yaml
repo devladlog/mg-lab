@@ -1,0 +1,92 @@
+episode: 10
+series: "DEVLADLOG Azure"
+status: draft-hold-for-review
+ai_label: true
+youtube_url: "{YOUTUBE_URL}"
+linkedin_company:
+  text: |
+    Seven support tickets arrive. One has a full card number in plain text, another is furious, and three are not even in English.
+
+    Episode 10 of DEVLADLOG Azure builds a small .NET app that triages them with Azure AI Language, using no keys at all:
+    - Order matters: detect the language, redact personal data, then score sentiment on the redacted text only, so the raw card number goes to exactly one call
+    - The service's limits (documents per request, characters per document) written as constants with tests
+    - A Language resource on the free tier with key access disabled, so Microsoft Entra ID is the only way in
+    - One narrow role, Cognitive Services Language Reader, instead of a key
+    - Routing as a plain, unit-tested function: a card or bank number goes to security review, strong negative sentiment escalates
+
+    We also say what we did not cover: Azure OpenAI, document analysis, custom models, private endpoints and the Standard tier.
+
+    Watch the episode: {YOUTUBE_URL}
+    Code: {REPO_URL}
+    Written guide: {BLOG_URL}
+
+    Narration uses an AI voice.
+
+    #Azure #AzureAI #EntraID #DotNet #Bicep
+linkedin_personal:
+  text: |
+    A rule from episode 10 of DEVLADLOG Azure that I now apply to any text pipeline: redact before you analyze.
+
+    The app detects the language, redacts personal data, and only then scores sentiment, on the redacted text. The raw card number goes to exactly one call, and no log or later service ever sees it. A test checks that the sentiment requests contain no raw email or card.
+
+    The service gives signals. Our own unit-tested code makes the routing decision.
+
+    Episode: {YOUTUBE_URL}
+
+    Narration uses an AI voice.
+
+    #Azure #AzureAI #DotNet
+facebook:
+  text: |
+    A customer pastes a card number into a support ticket. What happens next?
+
+    In the new DEVLADLOG Azure episode a small .NET app reads tickets with Azure AI Language. It redacts personal data first, scores the mood on the redacted text, and routes each ticket. The service has key access switched off, so only a Microsoft Entra ID identity can call it.
+
+    Watch it here: {YOUTUBE_URL}
+
+    Narration uses an AI voice.
+
+    #Azure #AzureAI #EntraID
+shorts:
+  - id: hook
+    youtube_short_title: "A customer pasted a card number into a ticket. Azure AI Language, no keys #Shorts"
+    instagram_reel:
+      caption: |
+        Seven support tickets arrive. One has a full card number in plain text, another is furious, and three are not even in English.
+
+        A small .NET app reads them with Azure AI Language: it redacts personal data first, scores the mood on the redacted text, and routes each ticket. And the service has no keys at all.
+
+        Full episode: link in bio
+
+        #Azure #AzureAI #EntraID #DotNet
+      cover_text: "Card number in a ticket"
+    tiktok:
+      caption: "A card number in a support ticket? Azure AI Language redacts it first, then scores sentiment on the redacted text. No keys, Entra ID only. #Azure #AzureAI #DotNet"
+  - id: router
+    youtube_short_title: "Routing support tickets: the AI gives signals, your code decides #Shorts"
+    instagram_reel:
+      caption: |
+        The service gives us signals, our code makes the decision. A card or bank number always wins and goes to security review. Then strong negative sentiment escalates, then the language picks the queue.
+
+        It is a pure function with unit tests, so the model can change without the rules becoming a mystery.
+
+        Full episode: link in bio
+
+        #Azure #AzureAI #DotNet #UnitTesting
+      cover_text: "Signals in, rules out"
+    tiktok:
+      caption: "AI gives signals, your code decides. Card or bank number goes to security review, strong negative sentiment escalates. A pure function with unit tests. #Azure #AzureAI #DotNet"
+  - id: gotcha
+    youtube_short_title: "Deleted an Azure AI resource? The name is blocked for 48 hours #Shorts"
+    instagram_reel:
+      caption: |
+        Per Microsoft Learn, once you delete one of these resources you can't create another with the same name for 48 hours, unless you purge it. Purging with the Contributor role needs that role at subscription level.
+
+        The free tier allows one per subscription, so a forgotten soft-deleted resource can block your next demo. Our teardown script deletes the group, then purges.
+
+        Full episode: link in bio
+
+        #Azure #AzureAI #Bicep #DevOps
+      cover_text: "Deleted is not gone"
+    tiktok:
+      caption: "Deleted an Azure AI Language resource? It's soft-deleted and the name is reserved for 48 hours until you purge it. The free tier allows only one. #Azure #AzureAI #Bicep"

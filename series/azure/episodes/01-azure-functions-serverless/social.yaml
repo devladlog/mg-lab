@@ -1,0 +1,88 @@
+episode: 1
+series: "DEVLADLOG Azure"
+status: draft-hold-for-review
+ai_label: true
+youtube_url: "{YOUTUBE_URL}"
+linkedin_company:
+  text: |
+    Support for the in-process model of .NET Azure Functions ended on 10 November 2026, and .NET 10 does not run on the Linux Consumption plan at all.
+
+    In episode 1 of DEVLADLOG Azure we build a serverless order intake the current way:
+    - .NET 10, isolated worker, Flex Consumption plan
+    - An HTTP function that answers 202 or 400 and only queues valid orders
+    - A queue function that prices the order and writes it to blob storage, with the order id as the blob name so a retry overwrites instead of duplicating
+    - Retries, then the poison queue, with a third function that turns it into an error you can alert on
+    - Managed identity everywhere, storage account keys disabled
+
+    33 unit tests run without a Functions host, and the Bicep, tests and deploy scripts are in the public repo ({REPO_URL}).
+
+    Watch the full episode: {YOUTUBE_URL}
+
+    Narration uses an AI voice.
+
+    #Azure #AzureFunctions #DotNet #Serverless #Bicep
+linkedin_personal:
+  text: |
+    My first draft of a queue-triggered function compiled, and the unit tests passed. It still would not have worked.
+
+    I had bound the trigger to the SDK queue message type to log the dequeue count, and used {OrderId} in the blob output path. Microsoft Learn is clear: payload properties in binding expressions do not work with SDK types. Fix: bind a plain record, read the dequeue count from binding data, and add a test that fails if anyone switches it back.
+
+    Episode 1 of DEVLADLOG Azure covers that and the rest of a .NET 10 Flex Consumption order intake: {YOUTUBE_URL}
+
+    Narration uses an AI voice.
+
+    #Azure #AzureFunctions #DotNet
+facebook:
+  text: |
+    How do you build a serverless order intake on Azure Functions in 2026? .NET 10, the isolated worker and Flex Consumption, because in-process support has ended.
+
+    The new DEVLADLOG Azure episode builds it step by step: an HTTP function, a queue function, five retries, then the poison queue. No storage keys anywhere, just managed identity. We also show the one binding mistake that compiled fine and still failed.
+
+    Watch here: {YOUTUBE_URL}
+
+    Narration uses an AI voice.
+
+    #Azure #AzureFunctions #DotNet
+shorts:
+  - id: hook
+    youtube_short_title: "In-process Azure Functions support ended 10 Nov 2026. Now what? #Shorts"
+    instagram_reel:
+      caption: |
+        In-process support for .NET Azure Functions ended on 10 November 2026, and .NET 10 does not run on the Linux Consumption plan at all.
+
+        So the current way to build a serverless order intake is .NET 10, the isolated worker and Flex Consumption, with no storage keys. We build it, test it and break it on purpose in the full episode.
+
+        Full episode: link in bio
+
+        #Azure #AzureFunctions #DotNet #Serverless
+      cover_text: "In-process is over"
+    tiktok:
+      caption: "In-process Azure Functions support ended 10 Nov 2026, and .NET 10 won't run on Linux Consumption. Here is the current setup: isolated worker + Flex Consumption. #Azure #AzureFunctions #DotNet"
+  - id: poison
+    youtube_short_title: "Azure Functions retries 5 times, then the poison queue #Shorts"
+    instagram_reel:
+      caption: |
+        The order is well formed, so the HTTP function accepts it, but the SKU is not in the catalogue. The logs show attempt one, two, three, four, five. Then the runtime moves the message to orders-poison.
+
+        Nobody watches a poison queue by default, so a third function turns it into an error log you can alert on.
+
+        Full episode: link in bio
+
+        #Azure #AzureFunctions #DotNet #Serverless
+      cover_text: "5 retries, then poison"
+    tiktok:
+      caption: "A queue message that fails pricing gets 5 attempts, then lands in the poison queue. Nobody watches that by default, so we log an error you can alert on. #Azure #AzureFunctions #Serverless"
+  - id: gotcha
+    youtube_short_title: "The Azure Functions binding that compiled, passed tests, and didn't bind #Shorts"
+    instagram_reel:
+      caption: |
+        My first draft bound the queue trigger to the SDK message type to log the dequeue count, and used the order id in the blob path. It compiled and the unit tests passed.
+
+        But binding expressions on JSON payloads do not work with SDK types. The fix is a plain record, the dequeue count from binding data, and a test that fails if anyone switches it back.
+
+        Full episode: link in bio
+
+        #Azure #AzureFunctions #DotNet #Serverless
+      cover_text: "It compiled. It didn't bind."
+    tiktok:
+      caption: "Compiled, tests passed, still wrong: you can't use JSON payload binding expressions with SDK types in Azure Functions. Bind a record and pin it with a test. #Azure #AzureFunctions #DotNet"

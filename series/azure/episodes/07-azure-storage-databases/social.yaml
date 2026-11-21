@@ -1,0 +1,91 @@
+episode: 7
+series: "DEVLADLOG Azure"
+status: draft-hold-for-review
+ai_label: true
+youtube_url: "{YOUTUBE_URL}"
+linkedin_company:
+  text: |
+    Your database connection drops right as the commit is acknowledged. Entity Framework retries, the insert runs again, and the customer now has two orders.
+
+    Episode 7 of DEVLADLOG Azure gives an orders API a real database and makes retries safe:
+    - Orders in Azure SQL Database on the free tier, with Microsoft Entra-only authentication and no password anywhere in the template
+    - An Idempotency-Key header backed by a unique index, so a replay returns the order that committed
+    - Keyset paging and ETags (412 on a stale version)
+    - Invoices in Blob Storage with shared keys disabled, downloaded through read-only user delegation SAS links
+    - A lifecycle rule that moves invoices to Cool, then Cold, then deletes them
+    - 47 tests that run without Azure
+
+    Watch the episode: {YOUTUBE_URL}
+    Code: {REPO_URL}
+    Written guide: {BLOG_URL}
+
+    Narration uses an AI voice.
+
+    #Azure #AzureSQL #BlobStorage #EntraID #DotNet
+linkedin_personal:
+  text: |
+    For episode 7 of DEVLADLOG Azure I wanted to fix one specific bug: a retry that creates a second order.
+
+    The fix lives in the database, not in the app. Every order needs an Idempotency-Key header, and a unique index enforces it. If the first commit really succeeded, the retry fails with a unique violation, and we return the order that is already there. Same body: replay. Different body: 409.
+
+    Retry logic helps with flaky connections. It also needs something underneath that says no to duplicates.
+
+    Episode: {YOUTUBE_URL}
+
+    Narration uses an AI voice.
+
+    #Azure #AzureSQL #DotNet
+facebook:
+  text: |
+    What happens when your database retries an insert and the customer ends up with two orders?
+
+    In the new DEVLADLOG Azure episode we move an orders API to Azure SQL on the free tier, keep invoices in Blob Storage with the keys switched off, and make retries safe with a unique index. No passwords anywhere.
+
+    Watch it here: {YOUTUBE_URL}
+
+    Narration uses an AI voice.
+
+    #Azure #AzureSQL #BlobStorage
+shorts:
+  - id: hook
+    youtube_short_title: "Your DB retry just created a second order. Here's the fix (Azure SQL) #Shorts"
+    instagram_reel:
+      caption: |
+        Your database connection drops right as the commit is acknowledged. Entity Framework retries, the insert runs again, and the customer now has two orders.
+
+        In this episode we give an orders API a real database, Azure SQL on the free tier, put invoices in Blob Storage with the keys switched off, and make retries safe.
+
+        Full episode: link in bio
+
+        #Azure #AzureSQL #EntityFramework #DotNet
+      cover_text: "Retry made a 2nd order"
+    tiktok:
+      caption: "Connection drops after the commit, EF Core retries, and now there are two orders. We fix it in Azure SQL, no passwords, no keys. #Azure #AzureSQL #DotNet"
+  - id: idempotency
+    youtube_short_title: "Idempotency in Azure SQL: let a unique index reject the duplicate #Shorts"
+    instagram_reel:
+      caption: |
+        Every order needs an Idempotency-Key header, and the database has a unique index on it. If the commit's acknowledgement was lost, the retry runs as if nothing happened, and with generated keys that means a duplicate row.
+
+        With the unique index, the second insert fails with error 2601, and we return the order that did commit. Two racing requests take the same path.
+
+        Full episode: link in bio
+
+        #Azure #AzureSQL #EntityFramework #DotNet
+      cover_text: "Let the index say no"
+    tiktok:
+      caption: "Idempotency-Key header plus a unique index: the retry fails with error 2601 and we return the order that already committed. Same body replays, other body is 409. #Azure #AzureSQL #DotNet"
+  - id: gotcha
+    youtube_short_title: "Azure SQL free tier: first request after a pause fails with 40613 #Shorts"
+    instagram_reel:
+      caption: |
+        The Azure SQL free tier pauses after fifteen minutes without connections, and you can't change that delay. The first connection then fails with error 40613 while the database resumes, usually in under a minute.
+
+        Without retries, that's an error page for your first user of the morning. With them, it's a slow first request.
+
+        Full episode: link in bio
+
+        #Azure #AzureSQL #EntityFramework #DotNet
+      cover_text: "Error 40613 on first hit"
+    tiktok:
+      caption: "Azure SQL free tier pauses after 15 min idle. The first connection fails with 40613 while it resumes. Retries turn that into a slow first request. #Azure #AzureSQL #EFCore"

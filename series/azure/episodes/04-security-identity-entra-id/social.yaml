@@ -1,0 +1,94 @@
+episode: 4
+series: "DEVLADLOG Azure"
+status: draft-hold-for-review
+ai_label: true
+youtube_url: "{YOUTUBE_URL}"
+linkedin_company:
+  text: |
+    Every API answers two questions on every request: who is calling, and what are they allowed to do? Most teams answer the first with a shared secret in a config file, and the second not at all.
+
+    Episode 4 of DEVLADLOG Azure protects an orders API with Entra ID and zero secrets:
+    - Scopes for people, app roles for workloads
+    - The app registration, service principal and role assignments written as Bicep with the Microsoft Graph extension, next to the Azure resources
+    - A managed identity for the order processor, so Azure holds the credential
+    - ASP.NET Core policies that require an app-only token for writes, not just a role claim
+    - 20 tests that run the real API pipeline with test-signed tokens
+
+    One gotcha along the way: in v2 tokens the audience is the API's client ID, and valid tokens come back 401 if you leave the token version at the default.
+
+    Watch the episode: {YOUTUBE_URL}
+    Code: {REPO_URL}
+    Written guide: {BLOG_URL}
+
+    Narration uses an AI voice.
+
+    #Azure #EntraID #ManagedIdentity #DotNet #Bicep
+linkedin_personal:
+  text: |
+    One thing I got wrong before building episode 4 of DEVLADLOG Azure: I assumed that if a token has the write role, it is safe to allow the write.
+
+    Roles can show up in user tokens too. So the write policy in our API requires the app role and the idtyp claim set to app. A test sends a user token that carries the app role and expects a 403.
+
+    The whole API runs with no secrets: managed identity for the workload, scopes for people, Entra objects in Bicep.
+
+    Episode: {YOUTUBE_URL}
+
+    Narration uses an AI voice.
+
+    #Azure #EntraID #DotNet
+facebook:
+  text: |
+    Does your API rely on a shared secret in a config file?
+
+    In the new DEVLADLOG Azure episode we protect an API with Microsoft Entra ID and no secrets at all, not in the API, not in the client, not in the pipeline. People get scopes, workloads get app roles, and the order processor runs as a managed identity.
+
+    We also look at why perfectly valid tokens can come back 401.
+
+    Watch here: {YOUTUBE_URL}
+
+    Narration uses an AI voice.
+
+    #Azure #EntraID #ManagedIdentity
+shorts:
+  - id: hook
+    youtube_short_title: "Who is calling your API, and what may they do? Zero secrets #Shorts"
+    instagram_reel:
+      caption: |
+        Every API answers two questions on every request: who is calling, and what are they allowed to do?
+
+        Most teams answer the first one with a shared secret in a config file, and the second one not at all. In this episode we protect an API with Entra ID with zero secrets: not in the API, not in the client, not in the pipeline.
+
+        Full episode: link in bio
+
+        #Azure #EntraID #ManagedIdentity #DotNet
+      cover_text: "An API with zero secrets"
+    tiktok:
+      caption: "Every API answers two questions: who is calling, and what may they do? We protect one with Entra ID and zero secrets, using a managed identity. #Azure #EntraID #ManagedIdentity"
+  - id: user
+    youtube_short_title: "Same API, two callers: a user reads, a workload writes (Entra ID) #Shorts"
+    instagram_reel:
+      caption: |
+        A person signs in with the Azure CLI and gets a token: the audience is the API's client ID and the scope is Orders.Read. Reading works. Writing returns a 403, because people don't write orders, workloads do.
+
+        The workload gets an app-only token with the write role from its managed identity. No secret involved.
+
+        Full episode: link in bio
+
+        #Azure #EntraID #ManagedIdentity #DotNet
+      cover_text: "Alex reads, can't write"
+    tiktok:
+      caption: "A user token with Orders.Read can GET /orders (200) but POST /orders returns 403. Only the managed identity's app-only token can write. No secrets. #Azure #EntraID #DotNet"
+  - id: gotcha
+    youtube_short_title: "Valid Entra token, 401? Check the audience in v2 tokens #Shorts"
+    instagram_reel:
+      caption: |
+        In version 2 access tokens, the audience is always the API's client ID. In version 1 tokens it can be the App ID URI.
+
+        Our API accepts the client ID only, so if you leave the token version at the default, perfectly valid tokens come back 401. Set requestedAccessTokenVersion to 2 and validate the client ID, nothing else.
+
+        Full episode: link in bio
+
+        #Azure #EntraID #DotNet #Bicep
+      cover_text: "Valid token, still 401"
+    tiktok:
+      caption: "Valid Entra token, still 401? In v2 tokens aud is always the API's client ID. Leave the default v1 and it can be the App ID URI. Set version 2. #Azure #EntraID #DotNet"
