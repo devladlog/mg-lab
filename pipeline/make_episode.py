@@ -139,8 +139,13 @@ def render_slide(scene, ep, W=1920, H=1080):
         if scene.get("sub"):
             d.text((W / 2, y + 70), scene["sub"], font=font("Inter-Medium.otf", 48), fill=MUTED, anchor="ma")
     else:
-        d.text((110, 170), scene["heading"], font=font("Inter-Bold.otf", 72), fill=WHITE)
-        d.rectangle((110, 268, 330, 276), fill=BLUE)
+        live = t == "screen" and scene.get("_live")
+        if live:  # live recordings get most of the frame: smaller heading, wider window
+            d.text((80, 112), scene["heading"], font=font("Inter-Bold.otf", 56), fill=WHITE)
+            d.rectangle((80, 188, 260, 194), fill=BLUE)
+        else:
+            d.text((110, 170), scene["heading"], font=font("Inter-Bold.otf", 72), fill=WHITE)
+            d.rectangle((110, 268, 330, 276), fill=BLUE)
         if t == "bullets":
             fb = font("Inter-SemiBold.otf", 54)
             y = 340
@@ -162,10 +167,11 @@ def render_slide(scene, ep, W=1920, H=1080):
             crop = scene.get("crop")  # [x, y, w, h] in source pixels
             if crop:
                 shot = shot.crop((crop[0], crop[1], crop[0] + crop[2], crop[1] + crop[3]))
-            maxw, maxh = W - 220, H - 360
-            sc = min(maxw / shot.width, maxh / (shot.height + 44))
+            top = 222 if live else 320
+            maxw, maxh = (W - 120, H - top - 40 - 52) if live else (W - 220, H - 360)
+            sc = min(maxw / shot.width, maxh / (shot.height + (0 if live else 44)))
             sw, sh = int(shot.width * sc), int(shot.height * sc)
-            fx, fy = (W - sw) // 2, 320
+            fx, fy = (W - sw) // 2, top
             frame = Image.new("RGBA", (sw + 8, sh + 52), (0, 0, 0, 0))
             fd = ImageDraw.Draw(frame)
             fd.rounded_rectangle((0, 0, sw + 7, sh + 51), radius=18, fill=(28, 32, 60, 255), outline=(70, 80, 140, 255), width=2)
@@ -256,14 +262,34 @@ def video_duration(path):
     return float(subprocess.check_output(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", str(path)]).decode())
 
 
-def video_segment(slide_png, clip, box, wav, speech, out, rate=1.0):
+def content_crop(clip, pad=18, min_aspect=2.6, bg_thresh=40):
+    """[x, y, w, h] around everything that ever appears on screen in a terminal recording (frames sampled every
+    second), so the empty part of the window doesn't shrink the text. Left edge stays at 0 so prompts line up."""
+    import numpy as np
+    W, H = map(int, subprocess.check_output(["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries",
+               "stream=width,height", "-of", "csv=p=0:s=x", str(clip)]).decode().strip().split("x"))
+    raw = subprocess.check_output(["ffmpeg", "-v", "error", "-i", str(clip), "-vf", "fps=1,format=gray",
+                                   "-f", "rawvideo", "-"])
+    frames = np.frombuffer(raw, np.uint8).reshape(-1, H, W)
+    mask = (frames > bg_thresh).any(axis=0)
+    ys, xs = np.where(mask)
+    if not len(xs):
+        return None
+    x1 = min(W, int(xs.max()) + pad)
+    y1 = min(H, int(ys.max()) + pad)
+    w, h = x1, y1
+    h = min(H, max(h, int(w / min_aspect)))  # never a thin strip
+    return [0, 0, w - w % 2, h - h % 2]
+
+
+def video_segment(slide_png, clip, box, wav, speech, out, rate=1.0, crop=None):
     """Live recording played inside the screen frame of the slide. The segment lasts as long as the longer of the
     narration and the clip (at `rate`), so a live run is never cut; the clip holds its last frame if the voice is longer."""
     x, y, w, h = box
     clip_dur = video_duration(clip) / rate
     dur = max(speech + PAD, clip_dur + 0.8)
     run(["ffmpeg", "-y", "-loop", "1", "-i", str(slide_png), "-i", str(clip), "-i", str(wav), "-filter_complex",
-         f"[1:v]setpts=PTS/{rate},scale={w}:{h}:force_original_aspect_ratio=decrease,pad={w}:{h}:(ow-iw)/2:(oh-ih)/2:color=black,"
+         f"[1:v]setpts=PTS/{rate},{f'crop={crop[2]}:{crop[3]}:{crop[0]}:{crop[1]},' if crop else ''}scale={w}:{h}:force_original_aspect_ratio=decrease,crop='min(iw,{w})':'min(ih,{h})',pad={w}:{h}:(ow-iw)/2:(oh-ih)/2:color=black,"
          f"tpad=stop_mode=clone:stop_duration={dur:.2f}[clip];"
          f"[0:v]scale=1920:1080,fps=30[bg];[bg][clip]overlay={x}:{y}:shortest=0,format=yuv420p,"
          f"fade=t=in:st=0:d=0.3,fade=t=out:st={dur-0.3:.2f}:d=0.3[v];[2:a]apad,atrim=0:{dur:.2f}[a]",
@@ -412,6 +438,9 @@ def main():
                 poster = work / f"{i:02d}_{sc['id']}_poster.png"
                 run(["ffmpeg", "-y", "-sseof", "-0.1", "-i", str(clip), "-frames:v", "1", "-update", "1", str(poster)])
                 sc["_poster"] = str(poster)
+                if "crop" not in sc and sc.get("autocrop", True):
+                    sc["crop"] = content_crop(clip)
+                sc["_live"] = True
             else:
                 print(f"  ! {sc['id']}: video {clip} missing, using the still image", flush=True)
                 clip = None
@@ -436,7 +465,7 @@ def main():
         if not a.only_shorts:
             seg_mp4 = work / f"{i:02d}_{sc['id']}.mp4"
             if clip is not None:
-                video_segment(png, clip, sc["_video_box"], wav, speech, seg_mp4, float(sc.get("video_rate", 1.0)))
+                video_segment(png, clip, sc["_video_box"], wav, speech, seg_mp4, float(sc.get("video_rate", 1.0)), sc.get("crop"))
             else:
                 still_segment(png, wav, dur, seg_mp4, zoom=sc["type"] not in ("code", "screen"))
             parts.append(seg_mp4)

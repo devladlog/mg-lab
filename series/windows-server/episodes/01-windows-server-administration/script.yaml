@@ -1,4 +1,4 @@
-# DEVLADLOG Windows Server - episode 01 (draft: the screen scenes need the lab recording, see demo.md)
+# DEVLADLOG Windows Server - episode 01 (screen scenes recorded live in the lab, 2026-11-21)
 episode: 1
 slug: windows-server-administration
 series_label: "WINDOWS SERVER"
@@ -193,6 +193,7 @@ scenes:
     type: screen
     heading: "Three servers, one command"
     image: screens/live-run.jpg
+    video: screens/live-run.mp4
     bar: "Lab · PowerShell 7 on the admin VM"
     demo: >
       Terminal (pwsh) on the lab admin machine CON-CLI01, in C:\lab\ep01\src. Run:
@@ -200,13 +201,14 @@ scenes:
       Show the full findings table and the summary line "3 server(s), N finding(s), N high."
     narration: >
       Now the real lab. From the admin machine, one command against all three servers. The snapshots are saved as
-      JSON, so we can re-check them later without touching the servers. Rewrite this line to the real result on
-      screen: the number of findings, and how many are High.
+      JSON, so we can re-check them later without touching the servers. Three servers, nineteen findings, seven of
+      them High.
 
   - id: report
     type: screen
     heading: "Worst first"
     image: screens/report.jpg
+    video: screens/report.mp4
     bar: "Lab · report.md"
     short: report
     demo: >
@@ -215,13 +217,16 @@ scenes:
       Desktop Experience Low finding. Zoom on the High rows.
     narration: >
       The report puts a summary row per server on top, then every finding, worst first. The file server is the
-      problem child, exactly as we set it up: SMB one installed, the public firewall profile off, and Remote Desktop
-      enabled on a server the baseline only manages remotely. Rewrite this to match the real rows.
+      problem child, exactly as we set it up: four High findings, including SMB one installed and the public firewall
+      profile off, plus an extra local administrator and Remote Desktop enabled. And every server's last update is
+      more than two years old, because these evaluation images were never patched. That's real, and the baseline
+      catches it.
 
   - id: fix
     type: screen
     heading: "Fix it, run it again"
     image: screens/fixed.jpg
+    video: screens/fixed.mp4
     bar: "Lab · CON-SRV02 fixed, second run"
     demo: >
       Split or two takes, on CON-CLI01. First: Invoke-Command -ComputerName CON-SRV02 { Uninstall-WindowsFeature FS-SMB1;
@@ -230,26 +235,28 @@ scenes:
       keep it on screen if it does).
     narration: >
       Fixing is remoting too: remove the SMB one feature and turn the public profile back on, from the same console.
-      Run the baseline again and those findings are gone. If removing the feature leaves a pending reboot, the
-      baseline says so, which is exactly its job.
+      Windows warns that a restart is needed to finish. Run the baseline again: seventeen findings, five High. The
+      SMB one and firewall rows are gone, and the pending reboot finding stays until we restart, which is exactly
+      the baseline's job.
 
   - id: hotfix
     type: screen
     heading: "Gotcha: Get-HotFix doesn't list every update"
     image: screens/hotfix.jpg
+    video: screens/hotfix.mp4
     bar: "Lab · CON-SRV02 · Get-HotFix vs Windows Update history"
     short: gotcha
     demo: >
-      On CON-SRV02 (Desktop Experience, so the Settings app exists; VMConnect console): left, a PowerShell window with
-      Get-HotFix | Sort-Object InstalledOn -Descending | Select-Object -First 5. Right, Settings > Windows Update >
-      Update history. Show at least one entry in the history that Get-HotFix doesn't list (for example a Defender
-      definition update). If none differs on the day, show the Notes section of the Get-HotFix page on Learn instead
-      and adjust the narration.
+      Recorded live on CON-SRV02 over PowerShell Direct: Get-HotFix | Sort-Object InstalledOn -Descending |
+      Select-Object -First 5, then the Windows Update history through the Microsoft.Update.Session COM object (the
+      same list Settings > Update history shows). Get-HotFix lists three updates from September 2024; the history
+      has entries from today that Get-HotFix doesn't list.
     narration: >
       The honest gotcha. Our update check uses Get-HotFix, which reads the Win32 Quick Fix Engineering class. That
       class only returns updates from Component Based Servicing. Updates delivered by Windows Installer or the Windows
-      Update site aren't in it. So the check is good for cumulative updates, and when it finds nothing dated, the
-      finding tells you to look at the Windows Update history instead.
+      Update site aren't in it. On the file server, Get-HotFix shows three updates from September twenty twenty
+      four. The Windows Update history shows two installs from this morning that Get-HotFix never lists. So the
+      check is good for cumulative updates, and when it looks wrong, check the Windows Update history too.
 
   - id: tune
     type: bullets
