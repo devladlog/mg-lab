@@ -1,0 +1,78 @@
+Descriptor:
+  Name: Contoso.SocHunting
+  DisplayName: Contoso SOC hunting
+  Description: Advanced hunting skills for the Contoso security operations team. Failed sign-ins for one account, email from one sender domain, and high severity alerts by keyword. Demo data only.
+
+SkillGroups:
+  - Format: KQL
+    Skills:
+      - Name: GetFailedSignInsByUser
+        DisplayName: Get failed sign-ins by user
+        Description: Counts failed Microsoft Entra sign-ins in the last 7 days for one user principal name, grouped by application, with the countries, the number of distinct IP addresses and the last time it happened. Use it when an analyst asks whether an account is being password-sprayed or is used from unusual places.
+        Inputs:
+          - Name: upn
+            Description: The user principal name of the account, for example alex.demo@contoso.example
+            Required: true
+        Settings:
+          Target: Defender
+          Template: |-
+            EntraIdSignInEvents
+            | where Timestamp > ago(7d)
+            | where AccountUpn =~ '{{upn}}'
+            | where ErrorCode != 0
+            | summarize Failures = count(), Countries = make_set(Country, 10), DistinctIPs = dcount(IPAddress), LastSeen = max(Timestamp) by AccountUpn, Application
+            | top 50 by Failures desc
+
+      - Name: GetEmailFromSenderDomain
+        DisplayName: Get email from a sender domain
+        Description: Lists the latest 100 emails of the last 7 days received from one sender domain, with the recipient, the subject, where the message was delivered and the threat verdict. Use it to see who received mail from a domain named in a phishing report.
+        Inputs:
+          - Name: domain
+            Description: The sender domain, for example fabrikam-invoices.example
+            Required: true
+        Settings:
+          Target: Defender
+          Template: |-
+            EmailEvents
+            | where Timestamp > ago(7d)
+            | where SenderFromDomain =~ '{{domain}}'
+            | project Timestamp, NetworkMessageId, SenderFromAddress, RecipientEmailAddress, Subject, DeliveryAction, DeliveryLocation, ThreatTypes
+            | top 100 by Timestamp desc
+
+      - Name: GetHighAlertsByKeyword
+        DisplayName: Get high severity alerts by keyword
+        Description: Lists the latest 50 high severity alerts of the last 30 days whose title contains a keyword, with the category, the service that raised it and the MITRE ATT&CK techniques. Use it to find related alerts when an analyst names a tactic or a product.
+        Inputs:
+          - Name: keyword
+            Description: A word from the alert title, for example phishing or password spray
+            Required: true
+        Settings:
+          Target: Defender
+          Template: |-
+            AlertInfo
+            | where Timestamp > ago(30d)
+            | where Severity =~ 'high'
+            | where Title contains '{{keyword}}'
+            | project Timestamp, AlertId, Title, Category, ServiceSource, DetectionSource, AttackTechniques
+            | top 50 by Timestamp desc
+
+  - Format: GPT
+    Skills:
+      - Name: SummarizeSignInFailures
+        DisplayName: Summarize sign-in failures
+        Description: Turns the rows returned by GetFailedSignInsByUser into three sentences for a shift handover.
+        Inputs:
+          - Name: Rows
+            Description: The rows returned by GetFailedSignInsByUser, as text
+            Required: true
+        Settings:
+          ModelName: gpt-4.1
+          Template: |-
+            <|im_start|>system
+            Summarise the failed sign-ins below in three sentences for a shift handover.
+            Sentence one says how many failures and for which application. Sentence two names the countries and the number of distinct IP addresses.
+            Sentence three says whether the pattern looks like a password spray, and why. Use only the data given.
+            <|im_end|>
+            <|im_start|>user
+            {{Rows}}
+            <|im_end|>

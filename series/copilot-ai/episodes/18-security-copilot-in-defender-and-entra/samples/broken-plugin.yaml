@@ -1,0 +1,38 @@
+# Several mistakes on purpose. `seckit check samples/broken-plugin.yaml` must report them all.
+Descriptor:
+  Name: Contoso SOC hunting
+  Description: ""
+SkillGroups:
+  - Format: KQL
+    Skills:
+      - Name: Get.Failed.SignIns
+        Description: Failed sign-ins for one user.
+        Inputs:
+          - Name: upn
+            Description: The user principal name
+            Required: true
+        Settings:
+          Target: Defender
+          Template: |-
+            AADSignInEventsBeta
+            | where Timestamp > ago(7d)
+            | where AccountUPN == {{upn}}
+            | where ErrorCode != 0
+            | take 50
+      - Name: GetMailBySender
+        Description: Mail from one sender.
+        Inputs:
+          - Name: sender
+            Description: The sender address
+        Settings:
+          Target: Defender
+          Template: |-
+            EmailEvents
+            | where SenderFromAddress == '{{sender}}'
+  - Format: GPT
+    Skills:
+      - Name: Summarise
+        Description: Summarise rows.
+        Settings:
+          ModelName: gpt-4o
+          Template: Summarise {{Rows}}

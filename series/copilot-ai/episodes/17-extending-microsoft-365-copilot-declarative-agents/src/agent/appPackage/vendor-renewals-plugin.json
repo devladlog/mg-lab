@@ -1,0 +1,83 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/copilot/plugin/v2.4/schema.json",
+  "schema_version": "v2.4",
+  "name_for_human": "Vendor renewals",
+  "namespace": "vendorrenewals",
+  "description_for_human": "Contract renewals and decision deadlines from the Contoso VMO register.",
+  "description_for_model": "Use this plugin for questions about Contoso vendor contract renewals: renewal dates, yearly cost, budget owner, decide-by and escalation dates, and to create a decision reminder for a vendor.",
+  "functions": [
+    {
+      "name": "listRenewals",
+      "description": "Lists vendor contract renewals sorted by renewal date, with decide-by and escalation dates. Optional filters: withinDays (renewals due within N days of today) and owner.",
+      "capabilities": {
+        "response_semantics": {
+          "data_path": "$.renewals",
+          "properties": {
+            "title": "$.vendorName",
+            "subtitle": "$.renewalDate"
+          },
+          "static_template": {
+            "file": "adaptiveCards/renewal.json"
+          }
+        },
+        "security_info": {
+          "data_handling": [
+            "GetPrivateData"
+          ]
+        }
+      }
+    },
+    {
+      "name": "getVendor",
+      "description": "Returns one vendor record by vendorId, for example fabrikam-cloud.",
+      "capabilities": {
+        "security_info": {
+          "data_handling": [
+            "GetPrivateData"
+          ]
+        }
+      }
+    },
+    {
+      "name": "createDecisionReminder",
+      "description": "Creates a decision reminder for the budget owner of a vendor. Needs vendorId, remindOn (YYYY-MM-DD, not after the decide-by date) and an optional note.",
+      "capabilities": {
+        "confirmation": {
+          "type": "AdaptiveCard",
+          "title": "Create decision reminder",
+          "body": "Create this reminder in the Contoso VMO register?"
+        },
+        "security_info": {
+          "data_handling": [
+            "ResourceStateUpdate"
+          ]
+        }
+      }
+    }
+  ],
+  "runtimes": [
+    {
+      "type": "OpenApi",
+      "auth": {
+        "type": "ApiKeyPluginVault",
+        "reference_id": "${{VENDOR_API_KEY_REGISTRATION_ID}}"
+      },
+      "run_for_functions": [
+        "listRenewals",
+        "getVendor",
+        "createDecisionReminder"
+      ],
+      "spec": {
+        "url": "openapi.yaml"
+      }
+    }
+  ],
+  "capabilities": {
+    "conversation_starters": [
+      {
+        "title": "Renewals",
+        "text": "Which vendor renewals are due in the next 90 days?"
+      }
+    ]
+  }
+}

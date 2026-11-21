@@ -1,0 +1,65 @@
+Descriptor:
+  Name: Contoso.SignInTriageAgent
+  DisplayName: Contoso sign-in triage agent
+  Description: Every hour, finds accounts with many failed sign-ins and writes a short triage note for each. Demo manifest for the Contoso SOC.
+
+SkillGroups:
+  - Format: KQL
+    Skills:
+      - Name: ListAccountsWithManyFailures
+        DisplayName: List accounts with many failed sign-ins
+        Description: Returns the accounts with ten or more failed sign-ins in the last hour. Each row has the AccountUpn.
+        Settings:
+          Target: Defender
+          Template: |-
+            EntraIdSignInEvents
+            | where Timestamp > ago(1h)
+            | where ErrorCode != 0
+            | summarize Failures = count() by AccountUpn
+            | where Failures >= 10
+            | project AccountUpn
+            | top 20 by AccountUpn asc
+
+  - Format: AGENT
+    Skills:
+      - Name: TriageSignInFailures
+        DisplayName: Triage sign-in failures
+        Description: The entry point of the sign-in triage agent. Takes one account and writes a triage note.
+        Interfaces:
+          - Agent
+        Inputs:
+          - Name: AccountUpn
+            Description: The user principal name of the account to triage
+            Required: true
+        Settings:
+          Model: gpt-4.1
+          Instructions: |
+            <|im_start|>system
+            You are a security analyst assistant. Triage the failed sign-ins of one account, in three steps.
+            1) Call GetFailedSignInsByUser with the account as upn.
+            2) Call SummarizeSignInFailures with the rows from step 1.
+            3) Reply with the summary, then one recommended next step for a human analyst: review the sign-in log, ask the user, or open an incident.
+            Keep the reply under 120 words. When a step returns an error, say which step failed and stop.
+            <|im_end|>
+            <|im_start|>user
+            {{AccountUpn}}
+            <|im_end|>
+        ChildSkills:
+          - GetFailedSignInsByUser
+          - SummarizeSignInFailures
+
+AgentDefinitions:
+  - Name: SignInTriageAgent
+    DisplayName: Sign-in triage agent
+    Description: Triage note for accounts with many failed sign-ins, every hour.
+    Publisher: Contoso
+    Product: SecurityOperations
+    RequiredSkillsets:
+      - Contoso.SignInTriageAgent
+      - Contoso.SocHunting
+    AgentSingleInstanceConstraint: None
+    Triggers:
+      - Name: Hourly
+        DefaultPeriodSeconds: 3600
+        FetchSkill: Contoso.SignInTriageAgent.ListAccountsWithManyFailures
+        ProcessSkill: Contoso.SignInTriageAgent.TriageSignInFailures

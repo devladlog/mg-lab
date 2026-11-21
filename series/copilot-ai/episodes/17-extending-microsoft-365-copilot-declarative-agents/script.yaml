@@ -1,0 +1,235 @@
+# DEVLADLOG Copilot & AI - episode 17 (draft: screen scenes need the recording described in demo.md)
+episode: 17
+slug: extending-microsoft-365-copilot-declarative-agents
+series_label: "COPILOT & AI"
+series_name: "DEVLADLOG Copilot & AI"
+file_prefix: "copilot-ai"
+title: "Extending Microsoft 365 Copilot: Declarative Agents and API Plugins"
+subtitle: "A pro-code agent, a REST API and tests you can run"
+voice: am_michael
+thumbnail_text: "DECLARATIVE\nAGENTS\nAPI PLUGINS"
+youtube:
+  title: "Extend Microsoft 365 Copilot: Declarative Agent and API Plugin, Tested and Packaged | DEVLADLOG Copilot & AI #17"
+  tags: [Microsoft 365 Copilot, declarative agents, API plugin, OpenAPI, Copilot extensibility, agent manifest, Adaptive Cards, Work IQ Dev Tools, dev tunnels, Python]
+next_episode: "Security Copilot in Defender and Entra"
+sources:
+  - "https://learn.microsoft.com/microsoft-365/copilot/extensibility/prerequisites"
+  - "https://learn.microsoft.com/microsoft-365/copilot/extensibility/declarative-agent-manifest-1.9"
+  - "https://learn.microsoft.com/microsoft-365/copilot/extensibility/plugin-manifest-2.4"
+  - "https://learn.microsoft.com/microsoft-365/copilot/extensibility/openapi-document-guidance"
+  - "https://learn.microsoft.com/microsoft-365/copilot/extensibility/plugin-authentication-api-key"
+  - "https://learn.microsoft.com/microsoft-365/copilot/extensibility/package-plugin"
+  - "https://learn.microsoft.com/microsoft-365/copilot/extensibility/debugging-agents"
+  - "https://learn.microsoft.com/microsoft-365/copilot/extensibility/choose-plugin-development-tools"
+  - "https://learn.microsoft.com/microsoftteams/teams-custom-app-policies-and-settings"
+  - "https://learn.microsoft.com/azure/developer/dev-tunnels/cli-commands"
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Teach Copilot your API"
+    sub: "A declarative agent with an API plugin"
+    short: hook
+    narration: >
+      Copilot knows Microsoft 365. It does not know your vendor register. A declarative agent fixes that: your
+      instructions, your A P I, and Copilot's own model and orchestrator. No hosting for the agent. Just one small
+      A P I, and a package that you can test before it ever touches a tenant. Welcome to Dev Lad Log, Copilot and A I.
+
+  - id: parts
+    type: bullets
+    heading: "Four files, one package"
+    bullets:
+      - "manifest.json: the app, one agent"
+      - "declarativeAgent.json: instructions, starters, actions"
+      - "Plugin manifest: functions, card, authentication"
+      - "openapi.yaml: what the A P I can do"
+    narration: >
+      A package has four files that matter. The app manifest points to one agent. The agent manifest holds the
+      instructions and lists its actions. The plugin manifest names the functions, the confirmation and the card, and
+      how to authenticate. And the open A P I file describes the real A P I. Learn now calls these actions.
+      Plugin means the whole installable package. Same scenario as before: the Contoso vendor desk, now as code you can review in a pull request.
+
+  - id: agent-code
+    type: code
+    heading: "The agent manifest"
+    lang: json
+    code: |
+      {
+        "version": "v1.9",
+        "name": "Contoso Vendor Desk",
+        "instructions": "# Purpose\n...\n# Tools\n- Use listRenewals ...",
+        "behavior_overrides": {
+          "special_instructions": { "discourage_model_knowledge": true }
+        },
+        "actions": [
+          { "id": "vendorRenewals", "file": "vendor-renewals-plugin.json" }
+        ]
+      }
+    narration: >
+      The agent manifest is plain. Instructions that say what to do, in sections, naming the functions. One switch that
+      discourages the model from answering from general knowledge. And a list of actions. Write instructions in positive
+      terms: what to do, not what to avoid.
+
+  - id: plugin-code
+    type: code
+    heading: "Functions, confirmation and a key"
+    lang: json
+    code: |
+      "functions": [
+        { "name": "listRenewals", "description": "..." },
+        { "name": "createDecisionReminder",
+          "capabilities": { "confirmation": {
+            "type": "AdaptiveCard", "title": "Set reminder?" } } }
+      ],
+      "runtimes": [{
+        "type": "OpenApi",
+        "auth": { "type": "ApiKeyPluginVault",
+                  "reference_id": "${{VENDOR_API_KEY_REGISTRATION_ID}}" },
+        "spec": { "url": "openapi.yaml" },
+        "run_for_functions": ["listRenewals", "getVendor", "createDecisionReminder"]
+      }]
+    narration: >
+      The plugin manifest lists the functions. The one that writes asks for confirmation first. The runtime points at
+      the open A P I file, and the key is never in the manifest. It is a registration id from the Teams developer portal,
+      and the portal keeps the key.
+
+  - id: tests-screen
+    type: screen
+    heading: "Validate before you upload"
+    image: screens/tests.jpg
+    bar: "Terminal · pytest · dakit validate"
+    demo: "Terminal: python3 -m pytest -q (78 passed), python3 -m dakit validate agent/appPackage (0 errors, 0 warnings). Then change manifestVersion to 1.19 on purpose, show the schema error, undo."
+    narration: >
+      Seventy eight tests, and a validator that uses Microsoft's own published schemas. Break the version on purpose and
+      it tells you. The same checks cover the open A P I rules from Learn: no nested objects, no one of, https only,
+      and a description on everything.
+
+  - id: contract
+    type: code
+    heading: "The API must match its description"
+    lang: text
+    code: |
+      $ python3 -m dakit contract agent/appPackage/openapi.yaml
+      0 error(s), 0 warning(s)
+
+      $ curl -H "Authorization: Bearer $KEY" ".../renewals?withinDays=150"
+      {"renewals": [{"vendorName": "Fabrikam Cloud",
+        "renewalDate": "2027-03-31", "decideBy": "2026-12-31",
+        "daysToDecision": 40, "status": "decide-soon"}]}
+    narration: >
+      The contract test calls the real A P I code and checks every response against the schema in the description.
+      Copilot reads that description, so it must not drift. Here the rule from episode three runs for real: renewal at the
+      end of March, decide by the end of December.
+
+  - id: licence
+    type: code
+    heading: "What does it cost to run?"
+    lang: text
+    code: |
+      $ python3 -m dakit licence declarativeAgent.json
+      Required: all - Copilot Chat without usage-based billing is enough
+
+      $ python3 -m dakit licence declarativeAgent.with-knowledge.json
+      Required: licensed - Needs a Microsoft 365 Copilot licence
+        payg     OneDriveAndSharePoint
+        licensed Email
+    narration: >
+      Licensing matters. According to Learn, custom actions and instructions work in Copilot Chat without usage based
+      billing. Add SharePoint knowledge and you need pay as you go or a licence. Add email and you need the licence.
+      The tool reads your manifest and tells you which tier you built.
+
+  - id: portal-screen
+    type: screen
+    heading: "Register the key"
+    image: screens/portal.jpg
+    bar: "Teams Developer Portal · API key registration"
+    demo: "Developer Portal > API key registration > New: name Contoso Vendor API, base URL = the dev tunnel, key typed off camera. Show the registration id; mask the key and the tunnel host."
+    narration: >
+      The key lives in the developer portal. Register the base U R L of the A P I, paste the key, and copy the
+      registration id. That id goes into the package. For local work, a dev tunnel exposes the A P I, and Learn says it
+      must allow anonymous access. That is separate from the key, which the A P I still checks.
+
+  - id: package
+    type: code
+    heading: "Build the package"
+    lang: bash
+    code: |
+      python3 -m dakit package agent/appPackage \
+        --out ../vendor-desk.zip \
+        --app-id $(python3 -c "import uuid;print(uuid.uuid4())") \
+        --api-url https://<tunnel> \
+        --auth-id <registration id> --version 1.0.0
+      # zip: manifest.json first, color.png 192x192, outline.png 32x32
+    narration: >
+      One command substitutes the app id, the tunnel address and the registration id, validates the result again, and
+      writes a zip with the manifest first and both icons. Every environment gets its own new app id.
+
+  - id: chat-screen
+    type: screen
+    heading: "Ask Copilot"
+    image: screens/chat.jpg
+    bar: "Microsoft 365 Copilot · Contoso Vendor Desk · alex.demo"
+    short: live
+    demo: "Teams > Apps > Manage your apps > Upload a custom app > vendor-desk.zip. Then Copilot Chat > Contoso Vendor Desk: 'Which renewals need a decision in the next 60 days?' Record the real answer and the card."
+    narration: >
+      Upload the zip as a custom app, pick the agent, and ask. Copilot chooses the function from its description, calls
+      the A P I through the tunnel, and answers with the card. The answer comes from the register, not from the model's
+      memory.
+
+  - id: reminder-screen
+    type: screen
+    heading: "Writes ask first"
+    image: screens/reminder.jpg
+    bar: "Copilot Chat · confirmation · API log"
+    demo: "Ask: 'Remind Jordan Demo to decide on Fabrikam Cloud on 1 December 2026.' Show the confirmation, confirm, show the reminder id and the request in the API terminal."
+    narration: >
+      Ask for a reminder and Copilot stops to confirm, because we declared it. Say yes, and the A P I returns a reminder
+      number, and the request shows in the A P I terminal. The model never writes without that step. That is the difference between a demo and something you can let people use.
+
+  - id: gotcha
+    type: bullets
+    heading: "Gotcha: uploading is a policy"
+    bullets:
+      - "Upload custom apps: Teams setup policy, up to 24 hours"
+      - "One declarative agent per app package"
+      - "Tunnel anonymous, API still needs the key"
+      - "Descriptions are prompts: write them for the model"
+    short: gotcha
+    narration: >
+      The gotchas. Uploading custom apps is a Teams setup policy, and it can take up to twenty four hours to apply. An app
+      has one agent. The tunnel must be anonymous, so the key check lives in your A P I. And your descriptions are
+      prompts, so write them for the model.
+
+  - id: tools
+    type: bullets
+    heading: "Which tool builds this?"
+    bullets:
+      - "Work IQ Dev Tools: recommended for pro-code agents"
+      - "Microsoft 365 Agents Toolkit: the older Teams Toolkit"
+      - "Copilot Studio: low-code, episodes 3 and 4"
+    narration: >
+      You do not have to write these files by hand. Learn now recommends Work I Q Dev Tools for supported pro code
+      agents. The Microsoft 365 Agents Toolkit, once Teams Toolkit, is the older route. And Copilot Studio is the low
+      code way we used in episodes three and four. Hand written files are worth it once, to see what the tools generate.
+
+  - id: recap
+    type: bullets
+    heading: "Five rules"
+    bullets:
+      - "Instructions: positive, sectioned, name the functions"
+      - "Keep the A P I description flat and honest"
+      - "Test the package before the tenant sees it"
+      - "Confirm every write"
+      - "Check the licence tier you built"
+    narration: >
+      Five rules. Write positive instructions that name the functions. Keep the A P I description flat and honest. Test the
+      package before the tenant sees it. Confirm every write. And know which licence tier you built. Next time: Security
+      Copilot in Defender and Entra.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The agent, the A P I, the validator and all the tests are on GitHub, and the Microsoft Learn pages are in the
+      description. This was Dev Lad Log, Copilot and A I, by Momento Galático.

@@ -1,0 +1,260 @@
+openapi: 3.0.3
+info:
+  title: Contoso Vendor Renewals API
+  description: Read the Contoso Vendor Management Office renewal register and create decision reminders. Fictional demo data.
+  version: 1.0.0
+servers:
+  - url: https://vendor-api.contoso.example
+paths:
+  /renewals:
+    get:
+      operationId: listRenewals
+      summary: List vendor contract renewals
+      description: Returns vendor contract renewals sorted by renewal date, each with the decide-by date (90 days before renewal), the escalation date (60 days before renewal) and a status.
+      parameters:
+        - name: withinDays
+          in: query
+          required: false
+          description: Only renewals whose renewal date is within this many days from today. Whole number from 1 to 730.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 730
+          example: 180
+        - name: owner
+          in: query
+          required: false
+          description: Only renewals owned by this budget owner, for example Jordan Demo.
+          schema:
+            type: string
+          example: Jordan Demo
+      responses:
+        '200':
+          description: A list of renewals.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RenewalList'
+              example:
+                today: '2026-11-21'
+                renewals:
+                  - vendorId: fabrikam-cloud
+                    vendorName: Fabrikam Cloud
+                    service: Hosting
+                    owner: Jordan Demo
+                    renewalDate: '2027-03-31'
+                    annualCostEur: 18400
+                    decideBy: '2026-12-31'
+                    escalateOn: '2027-01-30'
+                    daysToDecision: 40
+                    status: decide-soon
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /vendors/{vendorId}:
+    get:
+      operationId: getVendor
+      summary: Get one vendor
+      description: Returns one vendor record, including its renewal data, by vendor id.
+      parameters:
+        - name: vendorId
+          in: path
+          required: true
+          description: The vendor id, for example fabrikam-cloud.
+          schema:
+            type: string
+          example: fabrikam-cloud
+      responses:
+        '200':
+          description: The vendor.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Renewal'
+              example:
+                vendorId: fabrikam-cloud
+                vendorName: Fabrikam Cloud
+                service: Hosting
+                owner: Jordan Demo
+                renewalDate: '2027-03-31'
+                annualCostEur: 18400
+                decideBy: '2026-12-31'
+                escalateOn: '2027-01-30'
+                daysToDecision: 40
+                status: decide-soon
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /vendors/{vendorId}/reminders:
+    post:
+      operationId: createDecisionReminder
+      summary: Create a decision reminder
+      description: Creates a reminder for the budget owner to decide on the renewal. The reminder date must be today or later and not after the decide-by date.
+      parameters:
+        - name: vendorId
+          in: path
+          required: true
+          description: The vendor id, for example fabrikam-cloud.
+          schema:
+            type: string
+          example: fabrikam-cloud
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReminderRequest'
+            example:
+              remindOn: '2026-12-01'
+              note: Decide on Fabrikam Cloud renewal
+      responses:
+        '201':
+          description: The reminder was created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Reminder'
+              example:
+                reminderId: rem-0001
+                vendorId: fabrikam-cloud
+                remindOn: '2026-12-01'
+                note: Decide on Fabrikam Cloud renewal
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+  schemas:
+    Renewal:
+      type: object
+      required: [vendorId, vendorName, service, owner, renewalDate, annualCostEur, decideBy, escalateOn, daysToDecision, status]
+      properties:
+        vendorId:
+          type: string
+          description: Stable vendor id.
+        vendorName:
+          type: string
+          description: Vendor display name.
+        service:
+          type: string
+          description: What the vendor provides.
+        owner:
+          type: string
+          description: The budget owner who must decide.
+        renewalDate:
+          type: string
+          format: date
+          description: Next contract renewal date.
+        annualCostEur:
+          type: integer
+          description: Yearly cost in euros.
+        decideBy:
+          type: string
+          format: date
+          description: Last day for the budget owner to decide (90 days before renewal).
+        escalateOn:
+          type: string
+          format: date
+          description: Day the VMO escalates to the owner's manager (60 days before renewal).
+        daysToDecision:
+          type: integer
+          description: Days from today to decideBy. Negative when the date has passed.
+        status:
+          type: string
+          description: open, decide-soon (45 days or fewer), overdue (decideBy passed) or escalated (escalateOn reached).
+          enum: [open, decide-soon, overdue, escalated]
+    RenewalList:
+      type: object
+      required: [today, renewals]
+      properties:
+        today:
+          type: string
+          format: date
+          description: The date the API used as today.
+        renewals:
+          type: array
+          description: The matching renewals.
+          items:
+            $ref: '#/components/schemas/Renewal'
+    ReminderRequest:
+      type: object
+      required: [remindOn]
+      properties:
+        remindOn:
+          type: string
+          format: date
+          description: Reminder date, YYYY-MM-DD.
+        note:
+          type: string
+          description: Short note, up to 200 characters.
+    Reminder:
+      type: object
+      required: [reminderId, vendorId, remindOn, note]
+      properties:
+        reminderId:
+          type: string
+          description: Reminder id.
+        vendorId:
+          type: string
+          description: Vendor id.
+        remindOn:
+          type: string
+          format: date
+          description: Reminder date.
+        note:
+          type: string
+          description: The note.
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          description: Error details.
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              description: Machine-readable error code.
+            message:
+              type: string
+              description: Human-readable message.
+  responses:
+    BadRequest:
+      description: The request was not valid.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error:
+              code: invalid_request
+              message: remindOn must be a date from today to the decide-by date.
+    Unauthorized:
+      description: Missing or wrong API key.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error:
+              code: unauthorized
+              message: Missing or invalid bearer token.
+    NotFound:
+      description: No such vendor.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error:
+              code: not_found
+              message: No vendor with that id.

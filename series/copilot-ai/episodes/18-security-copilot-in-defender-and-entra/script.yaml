@@ -1,0 +1,202 @@
+# DEVLADLOG Copilot & AI - episode 18 (draft: screen scenes need the recording described in demo.md)
+episode: 18
+slug: security-copilot-in-defender-and-entra
+series_label: "COPILOT & AI"
+series_name: "DEVLADLOG Copilot & AI"
+file_prefix: "copilot-ai"
+title: "Security Copilot in Defender and Entra"
+subtitle: "Embedded, agents, your own KQL skills, and what an SCU costs"
+voice: am_michael
+thumbnail_text: "SECURITY\nCOPILOT\nDEFENDER + ENTRA"
+youtube:
+  title: "Security Copilot in Defender and Entra: Custom KQL Skills, Agents and SCU Costs | DEVLADLOG Copilot & AI #18"
+  tags: [Security Copilot, Microsoft Defender, Microsoft Entra, KQL, advanced hunting, Phishing Triage Agent, Conditional Access Optimization Agent, Security Compute Units, SCU, custom plugin]
+next_episode: "Copilot governance: Purview DSPM for AI and admin controls"
+sources:
+  - "https://learn.microsoft.com/copilot/security/developer/agent-manifest"
+  - "https://learn.microsoft.com/copilot/security/plugin-kql"
+  - "https://learn.microsoft.com/copilot/security/security-compute-units-capacity"
+  - "https://learn.microsoft.com/copilot/security/security-copilot-inclusion"
+  - "https://www.microsoft.com/security/pricing/microsoft-security-copilot"
+  - "https://learn.microsoft.com/defender-xdr/security-copilot-in-microsoft-365-defender"
+  - "https://learn.microsoft.com/defender-xdr/phishing-triage-agent"
+  - "https://learn.microsoft.com/entra/security-copilot/conditional-access-agent-optimization"
+  - "https://learn.microsoft.com/defender-xdr/advanced-hunting-entraidsigninevents-table"
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Security Copilot, with a meter running"
+    sub: "Defender, Entra, your own KQL, and the SCU bill"
+    short: hook
+    narration: >
+      Security Copilot lives in the Defender portal, in Entra, in its own portal, and as agents that work while you sleep.
+      It also has a meter: security compute units, billed by the hour. In this episode we look at what is embedded, build
+      our own K Q L skills, test them offline with a real parser, and do the cost sums before the invoice does. Welcome to
+      Dev Lad Log, Copilot and A I.
+
+  - id: map
+    type: bullets
+    heading: "Where Security Copilot shows up"
+    bullets:
+      - "Defender: incident summary, guided response, query assistant"
+      - "Entra: risky user summary, sign-in questions"
+      - "Agents: Conditional Access Optimization, Phishing Triage"
+      - "Standalone portal: your own plugins and promptbooks"
+    narration: >
+      In Defender, opening an incident creates a summary, and guided response suggests triage, containment, investigation
+      and remediation steps. The query assistant turns a sentence into K Q L. In Entra you get risky user summaries and
+      questions about the sign in logs. Agents do a job on their own, and the standalone portal is where your own
+      plugins live.
+
+  - id: agents
+    type: bullets
+    heading: "Two agents, two sets of prerequisites"
+    bullets:
+      - "Conditional Access Optimization: Entra ID P1, Security Administrator"
+      - "Phishing Triage: Defender for Office 365 Plan 2"
+      - "Both use SCUs: the CA agent under one per run, on average"
+      - "Phishing Triage is now the Security Alert Triage Agent too"
+    narration: >
+      Two agents. The Conditional Access Optimization Agent needs at least Entra I D P one, and a security administrator
+      to turn it on the first time. It suggests policies, in report only mode, and Learn says a run uses under one S C U on
+      average. The Phishing Triage Agent needs Defender for Office 365 plan two and a few settings. Learn now says it is the
+      same agent as the Security Alert Triage Agent, extended to some identity and cloud alerts.
+
+  - id: skill-code
+    type: code
+    heading: "A KQL skill in YAML"
+    lang: yaml
+    code: |
+      - Name: GetFailedSignInsByUser
+        Description: Counts failed Microsoft Entra sign-ins in the last 7 days ...
+        Inputs:
+          - Name: upn
+            Description: The user principal name of the account
+            Required: true
+        Settings:
+          Target: Defender
+          Template: |-
+            EntraIdSignInEvents
+            | where Timestamp > ago(7d)
+            | where AccountUpn =~ '{{upn}}'
+            | where ErrorCode != 0
+            | summarize Failures = count() by AccountUpn, Application
+            | top 50 by Failures desc
+    narration: >
+      Your own skill is a block of YAML. A description the model reads to choose it, an input, a target, and a K Q L
+      template with a placeholder. Notice the table is Entra I D sign in events. The old name, A A D sign in events beta,
+      was replaced on the nineteenth of October, twenty twenty six.
+
+  - id: check-screen
+    type: screen
+    heading: "Check it with a real KQL parser"
+    image: screens/check.jpg
+    bar: "Terminal · dotnet test · seckit check"
+    demo: "Terminal: dotnet test SecCopilotKit.Tests -m:1 (Passed: 115); seckit check plugin/contoso-soc-hunting.yaml (0 errors, 0 warnings); then seckit check samples/broken-plugin.yaml showing the red lines."
+    narration: >
+      Before you upload anything, check it. One hundred fifteen tests, and a checker that parses every query with the
+      Kusto language library against the real advanced hunting columns. A misspelt column is an error, because K Q L
+      column names are case sensitive. The broken sample shows the rest: a placeholder outside quotes, the old table name,
+      and a model that is not G P T four point one.
+
+  - id: inject
+    type: code
+    heading: "Placeholders belong inside quotes"
+    lang: text
+    code: |
+      input:   x' or 1==1 | where 'a'=='a
+
+      where AccountUpn =~ '{{upn}}'   -> one string literal
+      where AccountUpn == {{upn}}     -> ERROR: placeholder outside a string literal
+    narration: >
+      One rule is worth a minute. Learn does not say how Security Copilot escapes an input, so assume it does not. Keep
+      every placeholder inside a quoted string. The tests prove why: a hostile value adds operators to an unquoted
+      query, and stays one harmless string when it is escaped.
+
+  - id: plugin-screen
+    type: screen
+    heading: "Ask the plugin"
+    image: screens/plugin.jpg
+    bar: "Security Copilot · Custom plugin · Contoso SOC hunting"
+    demo: "Needs Security Copilot capacity. Plugin button on the prompt bar > Custom > Add plugin > contoso-soc-hunting.yaml. Prompt: 'Show failed sign-ins for jordan.demo@contoso.example'. Record the real answer and the skill in the activity trail."
+    narration: >
+      Upload the file as a custom plugin, and ask in plain words. This is the part Contoso cannot get from the built in features: their own questions, as code. Security Copilot picks the skill from its description,
+      fills the input, runs the query in advanced hunting and writes the answer. Same query as we tested, now with the
+      model on top.
+
+  - id: embedded-screen
+    type: screen
+    heading: "The embedded view"
+    image: screens/embedded.jpg
+    bar: "Defender · Incident · Copilot  |  Entra · Risky users · Summarize"
+    demo: "Needs capacity. Defender portal: a real incident, Copilot tab, summary, then Recommendations. Entra admin center: Protection > Risky users > a user > Summarize. Record what the tenant really shows."
+    narration: >
+      Embedded is the easy part, and it is where most analysts start. Open an incident, and the summary is waiting, with the timeline, the assets and the
+      recommended next steps. In Entra, a risky user gets a summary with what to do next. No prompt to write, but the same
+      meter is running.
+
+  - id: cost
+    type: code
+    heading: "What the meter says"
+    lang: text
+    code: |
+      $ seckit scu provisioned --scus 1 --hours 730
+      1 SCU x 730 h x 4.00 USD = 2920.00 USD
+
+      $ seckit scu inclusion --licences 4000 --used 1700
+      included: 1600 SCU a month, used 1700, beyond 100
+      beyond, at 6.00 USD: 600.00 USD   (Learn: throttling starts at a future date)
+    short: cost
+    narration: >
+      The cost. A provisioned S C U is four dollars an hour, billed per started hour. One S C U for a month is about
+      twenty nine hundred dollars, even when idle. Microsoft 365 E five and E seven include four hundred S C Us a month per
+      thousand licences, capped at ten thousand. Four thousand licences give sixteen hundred. Overage is six dollars an
+      S C U. Prices change, so read the page before you quote one.
+
+  - id: agent-screen
+    type: screen
+    heading: "An agent in report-only mode"
+    image: screens/agent.jpg
+    bar: "Entra · Agents · Conditional Access Optimization"
+    demo: "Needs capacity and Entra ID P1. Entra admin center > Agents > Conditional Access Optimization > Start agent as Security Administrator (no PIM-activated role). Show the activity map and one suggestion. Do not apply it."
+    narration: >
+      The Conditional Access agent scans new users and apps from the last day, finds gaps, and proposes policies in
+      report only mode. You review each suggestion and decide. It cannot be paused once started, and it looks at up to
+      three hundred users per run.
+
+  - id: gotcha
+    type: bullets
+    heading: "Gotcha: the quiet costs"
+    bullets:
+      - "One SCU minimum, billed hourly, even when idle"
+      - "Alert tuning can hide alerts from Phishing Triage"
+      - "Agent manifests are prerelease: expect changes"
+      - "Bound every query: output goes to the model"
+    short: gotcha
+    narration: >
+      The gotchas. One S C U is the minimum and it is billed every hour. The Phishing Triage Agent ignores alerts that
+      alert tuning resolves, so switch off the auto resolve rule. Agent manifests are prerelease in Learn, so expect
+      change. And bound your queries, because the rows you return are what the model reads.
+
+  - id: recap
+    type: bullets
+    heading: "Five rules"
+    bullets:
+      - "Check manifests and KQL offline before upload"
+      - "Keep placeholders inside quotes"
+      - "Know the prerequisites of each agent"
+      - "Do the SCU sums first, then watch the dashboard"
+      - "Review every suggestion, apply none blindly"
+    narration: >
+      Five rules. Check manifests and queries offline. Keep placeholders inside quotes. Know the prerequisites of each agent.
+      Do the S C U sums first, then watch the dashboard. And review every suggestion, apply none blindly. Next time: Copilot
+      governance with Purview.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The plugin, the agent manifest, the checker and the tests are on GitHub, and the Microsoft Learn pages are in the
+      description. This was Dev Lad Log, Copilot and A I, by Momento Galático.
