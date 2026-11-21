@@ -1,0 +1,57 @@
+{
+  "name": "Purchase request process",
+  "uniqueName": "cts_purchaserequestprocess",
+  "primaryTable": "cts_purchaserequest",
+  "firstStage": "submit",
+  "stages": {
+    "submit": {
+      "name": "Submit", "table": "cts_purchaserequest", "category": "Qualify",
+      "steps": [
+        {"column": "cts_amount", "type": "number", "required": true},
+        {"column": "cts_justification", "type": "text", "required": true},
+        {"column": "cts_neededby", "type": "date", "required": false}
+      ],
+      "next": "manager"
+    },
+    "manager": {
+      "name": "Manager review", "table": "cts_purchaserequest", "category": "Develop",
+      "steps": [
+        {"column": "cts_amount", "type": "number", "required": false},
+        {"column": "cts_managerdecision", "type": "choice", "required": true, "valid": ["Approved", "Rejected"]}
+      ],
+      "next": {
+        "condition": {"op": "and", "rules": [
+          {"column": "cts_amount", "operator": "gte", "value": 5000},
+          {"column": "cts_managerdecision", "operator": "eq", "value": "Approved"}
+        ]},
+        "yes": "finance",
+        "no": "order"
+      }
+    },
+    "finance": {
+      "name": "Finance review", "table": "cts_purchaserequest", "category": "Propose",
+      "steps": [
+        {"column": "cts_financedecision", "type": "choice", "required": true, "valid": ["Approved", "Rejected"]}
+      ],
+      "flowSteps": ["Request finance approval"],
+      "next": "order"
+    },
+    "order": {
+      "name": "Order", "table": "cts_purchaserequest", "category": "Propose",
+      "steps": [
+        {"column": "cts_ponumber", "type": "text", "required": true}
+      ],
+      "next": "close"
+    },
+    "close": {
+      "name": "Close", "table": "cts_purchaserequest", "category": "Close",
+      "steps": [
+        {"column": "cts_received", "type": "choice", "required": true, "valid": ["Yes", "No, partial", "No, missing"]}
+      ],
+      "next": null
+    }
+  },
+  "globalWorkflows": [
+    {"name": "Notify requester", "trigger": "processCompleted"}
+  ]
+}

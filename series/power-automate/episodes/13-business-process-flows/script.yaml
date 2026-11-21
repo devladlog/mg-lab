@@ -1,0 +1,251 @@
+# DEVLADLOG Power Automate — episode 13 (draft: material built and tested locally, demo still to record)
+episode: 13
+slug: business-process-flows
+series_label: "POWER AUTOMATE"
+series_name: "DEVLADLOG Power Automate"
+file_prefix: "power-automate"
+title: "Business process flows that guide the work"
+subtitle: "Stages, gates, branching and a flow step, tested"
+voice: am_michael
+thumbnail_text: "PROCESS\nFLOWS\nWITH GATES"
+youtube:
+  title: "Business Process Flows: Stage Gates, Branching and Flow Steps | DEVLADLOG Power Automate #13"
+  tags: [Power Automate, business process flow, BPF, Dataverse, model-driven app, stage gating, branching, flow step, Web API, Power Platform]
+sources:
+  - https://www.devladlog.com/articles/power-automate/2026-04-01-business-process-flows-complete-guide-2026/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Everyone follows the same steps"
+    sub: "Business process flows, with gates that hold"
+    short: hook
+    narration: >
+      A purchase request lands in front of finance with no justification and no manager decision. Someone skipped
+      three steps, and nobody noticed. A business process flow stops that. It is the bar across the top of a form
+      that says where you are and what is still missing. In this episode we build one, we test its rules before
+      opening the designer, and we drive it from code.
+
+  - id: what
+    type: bullets
+    heading: "What a business process flow is"
+    bullets:
+      - "Stages, each with steps that map to columns"
+      - "A required step gates the move to the next stage"
+      - "Branching on values from the previous stage"
+      - "Its own Dataverse table stores every instance"
+      - "No automation of its own: pair it with flows"
+    narration: >
+      A business process flow is a set of stages. Each stage holds steps, and each step is a column on the form. Mark
+      a step required and people cannot move on until it has a value. You can branch on those values. Every
+      activated process gets its own Dataverse table that stores the instances. And it has no automation of its own:
+      the work happens in the flows and rules you attach to it.
+
+  - id: limits
+    type: bullets
+    heading: "Limits from Microsoft Learn"
+    bullets:
+      - "30 stages per process, 30 steps per stage"
+      - "Up to 5 tables in one process"
+      - "10 active processes per table by default"
+      - "Branch rules: AND or OR, never both"
+      - "Maker needs a per user licence or a Dynamics plan"
+    narration: >
+      The limits. Thirty stages per process, thirty steps per stage, five tables, and ten active processes per
+      table by default. A branching rule can combine conditions with and, or with or, but never both. And to build
+      one you need a per user Power Apps or Power Automate licence, or a Dynamics plan that includes it.
+
+  - id: designer
+    type: screen
+    heading: "The process in the designer"
+    image: screens/designer.jpg
+    bar: "make.powerapps.com · Solutions · Purchase request process"
+    demo: >
+      Business process flow designer for "Purchase request process" on the Purchase request table: stages Submit,
+      Manager review, a Condition tile (Amount greater than or equal to 5000 AND Manager decision equals Approved),
+      Finance review on the Yes branch with the flow step "Request finance approval", Order, Close. Mask the org URL.
+    narration: >
+      Here is the process for the purchase request table. Submit, manager review, then a condition. Five thousand
+      euros or more, with the manager's approval, goes to finance review, where a cloud flow step asks finance to
+      decide. Everything else jumps straight to order, and then close.
+
+  - id: definition
+    type: code
+    heading: "The design, kept in version control"
+    lang: json
+    code: |
+      "manager": {
+        "name": "Manager review",
+        "steps": [
+          {"column": "cts_amount", "type": "number", "required": false},
+          {"column": "cts_managerdecision", "type": "choice", "required": true}
+        ],
+        "next": {
+          "condition": {"op": "and", "rules": [
+            {"column": "cts_amount", "operator": "gte", "value": 5000},
+            {"column": "cts_managerdecision", "operator": "eq", "value": "Approved"}
+          ]},
+          "yes": "finance", "no": "order"
+        }
+      }
+    narration: >
+      The designer is the source of truth, but we keep the design in a small json file. That lets us check the rules
+      from Microsoft Learn before anyone opens the designer. Notice that amount is also a step of the manager stage.
+      There is a reason.
+
+  - id: branch-rule
+    type: code
+    heading: "Gotcha: the rule needs a step in the stage before it"
+    lang: text
+    short: branch-rule
+    code: |
+      $ python -m bpfkit validate process/purchase-request-process.json
+      ERROR   BPF006 condition after 'Manager review':
+        rule on 'cts_amount', which is not a step of 'Manager review'.
+        A branching rule must be based on steps of the stage that
+        immediately precedes it: add the column as a step
+        (it can be optional)
+    narration: >
+      The gotcha. Learn says a branching rule must be based on the steps of the stage immediately before the
+      condition. Amount is typed in the first stage, so the rule after manager review cannot see it, unless you add
+      it there as an optional step. Our validator catches it, and the designer confirms it in the demo.
+
+  - id: gate
+    type: screen
+    heading: "The gate holds"
+    image: screens/gate.jpg
+    bar: "Purchasing app · Purchase request"
+    short: gate
+    demo: >
+      Model-driven app form of a Purchase request with the process bar on the Submit stage, Justification left empty
+      (required marker), and the error shown after selecting Next Stage. Then the field filled and the bar moving
+      to Manager review. Mask the org URL and user names except Alex Demo.
+    narration: >
+      This is the gate. Alex Demo leaves the justification empty and presses next stage. The form says what is
+      missing and stays put. Fill it in, and the bar moves on. One catch we tested: a required yes or no column
+      only passes on yes, so use a choice when no is also a valid answer.
+
+  - id: engine
+    type: code
+    heading: "The same rule, in code"
+    lang: python
+    code: |
+      def is_empty(value, step_type: str) -> bool:
+          if step_type == "twoOptions":
+              return value is not True  # No counts as empty for a required Two Options step
+          return value is None or (isinstance(value, str) and value.strip() == "")
+
+
+      def evaluate(condition: dict, record: dict) -> bool:
+          results = [OPERATORS[r["operator"]](record.get(r["column"]), r["value"]) for r in condition["rules"]]
+          return all(results) if condition["op"] == "and" else any(results)
+    narration: >
+      The same rules in code, so we can test every path in milliseconds. The gate is one small function, and the branch is evaluated from the values in the record. A small request skips finance. A large one
+      goes through it. A rejected request, an empty column, an aborted instance: each has a test.
+
+  - id: flowstep
+    type: code
+    heading: "A cloud flow as a stage step"
+    lang: json
+    code: |
+      "Complete_flow_step": {
+        "type": "OpenApiConnection",
+        "inputs": {
+          "host": { "operationId": "UpdateOnlyRecord" },
+          "parameters": {
+            "entityName": "processsessions",
+            "recordId": "@body('Parse_step_payload')?['entity']?['FlowsWorkflowLogId']",
+            "item/statecode": 1,
+            "item/statuscode": 4
+          }
+        }
+      }
+    narration: >
+      A flow step runs a solution cloud flow from inside a stage. The trigger is when a row is selected, and the
+      payload tells you which process instance called you. The detail people miss: unless the flow writes back to
+      the process log, the step shows processing forever, even after the flow succeeded.
+
+  - id: flowrun
+    type: screen
+    heading: "Finance decides from Outlook"
+    image: screens/flowrun.jpg
+    bar: "make.powerautomate.com · Finance review step · run history"
+    demo: >
+      Run history of "Finance review step" for the 12,500 EUR request: Parse step payload, Get purchase request,
+      Finance approval, Finance decision (Approve branch), Complete flow step, all green. Next to it the Finance
+      review stage in the form showing the step as Completed. Mask the org URL and approval IDs.
+    narration: >
+      Here is the flow step running for the twelve thousand five hundred euro request. Finance approves, the decision
+      is written to the request, the process log is completed, and the step turns green on the form.
+
+  - id: webapi
+    type: code
+    heading: "Moving a stage from code"
+    lang: http
+    code: |
+      PATCH /api/data/v9.2/cts_purchaserequestprocesses(<instance id>)
+      {
+        "activestageid@odata.bind": "/processstages(<next stage id>)",
+        "traversedpath": "<submit id>,<manager id>,<finance id>"
+      }
+
+      # abort:      { "statecode": 1, "statuscode": 3 }
+      # finish:     { "statecode": 0, "statuscode": 2 }  (last stage only)
+    narration: >
+      From code, a process instance is a row in its own table. To move it, patch the active stage and the traversed
+      path. Move one stage at a time, forward or back. Abort is state one, status three. Finished is only possible at
+      the last stage.
+
+  - id: script
+    type: screen
+    heading: "The script, against the real environment"
+    image: screens/script.jpg
+    bar: "PowerShell 7 · Set-BpfStage.ps1"
+    demo: >
+      Terminal on the lab laptop: Set-BpfStage.ps1 -Operation Next with -WhatIf (prints the PATCH), then without it,
+      then ListInstances showing the new active stage; next to it the form's process bar on the new stage. Token
+      comes from an environment variable and is never shown; mask the org URL and the GUIDs.
+    narration: >
+      The script reads the active path, finds the next stage and patches the instance. With what if it only prints the
+      request. Run for real, the process bar on the form moves. The token comes from an environment variable, never
+      from the file.
+
+  - id: tests
+    type: code
+    heading: "Everything tested without a tenant"
+    lang: text
+    code: |
+      $ python -m pytest
+      36 passed in 37.44s
+      $ Invoke-Pester tests/Set-BpfStage.Tests.ps1
+      Tests Passed: 11, Failed: 0
+
+      validator: 14 design rules from Microsoft Learn
+      engine:    gates, branches, back, abort, finish
+      flows:     lint, approve, reject, timeout
+      script:    real PowerShell, mocked Invoke-RestMethod
+    narration: >
+      Thirty six Python tests and eleven Pester tests, all without a tenant. The validator, the engine, the flows with
+      approve, reject and timeout paths, and the real PowerShell script with only the web call mocked.
+
+  - id: recap
+    type: bullets
+    heading: "Takeaways"
+    bullets:
+      - "Required steps are the gate: use choices, not yes or no"
+      - "Branch rules see only the previous stage"
+      - "Flow steps must complete the process log"
+      - "Code moves one stage at a time"
+      - "Keep the design and the checks in the repo"
+    narration: >
+      To recap. Required steps are your gate, and a choice beats a yes or no. Branch rules only see the stage before
+      them. A flow step must complete its process log. Code moves one stage at a time. And keep the design and the
+      checks in your repo, because the designer will not tell you what you broke.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The code is on GitHub, and the five guides for this topic are on devladlog dot com. See you in the next
+      episode, desktop flows.

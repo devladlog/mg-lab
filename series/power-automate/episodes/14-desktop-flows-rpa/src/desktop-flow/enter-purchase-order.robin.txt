@@ -1,0 +1,38 @@
+# Enter purchase order (Contoso Purchasing, legacy Windows Forms app without an API)
+# DRAFT of the designer actions: the recording session builds this flow in Power Automate for desktop, then replaces
+# this file with the text the designer copies so that `python -m padkit lint` runs on the real flow.
+# Input variables (Text): Supplier, Description, Amount (invariant, e.g. 1800.50), RequestId
+# Output variables (Text): Status, OrderNumber, Errors
+SET Status TO $'''Pending'''
+SET OrderNumber TO $''''''
+SET Errors TO $''''''
+# 1. When did this run start? (the ledger check only accepts orders saved after it)
+Scripting.RunPowershellScript.RunPowershellScript Script: $'''[datetime]::UtcNow.ToString('o')''' ScriptOutput=> RunStartedUtc ScriptError=> ScriptError
+# 2. Pre-flight. %variables% are pasted into script text before it runs, so free text (Supplier...) never goes into
+#    a script: each field is written to its own file and the script reads the files (see Test-PurchaseOrder.ps1)
+File.WriteText File: $'''C:\MGLab\run\Supplier.txt''' TextToWrite: Supplier AppendNewLine: False IfFileExists: File.IfFileExists.Overwrite Encoding: File.FileEncoding.UTF8
+File.WriteText File: $'''C:\MGLab\run\Description.txt''' TextToWrite: Description AppendNewLine: False IfFileExists: File.IfFileExists.Overwrite Encoding: File.FileEncoding.UTF8
+File.WriteText File: $'''C:\MGLab\run\Amount.txt''' TextToWrite: Amount AppendNewLine: False IfFileExists: File.IfFileExists.Overwrite Encoding: File.FileEncoding.UTF8
+Scripting.RunPowershellScript.RunPowershellScript Script: $'''& "C:\MGLab\scripts\Test-PurchaseOrder.ps1" -InputDir "C:\MGLab\run"''' ScriptOutput=> PreflightJson ScriptError=> ScriptError
+Variables.ConvertJsonToCustomObject Json: PreflightJson CustomObject=> Preflight
+IF Preflight.valid = False THEN
+    SET Status TO $'''Rejected'''
+    SET Errors TO Preflight.errorText
+    EXIT Code: 0
+END
+# 3. Drive the legacy window (tab order: Supplier, Description, Amount, Save)
+System.RunApplication.RunApplication ApplicationPath: $'''C:\MGLab\ContosoPurchasing\ContosoPurchasing.exe''' WindowStyle: System.ProcessWindowStyle.Normal ProcessId=> AppProcessId
+WAIT 2
+MouseAndKeyboard.SendKeys.SendKeys TextToSend: $'''%Supplier%{Tab}%Description%{Tab}%Preflight.amountForApp%{Tab}{Enter}''' DelayBetweenKeystrokes: 30 SendTextAsHardwareKeys: False
+WAIT 1
+# the "order saved" message box: press OK
+MouseAndKeyboard.SendKeys.SendKeys TextToSend: $'''{Enter}''' DelayBetweenKeystrokes: 30 SendTextAsHardwareKeys: False
+System.TerminateProcess.TerminateProcessById ProcessId: AppProcessId
+# 4. Trust, but verify: read the order back from the legacy ledger (Amount and RunStartedUtc come from our own scripts)
+Scripting.RunPowershellScript.RunPowershellScript Script: $'''& "C:\MGLab\scripts\Confirm-PurchaseOrder.ps1" -LedgerPath "$env:LOCALAPPDATA\ContosoLegacy\orders.csv" -InputDir "C:\MGLab\run" -Amount "%Preflight.amountInvariant%" -SinceUtc "%RunStartedUtc%"''' ScriptOutput=> ConfirmJson ScriptError=> ScriptError
+Variables.ConvertJsonToCustomObject Json: ConfirmJson CustomObject=> Confirm
+IF Confirm.found = False THEN
+    Flow.Exit Code: 1 ErrorMessage: $'''Order was not found in the ledger: %Confirm.reason%'''
+END
+SET OrderNumber TO Confirm.orderNo
+SET Status TO $'''Saved'''

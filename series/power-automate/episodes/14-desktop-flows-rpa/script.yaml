@@ -1,0 +1,211 @@
+# DEVLADLOG Power Automate — episode 14 (draft: material built and tested locally, demo still to record)
+episode: 14
+slug: desktop-flows-rpa
+series_label: "POWER AUTOMATE"
+series_name: "DEVLADLOG Power Automate"
+file_prefix: "power-automate"
+title: "Desktop flows and RPA for apps without an API"
+subtitle: "Drive a legacy window from the cloud, and prove it worked"
+voice: am_michael
+thumbnail_text: "DESKTOP\nFLOWS\nRPA"
+youtube:
+  title: "Desktop Flows and RPA: Automate a Legacy App Safely | DEVLADLOG Power Automate #14"
+  tags: [Power Automate, desktop flows, RPA, Power Automate for desktop, attended, unattended, legacy app, run a flow built with Power Automate for desktop, Power Platform]
+sources:
+  - https://www.devladlog.com/articles/power-automate/2025-02-03-desktop-flows-rpa-complete-guide-2025/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "No API? Drive the window"
+    sub: "Desktop flows, and how not to trust them"
+    short: hook
+    narration: >
+      Approved purchase requests still get typed by hand into an old Windows application. It has no connector, no
+      API, nothing. A desktop flow can click through it for us, started from a cloud flow. In this episode we build
+      that, and then we spend most of our time on what goes wrong, because a robot that clicks Save and hopes is the
+      most dangerous kind.
+
+  - id: legacy
+    type: screen
+    heading: "The app with no API"
+    image: screens/legacyapp.jpg
+    bar: "Contoso Purchasing · New order"
+    demo: >
+      The Contoso Purchasing Windows Forms app on the lab Windows 11 machine: fields Supplier, Description and Amount,
+      a Save button, and the message box with the new order number. Only fictional data (Fabrikam, 12,500).
+    narration: >
+      This is Contoso Purchasing. Three fields, a Save button, and a message box. The only trace it leaves is a
+      ledger file with one line per order. That file matters later. For now, remember there is nothing to call:
+      the only way in is the screen.
+
+  - id: licence
+    type: bullets
+    heading: "Attended, unattended, and the licence"
+    bullets:
+      - "Attended: runs in your signed-in session"
+      - "Unattended: the machine signs in and locks the screen"
+      - "Premium licence covers attended runs from the cloud"
+      - "Unattended needs a Process licence per bot"
+      - "Learn disagrees on the trial: check your tenant"
+    narration: >
+      Attended means the flow runs in your own signed in session. Unattended means the machine signs itself in and
+      runs with the screen locked. A Premium licence covers attended runs started from the cloud. Unattended runs
+      need a Process licence for each bot. The Learn pages disagree about whether the trial includes unattended, so
+      we only claim attended in the demo.
+
+  - id: contract
+    type: code
+    heading: "The cloud flow calls it"
+    lang: json
+    code: |
+      "operationId": "RunUIFlow_V2"
+      "parameters": {
+        "uiFlowId": "00000000-0000-0000-0000-000000000901",
+        "runMode": "attended",
+        "item/Supplier": "@triggerBody()?['Supplier']",
+        "item/Description": "@coalesce(triggerBody()?['Justification'], triggerBody()?['Title'])",
+        "item/Amount": "@formatNumber(triggerBody()?['Amount'], '0.00', 'en-US')",
+        "item/RequestId": "@string(triggerBody()?['ID'])"
+      }
+      "limit": {"timeout": "PT30M"}
+    narration: >
+      The cloud action is run a flow built with Power Automate for desktop. It takes the desktop flow, a run mode,
+      and your inputs. Notice the amount. We send it as text with a dot, formatted for en US, so the machine's
+      regional settings cannot turn eighteen hundred into a hundred and eighty thousand. And there is a timeout, so
+      a stuck window cannot hang for days.
+
+  - id: files
+    type: code
+    heading: "Free text goes into files, not into scripts"
+    lang: text
+    code: |
+      File.WriteText File: $'''C:\MGLab\run\Supplier.txt''' TextToWrite: Supplier AppendNewLine: False ...
+      File.WriteText File: $'''C:\MGLab\run\Amount.txt''' TextToWrite: Amount AppendNewLine: False ...
+      Scripting.RunPowershellScript.RunPowershellScript Script: $'''& "C:\MGLab\scripts\Test-PurchaseOrder.ps1" -InputDir "C:\MGLab\run"''' ScriptOutput=> PreflightJson ScriptError=> ScriptError
+    narration: >
+      Inside the desktop flow we validate before we touch the window. And here is how we pass the data to the
+      PowerShell script: through files. Each field is written to its own text file and the script reads the files.
+      Hold that thought, because the obvious way is a trap.
+
+  - id: injection
+    type: code
+    heading: "Gotcha: percent variables are pasted into the script"
+    lang: text
+    short: injection
+    code: |
+      $ python -m padkit lint enter-purchase-order.robin.txt
+      ERROR   PAD004 line 16: input 'Supplier' is pasted into script
+      text before it runs: write it to a file and read the file
+      1 error(s), 0 warning(s)
+    narration: >
+      The gotcha. In the run PowerShell script action, a percent variable is replaced by its value before the script
+      runs. So a supplier called quote, semicolon, delete something, becomes code. Our tests prove it, with a
+      negative control that really executes the bad text. Files are safe. The linter flags the unsafe pattern.
+
+  - id: designer
+    type: screen
+    heading: "The desktop flow in the designer"
+    image: screens/pad.jpg
+    bar: "Power Automate for desktop · Enter purchase order"
+    demo: >
+      The desktop flow "Enter purchase order" in Power Automate for desktop: input variables Supplier, Description,
+      Amount, RequestId; output variables Status, OrderNumber, Errors; the actions from enter-purchase-order.robin.txt.
+      Mask the user name in the title bar.
+    narration: >
+      Here is the flow in Power Automate for desktop. Four inputs, three outputs. It checks the order, opens the app,
+      types the fields with the keyboard, and presses save. We use keyboard keys in tab order instead of mouse
+      coordinates, because they survive a different screen size.
+
+  - id: verify
+    type: code
+    heading: "Trust, but read the ledger"
+    lang: text
+    code: |
+      IF Confirm.found = False THEN
+          Flow.Exit Code: 1 ErrorMessage: $'''Order was not found in the ledger: %Confirm.reason%'''
+      END
+      SET OrderNumber TO Confirm.orderNo
+      SET Status TO $'''Saved'''
+    narration: >
+      After the click, we check. A script reads the ledger and looks for an order saved after the run started, with
+      the same supplier and amount. Found, we return the order number. Not found, the flow fails loudly. A window
+      that closed without saving is not a success, and without this check nobody would know.
+
+  - id: loopguard
+    type: code
+    heading: "Gotcha: our own update triggers the flow"
+    lang: json
+    short: loopguard
+    code: |
+      "recurrence": {"interval": 5, "frequency": "Minute"},
+      "conditions": [{
+        "expression": "@and(equals(triggerBody()?['Status']?['Value'], 'Approved'), empty(triggerBody()?['RpaStatus']))"
+      }]
+    narration: >
+      Second gotcha. The trigger fires when an item is modified, and our flow writes the order number back to the
+      same item. That is a modification. Without a guard it loops. So the trigger condition also requires the RPA
+      status column to be empty, and we set it as soon as we are done. The tests run an item with the status filled
+      in and it does not start.
+
+  - id: flowrun
+    type: screen
+    heading: "The cloud run"
+    image: screens/flowrun.jpg
+    bar: "make.powerautomate.com · Enter approved purchase orders"
+    demo: >
+      Run history of "Enter approved purchase orders" for the 12,500 request: Run desktop flow green, Order saved
+      on the Saved branch, Mark entered green. Next to it the SharePoint item with PO number and RPA status Entered.
+      Mask the tenant URL.
+    narration: >
+      Here is a real run. The desktop flow runs on the lab machine, the order is saved, and the branch writes the
+      order number and the entered status back to the request. Alex Demo gets an email. A rejected order takes the
+      other branch with the reason, and nothing is retried.
+
+  - id: failure
+    type: bullets
+    heading: "When the robot fails"
+    bullets:
+      - "Try scope with a 30 minute timeout"
+      - "Catch scope on Failed and TimedOut"
+      - "Mark the item, tell purchasing, include the reason"
+      - "Without it, a failed run is silent"
+      - "Flow status: Failed, TimedOut, Cancelled and others"
+    narration: >
+      Failures. The desktop run sits in a try scope with a timeout. A catch scope runs on failed or timed out, marks
+      the item and mails purchasing with the reason. We tested the negative case too: take the catch scope away and
+      a failed run marks nothing and tells nobody. That is the quiet failure you avoid on purpose.
+
+  - id: unattended
+    type: bullets
+    heading: "Before you go unattended"
+    bullets:
+      - "The screen is locked: no message dialogs"
+      - "Secrets from the vault, never in the flow"
+      - "Input limit 2 MB per run"
+      - "70 runs per minute per connection"
+      - "Windows 10 needs the download, Windows 11 has it"
+    narration: >
+      If you go unattended, remember the screen is locked, so message dialogs have nothing to show on. Never hard
+      code a password in the flow. Inputs are capped at two megabytes, and there are seventy runs a minute per
+      connection. Windows eleven ships with the tool. Windows ten needs the download.
+
+  - id: tests
+    type: screen
+    heading: "The proof, locally"
+    image: screens/tests.jpg
+    bar: "Terminal · series/power-automate/episodes/14-desktop-flows-rpa"
+    demo: >
+      Terminal showing the three test runs: python -m pytest, the Pester suite (23 tests), and dotnet test for the
+      legacy app (9 tests), all green. Mask the user name in the prompt.
+    narration: >
+      Everything except the tenant runs locally. Python tests simulate the cloud flow on every path. Pester runs the
+      real PowerShell scripts, including the injection test. And the legacy app has its own unit tests. Only the
+      click-through itself needs a Windows desktop and a tenant.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The code is on GitHub, and the guides for this topic are on devladlog dot com. See you in the next episode. Until then, remember: let the robot click, but make it prove that the click worked.

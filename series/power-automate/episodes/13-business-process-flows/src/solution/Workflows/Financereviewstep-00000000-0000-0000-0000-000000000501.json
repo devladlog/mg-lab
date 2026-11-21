@@ -1,0 +1,302 @@
+{
+  "properties": {
+    "connectionReferences": {
+      "shared_commondataserviceforapps": {
+        "runtimeSource": "embedded",
+        "connection": {
+          "connectionReferenceLogicalName": "cts_shareddataverse_purchasebpf"
+        },
+        "api": {
+          "name": "shared_commondataserviceforapps"
+        }
+      },
+      "shared_approvals": {
+        "runtimeSource": "embedded",
+        "connection": {
+          "connectionReferenceLogicalName": "cts_sharedapprovals_purchasebpf"
+        },
+        "api": {
+          "name": "shared_approvals"
+        }
+      }
+    },
+    "definition": {
+      "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+      "contentVersion": "1.0.0.0",
+      "parameters": {
+        "$connections": {
+          "defaultValue": {},
+          "type": "Object"
+        },
+        "$authentication": {
+          "defaultValue": {},
+          "type": "SecureObject"
+        }
+      },
+      "triggers": {
+        "When_a_row_is_selected": {
+          "type": "OpenApiConnection",
+          "inputs": {
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+              "connectionName": "shared_commondataserviceforapps",
+              "operationId": "SubscribeOnDemand"
+            },
+            "parameters": {
+              "subscriptionRequest/entityname": "cts_purchaserequestprocess",
+              "subscriptionRequest/scope": 4
+            },
+            "authentication": "@parameters('$authentication')"
+          },
+          "splitOn": "@triggerOutputs()?['body/value']"
+        }
+      },
+      "actions": {
+        "Parse_step_payload": {
+          "type": "ParseJson",
+          "runAfter": {},
+          "inputs": {
+            "content": "@triggerOutputs()?['body']",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "entity": {
+                  "type": "object",
+                  "properties": {
+                    "FlowsWorkflowLogId": {
+                      "type": "string"
+                    },
+                    "BPFInstanceId": {
+                      "type": "string"
+                    },
+                    "BPFInstanceEntityName": {
+                      "type": "string"
+                    },
+                    "BPFDefinitionId": {
+                      "type": "string"
+                    },
+                    "BPFDefinitionEntityName": {
+                      "type": "string"
+                    },
+                    "StepId": {
+                      "type": "string"
+                    },
+                    "BPFDefinitionName": {
+                      "type": "string"
+                    },
+                    "BPFInstanceName": {
+                      "type": "string"
+                    },
+                    "BPFFlowStageLocalizedName": {
+                      "type": "string"
+                    },
+                    "BPFFlowStageEntityName": {
+                      "type": "string"
+                    },
+                    "BPFFlowStageEntityCollectionName": {
+                      "type": "string"
+                    },
+                    "BPFFlowStageTableRowID": {
+                      "type": "string"
+                    },
+                    "BPFActiveStageId": {
+                      "type": "string"
+                    },
+                    "BPFActiveStageEntityName": {
+                      "type": "string"
+                    },
+                    "BPFActiveStageLocalizedName": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "Get_purchase_request": {
+          "type": "OpenApiConnection",
+          "runAfter": {
+            "Parse_step_payload": [
+              "Succeeded"
+            ]
+          },
+          "inputs": {
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+              "connectionName": "shared_commondataserviceforapps",
+              "operationId": "GetItem"
+            },
+            "parameters": {
+              "entityName": "cts_purchaserequests",
+              "recordId": "@body('Parse_step_payload')?['entity']?['BPFFlowStageTableRowID']"
+            },
+            "authentication": "@parameters('$authentication')"
+          }
+        },
+        "Finance_approval": {
+          "type": "OpenApiConnectionWebhook",
+          "runAfter": {
+            "Get_purchase_request": [
+              "Succeeded"
+            ]
+          },
+          "limit": {
+            "timeout": "P3D"
+          },
+          "inputs": {
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_approvals",
+              "connectionName": "shared_approvals",
+              "operationId": "StartAndWaitForAnApproval"
+            },
+            "parameters": {
+              "approvalType": "Basic",
+              "WebhookApprovalCreationInput/title": "Finance review: @{outputs('Get_purchase_request')?['body/cts_justification']} (@{outputs('Get_purchase_request')?['body/cts_amount']} EUR)",
+              "WebhookApprovalCreationInput/assignedTo": "finance-approvers@contoso.com",
+              "WebhookApprovalCreationInput/details": "**Stage:** @{body('Parse_step_payload')?['entity']?['BPFActiveStageLocalizedName']}\n\n**Process:** @{body('Parse_step_payload')?['entity']?['BPFDefinitionName']}",
+              "WebhookApprovalCreationInput/enableNotifications": true,
+              "WebhookApprovalCreationInput/enableReassignment": true
+            },
+            "authentication": "@parameters('$authentication')"
+          }
+        },
+        "Fail_flow_step_on_timeout": {
+          "type": "OpenApiConnection",
+          "inputs": {
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+              "connectionName": "shared_commondataserviceforapps",
+              "operationId": "UpdateOnlyRecord"
+            },
+            "parameters": {
+              "entityName": "processsessions",
+              "recordId": "@body('Parse_step_payload')?['entity']?['FlowsWorkflowLogId']",
+              "item/statecode": 1,
+              "item/statuscode": 6
+            },
+            "authentication": "@parameters('$authentication')"
+          },
+          "runAfter": {
+            "Finance_approval": [
+              "TimedOut"
+            ]
+          }
+        },
+        "Finance_decision": {
+          "type": "If",
+          "runAfter": {
+            "Finance_approval": [
+              "Succeeded"
+            ]
+          },
+          "expression": {
+            "equals": [
+              "@body('Finance_approval')?['outcome']",
+              "Approve"
+            ]
+          },
+          "actions": {
+            "Record_approval": {
+              "type": "OpenApiConnection",
+              "runAfter": {},
+              "inputs": {
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+                  "connectionName": "shared_commondataserviceforapps",
+                  "operationId": "UpdateOnlyRecord"
+                },
+                "parameters": {
+                  "entityName": "cts_purchaserequests",
+                  "recordId": "@body('Parse_step_payload')?['entity']?['BPFFlowStageTableRowID']",
+                  "item/cts_financedecision": 444460000
+                },
+                "authentication": "@parameters('$authentication')"
+              }
+            },
+            "Complete_flow_step": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+                  "connectionName": "shared_commondataserviceforapps",
+                  "operationId": "UpdateOnlyRecord"
+                },
+                "parameters": {
+                  "entityName": "processsessions",
+                  "recordId": "@body('Parse_step_payload')?['entity']?['FlowsWorkflowLogId']",
+                  "item/statecode": 1,
+                  "item/statuscode": 4
+                },
+                "authentication": "@parameters('$authentication')"
+              },
+              "runAfter": {
+                "Record_approval": [
+                  "Succeeded"
+                ]
+              }
+            }
+          },
+          "else": {
+            "actions": {
+              "Record_rejection": {
+                "type": "OpenApiConnection",
+                "runAfter": {},
+                "inputs": {
+                  "host": {
+                    "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+                    "connectionName": "shared_commondataserviceforapps",
+                    "operationId": "UpdateOnlyRecord"
+                  },
+                  "parameters": {
+                    "entityName": "cts_purchaserequests",
+                    "recordId": "@body('Parse_step_payload')?['entity']?['BPFFlowStageTableRowID']",
+                    "item/cts_financedecision": 444460001
+                  },
+                  "authentication": "@parameters('$authentication')"
+                }
+              },
+              "Complete_flow_step_rejected": {
+                "type": "OpenApiConnection",
+                "inputs": {
+                  "host": {
+                    "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+                    "connectionName": "shared_commondataserviceforapps",
+                    "operationId": "UpdateOnlyRecord"
+                  },
+                  "parameters": {
+                    "entityName": "processsessions",
+                    "recordId": "@body('Parse_step_payload')?['entity']?['FlowsWorkflowLogId']",
+                    "item/statecode": 1,
+                    "item/statuscode": 4
+                  },
+                  "authentication": "@parameters('$authentication')"
+                },
+                "runAfter": {
+                  "Record_rejection": [
+                    "Succeeded"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "Step_result": {
+          "type": "Compose",
+          "inputs": "@coalesce(body('Finance_approval')?['outcome'], 'TimedOut')",
+          "runAfter": {
+            "Finance_decision": [
+              "Succeeded",
+              "Skipped"
+            ],
+            "Fail_flow_step_on_timeout": [
+              "Succeeded",
+              "Skipped"
+            ]
+          }
+        }
+      }
+    }
+  },
+  "schemaVersion": "1.0.0.0"
+}
