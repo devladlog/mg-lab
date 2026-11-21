@@ -75,6 +75,18 @@ if (-not $p.WaitForExit(20000)) { try { $p.Kill($true) } catch {} }
 # keep the text of what ran on camera next to the clip, so the narration can be checked against the real output
 $log = Join-Path $markers 'scene.log'
 if (Test-Path $log) { Copy-Item $log ([IO.Path]::ChangeExtension($mp4, '.log')) -Force }
+# confidentiality gate: the on-camera text must not show the owner's Windows user name or profile path
+if (Test-Path $log) {
+    $body = (Get-Content $log -Raw) -split '\*{22}' | Select-Object -Skip 2 | Out-String
+    $short = if ($env:USERNAME.Length -gt 6) { $env:USERNAME.Substring(0, 6) + '~' } else { $env:USERNAME }
+    $hit = @($env:USERNAME, $env:USERPROFILE, $short) | Where-Object { $_ -and $body -match [regex]::Escape($_) }
+    if ($hit) {
+        $leakDir = Join-Path (Split-Path $mp4) '_leak'; New-Item -ItemType Directory -Force $leakDir | Out-Null
+        Move-Item $mp4, $jpg -Destination $leakDir -Force
+        Add-Content (Join-Path $Root 'recordings\leaks.txt') "$(Get-Date -Format s) $mp4"
+        throw "Scene shows the Windows user name or profile path; moved to $leakDir. Fix the scene and record it again."
+    }
+}
 Write-Host "Saved $mp4 and poster $jpg" -ForegroundColor Green
 Add-RecordingLog -Root $Root -Entry ([ordered]@{ episode = (Resolve-Path $epDir).Path.Substring($Root.Length + 1); screen = $Screen; file = $mp4; at = (Get-Date -Format s) })
 Remove-Item -Recurse -Force $markers -ErrorAction SilentlyContinue
