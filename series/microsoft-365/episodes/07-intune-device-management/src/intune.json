@@ -1,0 +1,30 @@
+{
+  "$comment": "Intune & Device Management as code (DEVLADLOG Microsoft 365 #7). Fictional tenant: contoso.",
+  "compliancePolicy": {
+    "displayName": "MG Lab - Windows 11 baseline",
+    "description": "Managed from intune.json (MG Lab). Do not edit in the portal.",
+    "assignTo": {
+      "$comment": "Exactly one of groupId (Entra group object id) or allLicensedUsers. The zero GUID is a placeholder: Set-IntuneCompliancePolicy refuses it.",
+      "groupId": "00000000-0000-0000-0000-000000000000"
+    },
+    "settings": {
+      "bitLockerEnabled": true,
+      "secureBootEnabled": true,
+      "codeIntegrityEnabled": true,
+      "storageRequireEncryption": true,
+      "passwordRequired": true,
+      "passwordBlockSimple": true,
+      "passwordRequiredType": "alphanumeric",
+      "passwordMinimumLength": 14,
+      "osMinimumVersion": "10.0.26100.0"
+    },
+    "actions": [
+      { "type": "block", "gracePeriodHours": 24 }
+    ]
+  },
+  "audit": {
+    "staleDays": 30,
+    "requireEncryption": true,
+    "flagPersonalOwned": true
+  }
+}

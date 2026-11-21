@@ -1,0 +1,206 @@
+# DEVLADLOG Microsoft 365 — episode 08 (draft: code and tests are real; screen scenes still need the lab recording; the lab has NO Copilot licence)
+episode: 8
+slug: microsoft-365-copilot-for-microsoft-365
+series_label: "MICROSOFT 365"
+series_name: "DEVLADLOG Microsoft 365"
+file_prefix: "microsoft-365"
+title: "Microsoft 365 Copilot for Microsoft 365"
+subtitle: "Get ready before you buy: licences, Copilot Chat, labels and oversharing"
+voice: am_michael
+thumbnail_text: "WHAT CAN\nCOPILOT\nSEE?"
+youtube:
+  title: "Microsoft 365 Copilot Readiness: Licences, Oversharing and Labels with Microsoft Graph | DEVLADLOG Microsoft 365 #8"
+  tags: [Microsoft 365 Copilot, Copilot Chat, Copilot readiness, oversharing, SharePoint, sensitivity labels, Microsoft Graph, PowerShell, enterprise data protection, Microsoft 365 E5]
+sources:
+  - https://www.devladlog.com/articles/office-365/2026-06-04-copilot-m365-complete-guide-2026/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "What can Copilot see?"
+    sub: "Get ready before you buy: licences, Copilot Chat, labels and oversharing"
+    short: hook
+    narration: >
+      Copilot answers from what each person is allowed to open. So the question to ask before you buy it is not what
+      Copilot can do, but what it would find. Our lab tenant has no Copilot licence, on purpose, so everything you see runs without one. In this episode we
+      check licences, use Copilot Chat with Entra accounts, and review sharing and labels with Microsoft Graph. Every
+      screen is real. Where something needs a licence, I'll say so, with the cost.
+
+  - id: licensing
+    type: bullets
+    heading: "What each experience needs"
+    bullets:
+      - "Copilot Chat: an eligible Microsoft 365 licence and an Entra account"
+      - "Copilot in the apps and Graph grounding: plus the Copilot add-on licence"
+      - "Mailbox answers need an Exchange Online mailbox"
+      - "Add-on: about 30 US dollars per user per month, annual term"
+    narration: >
+      Copilot Chat needs an eligible Microsoft three sixty five licence and a Microsoft Entra account. No extra licence.
+      Copilot in Word, Excel, Outlook and Teams, and automatic grounding in your Microsoft Graph data, need the Copilot
+      add-on. Microsoft's pricing page lists about thirty US dollars per user per month, billed yearly. Check the price at
+      checkout. Mailbox answers also need an Exchange Online mailbox, and the script checks that too, for each user.
+
+  - id: licence-screen
+    type: screen
+    heading: "What the tenant really has"
+    image: screens/licences.jpg
+    bar: "Microsoft 365 admin center + PowerShell (lab tenant, masked)"
+    demo: >
+      Setup (demo.md): Microsoft 365 admin center > Billing > Licenses (E5 trial and the Copilot Studio trial, and no Microsoft 365
+      Copilot), then on the host Invoke-CopilotReadiness.ps1 -ConfigFile ./copilot.lab.json -Check Licences. Show the line "Copilot licence
+      in tenant: NO" and the user table with the real Status values. Rewrite the narration to the real output. Mask the tenant name and UPN domain.
+    narration: >
+      Here is the lab tenant. Licences in the admin center, then the readiness script. It reads the subscriptions and each
+      user's service plans. The answer is no Copilot licence, and every lab user is ready for Copilot Chat.
+
+  - id: gotcha
+    type: code
+    heading: "The gotcha: a trial is not a licence"
+    lang: powershell
+    short: gotcha
+    code: |
+      $copilotSkus = @(@($Skus) | Where-Object {
+              $names = Get-ActivePlanName $_.servicePlans
+              $_.skuPartNumber -in @($r.copilotSkuPartNumbers) -or @($names | Where-Object { $_ -in @($r.copilotAppPlans) }).Count -gt 0
+          })
+    narration: >
+      Here's the gotcha. Two of our lab users hold a Copilot Studio trial, and a Copilot Studio plan even appears inside the
+      Copilot product. Counting that plan would say we're licensed. So the check looks for the Copilot SKU names, or the
+      plans that put Copilot in your apps, and only counts a plan that is actually provisioned.
+
+  - id: chat-screen
+    type: screen
+    heading: "Copilot Chat, with an Entra account"
+    image: screens/chat.jpg
+    bar: "Microsoft Copilot Chat in the browser · Alex Demo (lab tenant, masked)"
+    demo: >
+      Setup (demo.md): signed in as alex.demo (a work account), open Copilot Chat. Show the Work label and the data protection shield, then
+      upload the fictional file "Contoso travel policy.docx" and ask for a summary. Capture the real answer. Rewrite the narration to what
+      really appears. Do not ask it about "my emails": record only what you can show honestly.
+    narration: >
+      Alex signs in with a work account and opens Copilot Chat. Enterprise data protection applies, so prompts and
+      responses get the same contractual protection as your mail and files. I upload a file and ask for a summary. That is
+      how Chat uses company content without the add-on.
+
+  - id: chat-limits
+    type: bullets
+    heading: "What Chat can see without the add-on"
+    bullets:
+      - "Web grounding, with enterprise data protection"
+      - "Files you upload, or content open in Outlook and Teams"
+      - "No automatic search of mail, files and meetings"
+      - "Admin: pin Chat, web search policy, agents"
+    narration: >
+      Without the add-on, Chat uses the web, the files you give it, and content you have open in Outlook or Teams. It does
+      not search your mail, files and meetings by itself. Admins decide whether Chat is pinned, whether web search is
+      allowed, and who can build agents, from the Copilot controls in the admin center. The AI Administrator role covers
+      this without making anyone a global administrator.
+
+  - id: walk-code
+    type: code
+    heading: "A bounded, read-only walk"
+    lang: powershell
+    code: |
+      $perms = @(Invoke-CRGraphPaged "$script:Graph/drives/$DriveId/items/$($i.id)/permissions")
+      [pscustomobject]@{ DriveId = $DriveId; Site = $Site; ItemId = $i.id; Path = $path; IsFolder = $isFolder; Permissions = $perms }
+      if ($isFolder -and $q.Depth -lt $MaxDepth) {
+    narration: >
+      The walk is breadth first and bounded. By default it reads at most two hundred items per library, three folders
+      deep, and for each item it asks Graph for the permissions. Everything is a get request, so the review cannot
+      change a thing. The raw result can be saved as a snapshot, which means you can analyze it again offline, or compare two runs.
+
+  - id: sharing-code
+    type: code
+    heading: "Copilot respects permissions, so check them"
+    lang: powershell
+    short: oversharing
+    code: |
+      $link = Get-CRProp $Permission 'link'
+      $scope = [string](Get-CRProp $link 'scope' '')
+      if ($scope -eq 'anonymous') { return 'AnyoneLink' }
+      if ($scope -eq 'organization' -and $Config.sharing.flagOrganizationLinks) { return 'OrganizationLink' }
+      if (@($names | Where-Object { $_ -like '*Everyone except external users*' -or $_ -like '*spo-grid-all-users*' }).Count -gt 0) { return 'EveryoneExceptExternalUsers' }
+    narration: >
+      Copilot only shows what a person can already open. That's good, until a folder was shared with everyone years ago. The
+      script walks the document libraries, reads each item's permissions from Graph, and flags three signals: an Anyone link,
+      a link for the whole organization, and the group Everyone except external users. Names like payroll or board raise the severity.
+
+  - id: sharing-screen
+    type: screen
+    heading: "Seeded oversharing, found by the script"
+    image: screens/sharing.jpg
+    bar: "PowerShell + SharePoint (lab tenant, masked)"
+    demo: >
+      Setup (demo.md): a lab team site with fictional files, one organization-wide link and one folder shared with Everyone except external users
+      (an Anyone link too only if the tenant allows it). Run Invoke-CopilotReadiness.ps1 -Check Sharing -OutFile ./readiness.lab.md, show the findings
+      table, then open one flagged item's Manage access panel in SharePoint. Rewrite the narration to the real findings and counts.
+    narration: >
+      We seeded a lab site with a link for the whole organization and a folder shared with everyone internal. The script
+      lists them, worst first, with the path. In SharePoint, Manage access shows the same permission. This is a sample
+      walk, not the full tenant report that SharePoint Advanced Management gives you.
+
+  - id: labels-screen
+    type: screen
+    heading: "Do the labels exist?"
+    image: screens/labels.jpg
+    bar: "Microsoft Purview portal + PowerShell (lab tenant, masked)"
+    demo: >
+      Setup (demo.md): the labels from episode 5 (Purview > Information protection > Sensitivity labels), then Invoke-CopilotReadiness.ps1 -Check Labels
+      from the host. Show the real findings (for example no container labels, no automatic labeling), or an empty result honestly.
+      Rewrite the narration to what is real.
+    narration: >
+      Labels are how you mark what is sensitive, and the same label can follow a file into Copilot's responses. The script
+      reads the tenant's labels and reports what is missing: no label for files, none for sites and groups, no default, nothing applied
+      automatically. Episode five created the labels. This only reads them.
+
+  - id: learn-gotchas
+    type: bullets
+    heading: "Things the documentation says"
+    bullets:
+      - "SharePoint libraries return no inherited-from, so repeats are collapsed"
+      - "Advanced Management reports come with a Copilot licence"
+      - "Restricted content discovery hides sites from Copilot; permissions stay"
+      - "The Graph usage report only lists licensed users"
+    narration: >
+      Four things from the documentation. Library permissions don't say where they were inherited from, so the script reports a
+      repeated permission once, at the shallowest path. SharePoint Advanced Management, with the full oversharing reports, comes with a Copilot licence. Restricted content
+      discovery keeps a site out of Copilot answers without touching its permissions. And the usage report only covers licensed users.
+
+  - id: licence-adds
+    type: bullets
+    heading: "What the licence adds, and what we did not run"
+    bullets:
+      - "Graph grounding, Copilot in Word, Excel, Outlook, Teams"
+      - "Advanced Management reports, Copilot usage reports"
+      - "Usage code is in the repo, not run: no licence here"
+      - "The script refuses to fake it"
+    narration: >
+      With the add-on you get grounding in your data, Copilot inside the apps, the Advanced Management reports and the usage
+      report. The usage function is in the repo, but we have no licence, so it was not run, and the script says so
+      instead of printing made up numbers. If you buy seats, pilot with a small group, fix the findings first, and measure adoption after.
+
+  - id: tests
+    type: code
+    heading: "Forty nine tests, no tenant"
+    lang: text
+    code: |
+      $ Invoke-Pester ./tests
+      Describing Collection (fake Graph tenant, read-only)
+        [+] never sends anything but GET (the review changes nothing)
+      Describing Test-CopilotReadiness
+        [+] reports no Copilot licence in the lab tenant, and a Copilot Studio trial is not one
+      Describing Get-CopilotSharingFinding
+        [+] reports Everyone except external users once, at the shallowest path
+
+      Tests Passed: 49, Failed: 0, Skipped: 0
+    narration: >
+      Forty nine Pester tests run without a tenant. A fake Graph tenant serves licences, labels and a folder tree, and a
+      test proves that nothing but read requests is ever sent.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      Code, tests and the shot list are on GitHub, and the complete Copilot guide is on dev lad log dot com. Next
+      episode: licensing optimization, and who really needs which seat.

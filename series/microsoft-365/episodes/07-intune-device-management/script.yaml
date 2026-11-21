@@ -1,0 +1,240 @@
+# DEVLADLOG Microsoft 365 — episode 07 (draft: code and tests are real; screen scenes still need the lab recording)
+episode: 7
+slug: intune-device-management
+series_label: "MICROSOFT 365"
+series_name: "DEVLADLOG Microsoft 365"
+file_prefix: "microsoft-365"
+title: "Intune & Device Management"
+subtitle: "A Windows compliance policy as code, and an audit of the devices it should cover"
+voice: am_michael
+thumbnail_text: "IS IT\nREALLY\nCOMPLIANT?"
+youtube:
+  title: "Intune Compliance Policy as Code: Enroll, Enforce, Audit with Microsoft Graph | DEVLADLOG Microsoft 365 #7"
+  tags: [Microsoft Intune, device compliance policy, Microsoft Graph, Windows 11, Entra join, BitLocker, PowerShell, device management, Microsoft 365 E5, endpoint management]
+sources:
+  - https://www.devladlog.com/articles/office-365/2026-04-01-intune-device-management-complete-guide-2026/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Compliant, or just not checked?"
+    sub: "Intune policy as code, and an audit that finds what it misses"
+    short: hook
+    narration: >
+      Intune says your devices are compliant. But compliant with what, and are all of them even covered? In this
+      episode we enroll a real Windows eleven machine, keep a compliance policy in one file, push it with Microsoft
+      Graph, and then audit every managed device for the things the dashboard tends to hide. Everything runs against
+      our own lab tenant, with fictional users, and the same code is on GitHub.
+
+  - id: licensing
+    type: bullets
+    heading: "What you need"
+    bullets:
+      - "An Intune licence for every user whose devices you manage"
+      - "Microsoft Entra ID P1 or P2 to enforce compliance with Conditional Access"
+      - "Windows 11 VM: generation 2, virtual TPM, 4 GB, 64 GB"
+      - "Graph scopes: DeviceManagementConfiguration and ManagedDevices"
+    narration: >
+      Intune comes with Microsoft three sixty five E3 and E5. To enforce compliance you also need Entra ID P1 or
+      P2. Our test device is a Hyper V virtual machine, and Windows eleven needs generation two, a virtual TPM, four
+      gigabytes of memory and sixty four gigabytes of disk. The lab tenant runs on the E5 trial. Graph needs an
+      active Intune licence in the tenant, and the module asks only for the scopes each step uses.
+
+  - id: enroll-screen
+    type: screen
+    heading: "A real device, enrolled"
+    image: screens/enroll.jpg
+    bar: "Hyper-V VM console + Microsoft Intune admin center (lab tenant, masked)"
+    demo: >
+      Setup (demo.md): VM CON-W11-01 (Windows 11 Enterprise evaluation, vTPM, Secure Boot) joined to Microsoft Entra ID
+      as alex.demo (Settings > Accounts > Access work or school > Connect > Join this device to Microsoft Entra ID).
+      Show the VM's Access work or school page (connected to the organization) and then the Intune admin center >
+      Devices > Windows: CON-W11-01, Primary user Alex Demo, Compliance "Not evaluated" or "Compliant" (the real value).
+      Rewrite narration to match. Mask the tenant name.
+    narration: >
+      This is a virtual machine in the lab, joined to Microsoft Entra ID as Alex, one of our lab users. Because
+      automatic enrollment is on, joining the device also enrolled it in Intune. A minute later it shows up in the
+      admin center with Alex as primary user.
+
+  - id: config
+    type: code
+    heading: "One file: intune dot json"
+    lang: json
+    code: |
+      "settings": {
+        "bitLockerEnabled": true,
+        "secureBootEnabled": true,
+        "codeIntegrityEnabled": true,
+        "storageRequireEncryption": true,
+        "passwordRequired": true,
+        "passwordBlockSimple": true,
+        "passwordRequiredType": "alphanumeric",
+        "passwordMinimumLength": 14,
+        "osMinimumVersion": "10.0.26100.0"
+      },
+      "actions": [
+        { "type": "block", "gracePeriodHours": 24 }
+      ]
+    narration: >
+      The policy is a short file. BitLocker, Secure Boot, code integrity and encryption, a password rule, and a
+      minimum Windows build. And one action for noncompliance: a twenty four hour grace period before the device is
+      blocked. The loader refuses anything Microsoft Graph or the documentation says is invalid.
+
+  - id: apply-code
+    type: code
+    heading: "From file to Graph"
+    lang: powershell
+    code: |
+      $body = [ordered]@{
+          '@odata.type' = $script:PolicyType
+          displayName   = [string]$cp.displayName
+          description   = [string](Get-IDProp $cp 'description')
+      }
+      foreach ($name in $script:SettingTypes.Keys) {
+          $v = Get-IDProp $cp.settings $name
+          if ($null -ne $v) { $body[$name] = $v }
+      }
+      $body['scheduledActionsForRule'] = @([ordered]@{
+              ruleName                      = $script:RuleName
+              scheduledActionConfigurations = @($cp.actions | ForEach-Object { ConvertTo-IDActionItem $_ })
+          })
+    narration: >
+      The module turns the file into a Windows ten compliance policy body, which also covers Windows eleven, and posts it to
+      the device compliance policies endpoint. Only properties Microsoft documents are allowed, and a test checks the
+      list. Run it twice and nothing changes, because it compares first and only patches what differs.
+
+  - id: gotcha
+    type: code
+    heading: "The gotcha: actions have their own endpoint"
+    lang: powershell
+    short: gotcha
+    code: |
+      if ($changes | Where-Object Area -eq 'Actions') {
+          $rules = [ordered]@{ deviceComplianceScheduledActionForRules = @($body.scheduledActionsForRule) }
+          $null = Invoke-MgGraphRequest -Method POST -Uri "$script:GraphRoot/deviceCompliancePolicies/$($existing.Id)/scheduleActionsForRules" -Body ($rules | ConvertTo-Json -Depth 10) -ContentType 'application/json' -ErrorAction Stop
+      }
+    narration: >
+      Here's the gotcha. Change a setting and you patch the policy. Change the grace period and a patch does nothing
+      useful, because actions for noncompliance are a separate object. Graph has a dedicated action, schedule actions
+      for rules, and the policy must keep exactly one block action. The module sends each change to the endpoint that owns it.
+
+  - id: apply-screen
+    type: screen
+    heading: "Apply it, then look in the portal"
+    image: screens/apply.jpg
+    bar: "PowerShell + Microsoft Intune admin center · Compliance (lab tenant, masked)"
+    demo: >
+      ./Invoke-IntuneDevices.ps1 -PolicyFile ./intune.lab.json -ApplyPolicy -WhatIf (row WhatIf-Create), then without
+      -WhatIf (confirm): row Created. Run it again: Unchanged. Then Intune admin center > Devices > Compliance >
+      "MG Lab - Windows 11 baseline": Properties show the settings, Actions for noncompliance (Mark device noncompliant
+      after 1 day), Assignments (the lab group). Rewrite narration to match the real output.
+    narration: >
+      First a what if, then for real. The policy is created and assigned to the lab group. Run it again and it says
+      unchanged. In the portal, it looks like any policy made by hand, with the same settings, and the same twenty four
+      hour grace period on the mark device noncompliant action.
+
+  - id: device-screen
+    type: screen
+    heading: "What the device really reports"
+    image: screens/device.jpg
+    bar: "VM console + Microsoft Intune admin center · Device compliance (lab tenant, masked)"
+    demo: >
+      On the VM, elevated PowerShell: Get-BitLockerVolume -MountPoint C: shows not protected. Sync (Settings > Accounts >
+      Access work or school > Info > Sync, or ./Invoke-IntuneDevices.ps1 -SyncDeviceName CON-W11-01). Intune admin center >
+      Devices > Windows > CON-W11-01 > Device compliance: the real state and the failing setting. Then on the VM:
+      Enable-BitLocker -MountPoint C: -EncryptionMethod XtsAes256 -UsedSpaceOnly -TpmProtector (after adding a recovery
+      password protector), restart, sync, and capture the new state. Rewrite narration to the real values.
+    narration: >
+      Now the device tells us what it really looks like. We sync it, and Intune reports the setting that fails. We
+      fix it on the machine with the BitLocker cmdlets, restart, sync again, and the state changes. The restart
+      matters, and that's the next point. The device, not the portal,
+      is the source of truth.
+
+  - id: learn-gotchas
+    type: bullets
+    heading: "Three things Microsoft documents"
+    bullets:
+      - "BitLocker health is measured at boot: a reboot is needed"
+      - "Secure Boot check needs a TPM; otherwise Not compliant"
+      - "No policy assigned counts as compliant by default"
+      - "Windows 11 health checks need the attestation endpoints reachable"
+    narration: >
+      Four things from Microsoft's documentation. BitLocker state in the health checks is measured at boot, so
+      encryption can finish and the device still waits for a restart. The Secure Boot check shows not compliant on
+      devices without a supported TPM. Devices with no compliance policy count as compliant until you flip the
+      tenant setting. And on Windows eleven the health checks call Azure attestation endpoints, so a firewall can
+      quietly make every device noncompliant.
+
+  - id: findings-code
+    type: code
+    heading: "The audit looks beyond the state"
+    lang: powershell
+    short: audit
+    code: |
+      if ($state -in 'noncompliant', 'error', 'conflict') { Add-F 'High' 'NonCompliant' $d "complianceState is $state. Open Devices > Monitor > Noncompliant devices for the failing setting." }
+      if ($needEnc -and $d.operatingSystem -eq 'Windows' -and (Get-IDProp $d 'isEncrypted') -eq $false) { Add-F 'High' 'NotEncrypted' $d 'isEncrypted is false.' }
+      if ($v -lt $minVer) { Add-F 'Medium' 'OsBelowMinimum' $d "OS $($d.osVersion) is below the policy minimum $minOs." }
+      $uid = "$(Get-IDProp $d 'userId')"
+      if (-not $uid -or $uid -eq $script:ZeroGuid) { Add-F 'Low' 'NoPrimaryUser' $d 'no primary user (userless device).' }
+    narration: >
+      Compliance state is one signal. The audit also flags devices that haven't synced for thirty days, devices that
+      never synced, unencrypted drives, Windows builds below the policy minimum, userless and personal devices, and
+      two records that share one serial number, which is what a re enrolled machine leaves behind.
+
+  - id: audit-screen
+    type: screen
+    heading: "Audit the whole fleet"
+    image: screens/audit.jpg
+    bar: "PowerShell · Microsoft Graph managedDevices (lab tenant, masked)"
+    demo: >
+      Connect-MgGraph -Scopes DeviceManagementManagedDevices.Read.All, then ./Invoke-IntuneDevices.ps1 -PolicyFile
+      ./intune.lab.json -Audit. Capture the state table and the findings for the lab's real devices (at least CON-W11-01; add
+      the earlier lab VM or a second enrollment of the same VM to show DuplicateSerial if it occurs naturally). Do not
+      invent devices. Rewrite narration to the real findings. Mask UPNs and the tenant domain.
+    narration: >
+      This is the live audit against the lab tenant. A compliance summary, then the findings, High first, each with
+      the device, the user and the reason. Nothing here is a dashboard you can't script, and the same function can run
+      on a schedule. And because it reads through Graph, it needs only the read scope, so you can hand it to
+      someone who must never change a policy.
+
+  - id: cleanup
+    type: bullets
+    heading: "Stale devices: hide, don't wipe"
+    bullets:
+      - "Device cleanup rules: 30 to 270 days without a check-in"
+      - "They hide the record: no wipe, no retire"
+      - "A hidden device that checks in again reappears"
+      - "Entra ID keeps its own device object"
+    narration: >
+      For stale devices, Intune has device cleanup rules, from thirty to two hundred seventy days. They only hide the
+      record. No wipe, no retire, and a device that checks in again before its certificate expires comes back.
+      The Entra device object is a separate clean up.
+
+  - id: tests
+    type: code
+    heading: "Fifty eight tests, no tenant"
+    lang: text
+    code: |
+      $ Invoke-Pester ./tests
+      Describing Config file
+        [+] refuses two block actions (Learn: one and only one)
+      Describing Request bodies
+        [+] only uses properties that Learn documents for windows10CompliancePolicy
+      Describing Set-IntuneCompliancePolicy (mocked Graph)
+        [+] patches only the settings that differ, and nothing else
+        [+] uses scheduleActionsForRules for a changed grace period
+      Describing Findings (fictional fixture)
+        [+] flags both records that share a serial number
+
+      Tests Passed: 58, Failed: 0, Skipped: 0
+    narration: >
+      Fifty eight Pester tests run without a tenant: the config rules, the request bodies against the properties in
+      Microsoft's documentation, every create and update path with Graph mocked, and each audit finding.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      Code, tests and the shot list are on GitHub, and the complete Intune guide with its companion articles is on
+      dev lad log dot com. Next episode: Microsoft three sixty five Copilot, and what you can prepare without a licence.
