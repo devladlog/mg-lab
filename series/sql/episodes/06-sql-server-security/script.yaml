@@ -1,0 +1,253 @@
+# DEVLADLOG SQL — episode 06 (draft: screen scenes need the recording described in demo.md)
+episode: 6
+slug: sql-server-security
+series_label: "SQL"
+series_name: "DEVLADLOG SQL"
+file_prefix: "sql"
+title: "SQL Server Security"
+subtitle: "Least privilege, SQL injection, module signing, row-level security and data masking, tested as each user"
+voice: am_michael
+thumbnail_text: "ONE NAME\nRETURNED\nEVERYONE"
+youtube:
+  title: "SQL Server Security: SQL Injection, Module Signing, Row-Level Security, Masking | DEVLADLOG SQL #6"
+  tags: [SQL Server, SQL Server security, SQL injection, sp_executesql, ownership chaining, module signing, row-level security, dynamic data masking, least privilege, T-SQL]
+sources:
+  - https://www.devladlog.com/articles/sql/2025-08-04-sql-server-security-complete-guide-2025/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "One name in a search box returned every customer."
+    sub: "Lock down last episode's database, and prove it as each user"
+    short: hook
+    narration: >
+      A search procedure takes a customer name. Type a name, get one customer. Type this strange name, and you
+      get all of them. Today we lock down last episode's database: users who can only run procedures, a search
+      that can't be injected, rows filtered per user, and a masked column, with an honest look at what masking
+      does not protect.
+
+  - id: setup
+    type: bullets
+    heading: "Three users, two roles, no logins"
+    bullets:
+      - "Episode 5's database: customers in North, Centre, South"
+      - "sales_north and sales_south: the order application"
+      - "analyst_demo: ad hoc reporting"
+      - "Users without logins, tested with EXECUTE AS USER"
+    narration: >
+      Same database as episode five. We add three database users without logins: two for the order application,
+      one analyst. The lab impersonates each of them with execute as user, tries things, and records every
+      attempt, allowed or denied, as a row. A Python runner compares every result with an expected file.
+
+  - id: grants
+    type: code
+    heading: "Grant to roles, on procedures, never on tables"
+    lang: sql
+    code: |
+      CREATE ROLE app_sales;      -- the order application
+      CREATE ROLE reporting;      -- ad hoc reporting
+      CREATE USER sales_north WITHOUT LOGIN;
+      ALTER ROLE app_sales ADD MEMBER sales_north;
+      GRANT EXECUTE ON OBJECT::Sales.usp_PlaceOrder      TO app_sales;
+      GRANT EXECUTE ON OBJECT::Sales.usp_ListCustomers   TO app_sales;
+      GRANT EXECUTE ON OBJECT::Sales.usp_SearchCustomers TO app_sales;
+      -- A table-valued parameter needs EXECUTE and REFERENCES on its table type.
+      GRANT EXECUTE, REFERENCES ON TYPE::Sales.OrderLineList TO app_sales;
+      GRANT SELECT ON SCHEMA::Sales TO reporting;
+    narration: >
+      Permissions go to roles, and the application role gets execute on three procedures. Nothing on any table.
+      One detail from the documentation: a procedure with a table valued parameter also needs execute and
+      references on the table type, or the call is refused.
+
+  - id: chain-screen
+    type: screen
+    heading: "Procedures yes, tables no"
+    image: screens/s01-least-privilege.jpg
+    bar: "SSMS · CON-SQL01 · ContosoBikesApp · s01-least-privilege.sql"
+    demo: "SSMS, database ContosoBikesApp, right after security_lab.py --setup. Run src/sql/s01-least-privilege.sql. Results grid, three rows: sales_north / SELECT FROM Sales.Customers / denied / error 229; sales_north / EXEC Sales.usp_ListCustomers / allowed / 6 rows; sales_north / EXEC Sales.usp_SearchCustomers_Unsafe / denied / error 229. The EXECUTE AS USER line visible in the query text."
+    narration: >
+      As sales north: select from the customers table, denied, error two two nine. Execute the list procedure,
+      allowed, six rows. That's ownership chaining: the procedure and the table have the same owner, so SQL Server
+      only checks the execute permission. And a procedure we never granted is denied too.
+
+  - id: unsafe
+    type: code
+    heading: "The injectable search"
+    lang: sql
+    code: |
+      CREATE OR ALTER PROCEDURE Sales.usp_SearchCustomers_Unsafe
+          @NamePrefix nvarchar(100)
+      AS
+      BEGIN
+          SET NOCOUNT ON;
+          DECLARE @sql nvarchar(max) =
+              N'SELECT CustomerId, CustomerName, Region FROM Sales.Customers WHERE CustomerName LIKE N'''
+              + @NamePrefix + N'%'' ORDER BY CustomerId;';
+          EXEC (@sql);
+      END;
+      -- ... s02 calls it with this "name" ...
+      INSERT INTO @found EXEC Sales.usp_SearchCustomers_Unsafe @NamePrefix = N''' OR 1 = 1 --';
+    narration: >
+      Now the classic mistake. This search glues the user's input into the text of a query and executes it. The
+      input becomes code. A name that starts with a quote closes the string, adds or one equals one, and comments
+      out the rest.
+
+  - id: injection-screen
+    type: screen
+    heading: "One customer, or all of them"
+    image: screens/s02-injection.jpg
+    bar: "SSMS · CON-SQL01 · ContosoBikesApp · s02-injection-unsafe.sql"
+    short: injection
+    demo: "SSMS, run src/sql/s02-injection-unsafe.sql as the runner's login (db_owner member). Grid: Alex / 1 and ' OR 1 = 1 -- / 6. Second shot: select only the line EXEC Sales.usp_SearchCustomers_Unsafe @NamePrefix = N''' OR 1 = 1 --'; (without INSERT INTO @found) and run it: the grid lists all six customers."
+    narration: >
+      Run as a database owner, which is what too many applications connect as. The name Alex returns one row. The
+      crafted name returns all six customers. And with owner rights, that payload could just as well have been
+      an update or a drop.
+
+  - id: safe
+    type: code
+    heading: "The fix: the text is fixed, the value is a parameter"
+    lang: sql
+    code: |
+      CREATE OR ALTER PROCEDURE Sales.usp_SearchCustomers
+          @NamePrefix nvarchar(100),
+          @SortBy     sysname = N'CustomerId'
+      AS
+          IF @SortBy NOT IN (N'CustomerId', N'CustomerName', N'Region')
+              THROW 50010, N'Unsupported sort column.', 1;
+          DECLARE @sql nvarchar(max) =
+              N'SELECT CustomerId, CustomerName, Region FROM Sales.Customers WHERE CustomerName LIKE @prefix + N''%'' ORDER BY '
+              + QUOTENAME(@SortBy) + N';';
+          EXEC sys.sp_executesql @sql, N'@prefix nvarchar(100)', @prefix = @NamePrefix;
+    narration: >
+      The fix keeps the query text fixed and sends the name as a typed parameter of s p execute s q l. The only
+      part that varies is the sort column, checked against a whitelist and wrapped in quote name. The payload is
+      now just a strange name. Locally, the runner builds both query texts the way these procedures do, and
+      runs them: six rows, then zero.
+
+  - id: gotcha
+    type: bullets
+    heading: "Gotcha: fixed the injection, broke the app"
+    bullets:
+      - "sales_north calls the safe search: error 229"
+      - "Dynamic SQL runs as a separate batch"
+      - "The ownership chain stops there"
+      - "SQL Server checks the caller's own SELECT permission"
+    narration: >
+      Here's the gotcha. The application calls the safe search and gets error two two nine, select permission
+      denied. Dynamic SQL breaks the ownership chain: SQL Server checks the caller's own permissions on whatever
+      the dynamic text touches. Granting select on the table would undo everything we just did.
+
+  - id: signing
+    type: code
+    heading: "Sign the procedure, not the user"
+    lang: sql
+    code: |
+      DECLARE @pw nvarchar(64) = CONVERT(nvarchar(36), NEWID()) + N'aA1!';
+      DECLARE @sql nvarchar(max) =
+            N'CREATE CERTIFICATE SearchSigningCert ENCRYPTION BY PASSWORD = ' + QUOTENAME(@pw, N'''')
+          + N' WITH SUBJECT = N''Signs Sales.usp_SearchCustomers'', EXPIRY_DATE = ''20301231'';'
+          + N' ADD SIGNATURE TO Sales.usp_SearchCustomers BY CERTIFICATE SearchSigningCert WITH PASSWORD = '
+          + QUOTENAME(@pw, N'''') + N';';
+      EXEC sys.sp_executesql @sql;
+      ALTER CERTIFICATE SearchSigningCert REMOVE PRIVATE KEY;
+      CREATE USER search_signer FROM CERTIFICATE SearchSigningCert;
+      GRANT SELECT ON OBJECT::Sales.Customers TO search_signer;
+    narration: >
+      The documented answer is module signing. Create a certificate, sign the procedure with it, create a user
+      from the certificate, and grant that user select. The permission only applies while the signed procedure
+      runs. The password is random and thrown away, and the private key is removed, so nothing else can be
+      signed. Change the procedure and the signature is dropped. Now the search works for sales north, and the
+      payload returns nothing.
+
+  - id: rls
+    type: code
+    heading: "Row-level security: one predicate, every query"
+    lang: sql
+    code: |
+      CREATE FUNCTION Security.fn_CustomerRegionPredicate (@Region nvarchar(20))
+      RETURNS TABLE
+      WITH SCHEMABINDING
+      AS
+      RETURN
+          SELECT 1 AS AccessGranted
+          WHERE IS_MEMBER(N'db_owner') = 1
+             OR EXISTS (SELECT 1 FROM Security.UserRegion AS ur
+                        WHERE ur.UserName = USER_NAME() AND ur.Region = @Region);
+      CREATE SECURITY POLICY Security.RegionPolicy
+          ADD FILTER PREDICATE Security.fn_CustomerRegionPredicate(Region) ON Sales.Customers,
+          ADD FILTER PREDICATE Security.fn_OrderCustomerPredicate(CustomerId) ON Sales.Orders
+      WITH (STATE = ON);
+    narration: >
+      Next, rows. A schema bound inline function decides, row by row, whether the current user may see a region,
+      and a security policy attaches it to customers and orders. Security policies apply to the database owner
+      too, so the function lets owners through explicitly.
+
+  - id: rls-screen
+    type: screen
+    heading: "Same procedure, different rows"
+    image: screens/s05-row-level-security.jpg
+    bar: "SSMS · CON-SQL01 · ContosoBikesApp · s05-row-level-security.sql"
+    demo: "SSMS, run src/sql/s05-row-level-security.sql (after the runner has applied 14 and 15, or run them first). Grid, four rows: sales_north / usp_ListCustomers / 2 / North; sales_south / usp_ListCustomers / 2 / South; db_owner member / usp_ListCustomers / 6 / Centre, North, South; sales_north / usp_SearchCustomers 'Bruno' / 0 / NULL. Optional inset: s06-rls-place-order.sql grid with 'error 50001: Unknown customer.' on row 2."
+    narration: >
+      The same list procedure: two northern customers for sales north, two southern for sales south, all six for
+      the owner. The signed search still filters, because signing adds a permission without changing who the
+      caller is. And when sales north tries to place an order for a southern customer, episode five's procedure
+      simply says: unknown customer.
+
+  - id: masking
+    type: code
+    heading: "Dynamic data masking, and its limit"
+    lang: sql
+    code: |
+      ALTER TABLE Sales.Customers DROP CONSTRAINT UQ_Customers_Email;
+      ALTER TABLE Sales.Customers ALTER COLUMN Email ADD MASKED WITH (FUNCTION = 'email()');
+      ALTER TABLE Sales.Customers ADD CONSTRAINT UQ_Customers_Email UNIQUE (Email);
+      -- ... s08: the analyst guesses ...
+      EXECUTE AS USER = N'analyst_demo';
+      INSERT INTO @result SELECT 1, N'c%',       COUNT(*) FROM Sales.Customers WHERE Email LIKE N'c%';
+      INSERT INTO @result SELECT 2, N'carla.e%', COUNT(*) FROM Sales.Customers WHERE Email LIKE N'carla.e%';
+      INSERT INTO @result SELECT 3, N'carla.x%', COUNT(*) FROM Sales.Customers WHERE Email LIKE N'carla.x%';
+      REVERT;
+    narration: >
+      Last, the email column gets a mask. Adding a mask is a schema change, and it fails on a column an index
+      depends on, so the unique constraint is dropped and recreated around it. The analyst, with select rights
+      and no unmask permission, sees a masked address. But masking changes what a query returns, not what its
+      where clause can test.
+
+  - id: masking-screen
+    type: screen
+    heading: "Masked, and guessed anyway"
+    image: screens/s07-s08-masking.jpg
+    bar: "SSMS · CON-SQL01 · ContosoBikesApp · s07-masking.sql + s08-masking-inference.sql"
+    short: masking
+    demo: "SSMS, two query windows side by side (or two shots). Left: src/sql/s07-masking.sql grid: Alex Demo / aXXX@XXXX.com / alex.demo@contoso.com, Rita Sample / rXXX@XXXX.com / rita.sample@contoso.com, Bruno Test / bXXX@XXXX.com / bruno.test@contoso.com. Right: src/sql/s08-masking-inference.sql grid: c% / 1, carla.e% / 1, carla.x% / 0."
+    narration: >
+      The analyst sees a, then X X X at X X X X dot com. The owner sees the real address. Then the analyst
+      guesses. Starts with c: one match. Carla dot e: one match. Carla dot x: none. Letter by letter, the real
+      address comes back. Microsoft documents exactly this: masking stops accidents, not someone running ad
+      hoc queries. Use it with permissions and auditing.
+
+  - id: recap
+    type: bullets
+    heading: "Five rules"
+    bullets:
+      - "Grant EXECUTE to roles; no table permissions for apps"
+      - "Never concatenate input: sp_executesql + QUOTENAME"
+      - "Dynamic SQL needs signing, not table grants"
+      - "Row-level security for rows, written for dbo too"
+      - "Masking is not access control"
+    narration: >
+      Five rules. Grant execute to roles, and give applications no table permissions. Never concatenate input
+      into SQL. When dynamic SQL needs more rights, sign the procedure instead of granting the table. Use row
+      level security for rows, and write the predicate with the owner in mind. And remember that masking is not
+      access control.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      Every script, the runner and the tests are on GitHub, and the complete guide is on dev lad log dot com.
+      Links are in the description. Next time: backup and recovery. This was dev lad log SQL, by Momento
+      Galático.

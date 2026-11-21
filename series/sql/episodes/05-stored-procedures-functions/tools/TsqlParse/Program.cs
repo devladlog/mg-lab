@@ -127,6 +127,7 @@ static class Module
             functionCalls = w.Calls.OrderBy(x => x),
             setOptions = w.SetOptions,
             procedureCalls = w.Execs.OrderBy(x => x),
+            variables = w.Variables.Select(v => new { name = v.VariableName.Value, value = v.Value == null ? null : Text(source, v.Value) }),
             topLevel = list?.Statements.Select(s => s.GetType().Name) ?? Enumerable.Empty<string>(),
         };
     }
@@ -140,6 +141,7 @@ sealed class Walker : TSqlFragmentVisitor
     public HashSet<string> Execs { get; } = new(StringComparer.OrdinalIgnoreCase);
     public List<string> SetOptions { get; } = new();
     public List<ReturnStatement> Returns { get; } = new();
+    public List<DeclareVariableElement> Variables { get; } = new();
 
     public override void Visit(TSqlFragment node) => Types.Add(node.GetType().Name);
 
@@ -163,6 +165,12 @@ sealed class Walker : TSqlFragmentVisitor
     {
         if (node.ProcedureReference?.ProcedureReference?.Name is { } n)
             Execs.Add(string.Join(".", n.Identifiers.Select(i => i.Value)));
+        base.ExplicitVisit(node);
+    }
+
+    public override void ExplicitVisit(DeclareVariableElement node)
+    {
+        Variables.Add(node);
         base.ExplicitVisit(node);
     }
 

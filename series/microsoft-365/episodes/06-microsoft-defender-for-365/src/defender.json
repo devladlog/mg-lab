@@ -1,0 +1,20 @@
+{
+  "$comment": "DEVLADLOG Microsoft 365 #6 - Defender for Office 365 as code. Fictional tenant (contoso). For the lab, copy to defender.lab.json (uncommitted) and replace contoso.onmicrosoft.com.",
+  "presets": {
+    "strict": {
+      "$comment": "Priority accounts: admins and finance. Strict wins over Standard for anyone in both.",
+      "sentToMemberOf": ["priority-accounts@contoso.onmicrosoft.com"]
+    },
+    "standard": {
+      "$comment": "Everyone in the accepted domain. One condition type only (different condition types are ANDed).",
+      "recipientDomainIs": ["contoso.onmicrosoft.com"]
+    }
+  },
+  "allowCombinedConditions": false,
+  "audit": {
+    "baseline": "Standard",
+    "builtInProtectionExceptionsAllowed": []
+  },
+  "hunting": { "lookbackDays": 7 },
+  "attackSimulation": { "maxCompromisedPercent": 20 }
+}

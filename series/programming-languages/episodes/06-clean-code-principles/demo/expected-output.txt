@@ -1,0 +1,90 @@
+# Real output captured 2026-11-21 in the build container (.NET SDK 10.0.115, Linux). Paths shortened.
+
+$ dotnet test CleanCode.slnx -m:1
+Passed!  - Failed:     0, Passed:    18, Skipped:     0, Total:    18, Duration: 188 ms - Contoso.Requests.Clean.Tests.dll (net10.0)
+
+$ ./demo/expect-errors.sh
+### legacy code + gates: dotnet build src/Contoso.Requests.Legacy -p:EnforceCleanCode=true
+src/Contoso.Requests.Legacy/RequestProcessor2.cs(14,19): error CA1502: 'Process' has a cyclomatic complexity of '19'. Rewrite or refactor the code to decrease its complexity below '11'.
+src/Contoso.Requests.Legacy/RequestProcessor2.cs(16,16): error IDE0059: Unnecessary assignment of a value to 'r'
+src/Contoso.Requests.Legacy/RequestProcessor2.cs(32,29): error IDE0011: Add braces to 'if' statement.
+src/Contoso.Requests.Legacy/RequestProcessor2.cs(33,29): error IDE0011: Add braces to 'if' statement.
+src/Contoso.Requests.Legacy/RequestProcessor2.cs(42,33): error IDE0011: Add braces to 'if' statement.
+src/Contoso.Requests.Legacy/RequestProcessor2.cs(43,38): error IDE0011: Add braces to 'if' statement.
+src/Contoso.Requests.Legacy/RequestProcessor2.cs(44,38): error IDE0011: Add braces to 'if' statement.
+src/Contoso.Requests.Legacy/RequestProcessor2.cs(45,38): error IDE0011: Add braces to 'if' statement.
+src/Contoso.Requests.Legacy/RequestProcessor2.cs(46,33): error IDE0011: Add braces to 'if' statement.
+src/Contoso.Requests.Legacy/RequestProcessor2.cs(49,37): error IDE0011: Add braces to 'if' statement.
+src/Contoso.Requests.Legacy/RequestProcessor2.cs(50,37): error IDE0011: Add braces to 'if' statement.
+src/Contoso.Requests.Legacy/RequestProcessor2.cs(54,37): error IDE0011: Add braces to 'if' statement.
+src/Contoso.Requests.Legacy/RequestProcessor2.cs(58,25): error IDE0011: Add braces to 'else' statement.
+src/Contoso.Requests.Legacy/RequestProcessor2.cs(60,21): error IDE0011: Add braces to 'else' statement.
+src/Contoso.Requests.Legacy/RequestProcessor2.cs(62,17): error IDE0011: Add braces to 'else' statement.
+src/Contoso.Requests.Legacy/RequestProcessor2.cs(64,13): error IDE0011: Add braces to 'else' statement.
+src/Contoso.Requests.Legacy/RequestProcessor2.cs(66,9): error CA1031: Modify 'Process' to catch a more specific allowed exception type, or rethrow the exception
+17 distinct errors
+ok   CA1502: complexity 19, gate is 10
+ok   CA1031: catch (Exception) swallows everything
+ok   IDE0011: if/else without braces
+ok   IDE0059: value assigned and never used
+
+### clean code + the same gates
+ok   clean project builds with the gates on
+
+### golden master: dotnet run -- compare samples/requests.csv
+clean code rounding: ToEven
+line        legacy                                             clean
+01 plain OK;PR-2026-0201;N;alex.demo;13800                     same
+02 plain OK;PR-2026-0202;N;jordan.demo;57500                   same
+03 plain OK;PR-2026-0203;H;riley.demo,sam.demo;57500           same
+04 plain OK;PR-2026-0204;B;alex.demo,sam.demo,board;345000     same
+05 plain ERR4                                                  same
+06 plain OK;PR-2026-0206;H;jordan.demo,sam.demo;207000         same
+07 plain OK;PR-2026-0207;N;alex.demo;57500                     DIFF  OK;PR-2026-0207;H;alex.demo,sam.demo;57500
+07 mail  OK;PR-2026-0207;N;alex.demo;57500;MAIL                DIFF  OK;PR-2026-0207;H;alex.demo,sam.demo;57500;MAIL
+08 plain ERR3                                                  same
+09 plain OK;PR-2026-0209;N;riley.demo;12500                    same
+10 plain ERR2                                                  same
+11 plain ERR2                                                  same
+12 plain ERR2                                                  same
+13 plain ERR1                                                  same
+14 plain ERR1                                                  same
+15 plain ERR0                                                  same
+16 plain ERR0                                                  same
+17 plain OK;PR-2026-0217;H;jordan.demo,sam.demo;86250          same
+18 plain ERR4                                                  same
+19 plain OK;PR-2026-0219;B;jordan.demo,sam.demo,board;299000   same
+20 plain OK;PR-2026-0220;N;riley.demo;9775                     same
+20 lines x 2 modes: 38 identical, 2 different
+ok   only line 7 (the 50,000 boundary) differs, on purpose
+
+### the 'obvious improvement': --rounding AwayFromZero
+07 plain OK;PR-2026-0207;N;alex.demo;57500                     DIFF  OK;PR-2026-0207;H;alex.demo,sam.demo;57500
+07 mail  OK;PR-2026-0207;N;alex.demo;57500;MAIL                DIFF  OK;PR-2026-0207;H;alex.demo,sam.demo;57500;MAIL
+09 plain OK;PR-2026-0209;N;riley.demo;12500                    DIFF  OK;PR-2026-0209;N;riley.demo;12501
+09 mail  OK;PR-2026-0209;N;riley.demo;12500;MAIL               DIFF  OK;PR-2026-0209;N;riley.demo;12501;MAIL
+20 lines x 2 modes: 36 identical, 4 different
+ok   line 9 (12,500.5) changes too: the master catches it
+exit code: 0
+
+$ dotnet run --project src/Contoso.Requests.Cli -- process samples/requests.csv
+01  PR-2026-0201  Normal  alex.demo                              13,800 EUR
+02  PR-2026-0202  Normal  jordan.demo                            57,500 EUR
+03  PR-2026-0203  High    riley.demo -> sam.demo                 57,500 EUR
+04  PR-2026-0204  Board   alex.demo -> sam.demo -> board        345,000 EUR
+05  rejected: MissingJustification
+06  PR-2026-0206  High    jordan.demo -> sam.demo               207,000 EUR
+07  PR-2026-0207  High    alex.demo -> sam.demo                  57,500 EUR
+08  rejected: UnknownDepartment
+09  PR-2026-0209  Normal  riley.demo                             12,500 EUR
+10  rejected: InvalidBudget
+11  rejected: InvalidBudget
+12  rejected: InvalidBudget
+13  rejected: InvalidCode
+14  rejected: InvalidCode
+15  rejected: WrongFieldCount
+16  rejected: WrongFieldCount
+17  PR-2026-0217  High    jordan.demo -> sam.demo                86,250 EUR
+18  rejected: MissingJustification
+19  PR-2026-0219  Board   jordan.demo -> sam.demo -> board      299,000 EUR
+20  PR-2026-0220  Normal  riley.demo                              9,775 EUR

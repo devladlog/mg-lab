@@ -1,0 +1,331 @@
+# DEVLADLOG Code — episode 05 (draft; screens are recorded on the Windows laptop, see demo.md)
+episode: 5
+slug: design-patterns-in-practice
+series_label: "CODE"
+series_name: "DEVLADLOG Code"
+file_prefix: "programming-languages"
+title: "Design patterns in practice"
+subtitle: "Strategy, Decorator, Observer and Options with .NET dependency injection"
+voice: am_michael
+thumbnail_text: "PATTERNS\nTHAT RUN\nIN .NET"
+youtube:
+  title: "Design Patterns in C#: Strategy, Decorator, Observer with .NET DI | DEVLADLOG Code #5"
+  tags: [C#, design patterns, .NET 10, dependency injection, strategy pattern, decorator pattern, observer pattern, options pattern, keyed services, captive dependency, ValidateOnStart, Generic Host, xUnit]
+sources:
+  - https://www.devladlog.com/articles/programming-languages/2025-06-28-design-patterns-in-practice-complete-guide-2025/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Design patterns in practice"
+    sub: "Four patterns, one composition root, one silent bug"
+    short: hook
+    narration: >
+      Design patterns usually come as boxes and arrows. Today they come as code that runs: Strategy, Decorator,
+      Observer and Options, built with the dependency injection every dot net app already has. And a one-line
+      registration mistake that fails on your laptop, but in production runs fine and quietly loses your audit
+      trail. Welcome to DEVLADLOG Code.
+
+  - id: plan
+    type: bullets
+    heading: "What we're building"
+    bullets:
+      - "Route each Contoso request to named approvers"
+      - "Strategy: one class per approval route"
+      - "Decorator: a cached, metered approver directory"
+      - "Observer: audit, outbox and budget tally"
+      - "Options: the policy in config, validated at startup"
+    narration: >
+      Same Contoso project requests as the rest of the series. This time each request gets a route and real
+      approver names. Strategy picks the route. Decorators add caching and metering to a slow approver directory.
+      Observers react to every routed request. And the policy thresholds move to configuration, checked when the app
+      starts. Twenty-seven tests.
+
+  - id: strategy
+    type: code
+    heading: "Strategy: one class per route"
+    lang: csharp
+    code: |
+      public interface IApprovalRoute
+      {
+          string Key { get; }
+          RoutePlan Plan(ProjectRequest request);
+      }
+      /// Board requests: Finance first, Board last, and a justification is mandatory.
+      public sealed class BoardRoute(IOptions<ApprovalPolicyOptions> policy) : IApprovalRoute
+      {
+          public string Key => RouteKeys.Board;
+          public RoutePlan Plan(ProjectRequest request)
+          {
+              string[] warnings = string.IsNullOrWhiteSpace(request.Justification)
+                  ? ["justification required for board requests"] : [];
+              return new(Key, [ApproverRole.Finance, ApproverRole.Board], policy.Value.BoardDueDays, warnings);
+          }
+      }
+    narration: >
+      Strategy first. One small interface, and one class per way of routing a request. Standard goes to the manager.
+      High value goes to the manager and then Finance. Board goes to Finance first and the Board last, and it has its
+      own rule: no justification, you get a warning.
+
+  - id: catalog
+    type: code
+    heading: "Picking the strategy, without a service locator"
+    lang: csharp
+    code: |
+      public RouteCatalog(IEnumerable<IApprovalRoute> routes, IOptions<ApprovalPolicyOptions> policy)
+      {
+          foreach (var route in routes)
+              if (!_routes.TryAdd(route.Key, route))
+                  throw new InvalidOperationException($"Two approval routes use the key '{route.Key}' ...");
+          _policy = policy;
+      }
+
+      // Not everything needs a pattern: choosing the key is one expression.
+      public static string For(decimal budget, ApprovalPolicyOptions policy) =>
+          budget >= policy.BoardThreshold ? Board
+          : budget >= policy.HighThreshold ? High
+          : Standard;
+    narration: >
+      Who picks the strategy? The catalog asks the container for every registered route, as an I Enumerable, once,
+      in its constructor. Microsoft's guidance is to avoid the service locator pattern, and this does: nothing calls
+      Get Service at run time. A new route is one class and one registration line. And choosing the key is not a
+      pattern at all: it's one expression. That's fine.
+
+  - id: run
+    type: screen
+    heading: "Eight requests, two batches, three routes"
+    image: screens/run.jpg
+    bar: "Terminal · dotnet run (Production)"
+    demo: >
+      Windows Terminal (dark, font 18 pt or larger, ~150 columns), in the episode folder:
+      dotnet run --no-build --project src\Contoso.Approvals.Patterns.Cli. Visible: the header "environment:
+      Production | High >= 50,000 EUR | Board >= 250,000 EUR", "routes (strategy): board, high, standard", both
+      batches (PR-2026-0103 board "Finance: Sam Demo -> Board: Taylor Demo 20 days", the "! justification required"
+      line under PR-2026-0106), "audit trail (scoped): 4 entries [ok]" twice, and the three summary lines
+      (13 lookups, 10 file reads, 3 from cache; 8 notification files; the tally). Reference: demo/expected-output.txt.
+    narration: >
+      Here it runs. Two batches, each in its own dependency injection scope. Forty-nine thousand nine hundred and
+      ninety-nine goes standard, fifty thousand goes high, the data platform goes to the Board, and the new HR system
+      gets a warning: no justification. Each batch has its own audit trail with four entries. At the bottom: the
+      decorators, the outbox and the tally.
+
+  - id: decorator
+    type: code
+    heading: "Decorator: same interface, one more job"
+    lang: csharp
+    code: |
+      public sealed class CachingApproverDirectory(
+          IApproverDirectory inner, TimeProvider time, IOptions<ApproverDirectoryOptions> options)
+          : IApproverDirectory
+      {
+          public async Task<string> FindAsync(string department, ApproverRole role, CancellationToken ct = default)
+          {
+              var key = (department, role);
+              var now = time.GetUtcNow();
+              if (_cache.TryGetValue(key, out var entry) && entry.ExpiresAt > now)
+                  return entry.Approver;
+
+              var approver = await inner.FindAsync(department, role, ct).ConfigureAwait(false);
+              _cache[key] = new CacheEntry(approver, now.AddSeconds(options.Value.CacheSeconds));
+              return approver;
+          }
+      }
+    narration: >
+      The approver directory reads a file on every lookup, slow on purpose. A decorator implements the same
+      interface and wraps the real one. This one adds a cache with an expiry. It takes a Time Provider instead of
+      reading the clock, so a test can move time forward and watch the entry expire.
+
+  - id: chain
+    type: code
+    heading: "Wiring the chain with keyed services"
+    short: decorator
+    lang: csharp
+    code: |
+      // Decorator: Metered -> Caching -> JsonFile. Inner layers are keyed, so nobody can skip the cache.
+      services.AddKeyedSingleton<IApproverDirectory, JsonFileApproverDirectory>(DirectoryKeys.Source);
+      services.AddKeyedSingleton<IApproverDirectory>(DirectoryKeys.Cached, (sp, _) =>
+          new CachingApproverDirectory(
+              sp.GetRequiredKeyedService<IApproverDirectory>(DirectoryKeys.Source),
+              sp.GetRequiredService<TimeProvider>(),
+              sp.GetRequiredService<IOptions<ApproverDirectoryOptions>>()));
+      services.AddSingleton<IApproverDirectory>(sp =>
+          new MeteredApproverDirectory(
+              sp.GetRequiredKeyedService<IApproverDirectory>(DirectoryKeys.Cached),
+              sp.GetRequiredService<DirectoryStats>()));
+
+      // Order matters: Metered outside the cache counts 3 of 3 calls; inside, only 1.
+    narration: >
+      Here's a trick for wiring decorators with the built-in container. Register the inner layers as keyed
+      services. Only the outermost decorator is registered without a key, so anyone who asks for an approver
+      directory gets the full chain, and nobody can skip the cache by accident. And the order matters: put the meter
+      outside the cache and it counts every call; put it inside and it only counts the misses.
+
+  - id: observer
+    type: code
+    heading: "Observer: every registration gets the event"
+    lang: csharp
+    code: |
+      services.AddScoped<AuditTrail>();
+      services.AddScoped<IRequestObserver, AuditObserver>();      // scoped: this scope's AuditTrail
+      services.AddSingleton<IRequestObserver, OutboxObserver>();
+      services.AddSingleton<IRequestObserver, BudgetTallyObserver>();
+
+      // ApprovalService(..., IEnumerable<IRequestObserver> observers)
+      foreach (var observer in _observers)
+      {
+          try { await observer.OnRoutedAsync(routed, cancellationToken).ConfigureAwait(false); }
+          catch (Exception ex) when (ex is not OperationCanceledException)
+          {
+              failures.Add($"{observer.GetType().Name}: {ex.Message}");
+          }
+      }
+    narration: >
+      Observer. Anything that wants to react to a routed request implements one interface and registers itself.
+      The approval service takes all of them as an I Enumerable, and the container hands them over in registration
+      order. Each call is isolated: if the outbox throws, the others still run, and the failure is reported, not
+      swallowed. And ask for a single observer, and you silently get the last one registered.
+
+  - id: options
+    type: code
+    heading: "Options: the policy is configuration"
+    lang: csharp
+    code: |
+      services.AddOptions<ApprovalPolicyOptions>()
+          .Bind(configuration.GetSection(ApprovalPolicyOptions.SectionName))
+          .ValidateDataAnnotations()
+          .Validate(p => p.BoardThreshold > p.HighThreshold,
+              "Policy:BoardThreshold must be greater than Policy:HighThreshold.")
+          .ValidateOnStart();
+
+      public sealed class ApprovalPolicyOptions
+      {
+          [Range(typeof(decimal), "1", "1000000000")]
+          public decimal HighThreshold { get; set; } = 50_000m;
+          [Range(1, 90)]
+          public int BoardDueDays { get; set; } = 20;
+      }
+    narration: >
+      The thresholds are policy, so they live in configuration. The options pattern binds the Policy section to a
+      class, checks the data annotations, and adds one rule that annotations can't express: the Board threshold must
+      be above the High threshold. Validate On Start runs all of it when the host starts, instead of on the first
+      request that happens to read the value.
+
+  - id: optionsrun
+    type: screen
+    heading: "A bad policy never starts"
+    image: screens/options.jpg
+    bar: "Terminal · --Policy:BoardThreshold=10000"
+    demo: >
+      Terminal: dotnet run --no-build --project src\Contoso.Approvals.Patterns.Cli -- --Policy:BoardThreshold=10000.
+      Visible at the top: "fail: Microsoft.Extensions.Hosting.Internal.Host[11] Hosting failed to start" and
+      "OptionsValidationException: Policy:BoardThreshold must be greater than Policy:HighThreshold.", and at the
+      bottom "Startup failed in Production: OptionsValidationException". Then run echo $LASTEXITCODE to show 1.
+      Scroll or crop so the first and last lines are both in frame; the stack trace in between may be cut.
+    narration: >
+      So if someone sets the Board threshold to ten thousand, below the High threshold, the app doesn't start. The
+      host logs the validation error, our app prints it, and the exit code is one. Better a failed deployment than a
+      week of requests routed to the wrong people.
+
+  - id: gotcha
+    type: code
+    heading: "Gotcha: the captive dependency"
+    short: captive
+    lang: csharp
+    code: |
+      services.AddScoped<AuditTrail>();
+      // "The audit observer has no state, make it a singleton."
+      // But it holds a scoped AuditTrail: a captive dependency.
+      services.AddSingleton<IRequestObserver, AuditObserver>();
+
+      public sealed class AuditObserver(AuditTrail trail) : IRequestObserver
+      {
+          public Task OnRoutedAsync(RequestRouted routed, CancellationToken ct)
+          {
+              trail.Add($"{routed.Request.Code} routed to {routed.Route}");
+              return Task.CompletedTask;
+          }
+      }
+    narration: >
+      Now the bug. Someone reads the audit observer, sees no fields of its own, and says: no state, make it a
+      singleton. One word changed. But it receives a scoped audit trail in its constructor. A singleton is created
+      once, so it keeps the first audit trail it was given, forever. That's called a captive dependency. It compiles.
+      The question is what happens when it runs.
+
+  - id: captiveprod
+    type: screen
+    heading: "Production: exit code zero, empty audit"
+    image: screens/captive-prod.jpg
+    bar: "Terminal · --Demo:CaptiveAudit=true (Production)"
+    demo: >
+      Terminal: dotnet run --no-build --project src\Contoso.Approvals.Patterns.Cli -- --Demo:CaptiveAudit=true.
+      Visible: "environment: Production", all eight requests routed normally, and under each batch
+      "audit trail (scoped): 0 entries [MISSING, expected 4]". Then echo $LASTEXITCODE showing 0.
+    narration: >
+      In production it runs. Every request is routed, the outbox is written, the exit code is zero. And both audit
+      trails are empty. The entries went to an audit trail that belongs to no batch. Nothing failed, nothing was
+      logged. A console app's environment is Production unless you set it, and in Production the container doesn't
+      check lifetimes.
+
+  - id: captivedev
+    type: screen
+    heading: "Development: the container refuses"
+    image: screens/captive-dev.jpg
+    bar: "Terminal · --environment Development"
+    demo: >
+      Terminal: dotnet run --no-build --project src\Contoso.Approvals.Patterns.Cli -- --Demo:CaptiveAudit=true
+      --environment Development. Visible: "Startup failed in Development: AggregateException" and the message with
+      "Cannot consume scoped service 'Contoso.Approvals.Patterns.Events.AuditTrail' from singleton
+      'Contoso.Approvals.Patterns.Events.IRequestObserver'". Wrap long lines (Windows Terminal wraps by default).
+    narration: >
+      Same code, Development environment. Now the host refuses to build: cannot consume scoped service Audit Trail
+      from singleton I Request Observer. That check is on by default in Development only. So don't rely on someone
+      remembering to run in Development.
+
+  - id: tests
+    type: code
+    heading: "Make the container prove it in CI"
+    lang: csharp
+    code: |
+      public static ServiceProvider Provider(IConfiguration? config = null, Action<IServiceCollection>? extra = null)
+      {
+          var services = new ServiceCollection();
+          services.AddApprovals(config ?? Config());
+          extra?.Invoke(services);
+          return services.BuildServiceProvider(
+              new ServiceProviderOptions { ValidateScopes = true, ValidateOnBuild = true });
+      }
+
+      [Fact]
+      public void The_real_composition_root_passes_scope_and_build_validation()
+      {
+          using var sp = TestHost.Provider();   // throws if anything is miswired
+          using var scope = sp.CreateScope();
+          Assert.NotNull(scope.ServiceProvider.GetRequiredService<ApprovalService>());
+      }
+    narration: >
+      The fix is a test. Build the real composition root with validate scopes and validate on build switched on,
+      whatever the environment. If anyone registers a singleton that captures something scoped, this test fails in
+      the pipeline, long before production.
+
+  - id: recap
+    type: bullets
+    heading: "Five rules"
+    bullets:
+      - "A pattern earns its place by removing a branch or a dependency"
+      - "Strategies as IEnumerable, not a service locator"
+      - "Keyed services keep decorator chains honest"
+      - "Observers are a collection: order and failure are your job"
+      - "Validate options on start and lifetimes in a test"
+    narration: >
+      Five rules. A pattern earns its place when it removes a branch or a hard dependency. Take strategies as a
+      collection, not through a service locator. Keyed services keep decorator chains honest. With observers, order
+      and failures are your job. And validate options on start, and lifetimes in a test.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The routing app, the twenty-seven tests and the demo script are on GitHub, and the full guide is on devladlog
+      dot com. Links are in the description. Next time: clean code principles, where we refactor a legacy method
+      without changing what it does. Subscribe so you don't miss it. This was DEVLADLOG Code, by Momento Galático.

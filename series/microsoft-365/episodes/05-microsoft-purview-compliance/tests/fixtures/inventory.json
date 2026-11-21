@@ -1,0 +1,36 @@
+{
+  "collectedAt": "2026-11-21T10:00:00Z",
+  "labels": [
+    { "name": "Contoso-Public", "displayName": "Public", "guid": "00000000-0000-0000-0000-000000000501", "priority": 0 },
+    { "name": "Contoso-General", "displayName": "General", "guid": "00000000-0000-0000-0000-000000000502", "priority": 1 },
+    { "name": "Legacy-Secret", "displayName": "Secret (old)", "guid": "00000000-0000-0000-0000-000000000509", "priority": 2 }
+  ],
+  "labelPolicies": [
+    { "name": "Contoso labels - pilot", "labels": ["Contoso-Public", "Contoso-General"], "distributionStatus": "Success" }
+  ],
+  "dlpPolicies": [
+    { "name": "Contoso - Card numbers", "mode": "TestWithNotifications", "distributionStatus": "Success",
+      "whenCreatedUtc": "2026-10-20T09:00:00Z", "whenChangedUtc": "2026-10-20T09:00:00Z",
+      "locations": ["Exchange", "SharePoint", "OneDrive", "Teams"] },
+    { "name": "Old - HR labels", "mode": "Enable", "distributionStatus": "Success",
+      "whenCreatedUtc": "2026-03-02T09:00:00Z", "whenChangedUtc": "2026-03-02T09:00:00Z",
+      "locations": ["SharePoint", "Teams"] }
+  ],
+  "dlpRules": [
+    { "name": "Card numbers - low count", "policy": "Contoso - Card numbers", "disabled": false,
+      "conditionJson": "{\"operator\":\"And\",\"groups\":[{\"operator\":\"Or\",\"name\":\"Default\",\"sensitivetypes\":[{\"name\":\"Credit Card Number\",\"mincount\":1,\"maxcount\":9}]}]}" },
+    { "name": "HR - secret label", "policy": "Old - HR labels", "disabled": false,
+      "conditionJson": "{\"operator\":\"And\",\"groups\":[{\"operator\":\"Or\",\"name\":\"Default\",\"labels\":[{\"name\":\"Legacy-Secret\",\"type\":\"Sensitivity\"}]}]}" }
+  ],
+  "retentionLabels": [
+    { "name": "Contoso Contract - 7 years", "retentionAction": "KeepAndDelete", "retentionDuration": "2555", "isRecordLabel": false },
+    { "name": "Legal Hold Record", "retentionAction": "Keep", "retentionDuration": "unlimited", "isRecordLabel": true }
+  ],
+  "retentionPolicies": [
+    { "name": "Contoso retention labels", "distributionStatus": "Pending", "restrictiveRetention": false, "enabled": true },
+    { "name": "Legal records", "distributionStatus": "Error", "restrictiveRetention": true, "enabled": true }
+  ],
+  "retentionRules": [
+    { "name": "Legal records - rule", "policy": "Legal records", "publishComplianceTag": "Legal Hold Record" }
+  ]
+}

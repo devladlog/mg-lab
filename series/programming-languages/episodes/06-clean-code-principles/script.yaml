@@ -1,0 +1,322 @@
+# DEVLADLOG Code — episode 06 (draft; screens are recorded on the Windows laptop, see demo.md)
+episode: 6
+slug: clean-code-principles
+series_label: "CODE"
+series_name: "DEVLADLOG Code"
+file_prefix: "programming-languages"
+title: "Clean code principles, proven"
+subtitle: "Refactor a legacy method without changing what it does"
+voice: am_michael
+thumbnail_text: "CLEAN CODE\nPROVEN\nNOT PREACHED"
+youtube:
+  title: "Clean Code in C#: Refactor Legacy Code Safely with a Golden Master and Analyzers | DEVLADLOG Code #6"
+  tags: [C#, clean code, refactoring, legacy code, golden master, characterization tests, .NET 10, CA1502, cyclomatic complexity, code analysis, Roslyn analyzers, Math.Round, xUnit]
+sources:
+  - https://www.devladlog.com/articles/programming-languages/2025-07-02-clean-code-principles-complete-guide-2025/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Clean code, proven"
+    sub: "Same behavior, half the nesting, and a test that says so"
+    short: hook
+    narration: >
+      Everybody agrees clean code is good. The hard part is cleaning real legacy code without breaking it. Today we
+      take a sixty-line method nobody wants to touch, rewrite it, and prove that it still does exactly the same thing,
+      except for one change we decide on, out loud. Welcome to DEVLADLOG Code.
+
+  - id: plan
+    type: bullets
+    heading: "The plan"
+    bullets:
+      - "Turn principles into build gates"
+      - "Record what the legacy code does: a golden master"
+      - "Refactor: names, constants, guard clauses, no flags"
+      - "Change behavior only on purpose, in a listed step"
+      - "Find what the master can't see"
+    narration: >
+      The plan. First, turn clean code principles into build gates, so they're not opinions. Second, record what the
+      legacy code does today, a golden master. Third, refactor. Fourth, change behavior only on purpose. And finally,
+      look for what the golden master can't see. Eighteen tests.
+
+  - id: legacy
+    type: code
+    heading: "The legacy method"
+    lang: csharp
+    code: |
+      public string Process(string l, bool f)
+      {
+          // ...
+                          // budget >= 50k is high
+                          string pr = "N";
+                          if (b > 50000) pr = "H";
+                          if (b >= 250000) pr = "B";
+                          if (pr == "B" && p[4].Trim() == "")
+                          {
+                              r = "ERR4";
+                          }
+                          else
+                          {
+                              var d = p[2].ToUpper(CultureInfo.CurrentCulture);
+                              string a = "";
+                              if (d == "IT") a = "alex.demo";
+    narration: >
+      Here it is. Same Contoso requests as the rest of the series: one line from a file in, a result string out. One
+      letter names. Magic numbers. Results like E R R four. A boolean called f that means send mail. Six levels of
+      nesting. And read that comment: budget fifty thousand or more is high. Now read the code under it.
+
+  - id: smells
+    type: bullets
+    heading: "What makes it hard to change"
+    bullets:
+      - "Names that explain nothing: l, f, p, b, r"
+      - "Magic numbers and codes: 50000, 1.15m, \"ERR3\""
+      - "A flag argument that changes the output"
+      - "Six levels of nesting"
+      - "catch (Exception) that hides every bug"
+      - "A comment that disagrees with the code"
+    narration: >
+      None of this is a syntax error, and that's the problem. The names explain nothing. The rules hide in numbers
+      and codes. A flag changes what the method returns. The nesting means every change touches everything. A catch
+      all turns any bug into a normal looking error. And a comment that disagrees with the code is worse than no
+      comment.
+
+  - id: gates
+    type: code
+    heading: "Principles as build gates"
+    lang: ini
+    code: |
+      # cleancode.globalconfig
+      is_global = true
+      dotnet_diagnostic.CA1502.severity = warning   # complexity, threshold 10 in CodeMetricsConfig.txt
+      dotnet_diagnostic.CA1031.severity = warning   # don't catch Exception
+      csharp_prefer_braces = true
+      dotnet_diagnostic.IDE0011.severity = warning  # braces on every block
+      dotnet_diagnostic.IDE0059.severity = warning  # value assigned, never used
+
+      <!-- Directory.Build.props: every project, unless it opts out -->
+      <ItemGroup Condition="'$(EnforceCleanCode)' != 'false'">
+        <GlobalAnalyzerConfigFiles Include="$(MSBuildThisFileDirectory)cleancode.globalconfig" />
+        <AdditionalFiles Include="$(MSBuildThisFileDirectory)CodeMetricsConfig.txt" />
+      </ItemGroup>
+    narration: >
+      Step one: gates. A global analyzer config turns on four rules. Complexity, with the threshold lowered from
+      twenty-five to ten. No catching of general exceptions. Braces on every block. And no values that are assigned
+      and never read. The first two are off by default in dot net ten, even at the recommended level. Every project
+      gets the gates. The legacy project opts out, for now.
+
+  - id: gatesrun
+    type: screen
+    heading: "The legacy code against the gates"
+    image: screens/gates.jpg
+    bar: "Terminal · dotnet build -p:EnforceCleanCode=true"
+    demo: >
+      Windows Terminal (dark, font 18 pt or larger, ~150 columns), in the episode folder:
+      dotnet build src\Contoso.Requests.Legacy -m:1 --no-incremental -v q -p:EnforceCleanCode=true.
+      Visible: "error CA1502: 'Process' has a cyclomatic complexity of '19'. Rewrite or refactor the code to decrease
+      its complexity below '11'.", the IDE0011 "Add braces" lines, IDE0059 for 'r', CA1031, and "17 Error(s)" (each
+      error is printed twice by MSBuild, once while building and once in the summary). Then dotnet build src\Contoso.Requests.Clean -m:1
+      --no-incremental -v q showing "0 Error(s)".
+    narration: >
+      Switch the gates on for the legacy project, and the build fails with seventeen errors. Cyclomatic complexity
+      nineteen, the limit is ten. Braces missing everywhere. The catch all. An assignment that's never used. The clean
+      project, same gates: zero errors.
+
+  - id: golden
+    type: code
+    heading: "Before touching anything: a golden master"
+    lang: csharp
+    code: |
+      /// The approved file is what the legacy code did before anybody touched it.
+      /// Line 7, budget exactly 50,000: legacy said Normal ("> 50000"), the rule says High.
+      private static readonly string[] IntentionalChanges = ["07 plain", "07 mail"];
+
+      [Fact]
+      public void The_legacy_code_still_produces_the_approved_master() =>
+          Assert.Equal(GoldenMaster.Approved, GoldenMaster.Record(new RequestProcessor2()));
+
+      [Fact]
+      public void Clean_code_matches_the_master_except_the_intentional_changes() =>
+          Assert.Equal(IntentionalChanges,
+              GoldenMaster.DifferencesFrom(GoldenMaster.Record(new RequestProcessor())));
+    narration: >
+      Step two, before changing a single line: record what the code does. Twenty input lines chosen to hit every
+      branch and every odd case, run in both modes, forty results saved as a text file. That's the golden master. The
+      clean code must reproduce it, line by line. And there's exactly one exception, written down in the test with
+      the reason: the fifty thousand boundary.
+
+  - id: processor
+    type: code
+    heading: "Guard clauses, in the legacy order"
+    lang: csharp
+    code: |
+      // ...field count and code checks above, same shape
+      if (!request.TryGetBudget(out var budget))
+      {
+          return new Rejected(Rejection.InvalidBudget);
+      }
+      var priority = ApprovalPolicy.PriorityFor(budget);
+      if (ApprovalPolicy.NeedsJustification(priority) && !request.HasJustification)
+      {
+          return new Rejected(Rejection.MissingJustification);
+      }
+      if (!DepartmentManagers.TryFind(request.Department, out var manager))
+      {
+          return new Rejected(Rejection.UnknownDepartment);
+      }
+      return new Routed(request.Code, priority, ApprovalPolicy.ApproversFor(priority, manager),
+          ApprovalPolicy.WithContingency(budget, rounding));
+    narration: >
+      Step three, the refactor. Six levels of nesting become a straight list of guard clauses that reads like the
+      rules. Each question has a name: has valid code, try get budget, needs justification. E R R three becomes
+      Rejection dot Unknown Department. And the order of the checks stays exactly the legacy order, because the
+      order is behavior too: a Board request with no justification and an unknown department still says
+      justification first.
+
+  - id: policy
+    type: code
+    heading: "Names instead of magic numbers"
+    lang: csharp
+    code: |
+      /// Series rule: 50,000 and above is High. The legacy code used "> 50000".
+      public const decimal HighPriorityFrom = 50_000m;
+      public const decimal BoardFrom = 250_000m;
+      public const decimal ContingencyRate = 0.15m;
+
+      public static Priority PriorityFor(decimal budget) =>
+          budget >= BoardFrom ? Priority.Board
+          : budget >= HighPriorityFrom ? Priority.High
+          : Priority.Normal;
+
+      public static IReadOnlyList<string> ApproversFor(Priority priority, string manager) => priority switch
+      {
+          Priority.Board => [manager, FinanceApprover, BoardApprover],
+          Priority.High => [manager, FinanceApprover],
+          _ => [manager],
+      };
+    narration: >
+      The numbers get names. High priority from fifty thousand, Board from two hundred and fifty thousand, a fifteen
+      percent contingency. The string concatenation that built the approver list becomes one switch expression. Now
+      the comment explains why, and the code says what.
+
+  - id: flag
+    type: code
+    heading: "A flag argument becomes two methods"
+    lang: csharp
+    code: |
+      // before: legacy.Process(line, true)   what does true mean?
+
+      public static string Describe(Outcome outcome) => outcome switch
+      {
+          Routed routed => string.Join(';', "OK", routed.Code, PriorityCode(routed.Priority),
+              string.Join(',', routed.Approvers),
+              routed.TotalWithContingency.ToString(CultureInfo.InvariantCulture)),
+          Rejected rejected => $"ERR{(int)rejected.Reason}",
+          _ => throw new UnreachableException($"Unknown outcome {outcome.GetType().Name}"),
+      };
+
+      public static string DescribeAfterNotifying(Outcome outcome) =>
+          outcome is Routed ? Describe(outcome) + MailMarker : Describe(outcome);
+    narration: >
+      The boolean flag becomes two methods with honest names, so the call site says what it means. The output
+      format stays byte for byte the same, because other systems read it. Processing is now a query, and the mail
+      marker belongs to the step that notifies.
+
+  - id: compare
+    type: screen
+    heading: "38 identical, 2 different, on purpose"
+    image: screens/compare.jpg
+    bar: "Terminal · dotnet run -- compare"
+    demo: >
+      Terminal: dotnet run --no-build --project src\Contoso.Requests.Cli -- compare samples\requests.csv.
+      Visible: "clean code rounding: ToEven", the table with "same" on every line except
+      "07 plain OK;PR-2026-0207;N;alex.demo;57500  DIFF  OK;PR-2026-0207;H;alex.demo,sam.demo;57500" and the
+      07 mail line, and the last line "20 lines x 2 modes: 38 identical, 2 different".
+    narration: >
+      Here's the proof. Legacy and clean side by side, forty results. Thirty-eight identical. Two different, both on
+      line seven, budget exactly fifty thousand: legacy said normal, the rule says high. That's the one change we
+      decided on, and it's the only one.
+
+  - id: rounding
+    type: code
+    heading: "Gotcha: the obvious improvement"
+    short: rounding
+    lang: csharp
+    code: |
+      // legacy:
+      var t = Math.Round(b * 1.15m);   // Math.Round(decimal) defaults to MidpointRounding.ToEven
+
+      // the "obvious" improvement:
+      Math.Round(budget * (1 + ContingencyRate), MidpointRounding.AwayFromZero)
+
+      // 10,870 * 1.15 = 12,500.5
+      //   ToEven       -> 12,500   (what was approved)
+      //   AwayFromZero -> 12,501
+
+      // what we keep, out loud:
+      public static decimal WithContingency(decimal budget, MidpointRounding rounding = MidpointRounding.ToEven)
+    narration: >
+      Now a trap. Math dot Round on a decimal uses banker's rounding by default: a midpoint goes to the nearest even
+      number. Plenty of people would call that a bug and switch to away from zero. Ten thousand eight hundred and
+      seventy plus fifteen percent is twelve thousand five hundred and a half. Banker's rounding says twelve thousand
+      five hundred. Away from zero says one euro more.
+
+  - id: roundingrun
+    type: screen
+    heading: "The master catches it"
+    image: screens/rounding.jpg
+    bar: "Terminal · compare --rounding AwayFromZero"
+    demo: >
+      Terminal: dotnet run --no-build --project src\Contoso.Requests.Cli -- compare samples\requests.csv
+      --rounding AwayFromZero. Visible: "clean code rounding: AwayFromZero", the two 07 DIFF lines, the two 09 DIFF
+      lines ("OK;PR-2026-0209;N;riley.demo;12500" vs "...;12501") and "20 lines x 2 modes: 36 identical, 4 different".
+    narration: >
+      Run the comparison with that improvement, and line nine turns red: twelve thousand five hundred versus twelve
+      thousand five hundred and one. An amount somebody already approved. So the clean code keeps banker's rounding,
+      and now it says so explicitly, where the next person will read it.
+
+  - id: culture
+    type: code
+    heading: "What the master can't see"
+    short: culture
+    lang: csharp
+    code: |
+      [Fact]
+      public void Gotcha_the_catch_all_turned_a_null_line_into_a_normal_looking_error()
+      {
+          Assert.Equal("ERR", new RequestProcessor2().Process(null!, false));                 // swallowed
+          Assert.Throws<ArgumentNullException>(() => new RequestProcessor().Process(null!)); // a bug is a bug
+      }
+
+      // under tr-TR, "it".ToUpper(CurrentCulture) is "İT": the legacy lookup misses IT
+      CultureInfo.CurrentCulture = new CultureInfo("tr-TR");
+      Assert.Equal("ERR3", new RequestProcessor2().Process("PR-2026-0303;Laptops;it;1000;", false));
+      Assert.IsType<Routed>(new RequestProcessor().Process("PR-2026-0303;Laptops;it;1000;"));
+    narration: >
+      But a golden master only knows the inputs you gave it. Two differences never showed up. The catch all turned a
+      null line into a normal looking error; clean code throws. And on a Turkish machine, lowercase i t upper cases to
+      a dotted capital I, so the legacy code rejects the IT department. The clean code compares ordinally, the same
+      in every culture. Both are tests now.
+
+  - id: recap
+    type: bullets
+    heading: "Five rules"
+    bullets:
+      - "Make principles build gates, not review comments"
+      - "Record behavior before you refactor"
+      - "Refactor and change behavior in separate, named steps"
+      - "Say surprising defaults out loud: rounding, culture, order"
+      - "A master only sees its inputs: add unit tests for the edges"
+    narration: >
+      Five rules. Make principles build gates, not review comments. Record behavior before you refactor. Never
+      refactor and change behavior in the same step. Say surprising defaults out loud: rounding, culture, the order
+      of checks. And remember a golden master only sees its inputs, so test the edges too.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The legacy code, the clean version, the golden master and the eighteen tests are on GitHub, and the full guide
+      is on devladlog dot com. Links are in the description. Next time: PowerShell automation. Subscribe so you
+      don't miss it. This was DEVLADLOG Code, by Momento Galático.

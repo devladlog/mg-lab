@@ -1,0 +1,274 @@
+# DEVLADLOG Microsoft 365 — episode 05 (draft: code and tests are real; screen scenes still need the lab recording)
+episode: 5
+slug: microsoft-purview-compliance
+series_label: "MICROSOFT 365"
+series_name: "DEVLADLOG Microsoft 365"
+file_prefix: "microsoft-365"
+title: "Microsoft Purview Compliance"
+subtitle: "Sensitivity labels, DLP in simulation and retention labels, as code"
+voice: am_michael
+thumbnail_text: "PURVIEW\nAS\nCODE"
+youtube:
+  title: "Microsoft Purview as Code: Sensitivity Labels, DLP, Retention | DEVLADLOG Microsoft 365 #5"
+  tags: [Microsoft Purview, data loss prevention, DLP, sensitivity labels, retention labels, Security and Compliance PowerShell, Microsoft 365 E5, information protection, compliance, PowerShell]
+sources:
+  - https://www.devladlog.com/articles/office-365/2025-04-05-purview-compliance-complete-guide-2025/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Your data leaves through normal work"
+    sub: "A spreadsheet of card numbers, one external recipient, one click"
+    short: hook
+    narration: >
+      Data doesn't only leak through attackers. It leaks through a spreadsheet of card numbers attached to the wrong
+      email, or a confidential file shared with a partner. Today we put Microsoft Purview in front of that, from one file:
+      sensitivity labels people can apply, data loss prevention that runs in simulation first, and a retention label
+      for contracts. And we hit two gotchas on the way.
+
+  - id: licensing
+    type: bullets
+    heading: "What each licence covers"
+    bullets:
+      - "Manual sensitivity labels: E3 and up"
+      - "DLP for Exchange, SharePoint and OneDrive: E3"
+      - "DLP for Teams chat and channel messages: E5"
+      - "Auto-labeling policies: E5 tier"
+    narration: >
+      Licences first. Manual sensitivity labels and DLP for Exchange, SharePoint and OneDrive come with Microsoft
+      three sixty five E3. DLP for Teams chat and channel messages, and automatic labeling, need the E5 tier. Our lab
+      runs on the E5 trial, so everything in this episode is covered.
+
+  - id: config
+    type: code
+    heading: "One file: compliance dot json"
+    lang: json
+    code: |
+      "sensitivityLabels": [ { "name": "Contoso-Public" }, { "name": "Contoso-General" },
+        { "name": "Contoso-Confidential",
+          "header": { "text": "CONFIDENTIAL - Contoso internal", "fontColor": "#C00000" } } ],
+      "labelPolicy": { "name": "Contoso labels - pilot",
+                       "publishTo": ["labadmin@...", "alex.demo@...", "sam.demo@..."] },
+      "dlpPolicies": [ { "name": "Contoso - Card numbers", "mode": "TestWithNotifications",
+                         "locations": ["Exchange", "SharePoint", "OneDrive", "Teams"] },
+                       { "name": "Contoso - Confidential label", "mode": "TestWithNotifications",
+                         "locations": ["Exchange", "SharePoint", "OneDrive"] } ],
+      "retention": { "labels": [ { "name": "Contoso Contract - 7 years", "action": "KeepAndDelete",
+                                   "durationDays": 2555, "retentionType": "CreationAgeInDays" } ] }
+    narration: >
+      Here's the file. Three labels, with a red header on Confidential. A label policy for a pilot group, not the
+      whole company. Two DLP policies, both starting in simulation with policy tips. And a retention label that keeps
+      contracts for seven years from creation, then deletes them.
+
+  - id: whatif
+    type: code
+    heading: "WhatIf doesn't work here, so we built it"
+    lang: powershell
+    short: whatif
+    code: |
+      [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'High')]
+      param([Parameter(Mandatory)][AllowEmptyCollection()][object[]]$Plan)
+      foreach ($s in $Plan) {
+          if ($s.Action -ne 'Create') { [pscustomobject]@{ ...; Result = $s.Action }; continue }
+          if (-not $PSCmdlet.ShouldProcess("$($s.Kind) '$($s.Name)'", $s.Cmdlet)) {
+              [pscustomobject]@{ Kind = $s.Kind; Name = $s.Name; Result = 'WhatIf'; Detail = $s.Cmdlet }; continue
+          }
+          $params = $s.Params
+          & $s.Cmdlet @params -ErrorAction Stop | Out-Null
+      }
+    narration: >
+      Something every Purview admin should know. Every cmdlet page in Security and Compliance PowerShell says it: the
+      what if switch doesn't work there. So you can't rely on it for a dry run. Our dry run lives in our own
+      function instead. It plans, it asks, and it never passes what if down.
+
+  - id: plan-screen
+    type: screen
+    heading: "Plan, then deploy"
+    image: screens/plan.jpg
+    bar: "PowerShell · Security & Compliance (lab tenant, masked)"
+    demo: >
+      Lab tenant, after Connect-IPPSSession as Lab Admin. ./Invoke-PurviewCompliance.ps1 -PolicyFile ./compliance.lab.json
+      -Plan: 12 rows, all Create on a clean tenant. Then -Deploy -WhatIf (12 rows WhatIf, nothing created), then -Deploy
+      (confirm): 12 rows Created. Then Microsoft Purview portal > Information Protection > Sensitivity labels showing
+      Public, General, Confidential, and Data loss prevention > Policies showing both policies "In simulation with
+      notifications". Mask tenant name and admin UPN.
+    narration: >
+      Against the lab: the plan shows twelve steps, all create. The what if run creates nothing. The real run creates
+      the labels, the label policy, the retention label and its policy, and both DLP policies with their rules, in
+      that order. Labels first, policies after.
+
+  - id: labels
+    type: bullets
+    heading: "Labels: what to expect"
+    bullets:
+      - "Publish to a pilot group first, then widen"
+      - "Word, Excel, PowerPoint on the web: usually within the hour"
+      - "Allow up to 24 hours for all apps and services"
+      - "No label policy, no label: nobody can apply it"
+    narration: >
+      Labels take time. Microsoft says to allow twenty four hours for labels and label policies to reach every app,
+      although Office on the web often shows them within the hour. That's why we deployed the day before recording.
+      And a label that isn't in any label policy can't be applied by anyone, which the audit checks.
+
+  - id: label-screen
+    type: screen
+    heading: "Alex labels a document Confidential"
+    image: screens/label.jpg
+    bar: "Word on the web · signed in as Alex Demo (lab tenant, masked)"
+    demo: >
+      Second browser profile signed in as alex.demo. OneDrive > new Word document "Q4 supplier contract.docx". Home >
+      Sensitivity: the menu lists Public, General, Confidential (with tooltips). Choose Confidential: the red centered
+      header "CONFIDENTIAL - Contoso internal" appears. Prerequisite: sensitivity labels enabled for SharePoint and
+      OneDrive (demo.md). Mask the OneDrive URL.
+    narration: >
+      Alex opens a supplier contract in Word on the web, picks Confidential from the sensitivity menu, and the red
+      header appears. The label travels with the file, and our second DLP policy can now act on it.
+
+  - id: dlp-code
+    type: code
+    heading: "A DLP rule, from the file"
+    lang: powershell
+    code: |
+      $p = [ordered]@{
+          Name                                = $Rule.name
+          Policy                              = $PolicyName
+          ContentContainsSensitiveInformation = ConvertTo-PVSensitiveInfoCondition -Rule $Rule
+      }
+      $scope = Get-PVProp $Rule 'accessScope'
+      if ($scope) { $p.AccessScope = $scope }
+      if ([bool](Get-PVProp $Rule 'blockAccess' $false)) { $p.BlockAccess = $true }
+      $notify = @(Get-PVProp $Rule 'notifyUser' @())
+      if ($notify.Count) { $p.NotifyUser = $notify }
+      $tip = Get-PVProp $Rule 'policyTip'
+      if ($tip) { $p.NotifyPolicyTipCustomText = $tip }
+      $ov = Get-PVProp $Rule 'allowOverride'
+      if ($ov) { $p.NotifyAllowOverride = $ov }
+      $report = @(Get-PVProp $Rule 'incidentReportTo' @())
+      if ($report.Count) { $p.GenerateIncidentReport = $report; $p.IncidentReportContent = 'All' }
+    narration: >
+      The card number policy copies the shape of Microsoft's P C I template. One to nine card numbers going outside
+      the organization: notify the owner with a policy tip. Ten or more: block external access, allow an override
+      only with a business justification, and send an incident report.
+
+  - id: rollout
+    type: bullets
+    heading: "Simulation first, Microsoft says so"
+    bullets:
+      - "Simulation, then simulation with tips for a pilot, then on"
+      - "A simulation runs for up to 15 days"
+      - "Exchange and Teams: only new items are evaluated"
+      - "Turned on, a policy takes effect in about an hour"
+    narration: >
+      Microsoft's deployment guidance is incremental. Simulation first, then simulation with policy tips for a pilot
+      group, then turn it on. A simulation runs for up to fifteen days. SharePoint and OneDrive content is evaluated
+      in full, but for Exchange and Teams only new items count. Once turned on, a policy takes effect in about an hour.
+
+  - id: gotcha
+    type: code
+    heading: "The gotcha: the famous test card doesn't trigger"
+    lang: powershell
+    short: gotcha
+    code: |
+      # The Credit Card Number type doesn't flag reserved test card numbers:
+      # 4111 1111 1111 1111 sails straight through. Generate Luhn-valid numbers instead.
+      while ($seen.Count -lt $Count) {
+          $body = '4' + (-join (1..14 | ForEach-Object { $rng.Next(0, 10) }))
+          foreach ($c in 0..9) { if (Test-PVLuhn "$body$c") { $check = $c; break } }
+          $n = "$body$check"
+          if ($seen.ContainsKey($n)) { continue }
+          $seen[$n] = $true
+          $out.Add(('Customer {0:D3} - Visa card number {1} {2} {3} {4}' -f $seen.Count, ...))
+      }
+    narration: >
+      Here's the gotcha. Many people test DLP with four one one one, one one one one, and then think DLP is broken.
+      Microsoft's definition of the credit card type says it doesn't flag reserved test card numbers. So we generate
+      synthetic numbers that pass the Luhn check, each next to the word Visa, because a keyword within three hundred
+      characters gives high confidence. No names, no expiry dates, lab only.
+
+  - id: dlp-screen
+    type: screen
+    heading: "The policy tip in Outlook"
+    image: screens/dlp-tip.jpg
+    bar: "Outlook on the web · signed in as Alex Demo (lab tenant, masked)"
+    demo: >
+      ./Invoke-PurviewCompliance.ps1 -NewTestFile -TestFilePath ./contoso-dlp-test.txt -Count 12 on the recording machine.
+      As alex.demo in Outlook on the web: new message to partner@example.com (reserved domain, nothing is sent), subject
+      "Customer list", paste the 12 generated lines into the body. Wait for the policy tip bar with the custom text
+      "Blocked: 10 or more card numbers can't leave Contoso...". Discard the draft without sending. Mask the mailbox address.
+    narration: >
+      Alex pastes the test data into a message for an outside address. Before anything is sent, Outlook shows our
+      policy tip. In simulation, nothing is blocked yet, but Alex already learns the rule. We close the draft.
+      Nothing leaves the tenant.
+
+  - id: simulation-screen
+    type: screen
+    heading: "Review the simulation, then promote"
+    image: screens/simulation.jpg
+    bar: "Microsoft Purview portal · Data loss prevention (lab tenant, masked)"
+    demo: >
+      As alex.demo create "Customer list.docx" in OneDrive with the 12 generated lines (do not share it). Next day, Purview
+      portal > Data loss prevention > Policies > "Contoso - Card numbers" > View simulation: Simulation overview with the
+      matched item, Items for review lists Customer list.docx. Then PowerShell: ./Invoke-PurviewCompliance.ps1 -Promote -PolicyName
+      'Contoso - Card numbers' -Mode Enable (confirm) -> From TestWithNotifications To Enable. Mask names except lab users.
+    narration: >
+      Alex also saved the list in a Word file on OneDrive. The simulation dashboard lists it as a matched item, without blocking
+      anything. Happy with the results, we promote the policy to enforcement with one command. It refuses while a
+      policy is still distributing.
+
+  - id: teams-label
+    type: code
+    heading: "One location can switch off a condition"
+    lang: powershell
+    code: |
+      # DLP policy reference: Teams chat and channel messages can't define content by sensitivity label,
+      # and in a multi-location policy a 'no' wins - so a label condition in a policy that includes Teams can't work.
+      if ($labels.Count -and 'Teams' -in @($p.locations)) {
+          throw "rule '$($r.name)': a sensitivity label condition isn't supported when the policy includes Teams."
+      }
+    narration: >
+      Why two DLP policies and not one? Teams chat can be matched by sensitive information types, but not by
+      sensitivity label. When a policy combines locations, the most limited one wins. Add Teams to the Confidential
+      policy and the label condition stops working. The config loader refuses that, and the audit finds it in old
+      policies.
+
+  - id: retention
+    type: bullets
+    heading: "Retention labels, carefully"
+    bullets:
+      - "Published by a rule with PublishComplianceTag"
+      - "SharePoint and OneDrive: about a day, allow up to 7 days"
+      - "Exchange: up to 7 days"
+      - "Record labels and Preservation Lock: refused unless you say so"
+    narration: >
+      The retention label is published by a retention policy with a single rule that names the label. Users see it in
+      SharePoint and OneDrive within about a day, but allow up to seven days, and up to seven days in Exchange. Two
+      settings can't be undone: a record label can't be removed from content, and Preservation Lock can't be turned
+      off, even by an admin. The file refuses both unless you opt in.
+
+  - id: audit
+    type: code
+    heading: "The audit, against a messy tenant"
+    lang: text
+    code: |
+      Severity Target                                  Rule
+      -------- ------                                  ----
+      High     DLP rule: HR - secret label             LabelConditionWithTeams
+      High     Retention policy: Legal records         DistributionError
+      Medium   DLP policy: Contoso - Card numbers      SimulationOverdue
+      Medium   Sensitivity label: Legacy-Secret        LabelNotPublished
+      Medium   Retention label: Contoso Contract - 7.. RetentionLabelNotPublished
+      Low      LabelPolicy: Contoso labels - pilot     Drift
+      Info     Retention policy: Legal records         PreservationLock
+    narration: >
+      The audit reads the tenant and reports what's wrong: a label rule in a policy with Teams, a retention policy
+      whose distribution failed, a simulation running past fifteen days, a label nobody can apply, and drift from the
+      file. Sixty Pester tests cover the rules, the parameters and the deploy order, without a tenant, and every
+      parameter name is checked against the Microsoft Learn syntax.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The module, the config, the tests and the shot list are on GitHub. The complete Purview guide and its four
+      companion articles are on dev lad log dot com. Next episode: Microsoft Defender for Office three sixty five.

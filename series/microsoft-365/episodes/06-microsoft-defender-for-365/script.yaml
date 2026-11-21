@@ -1,0 +1,261 @@
+# DEVLADLOG Microsoft 365 — episode 06 (draft: code and tests are real; screen scenes still need the lab recording)
+episode: 6
+slug: microsoft-defender-for-365
+series_label: "MICROSOFT 365"
+series_name: "DEVLADLOG Microsoft 365"
+file_prefix: "microsoft-365"
+title: "Microsoft Defender for Office 365"
+subtitle: "Preset policies, real coverage, hunting and attack simulation, as code"
+voice: am_michael
+thumbnail_text: "WHO IS\nREALLY\nPROTECTED?"
+youtube:
+  title: "Defender for Office 365 as Code: Presets, Coverage, KQL, Attack Sim | DEVLADLOG Microsoft 365 #6"
+  tags: [Microsoft Defender for Office 365, preset security policies, Safe Links, Safe Attachments, advanced hunting, KQL, attack simulation training, Exchange Online PowerShell, Microsoft Graph, Microsoft 365 E5]
+sources:
+  - https://www.devladlog.com/articles/office-365/2026-05-02-defender-365-security-complete-guide-2026/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Turned on is not the same as protected"
+    sub: "Which mailbox gets which protection? Let's prove it"
+    short: hook
+    narration: >
+      The Defender portal says Standard protection is on. But which mailboxes actually get it? In this episode we
+      assign Microsoft's preset security policies from one file, compute the real coverage of every mailbox, hunt for
+      threats with K Q L, and read the results of a phishing simulation. All in the lab, with Microsoft's own test
+      methods. No real malware, no real phishing.
+
+  - id: licensing
+    type: bullets
+    heading: "What you need"
+    bullets:
+      - "Built-in protection features: every organization with cloud mailboxes"
+      - "Safe Links, Safe Attachments: Defender for Office 365 (in E5)"
+      - "Attack simulation training: E5 or Defender for Office 365 Plan 2"
+      - "Hunting API: ThreatHunting.Read.All"
+    narration: >
+      Anti-malware, anti-spam and anti-phishing come with every Exchange Online organization. Safe Links and Safe
+      Attachments are Defender for Office three sixty five, which Microsoft three sixty five E5 includes. Attack
+      simulation training needs E5 or Plan 2. Our lab runs on the E5 trial.
+
+  - id: presets
+    type: bullets
+    heading: "Preset policies: you choose who, Microsoft chooses how"
+    bullets:
+      - "Order: Strict, Standard, evaluation, custom, then Built-in protection"
+      - "Settings inside presets are not configurable"
+      - "You set recipients, exceptions, and on or off"
+      - "Two rules per preset: EOP and Defender for Office 365"
+    narration: >
+      Preset security policies are Microsoft's recommended settings, maintained for you. You don't tune them. You
+      decide who gets them. Strict always wins, then Standard, then custom policies, and Built-in protection catches
+      everyone else for Safe Links and Safe Attachments. Each preset has two rules: one for the built in protections
+      and one for Defender for Office three sixty five.
+
+  - id: config
+    type: code
+    heading: "One file: defender dot json"
+    lang: json
+    code: |
+      "presets": {
+        "strict": {
+          "$comment": "Priority accounts: admins and finance. Strict wins over Standard for anyone in both.",
+          "sentToMemberOf": ["priority-accounts@contoso.onmicrosoft.com"]
+        },
+        "standard": {
+          "$comment": "Everyone in the accepted domain. One condition type only (different condition types are ANDed).",
+          "recipientDomainIs": ["contoso.onmicrosoft.com"]
+        }
+      },
+      "allowCombinedConditions": false,
+      "audit": { "baseline": "Standard", "builtInProtectionExceptionsAllowed": [] },
+      "hunting": { "lookbackDays": 7 },
+      "attackSimulation": { "maxCompromisedPercent": 20 }
+    narration: >
+      The file is short. Strict for the priority accounts group, which holds the lab admin and Riley from finance.
+      Standard for everyone in the domain. No exceptions to Built-in protection. A seven day hunting window, and a
+      target of at most twenty percent compromised in a simulation.
+
+  - id: apply-code
+    type: code
+    heading: "Make the tenant match the file"
+    lang: powershell
+    code: |
+      $p = Get-DOProp $Config.presets $Preset.ToLowerInvariant()
+      $out = [ordered]@{ Identity = $script:PresetRuleName[$Preset] }
+      foreach ($k in $script:ConditionKeys + $script:ExceptionKeys) {
+          $jsonKey = $k.Substring(0, 1).ToLowerInvariant() + $k.Substring(1)
+          $v = @(Get-DOList $p $jsonKey)
+          $out[$k] = if ($v.Count) { $v } else { $null }
+      }
+      $out
+      # then: Set-EOPProtectionPolicyRule @params / Set-ATPProtectionPolicyRule @params,
+      #       Enable-...ProtectionPolicyRule when the rule is disabled
+    narration: >
+      Every recipient parameter is sent, and the unused ones as null, so old conditions don't linger. One detail from
+      Microsoft's documentation: the Standard and Strict rules are created the first time you turn on the preset in
+      the Defender portal. Before that, PowerShell has nothing to set. So the function checks all four rules first,
+      and tells you to turn the preset on once, instead of failing halfway.
+
+  - id: gotcha
+    type: code
+    heading: "The gotcha: users AND groups"
+    lang: powershell
+    short: gotcha
+    code: |
+      foreach ($k in $script:ExceptionKeys) {           # any exception wins
+          $v = @(Get-DOList $Rule ($k.Substring(0, 1).ToLowerInvariant() + $k.Substring(1)))
+          if ($v.Count -and (& $test $k.Substring(8) $v)) { return $false }
+      }
+      foreach ($k in $script:ConditionKeys) {           # every condition TYPE must match
+          $v = @(Get-DOList $Rule ($k.Substring(0, 1).ToLowerInvariant() + $k.Substring(1)))
+          if (-not $v.Count) { continue }
+          if (-not (& $test $k $v)) { return $false }
+      }
+      $true
+    narration: >
+      Here's the gotcha. In the portal you add the domain, and then a group for good measure. It looks like more
+      people. It's fewer. Values of one condition are ORed, but different condition types are ANDed, so only domain
+      users who are also in the group are protected. Exceptions are ORed: any match excludes you. Our coverage check
+      implements exactly those rules.
+
+  - id: before-screen
+    type: screen
+    heading: "The audit finds the trap"
+    image: screens/audit-before.jpg
+    bar: "PowerShell · Exchange Online (lab tenant, masked)"
+    demo: >
+      Setup (demo.md): Standard preset turned on in the portal with Domains = lab domain AND Groups = All Staff (labadmin,
+      alex, sam, riley); Strict with Groups = Priority Accounts, but its Defender for Office 365 part turned off. Run
+      ./Invoke-DefenderForOffice.ps1 -PolicyFile ./defender.lab.json -Audit. Capture the coverage table (jordan.demo:
+      Default/custom + Built-in protection) and the findings CombinedConditions, PriorityNotStrict, NotOnPreset.
+      Rewrite narration to match the real output. Mask the tenant domain.
+    narration: >
+      In the lab we set up that trap on purpose. The audit's coverage table shows Jordan on default policies and
+      Built-in protection only, because Jordan isn't in the group. And the priority accounts get Strict for the built
+      in features, but only Standard for Defender, because half of the Strict preset is switched off.
+
+  - id: apply-screen
+    type: screen
+    heading: "Apply the file, audit again"
+    image: screens/apply.jpg
+    bar: "PowerShell + Microsoft Defender portal · Preset security policies (lab tenant, masked)"
+    demo: >
+      ./Invoke-DefenderForOffice.ps1 -PolicyFile ./defender.lab.json -ApplyPresets -WhatIf (4 rows WhatIf), then without
+      -WhatIf (confirm): 4 rows Applied. Run -Audit again: every mailbox Standard or Strict for both EOP and Defender,
+      labadmin and riley Strict/Strict; remaining findings only BelowStandard rows. Then Defender portal > Email &
+      collaboration > Policies & rules > Threat policies > Preset security policies: Standard and Strict both on.
+    narration: >
+      Apply the file: what if first, then for real. Four rules updated, the disabled one switched on. The second audit
+      shows every mailbox on Standard or Strict, and both priority accounts on Strict for everything. The portal
+      agrees.
+
+  - id: audit-rules
+    type: bullets
+    heading: "What the audit checks"
+    bullets:
+      - "Preset rule missing or turned off: High"
+      - "Priority account not on Strict for everything: High"
+      - "Mailbox on defaults, or excluded from Built-in protection"
+      - "Combined conditions, drift from the file, settings below Standard"
+    narration: >
+      Here's what the audit checks. A preset rule that's missing or turned off is high severity, and so is a priority
+      account that doesn't get Strict for every protection. A mailbox left on default policies is medium. An exception
+      to Built-in protection is flagged too, because Microsoft says those exceptions are typically only for users
+      without Defender licences. Then combined conditions, drift from the file, and every setting below Standard.
+
+  - id: analyzer
+    type: bullets
+    heading: "Use Microsoft's analyzer, don't rebuild it"
+    bullets:
+      - "Get-ConfigAnalyzerPolicyRecommendation compares custom policies to Standard"
+      - "Only settings below the baseline come back"
+      - "Safe Links click-through: on by default in the portal, off in PowerShell"
+      - "Built-in protection lets users click through, without rewriting URLs"
+    narration: >
+      For custom policies we don't reinvent Microsoft's tables. Get Config Analyzer Policy Recommendation returns
+      every setting below the Standard baseline, and the audit turns each row into a finding. A real example: in a
+      new Safe Links policy, letting users click through to the original URL is selected by default in the portal,
+      but off when you create it in PowerShell. Same feature, different defaults.
+
+  - id: eicar-screen
+    type: screen
+    heading: "EICAR, inside the tenant"
+    image: screens/eicar.jpg
+    bar: "Outlook on the web + PowerShell · Microsoft Graph hunting (lab tenant, masked)"
+    demo: >
+      Microsoft's documented anti-malware test: EICAR.TXT (68 bytes) created in a folder excluded from the recording
+      laptop's antivirus. As alex.demo in Outlook on the web, send it as an attachment to sam.demo (internal only). Show
+      Sam's inbox without it. When the event shows up in hunting (can take a while): ./Invoke-DefenderForOffice.ps1 -Hunt -Recipient sam.demo@<lab
+      domain> -Days 1 and the threat summary -Hunt: a row with ThreatTypes Malware, DeliveryAction Blocked, DeliveryLocation
+      Quarantine. Rewrite narration to the real values. Delete EICAR.TXT afterwards.
+    narration: >
+      Now a threat, the documented way. EICAR is a harmless file made by the European Institute for Computer
+      Antivirus Research to test antivirus safely. Alex
+      sends it to Sam, inside the tenant. Sam never sees it. Our hunting query on the email events table shows the
+      message blocked as malware and sent to quarantine.
+
+  - id: kql
+    type: code
+    heading: "Hunting with KQL, checked before it runs"
+    lang: kusto
+    short: kql
+    code: |
+      EmailEvents
+      | where Timestamp > ago(7d)
+      | where isnotempty(ThreatTypes)
+      | summarize Messages = count(), Recipients = dcount(RecipientEmailAddress) by ThreatTypes, DeliveryAction, DeliveryLocation
+      | order by Messages desc
+
+      // tests: Microsoft's Kusto.Language parser binds it to the EmailEvents schema
+      // EmailEvents | where Verdict == "Phish"   ->  KS142 The name 'Verdict' does not refer to any known column
+    narration: >
+      The query goes to Microsoft Graph's run hunting query action, which looks back thirty days by default, so we
+      pass a seven day timespan. And because a typo in K Q L only fails at run time, the tests parse each query with
+      Microsoft's Kusto dot Language library against the email events columns. A wrong column name fails the build.
+
+  - id: sim-screen
+    type: screen
+    heading: "A phishing simulation, safely"
+    image: screens/simulation.jpg
+    bar: "Microsoft Defender portal · Attack simulation training + PowerShell (lab tenant, masked)"
+    demo: >
+      Defender portal > Email & collaboration > Attack simulation training > Simulations > Launch a simulation:
+      Credential Harvest, a Microsoft-provided payload, target alex.demo, sam.demo, jordan.demo, taylor.demo, training
+      assigned, launch now. As alex.demo click the link in the simulation message (lab only). As sam.demo use Report >
+      Report phishing. Later: ./Invoke-DefenderForOffice.ps1 -SimulationReport: Targeted, Compromised, Reported, per-user
+      table. Rewrite narration numbers to match. Mask tenant name.
+    narration: >
+      Last, people. Attack simulation training sends a benign phishing message from Microsoft's payload library to
+      four lab users. Alex clicks, Sam reports it. The report, read through Microsoft Graph, shows who was compromised,
+      who reported, and training progress, and flags anyone compromised with no training assigned.
+
+  - id: tests
+    type: code
+    heading: "Forty eight tests, no tenant"
+    lang: text
+    code: |
+      $ Invoke-Pester ./tests
+      Describing Recipient scope logic (Learn: OR within a condition, AND across types, any exception excludes)
+        [+] ANDs different condition types: domain + group excludes non-members
+      Describing Findings
+        [+] explains the combined conditions and names who falls through
+      Describing Set-DefenderPresetPolicy (mocked Exchange Online)
+        [+] refuses up front when a preset was never turned on in the portal
+      Describing KQL compiles against the EmailEvents schema (Kusto.Language)
+        [+] catches a wrong column name (proves the check works)
+
+      Tests Passed: 48, Failed: 0, Skipped: 0
+    narration: >
+      Forty eight Pester tests run without a tenant: the scope logic, coverage, every finding, the preset rules against
+      mocked Exchange Online, the Graph calls for hunting and simulations, the K Q L check, and the real Exchange and
+      Graph PowerShell modules.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      Code, tests and the shot list are on GitHub, and the complete Defender guide with its companion articles is on
+      dev lad log dot com. Next episode: Intune and device management.

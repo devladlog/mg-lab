@@ -1,0 +1,64 @@
+# Real output captured 2026-11-21 in the build container (.NET SDK 10.0.115, Linux). Paths shortened.
+
+$ dotnet test DesignPatterns.slnx -m:1
+Passed!  - Failed:     0, Passed:    27, Skipped:     0, Total:    27, Duration: 1 s - Contoso.Approvals.Patterns.Tests.dll (net10.0)
+
+$ ./demo/run-all.sh
+### 1. normal run
+Contoso approvals | environment: Production | High >= 50,000 EUR | Board >= 250,000 EUR
+routes (strategy): board, high, standard
+
+Batch 1 (new DI scope)
+  PR-2026-0101  Laptop refresh            12,000.00 EUR  standard  Manager: Alex Demo                          5 days
+  PR-2026-0102  Warehouse scanners        49,999.99 EUR  standard  Manager: Jordan Demo                        5 days
+  PR-2026-0103  Data platform            300,000.00 EUR  board     Finance: Sam Demo -> Board: Taylor Demo    20 days
+  PR-2026-0104  Campaign analytics        50,000.00 EUR  high      Manager: Riley Demo -> Finance: Sam Demo   10 days
+  audit trail (scoped): 4 entries  [ok]
+
+Batch 2 (new DI scope)
+  PR-2026-0105  Fleet telematics         180,000.00 EUR  high      Manager: Jordan Demo -> Finance: Sam Demo  10 days
+  PR-2026-0106  New HR system            250,000.00 EUR  board     Finance: Sam Demo -> Board: Taylor Demo    20 days
+    ! justification required for board requests
+  PR-2026-0107  Onboarding portal          8,500.00 EUR  standard  Manager: Riley Demo                         5 days
+  PR-2026-0108  Service desk licences     75,000.00 EUR  high      Manager: Alex Demo -> Finance: Sam Demo    10 days
+  audit trail (scoped): 4 entries  [ok]
+
+directory (decorators): 13 lookups, 10 file reads, 3 from cache
+outbox (observer): 8 notification files in ./outbox
+tally (observer): board 2 = 550,000.00 EUR | high 3 = 305,000.00 EUR | standard 3 = 70,499.99 EUR
+ok   each batch has its own audit trail
+ok   decorators: cache served 3 of 13 lookups
+
+### 2. impossible policy
+fail: Microsoft.Extensions.Hosting.Internal.Host[11]
+      Hosting failed to start
+      Microsoft.Extensions.Options.OptionsValidationException: Policy:BoardThreshold must be greater than Policy:HighThreshold.
+Startup failed in Production: OptionsValidationException
+  Policy:BoardThreshold must be greater than Policy:HighThreshold.
+ok   ValidateOnStart stopped the app (exit 1)
+
+### 3. captive dependency, Production (default environment)
+Contoso approvals | environment: Production | High >= 50,000 EUR | Board >= 250,000 EUR
+  audit trail (scoped): 0 entries  [MISSING, expected 4]
+  audit trail (scoped): 0 entries  [MISSING, expected 4]
+ok   no error, but the audit trail is empty
+
+### 4. captive dependency, Development
+Startup failed in Development: AggregateException
+  Some services are not able to be constructed (Error while validating the service descriptor 'ServiceType: Contoso.Approvals.Patterns.ApprovalService Lifetime: Scoped ImplementationType: Contoso.Approvals.Patterns.ApprovalService': Cannot consume scoped service 'Contoso.Approvals.Patterns.Events.AuditTrail' from singleton 'Contoso.Approvals.Patterns.Events.IRequestObserver'.) (Error while validating the service descriptor 'ServiceType: Contoso.Approvals.Patterns.Events.IRequestObserver Lifetime: Singleton ImplementationType: Contoso.Approvals.Patterns.Events.AuditObserver': Cannot consume scoped service 'Contoso.Approvals.Patterns.Events.AuditTrail' from singleton 'Contoso.Approvals.Patterns.Events.IRequestObserver'.)
+ok   Development validation refuses to build the host
+exit code: 0
+
+$ ls outbox && cat outbox/PR-2026-0103.txt
+PR-2026-0101.txt
+PR-2026-0102.txt
+PR-2026-0103.txt
+PR-2026-0104.txt
+PR-2026-0105.txt
+PR-2026-0106.txt
+PR-2026-0107.txt
+PR-2026-0108.txt
+To: Sam Demo (Finance)
+Subject: PR-2026-0103 needs your approval
+
+Data platform, 300,000.00 EUR, route board, due in 20 days.

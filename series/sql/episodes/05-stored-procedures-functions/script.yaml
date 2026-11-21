@@ -1,0 +1,273 @@
+# DEVLADLOG SQL — episode 05 (draft: screen scenes need the recording described in demo.md)
+episode: 5
+slug: stored-procedures-functions
+series_label: "SQL"
+series_name: "DEVLADLOG SQL"
+file_prefix: "sql"
+title: "Stored Procedures & Functions"
+subtitle: "Inlineable functions, table-valued parameters, and procedures that never half-save an order"
+voice: am_michael
+thumbnail_text: "NEVER\nHALF-SAVE\nAN ORDER"
+youtube:
+  title: "SQL Server Stored Procedures and Functions: XACT_ABORT, THROW, UDF Inlining | DEVLADLOG SQL #5"
+  tags: [SQL Server, stored procedures, user-defined functions, scalar UDF inlining, table-valued function, table-valued parameter, XACT_ABORT, TRY CATCH, THROW, T-SQL]
+sources:
+  - https://www.devladlog.com/articles/sql/2025-07-31-stored-procedures-functions-complete-guide-2025/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "It used a transaction. It still half-saved the order."
+    sub: "Functions that inline, procedures that are all or nothing"
+    short: hook
+    narration: >
+      This stored procedure wraps everything in a transaction. A customer orders three wheels when we have two.
+      The procedure fails, and the order is saved anyway, with its lines, and the stock never moves. In this
+      episode: functions SQL Server can inline, a procedure that takes a whole order in one call, and the two
+      lines that make it all or nothing.
+
+  - id: setup
+    type: bullets
+    heading: "A small order system"
+    bullets:
+      - "New database ContosoBikesApp on CON-SQL01"
+      - "Customers, products with stock, orders, order lines"
+      - "Two scalar functions, one inline table-valued function"
+      - "One procedure to place an order, safe and naive versions"
+    narration: >
+      A new, small database on the lab server. Six customers, five products with stock levels, eight orders.
+      On top of it we build two scalar functions, one inline table valued function, and a procedure that places
+      an order, in a safe version and a naive one. A Python runner calls everything and checks every result.
+
+  - id: scalar-udf
+    type: code
+    heading: "A scalar function SQL Server can inline"
+    lang: sql
+    code: |
+      CREATE OR ALTER FUNCTION Sales.ufn_LineTotal
+      (
+          @Qty         int,
+          @UnitPrice   decimal(10,2),
+          @DiscountPct decimal(5,2)
+      )
+      RETURNS decimal(12,2)
+      AS
+      BEGIN
+          RETURN CAST(@Qty * @UnitPrice * (100 - @DiscountPct) / 100 AS decimal(12,2));
+      END;
+    narration: >
+      Scalar functions had a bad reputation, for a good reason: SQL Server called them once per row, with no
+      parallelism. Since SQL Server twenty nineteen, at compatibility level one fifty or higher, a function like
+      this one, a single return of a plain expression, can be inlined. The optimizer pastes the expression into
+      the calling query, as if you had typed it there.
+
+  - id: inlining-gotcha
+    type: code
+    heading: "One built-in, and inlining is off"
+    lang: sql
+    short: inlining
+    code: |
+      CREATE OR ALTER FUNCTION Sales.ufn_DaysSinceOrder
+      (
+          @OrderDate date
+      )
+      RETURNS int
+      AS
+      BEGIN
+          RETURN DATEDIFF(day, @OrderDate, CAST(GETDATE() AS date));
+      END;
+      -- ... r01: which functions can SQL Server inline? ...
+      SELECT o.name AS FunctionName,
+             o.type_desc AS FunctionType,
+             CAST(m.is_inlineable AS int) AS IsInlineable
+      FROM sys.sql_modules AS m
+      JOIN sys.objects AS o ON o.object_id = m.object_id
+    narration: >
+      But the rules are strict. This function calls get date, and Microsoft's documentation is clear: a function
+      that calls a time dependent built in is never inlineable. It still works. It just runs once per row, the
+      old way, and nothing warns you. The catalog tells you: sys dot sql modules has an is inlineable column.
+
+  - id: inlining-screen
+    type: screen
+    heading: "is_inlineable, straight from the catalog"
+    image: screens/r01-is-inlineable.jpg
+    bar: "SSMS · CON-SQL01 · ContosoBikesApp · r01-inlining-catalog.sql"
+    demo: "SSMS connected to CON-SQL01, database ContosoBikesApp. Run src/sql/r01-inlining-catalog.sql. Results grid with exactly three rows: ufn_CustomerOrderSummary / SQL_INLINE_TABLE_VALUED_FUNCTION / 1, ufn_DaysSinceOrder / SQL_SCALAR_FUNCTION / 0, ufn_LineTotal / SQL_SCALAR_FUNCTION / 1. Keep the query text visible above the grid."
+    narration: >
+      Line total, one. Days since order, zero. And the runner goes further: it captures the actual plan of a
+      query that uses line total, and checks the plan has no user defined function node. Switch inlining off with
+      a query hint, and the node is back. Same rows both times.
+
+  - id: tvf
+    type: code
+    heading: "Inline table-valued function: a view with parameters"
+    lang: sql
+    code: |
+      CREATE OR ALTER FUNCTION Sales.ufn_CustomerOrderSummary
+      (
+          @CustomerId int
+      )
+      RETURNS TABLE
+      AS
+      RETURN
+          SELECT o.OrderId,
+                 o.OrderDate,
+                 COUNT(*) AS Lines,
+                 SUM(Sales.ufn_LineTotal(l.Qty, l.UnitPrice, l.DiscountPct)) AS OrderTotal
+          FROM Sales.Orders AS o
+          JOIN Sales.OrderLines AS l ON l.OrderId = o.OrderId
+          WHERE o.CustomerId = @CustomerId
+          GROUP BY o.OrderId, o.OrderDate;
+      -- ... r03: CROSS APPLY Sales.ufn_CustomerOrderSummary(c.CustomerId) AS s ...
+    narration: >
+      For anything that returns rows, prefer the inline table valued function: returns table, then a single
+      select. It behaves like a view with parameters, and the optimizer expands it into the calling query. Use it
+      with cross apply to get every customer's order summary in one statement.
+
+  - id: tvf-kinds
+    type: bullets
+    heading: "Inline vs multi-statement TVFs"
+    bullets:
+      - "Inline: one SELECT, expanded into the caller"
+      - "Multi-statement: fills a table variable, then returns it"
+      - "Fixed estimate of 100 rows since SQL Server 2014"
+      - "Interleaved execution helps from compatibility 140"
+    narration: >
+      The other kind, the multi statement function, fills a table variable and returns it. The optimizer can't see
+      inside it, so it used a fixed guess of one hundred rows. Interleaved execution, from compatibility level one
+      forty, improves that, but if one select can do the job, stay inline.
+
+  - id: tvp
+    type: code
+    heading: "A whole order in one call"
+    lang: sql
+    code: |
+      CREATE TYPE Sales.OrderLineList AS TABLE
+      (
+          ProductId   int          NOT NULL PRIMARY KEY,
+          Qty         int          NOT NULL CHECK (Qty > 0),
+          DiscountPct decimal(5,2) NOT NULL DEFAULT (0)
+      );
+      CREATE OR ALTER PROCEDURE Sales.usp_PlaceOrder
+          @CustomerId int,
+          @Lines      Sales.OrderLineList READONLY,
+          @OrderId    int OUTPUT
+    narration: >
+      Now the procedure. The order lines arrive as a table valued parameter: a user defined table type, passed in
+      one round trip. Table valued parameters must be read only. The new order number comes back in an output
+      parameter, and failures come back as errors, not return codes.
+
+  - id: safe-proc
+    type: code
+    heading: "All or nothing"
+    lang: sql
+    code: |
+          SET NOCOUNT ON;
+          SET XACT_ABORT ON;      -- any run-time error rolls back the whole transaction
+          BEGIN TRY
+              IF NOT EXISTS (SELECT 1 FROM Sales.Customers WHERE CustomerId = @CustomerId)
+                  THROW 50001, N'Unknown customer.', 1;
+              -- ... two more checks: no lines, unknown product ...
+              BEGIN TRANSACTION;
+              -- ... next order number, INSERT the order, INSERT the lines, UPDATE the stock ...
+              COMMIT TRANSACTION;
+          END TRY
+          BEGIN CATCH
+              IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION;
+              SET @OrderId = NULL;
+              THROW;              -- re-raise the original error: number, message, line
+          END CATCH;
+    narration: >
+      The body follows one pattern. Set no count on, set exact abort on. Business rules throw their own errors,
+      numbered fifty thousand and up. The writes happen inside a transaction, inside a try block. The catch block
+      rolls back if a transaction is open, then throw, with no arguments, re raises the original error to the
+      caller, untouched. And stock is never checked first: the check constraint refuses to go below zero.
+
+  - id: place-order-screen
+    type: screen
+    heading: "One call, one order"
+    image: screens/d01-place-order.jpg
+    bar: "SSMS · CON-SQL01 · ContosoBikesApp · d01-place-order.sql"
+    demo: "SSMS, ContosoBikesApp, right after running proc_lab.py --setup (fresh data). Open and run src/sql/d01-place-order.sql. Query text visible (DECLARE @lines Sales.OrderLineList, the INSERT of two lines, EXEC with @OrderId OUTPUT). Results grid, one row: GotNewOrderId yes, Lines 2, OrderTotal 201.85, HelmetStock 38, LockStock 119."
+    narration: >
+      Rita orders two helmets and a lock at ten percent off. One call. A new order number comes back, the
+      summary function shows two lines and the total, and both stock levels went down.
+
+  - id: naive
+    type: code
+    heading: "The naive version: a transaction is not enough"
+    lang: sql
+    code: |
+          SET NOCOUNT ON;
+          BEGIN TRANSACTION;
+          -- ... same: next order number, INSERT the order, INSERT the lines ...
+          UPDATE p
+          SET p.StockQty = p.StockQty - l.Qty
+          FROM Sales.Products AS p
+          JOIN @Lines AS l ON l.ProductId = p.ProductId;
+          COMMIT TRANSACTION;
+    narration: >
+      Here is the naive version. Same statements, inside a transaction, but no exact abort and no try block.
+      Looks safe. It isn't. With exact abort off, a constraint violation rolls back only the statement that
+      failed, and the procedure carries on to the next line, which is commit.
+
+  - id: gotcha-screen
+    type: screen
+    heading: "The order nobody can ship"
+    image: screens/d03-naive-out-of-stock.jpg
+    bar: "SSMS · CON-SQL01 · ContosoBikesApp · d03-naive-out-of-stock.sql"
+    short: gotcha
+    demo: "SSMS, run src/sql/d03-naive-out-of-stock.sql (after d01 and d02, as in the runner order). Messages tab: Msg 547, the UPDATE statement conflicted with the CHECK constraint CK_Products_StockQty. Then the Results tab of batch 2, one row: NewOrders 1, NewOrderLines 2, WheelsetStock 2, LockStock 119, OpenTransactions 0. Show both (split the capture or take two shots: Messages first, then Results)."
+    narration: >
+      Carla orders three wheelsets. We have two. The update fails, error five four seven, check constraint. And
+      yet: one new order, two order lines, committed. The wheelset stock still says two, and even the lock on the
+      same order never left the shelf. An order nobody can ship. With the safe procedure, the same order leaves
+      nothing behind.
+
+  - id: runner
+    type: code
+    heading: "Every step has checks"
+    lang: python
+    code: |
+      Step("r02a-order-totals", "order totals through the scalar UDF", ["error: none", "plan: inlined"], local=True),
+      Step("r02b-order-totals-no-inlining", "same query, inlining switched off",
+           ["error: none", "plan: not inlined"], local=True),
+      Step("d01-place-order", "safe procedure, a good order", ["error: none"]),
+      Step("d02-unknown-customer", "safe procedure, THROW 50001 (caught in the script)", ["error: none"]),
+      Step("d03-naive-out-of-stock", "NAIVE procedure, out of stock", ["error: CK_Products_StockQty"]),
+      Step("d04-safe-out-of-stock", "safe procedure, out of stock", ["error: CK_Products_StockQty"]),
+    narration: >
+      None of this is eyeballed. Each step runs the script the way management studio does, batch by batch, and
+      checks the error it raised, the rows against an expected file, and for the functions, the actual plan.
+
+  - id: runner-screen
+    type: screen
+    heading: "Eight steps, eight OKs"
+    image: screens/runner-summary.jpg
+    bar: "Terminal · proc_lab.py --engine sqlserver --setup"
+    demo: "Windows Terminal (dark theme, 18 pt) in this episode folder: py src/proc_lab.py --engine sqlserver --setup. Scroll so d03 and d04 are both visible: each shows 'error raised: ... CK_Products_StockQty', check OK, and its one-row table (d03: 1 2 2 119 0, d04: 0 0 2 119 0), then the last line '8/8 steps behaved as expected on sqlserver'."
+    narration: >
+      Here it is on the lab server. The naive procedure leaves an order and two lines. The safe one raises the
+      same error and leaves nothing. Eight steps, eight OKs.
+
+  - id: recap
+    type: bullets
+    heading: "Four rules"
+    bullets:
+      - "Check is_inlineable before trusting a scalar UDF"
+      - "Return rows with inline table-valued functions"
+      - "SET XACT_ABORT ON, TRY/CATCH, ROLLBACK, THROW"
+      - "Let constraints guard the data, inside the transaction"
+    narration: >
+      Four rules. Check is inlineable before you trust a scalar function. Return rows with inline table valued
+      functions. In every procedure that writes: exact abort on, try and catch, roll back, throw. And let
+      constraints guard the data inside the transaction.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The scripts, the runner and the tests are on GitHub, and the complete guide is on dev lad log dot com. Links
+      are in the description. Next time: SQL Server security, and we lock this very procedure down. This was dev
+      lad log SQL, by Momento Galático.

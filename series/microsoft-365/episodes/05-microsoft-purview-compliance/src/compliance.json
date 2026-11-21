@@ -1,0 +1,149 @@
+{
+  "$comment": "DEVLADLOG Microsoft 365 #5 - Microsoft Purview as code. Fictional tenant (contoso). For the lab, copy to compliance.lab.json (uncommitted) and replace contoso.onmicrosoft.com in labelPolicy.publishTo.",
+  "sensitivityLabels": [
+    {
+      "name": "Contoso-Public",
+      "displayName": "Public",
+      "tooltip": "Approved for anyone, inside or outside Contoso.",
+      "contentType": "File, Email"
+    },
+    {
+      "name": "Contoso-General",
+      "displayName": "General",
+      "tooltip": "Day-to-day business data. Not for public release.",
+      "contentType": "File, Email"
+    },
+    {
+      "name": "Contoso-Confidential",
+      "displayName": "Confidential",
+      "tooltip": "Sensitive business data. Never share outside Contoso without approval.",
+      "contentType": "File, Email",
+      "header": {
+        "text": "CONFIDENTIAL - Contoso internal",
+        "fontSize": 10,
+        "fontColor": "#C00000",
+        "alignment": "Center"
+      }
+    }
+  ],
+  "labelPolicy": {
+    "name": "Contoso labels - pilot",
+    "comment": "Pilot group first; widen after feedback.",
+    "labels": [
+      "Contoso-Public",
+      "Contoso-General",
+      "Contoso-Confidential"
+    ],
+    "publishTo": [
+      "labadmin@contoso.onmicrosoft.com",
+      "alex.demo@contoso.onmicrosoft.com",
+      "sam.demo@contoso.onmicrosoft.com"
+    ]
+  },
+  "dlpPolicies": [
+    {
+      "name": "Contoso - Card numbers",
+      "comment": "Same shape as the PCI DSS template: notify on a few, block external sharing of many.",
+      "mode": "TestWithNotifications",
+      "locations": [
+        "Exchange",
+        "SharePoint",
+        "OneDrive",
+        "Teams"
+      ],
+      "rules": [
+        {
+          "name": "Card numbers - low count",
+          "sensitiveTypes": [
+            {
+              "name": "Credit Card Number",
+              "minCount": 1,
+              "maxCount": 9
+            }
+          ],
+          "accessScope": "NotInOrganization",
+          "notifyUser": [
+            "Owner",
+            "LastModifier"
+          ],
+          "policyTip": "This contains card numbers. Remove them before sharing outside Contoso.",
+          "severity": "Medium"
+        },
+        {
+          "name": "Card numbers - high count",
+          "sensitiveTypes": [
+            {
+              "name": "Credit Card Number",
+              "minCount": 10,
+              "maxCount": -1
+            }
+          ],
+          "accessScope": "NotInOrganization",
+          "blockAccess": true,
+          "notifyUser": [
+            "Owner",
+            "LastModifier"
+          ],
+          "allowOverride": "WithJustification",
+          "policyTip": "Blocked: 10 or more card numbers can't leave Contoso. Override only with a business justification.",
+          "incidentReportTo": [
+            "SiteAdmin"
+          ],
+          "severity": "High"
+        }
+      ]
+    },
+    {
+      "name": "Contoso - Confidential label",
+      "comment": "Sensitivity label as a condition: not supported for Teams chat, so this policy leaves Teams out.",
+      "mode": "TestWithNotifications",
+      "locations": [
+        "Exchange",
+        "SharePoint",
+        "OneDrive"
+      ],
+      "rules": [
+        {
+          "name": "Confidential - external",
+          "sensitivityLabels": [
+            "Contoso-Confidential"
+          ],
+          "accessScope": "NotInOrganization",
+          "blockAccess": true,
+          "notifyUser": [
+            "Owner"
+          ],
+          "policyTip": "Confidential content can't be shared outside Contoso.",
+          "severity": "High"
+        }
+      ]
+    }
+  ],
+  "retention": {
+    "labels": [
+      {
+        "name": "Contoso Contract - 7 years",
+        "comment": "Keep 7 years from creation, then delete.",
+        "action": "KeepAndDelete",
+        "durationDays": 2555,
+        "retentionType": "CreationAgeInDays",
+        "isRecordLabel": false
+      }
+    ],
+    "labelPolicy": {
+      "name": "Contoso retention labels",
+      "comment": "Publishes the contract label to mailboxes, SharePoint and OneDrive (one label per policy: one rule per retention policy).",
+      "locations": [
+        "Exchange",
+        "SharePoint",
+        "OneDrive"
+      ],
+      "label": "Contoso Contract - 7 years"
+    },
+    "allowRecordLabels": false,
+    "allowPreservationLock": false
+  },
+  "audit": {
+    "simulationMaxDays": 15
+  }
+}
