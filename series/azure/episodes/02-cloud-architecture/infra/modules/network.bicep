@@ -63,12 +63,12 @@ resource vnet 'Microsoft.Network/virtualNetworks@2024-05-01' = {
   location: location
   tags: tags
   properties: {
-    addressSpace: { addressPrefixes: ['10.20.0.0/24'] }
+    addressSpace: { addressPrefixes: ['10.50.0.0/24'] }
     subnets: [
       {
         name: 'snet-app' // App Service VNet integration: empty, delegated, /26 recommended
         properties: {
-          addressPrefix: '10.20.0.0/26'
+          addressPrefix: '10.50.0.0/26'
           defaultOutboundAccess: false
           networkSecurityGroup: { id: nsgApp.id }
           delegations: [
@@ -82,7 +82,7 @@ resource vnet 'Microsoft.Network/virtualNetworks@2024-05-01' = {
       {
         name: 'snet-pe' // private endpoints for storage and Key Vault
         properties: {
-          addressPrefix: '10.20.0.64/26'
+          addressPrefix: '10.50.0.64/26'
           defaultOutboundAccess: false
           networkSecurityGroup: { id: nsgPe.id }
         }
