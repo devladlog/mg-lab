@@ -1,0 +1,12 @@
+// Run in the KQL queryset of the Eventhouse database, one statement at a time (select it, then Run).
+// A statement is a block of lines without a blank line inside; src/KqlCheck splits the file the same way.
+.create-merge table TillEventsRaw (EventId:string, EventTime:datetime, RunId:string, Store:string, Country:string, Channel:string, Till:string, ProductCode:string, Category:string, Subcategory:string, Quantity:int, UnitPrice:real, Amount:real, Payment:string)
+
+.create-or-alter table TillEventsRaw ingestion json mapping 'TillEventsRawMapping' '[{"column":"EventId","datatype":"string","Properties":{"Path":"$.EventId"}},{"column":"EventTime","datatype":"datetime","Properties":{"Path":"$.EventTime"}},{"column":"RunId","datatype":"string","Properties":{"Path":"$.RunId"}},{"column":"Store","datatype":"string","Properties":{"Path":"$.Store"}},{"column":"Country","datatype":"string","Properties":{"Path":"$.Country"}},{"column":"Channel","datatype":"string","Properties":{"Path":"$.Channel"}},{"column":"Till","datatype":"string","Properties":{"Path":"$.Till"}},{"column":"ProductCode","datatype":"string","Properties":{"Path":"$.ProductCode"}},{"column":"Category","datatype":"string","Properties":{"Path":"$.Category"}},{"column":"Subcategory","datatype":"string","Properties":{"Path":"$.Subcategory"}},{"column":"Quantity","datatype":"int","Properties":{"Path":"$.Quantity"}},{"column":"UnitPrice","datatype":"real","Properties":{"Path":"$.UnitPrice"}},{"column":"Amount","datatype":"real","Properties":{"Path":"$.Amount"}},{"column":"Payment","datatype":"string","Properties":{"Path":"$.Payment"}}]'
+
+.alter-merge table TillEventsRaw policy retention softdelete = 7d recoverability = disabled
+
+.create materialized-view with (lookback=6h) TillEventsUnique on table TillEventsRaw {
+    TillEventsRaw
+    | summarize take_any(*) by EventId
+}

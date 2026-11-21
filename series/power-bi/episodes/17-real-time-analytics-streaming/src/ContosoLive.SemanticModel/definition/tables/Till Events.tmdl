@@ -1,0 +1,107 @@
+/// The deduplicated till events: DirectQuery over the materialized view TillEventsUnique of the KQL database.
+table 'Till Events'
+
+	/// Sales in the current filter context: sum of the line amounts.
+	measure 'Sales Amount' = SUM('Till Events'[Amount])
+		formatString: #,0.00
+		displayFolder: Live
+
+	/// Number of till events (one per EventId).
+	measure Orders = COUNTROWS('Till Events')
+		formatString: #,0
+		displayFolder: Live
+
+	/// Units sold.
+	measure Units = SUM('Till Events'[Quantity])
+		formatString: #,0
+		displayFolder: Live
+
+	/// Time of the newest event; a good base for the change detection measure of automatic page refresh.
+	measure 'Last Event Time' = MAX('Till Events'[EventTime])
+		formatString: General Date
+		displayFolder: Live
+
+	column EventId
+		dataType: string
+		isHidden
+		isKey
+		summarizeBy: none
+		sourceColumn: EventId
+
+	column EventTime
+		dataType: dateTime
+		formatString: General Date
+		summarizeBy: none
+		sourceColumn: EventTime
+
+	column RunId
+		dataType: string
+		isHidden
+		summarizeBy: none
+		sourceColumn: RunId
+
+	column Store
+		dataType: string
+		summarizeBy: none
+		sourceColumn: Store
+
+	column Country
+		dataType: string
+		summarizeBy: none
+		sourceColumn: Country
+
+	column Channel
+		dataType: string
+		summarizeBy: none
+		sourceColumn: Channel
+
+	column Till
+		dataType: string
+		summarizeBy: none
+		sourceColumn: Till
+
+	column ProductCode
+		dataType: string
+		summarizeBy: none
+		sourceColumn: ProductCode
+
+	column Category
+		dataType: string
+		summarizeBy: none
+		sourceColumn: Category
+
+	column Subcategory
+		dataType: string
+		summarizeBy: none
+		sourceColumn: Subcategory
+
+	column Quantity
+		dataType: int64
+		formatString: 0
+		summarizeBy: none
+		sourceColumn: Quantity
+
+	column UnitPrice
+		dataType: double
+		formatString: #,0.00
+		summarizeBy: none
+		sourceColumn: UnitPrice
+
+	column Amount
+		dataType: double
+		formatString: #,0.00
+		summarizeBy: none
+		sourceColumn: Amount
+
+	column Payment
+		dataType: string
+		summarizeBy: none
+		sourceColumn: Payment
+
+	partition 'Till Events' = m
+		mode: directQuery
+		source =
+				let
+				    Source = AzureDataExplorer.Contents(KqlClusterUri, KqlDatabase, "TillEventsUnique", [])
+				in
+				    Source

@@ -1,0 +1,5 @@
+// Tile: sales per minute and store, the last hour.
+TillEventsUnique
+| where EventTime > ago(1h)
+| summarize Sales = round(sum(Amount), 2), Orders = count() by Minute = bin(EventTime, 1m), Store
+| order by Minute asc

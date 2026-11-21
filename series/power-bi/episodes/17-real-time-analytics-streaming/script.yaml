@@ -1,0 +1,225 @@
+episode: 17
+slug: real-time-analytics-streaming
+series_label: "POWER BI"
+series_name: "DEVLADLOG Power BI"
+file_prefix: "power-bi"
+title: "Real-Time Analytics and Streaming"
+subtitle: "Till events into a Fabric eventstream, read in Power BI with automatic page refresh, and what to stop building"
+voice: am_michael
+thumbnail_text: "LIVE\nDATA IN\nPOWER BI"
+youtube:
+  title: "Power BI Real-Time Analytics: Eventstream, KQL, Auto Page Refresh | DEVLADLOG Power BI #17"
+  tags: [Power BI, real-time analytics, Fabric Real-Time Intelligence, eventstream, eventhouse, KQL, automatic page refresh, DirectQuery, streaming dataset retirement, push dataset, Python]
+sources:
+  - https://www.devladlog.com/articles/power-bi/2026-06-04-real-time-analytics-complete-guide-2026/
+  - https://learn.microsoft.com/en-us/power-bi/connect-data/service-real-time-streaming
+  - https://learn.microsoft.com/en-us/power-bi/create-reports/desktop-automatic-page-refresh
+  - https://learn.microsoft.com/en-us/fabric/real-time-intelligence/event-streams/add-source-custom-app
+  - https://learn.microsoft.com/en-us/fabric/real-time-intelligence/power-bi-data-connector
+  - https://learn.microsoft.com/en-us/power-bi/developer/embedded/push-datasets-limitations
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Your dashboard is five minutes old"
+    sub: "Live till sales in Power BI, and the old real-time tools to stop building"
+    short: hook
+    narration: >
+      The dashboard says the shop is quiet. The shop has been busy for five minutes. Contoso Bikes now streams its till sales into
+      Microsoft Fabric, we read them in Power BI as they arrive, and we check which old real time tools you should stop building on.
+
+  - id: plan
+    type: bullets
+    heading: "Three ways to go live"
+    bullets:
+      - "Push and streaming semantic models: creation ends 31 Oct 2027"
+      - "DirectQuery plus automatic page refresh"
+      - "Fabric Real-Time Intelligence: eventstream, eventhouse, KQL"
+      - "Today: build the third, read it with the second"
+    narration: >
+      Three ways to get live data into Power BI. Push and streaming semantic models, fed by the REST A P I: Learn says you can create them
+      until the thirty first of October, twenty twenty seven, and existing ones keep working. A DirectQuery report with automatic page
+      refresh. And Fabric Real Time Intelligence, with an eventstream, an eventhouse and K Q L. We build the third, read it with the second.
+
+  - id: planted
+    type: code
+    heading: "A till that misbehaves on purpose"
+    lang: python
+    code: |
+      r = rng.random()
+      if r < late_rate:
+          emissions.append(Emission(s.t + LATE_BY_S, s, "late"))
+      else:
+          emissions.append(Emission(s.t, s))
+          if r > 1 - dup_rate:
+              emissions.append(Emission(s.t + rng.uniform(1, 20), s, "duplicate"))
+    narration: >
+      The Contoso till is a generator, and it misbehaves on purpose. Two sales in a hundred are sent twice, because a sender
+      that retries is at least once. One in a hundred arrives three minutes late. And for two minutes the online shop runs a
+      flash sale on one helmet. We plant all of it, so we know what the queries should find.
+
+  - id: send
+    type: code
+    heading: "Eventstream custom endpoint, Event Hubs protocol"
+    lang: python
+    code: |
+      for p in payloads:
+          try:
+              batch.add(EventData(p))
+          except ValueError:  # the batch is full: send it and start the next one
+              self._producer.send_batch(batch)
+              batches += 1
+              batch = self._producer.create_batch()
+              batch.add(EventData(p))
+    narration: >
+      The sender uses the Azure Event Hubs library. A custom endpoint on an eventstream gives you an Event Hubs connection
+      string with the entity path inside, so nothing else is needed. Events go into a batch. When the batch is full the library
+      raises a value error, we send it and start the next. The connection string comes from an environment variable, never from
+      the command line.
+
+  - id: eventstream
+    type: screen
+    heading: "Till events arriving in the eventstream"
+    image: screens/eventstream-live.jpg
+    bar: "Microsoft Fabric · Eventstream · custom endpoint to Eventhouse"
+    demo: "Browser, workspace Contoso Sales (Lab), eventstream es-till-events in Live view: custom endpoint source, Eventhouse destination (direct ingestion, table TillEventsRaw). Terminal inset (lab laptop): 'python -m tillstream send --run-id demo17' started on a whole minute; the Data preview of the eventstream shows JSON rows arriving. When the ten minutes are over, show the summary the sender prints (messages, unique EventId, duplicates, late events, amount). Mask the tenant name in the URL, the endpoint namespace and the connection string; never show the keys."
+    narration: >
+      Here is the eventstream. The custom endpoint is the source, an eventhouse with direct ingestion is the destination. The
+      terminal starts the run on a whole minute, so the flash sale lands in whole one minute bins, and rows appear in the live
+      view. When the ten minutes are over, the sender prints its summary: messages, unique events, duplicates, and the amount.
+      Keep those numbers.
+
+  - id: schema
+    type: code
+    heading: "The view that removes the duplicates"
+    lang: kql
+    code: |
+      .create materialized-view with (lookback=6h) TillEventsUnique on table TillEventsRaw {
+          TillEventsRaw
+          | summarize take_any(*) by EventId
+      }
+    narration: >
+      In the eventhouse the raw table keeps everything it receives, duplicates included. A materialized view, take any by event
+      id with a lookback of six hours, gives us the clean table. Learn is explicit: records are only deduplicated against
+      records ingested within the lookback. A duplicate that arrives seven hours later gets through. Dashboards read the view.
+      The raw table is for diagnostics.
+
+  - id: totals
+    type: screen
+    heading: "The totals check"
+    image: screens/kql-totals.jpg
+    bar: "Microsoft Fabric · KQL queryset · ContosoLive"
+    demo: "Browser, KQL queryset on the database ContosoLive. Run totals-check.kql (Events, Units, Amount for RunId demo17) and show it equals the sender's summary line by line. Then duplicates.kql (ExtraRows equals the sender's duplicates) and late-arrivals.kql (P50, P95, LateOverTwoMinutes). Keep the sender summary visible beside it. Record the real numbers and the real P50 and P95 latency."
+    narration: >
+      In the K Q L queryset, the totals check filters on the run id and must equal the sender's summary, event for event and cent for
+      cent. The duplicates query shows the extra rows. The late arrival query shows how long events took from till to table. The real
+      values are read on the day.
+
+  - id: anomaly
+    type: code
+    heading: "Which minute was the flash sale?"
+    lang: kql
+    code: |
+      let t1 = bin(now(), 1m);
+      let t0 = t1 - 1h;
+      TillEventsUnique
+      | where EventTime >= t0 and EventTime < t1
+      | make-series Orders = count() default = 0 on EventTime from t0 to t1 step 1m by Channel
+      | extend (Flag, Score, Baseline) = series_decompose_anomalies(Orders, 2.5, 0, 'avg')
+      | mv-expand EventTime to typeof(datetime), Orders to typeof(long), Flag to typeof(int),
+          Score to typeof(double), Baseline to typeof(double)
+      | where Flag == 1
+      | project Channel, Minute = EventTime, Orders, Baseline = round(Baseline, 1), Score = round(Score, 1)
+    short: anomaly
+    narration: >
+      Which minute was the flash sale? Make series builds orders per minute and channel, and series decompose anomalies flags points far
+      from the baseline. Seasonality is zero: we have minutes of data, not weeks. The plain Python reference, a median and a robust
+      deviation, expects the two flash minutes. If the query flags others, find out why.
+
+  - id: desktop
+    type: screen
+    heading: "DirectQuery and change detection"
+    image: screens/desktop-page-refresh.jpg
+    bar: "Power BI Desktop · Contoso Live · page Live tills"
+    demo: "Desktop (lab laptop). ContosoLive.pbip with KqlClusterUri and KqlDatabase set to the lab values (masked), storage mode DirectQuery on 'Till Events'. Page 'Live tills': three cards (Sales Amount, Orders, Last Event Time), a line chart Orders by minute (Axis EventTime, Legend Channel), a column chart Sales Amount by Store. Format pane, Page refresh: On, type Change detection, measure Last Event Time, check every 5 seconds; show 'show details'. With the sender running, record the cards and the line moving without a click. Also show that in Import mode the Page refresh card is missing (one short cut). Record what Desktop really shows."
+    narration: >
+      In Power BI Desktop we connect to the view in DirectQuery mode. In Import mode the page refresh option does not even
+      appear. We set automatic page refresh to change detection on the last event time measure, checking every five seconds.
+      Only that one query goes to the source until the value changes, and then the whole page refreshes. Desktop has no minimum
+      interval.
+
+  - id: dashboard
+    type: screen
+    heading: "The same queries as a Real-Time Dashboard"
+    image: screens/realtime-dashboard.jpg
+    bar: "Microsoft Fabric · Real-Time Dashboard · Live tills"
+    demo: "Browser, a Real-Time Dashboard 'Live tills' on the KQL database: three tiles from live-kpis.kql, sales-per-minute.kql and orders-per-minute-anomaly.kql. Manage, Refresh settings, Live refresh on. With the sender running, show tiles updating without a reload. Record the refresh rate limit chosen."
+    narration: >
+      The same queries make a Real Time Dashboard. Tiles are K Q L, and live refresh updates them when new data is ingested,
+      without a reload. Power BI is the choice when you want the semantic model: measures, slicers, and the report your
+      people already know, on the same table.
+
+  - id: gotcha
+    type: screen
+    heading: "Gotcha: the service sets the interval, not you"
+    image: screens/apr-minimum.jpg
+    bar: "Power BI service · Contoso Sales (Lab) · page refresh"
+    demo: "Browser, the report published from Desktop to workspace Contoso Sales (Lab) (Fabric trial capacity). Semantic model settings: credentials for the Azure Data Explorer source set. Open the report, Edit, Format, Page refresh: show the interval and the message about the minimum allowed. Then, as capacity admin (labadmin), show the capacity's automatic page refresh settings if the trial capacity exposes them (Admin portal, capacity settings, Power BI workloads). Record the exact wording and the real minimum; if the page refresh settings are not available on the trial capacity, record that instead and say so in the narration."
+    short: gotcha
+    narration: >
+      Now the part that bites. Publish that report, and the service decides the interval. On a shared workspace the minimum is
+      thirty minutes, and change detection is not available. On a Fabric capacity the admin sets a minimum, five minutes by
+      default for a fixed interval and five seconds for change detection. A report set to one second is simply overridden.
+      Desktop looked fine. The service did not.
+
+  - id: push
+    type: code
+    heading: "The old way, with its limits"
+    lang: python
+    code: |
+      MAX_ROWS_PER_POST = 10_000
+      MAX_ROWS_PER_HOUR = 1_000_000
+      MAX_POSTS_PER_MINUTE = 120
+      MAX_ROWS_FIFO = 200_000
+      # Learn, "Real-time streaming in Power BI": a streaming tile accepts requests of at most 15 KB
+      MAX_STREAMING_REQUEST_BYTES = 15 * 1024
+    narration: >
+      And the old way, for comparison. A push semantic model takes ten thousand rows per request, a million rows per hour and one
+      hundred twenty requests per minute; a first in first out model keeps two hundred thousand rows. Streaming tiles take fifteen
+      kilobytes per request. But Learn lists push models with a thirty minute minimum page refresh, and no change detection.
+
+  - id: inventory
+    type: code
+    heading: "Find the models you still run"
+    lang: python
+    code: |
+      for ws in get("/v1.0/myorg/groups").get("value", []):
+          for ds in get(f"/v1.0/myorg/groups/{ws['id']}/datasets").get("value", []):
+              kind = classify(ds)
+              if kind:
+    narration: >
+      If you already run push or streaming models, find them now. Two documented calls: the workspaces you can see, and the
+      datasets in each one. A dataset that accepts rows is a push model. I have not verified that a pure streaming model is
+      returned by that call, so treat the list as a floor, not a full count.
+
+  - id: ship
+    type: bullets
+    heading: "Before you ship it"
+    bullets:
+      - "Choose the destination by who reads it"
+      - "Deduplicate by event id, in the view"
+      - "Change detection, not one second polling"
+      - "Check the capacity minimum first"
+      - "Plan push model migration before Oct 2027"
+    narration: >
+      Before you ship it. Choose the destination by who reads it. Deduplicate by event id in the view, not in the report. Use
+      change detection instead of one second polling. Check the capacity minimum before you promise anyone a refresh rate. And
+      plan the move away from push models before October twenty twenty seven.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The sender, the K Q L, the model and the inventory script are on GitHub, and the complete guide to real time analytics is
+      on dev lad log dot com. Links in the description. This was DEVLADLOG Power BI, by Momento Galático.

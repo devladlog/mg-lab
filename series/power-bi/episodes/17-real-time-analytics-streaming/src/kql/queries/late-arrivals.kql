@@ -1,0 +1,5 @@
+// How long an event took from the till to the table. ingestion_time() is when the row became queryable.
+TillEventsRaw
+| where EventTime > ago(1h)
+| extend Lag = ingestion_time() - EventTime
+| summarize Events = count(), P50 = percentile(Lag, 50), P95 = percentile(Lag, 95), LateOverTwoMinutes = countif(Lag > 2m)

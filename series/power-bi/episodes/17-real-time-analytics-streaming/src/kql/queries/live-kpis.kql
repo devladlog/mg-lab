@@ -1,0 +1,4 @@
+// Tile: the last 15 minutes in one row. Duplicates are already gone (TillEventsUnique).
+TillEventsUnique
+| where EventTime > ago(15m)
+| summarize Orders = count(), Units = sum(Quantity), Sales = round(sum(Amount), 2), LastEvent = max(EventTime)

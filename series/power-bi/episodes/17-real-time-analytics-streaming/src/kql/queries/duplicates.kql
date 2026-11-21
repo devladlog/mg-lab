@@ -1,0 +1,5 @@
+// How many EventIds arrived more than once in the raw table (a sender that retries is at-least-once).
+TillEventsRaw
+| where EventTime > ago(1h)
+| summarize Copies = count() by EventId
+| summarize UniqueEvents = count(), DuplicatedEvents = countif(Copies > 1), ExtraRows = sum(Copies - 1)

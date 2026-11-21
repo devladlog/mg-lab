@@ -1,0 +1,11 @@
+// Tile: minutes in which a channel sold far more orders than its own baseline (the flash sale).
+let t1 = bin(now(), 1m);
+let t0 = t1 - 1h;
+TillEventsUnique
+| where EventTime >= t0 and EventTime < t1
+| make-series Orders = count() default = 0 on EventTime from t0 to t1 step 1m by Channel
+| extend (Flag, Score, Baseline) = series_decompose_anomalies(Orders, 2.5, 0, 'avg')
+| mv-expand EventTime to typeof(datetime), Orders to typeof(long), Flag to typeof(int),
+    Score to typeof(double), Baseline to typeof(double)
+| where Flag == 1
+| project Channel, Minute = EventTime, Orders, Baseline = round(Baseline, 1), Score = round(Score, 1)
