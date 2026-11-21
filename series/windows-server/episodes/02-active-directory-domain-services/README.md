@@ -39,11 +39,12 @@ pwsh -NoProfile -Command './Invoke-AdHygieneReport.ps1 -FromSnapshot ../tests/fi
 ## Run it in the lab
 
 ```powershell
-# On the future DC (Windows Server 2025, static IP, isolated network), elevated Windows PowerShell 5.1 (powershell.exe):
-./setup/New-LabForest.ps1 -DomainName lab.contoso.com -NetbiosName CONTOSOLAB -WhatIf
-./setup/New-LabForest.ps1 -DomainName lab.contoso.com -NetbiosName CONTOSOLAB       # restarts the server
+# On a NEW, throwaway server (Windows Server 2025, static IP, isolated Private switch; in the shared lab that is
+# CON-FOREST01, never CON-DC01, see demo.md), elevated Windows PowerShell 5.1 (powershell.exe):
+./setup/New-LabForest.ps1 -DomainName lab.contoso.com -NetbiosName CONTOSO -WhatIf
+./setup/New-LabForest.ps1 -DomainName lab.contoso.com -NetbiosName CONTOSO          # restarts the server
 
-# After the restart, on the DC (PowerShell 7.2+; the ActiveDirectory module comes with the role):
+# On a DC of the domain (in the shared lab: CON-DC01; PowerShell 7.2+; the ActiveDirectory module comes with the role):
 Import-Module ./src/AdLab/AdLab.psd1
 $pw = Read-Host -AsSecureString 'Initial password for the lab users'
 Invoke-AdLabProvisioning -CsvPath ./src/users.csv -DomainDn 'DC=lab,DC=contoso,DC=com' -UpnSuffix lab.contoso.com -InitialPassword $pw -WhatIf

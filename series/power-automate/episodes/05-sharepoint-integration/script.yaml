@@ -1,0 +1,266 @@
+# DEVLADLOG Power Automate — episode 05 (draft: material built and tested locally, demo still to record)
+episode: 5
+slug: sharepoint-integration
+series_label: "POWER AUTOMATE"
+series_name: "DEVLADLOG Power Automate"
+file_prefix: "power-automate"
+title: "SharePoint flows that react to the right change"
+subtitle: "Get changes, REST permissions, and the loop that never ends"
+voice: am_michael
+thumbnail_text: "WHAT CHANGED?\nLOCKED FOLDER\nNO LOOP"
+youtube:
+  title: "Power Automate + SharePoint: Get Changes, REST Permissions, No Loops | DEVLADLOG Power Automate #5"
+  tags: [Power Automate, SharePoint, SharePoint REST API, Send an HTTP request to SharePoint, Get changes, trigger conditions, infinite loop, permissions, Power Platform, cloud flows]
+sources:
+  - https://www.devladlog.com/articles/power-automate/2025-05-06-sharepoint-integration-complete-guide-2025/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Your flow emailed Alex six times"
+    sub: "A SharePoint flow that triggered itself, and the fix"
+    short: hook
+    narration: >
+      The flow worked. It created the folder, set the permissions, wrote the link back to the item and emailed
+      Alex. Then it ran again. And again. Every few minutes, a new run and a new email, because writing back to
+      the item is a change, and the flow triggers on changes. In this episode we build a SharePoint flow that reacts
+      to the right change, locks a folder down with the REST API, and stops after one quiet run.
+
+  - id: scenario
+    type: bullets
+    heading: "What purchasing asked for"
+    bullets:
+      - "Episode 2 approves purchase requests"
+      - "Approved: a folder per request for quote, order, invoice"
+      - "Purchasing edits it, the requester can only read it"
+      - "Link the folder on the request, tell the requester"
+      - "Amount changed after approval? Escalate"
+    narration: >
+      Episode two approves purchase requests. Once a request is approved, purchasing wants a folder for the quote,
+      the order and the invoice. Purchasing can edit it, the requester can only read it, and nobody else sees it.
+      The link goes on the request. And if someone changes the amount after approval, the request is escalated.
+
+  - id: site
+    type: screen
+    heading: "One list, one library"
+    image: screens/site.jpg
+    bar: "SharePoint · Purchasing · Purchase Requests and Orders"
+    demo: >
+      The Purchasing site: the Purchase Requests list with columns Title, Amount, Status, Decision by and Order
+      folder (request PR-00041 "Laptops for two new developers", 12,500, Approved, created by Alex Demo), then the
+      Orders library, empty. Show List settings > Versioning settings with "Create a version each time you edit an
+      item" set to Yes. Mask the tenant name in the URL.
+    narration: >
+      The Purchasing site has the Purchase Requests list from episode two, with one new column, order folder, and an
+      empty Orders library. Note that versioning is on for the list. We need it in a minute.
+
+  - id: trigger
+    type: code
+    heading: "Trigger on changes, then ask what changed"
+    lang: json
+    code: |
+      "When_a_purchase_request_is_modified": {
+        "operationId": "GetOnChangedItems",
+        "conditions": [{ "expression":
+          "@equals(triggerBody()?['Status']?['Value'], 'Approved')" }] },
+
+      "Get_changes": {
+        "operationId": "GetItemChanges",
+        "id":    "@triggerBody()?['ID']",
+        "since": "@triggerBody()?['{TriggerWindowStartToken}']",
+        "until": "@triggerBody()?['{TriggerWindowEndToken}']" }
+    narration: >
+      The trigger is when an item or a file is modified, with a trigger condition: status must be approved. Pending
+      or rejected edits never start a run. Then get changes for an item compares the item between the trigger's
+      window start and end tokens. Learn is clear on two things: those tokens only exist with this trigger, and the
+      list must have versioning turned on.
+
+  - id: permissions
+    type: code
+    heading: "What the connector can't do: REST"
+    lang: text
+    code: |
+      Create new folder      Orders/PR-00041
+      Send an HTTP request to SharePoint   (Accept: application/json;odata=nometadata)
+
+      POST _api/web/ensureuser                         { "logonName": "<requester claims>" }
+      GET  _api/web/roledefinitions/getbyname('Read')?$select=Id
+      POST _api/web/GetFolderByServerRelativeUrl('/sites/Purchasing/Orders/PR-00041')
+             /ListItemAllFields/breakroleinheritance(copyRoleAssignments=true,clearSubscopes=true)
+      POST .../ListItemAllFields/roleassignments/addroleassignment(principalid=<user Id>,roledefid=<Read Id>)
+    short: rest
+    narration: >
+      The connector creates the folder. It has no action to break permission inheritance, so we use send an HTTP
+      request to SharePoint. Ensure the requester is a site user, read the ID of the read permission level, break
+      inheritance on the folder while copying purchasing's access, and add the requester as a reader. Always send
+      accept, application JSON, odata equals no metadata, so the ID is right there in the body.
+
+  - id: why-rest
+    type: bullets
+    heading: "Connector first, REST for the gaps"
+    bullets:
+      - "Folders, files, properties: connector actions"
+      - "Unique permissions: SharePoint REST, same connection"
+      - "Runs with the connection's rights (site owner here)"
+      - "Grant only after break succeeded, link only after grant"
+      - "600 calls per connection per minute"
+    narration: >
+      The rule is simple: connector actions for folders, files and properties, REST only for the gaps. The HTTP
+      action uses the same connection, so it has exactly that account's rights. The steps are chained: no grant
+      before the break succeeds, and no link before the grant, so nobody is ever sent to an open folder.
+
+  - id: merge
+    type: code
+    heading: "Write back only what changed"
+    lang: json
+    code: |
+      "Get_list_item_type": { "method": "GET",
+        "uri": "_api/web/lists/GetByTitle('Purchase Requests')?$select=ListItemEntityTypeFullName" },
+
+      "Link_folder_on_request": { "method": "POST",
+        "uri": "_api/web/lists/GetByTitle('Purchase Requests')/items(@{triggerBody()?['ID']})",
+        "headers": { "X-HTTP-Method": "MERGE", "IF-MATCH": "*",
+                     "Content-Type": "application/json;odata=verbose" },
+        "body": { "__metadata": { "type": "@{body('Get_list_item_type')?['ListItemEntityTypeFullName']}" },
+                  "OrderFolder": ".../Orders/PR-00041" } }
+    narration: >
+      To write the link back, update item would make us send every required column, title and amount included.
+      A REST merge keeps every property we don't send. Learn says the list item type must be passed as metadata, so
+      we read it first instead of guessing it from the list name. Only order folder changes.
+
+  - id: run
+    type: screen
+    heading: "The approval run"
+    image: screens/run-folder.jpg
+    bar: "Power Automate · Purchase order folder · Run history"
+    demo: >
+      Run details of the run started by approving PR-00041: Get changes expanded with outputs showing
+      ColumnHasChanged with Status true and Amount false; Needs order folder true branch all green (Create order
+      folder, Ensure requester, Get read role, Break inheritance in parallel, Grant requester read, Create summary
+      file, Tag summary file, Get list item type, Link folder on request, Tell requester). Mask site URLs and IDs.
+    narration: >
+      Here's the real run after the approval. Get changes says status changed and amount didn't. The folder branch
+      ran: the three REST calls in parallel after the folder, then the grant, the summary file, and the link.
+
+  - id: folder-permissions
+    type: screen
+    heading: "Purchasing edits, Alex reads"
+    image: screens/folder-permissions.jpg
+    bar: "SharePoint · Orders · PR-00041 · Manage access"
+    demo: >
+      The PR-00041 folder in the Orders library with the summary file (Request ID 41, Request amount 12,500), then
+      Manage access / Advanced permissions for the folder: "This folder has unique permissions", Purchasing Owners
+      Full Control, Purchasing Members Edit, Alex Demo Read, and no other requester. Then the request item showing the
+      Order folder link.
+    narration: >
+      In SharePoint, the folder has unique permissions: purchasing kept full control and edit, and Alex Demo can
+      read. Jordan, who raised a different request, can't see it. The request now links to its folder.
+
+  - id: gotcha
+    type: code
+    heading: "The first version triggered itself forever"
+    lang: text
+    code: |
+      $ python -m spfake --first-version --max-polls 4
+      poll 1: run Succeeded folder, permissions, summary file, link on item, email requester
+      poll 2: run Succeeded folder, permissions, summary file, link on item, email requester
+      poll 3: run Succeeded folder, permissions, summary file, link on item, email requester
+      poll 4: run Succeeded folder, permissions, summary file, link on item, email requester
+
+      flowkit lint: WARNING Link_folder_on_request: writes ['OrderFolder'] to 'Purchase Requests',
+        the list that triggers this flow, and no trigger condition or enclosing condition checks
+        those columns: every run triggers the next one (infinite trigger loop)
+    short: loop
+    narration: >
+      Here's the trap from the opening. The first version had no check on order folder. Writing the link is a
+      modification, the status is still approved, so the next poll runs the flow again, and it writes again. Learn
+      calls this an infinite loop and says to stop it with a trigger condition or a check. The linter now catches it.
+
+  - id: fix
+    type: code
+    heading: "One check, one quiet run, then silence"
+    lang: text
+    code: |
+      "Needs_order_folder": { "expression": "@empty(triggerBody()?['OrderFolder'])" }
+
+      $ python -m spfake --amount-change
+      poll 1: run Succeeded folder, permissions, summary file, link on item, email requester
+      poll 2: run Succeeded nothing to do
+      poll 3: no changes
+      Alex Demo changes the amount to 14,200
+      poll 4: run Succeeded Escalated, email purchasing
+      poll 5: item changed, trigger condition false: no run
+    narration: >
+      The fix is one condition: only create the folder when order folder is empty. Our own write still triggers one
+      run, which finds the folder and does nothing, and then it's quiet. When Alex changes the amount, get changes
+      reports amount and not status, so the request is escalated. Escalated fails the trigger condition, so that
+      write starts nothing.
+
+  - id: escalated
+    type: screen
+    heading: "Amount changed after approval"
+    image: screens/escalated.jpg
+    bar: "SharePoint · Purchase Requests · Outlook"
+    demo: >
+      PR-00041 after Alex Demo edits Amount to 14,200: Status Escalated, Decision comments "Amount changed to
+      14,200.00 EUR after approval by Alex Demo. Needs a new decision." Then the high-importance email in the
+      purchasing-team mailbox, subject "PR-00041: amount changed after approval". Optionally Run history showing the
+      escalation run followed by no run for the flow's own write.
+    narration: >
+      And in the tenant: the request is escalated with the reason, and purchasing gets a high importance email with
+      a link to the request.
+
+  - id: honest
+    type: bullets
+    heading: "What polling can't tell you"
+    bullets:
+      - "Triggers poll: one run can gather several changes"
+      - "Amount edited before the next poll: Amount and Status both changed"
+      - "The flow can't know the order, treats it as approved"
+      - "If it matters: lock the amount when it's approved"
+    narration: >
+      One honest limit. SharePoint triggers poll, and Learn warns that a run may gather more than one change. If the
+      amount is edited between the approval and the next poll, get changes reports both columns, and the flow can't
+      tell which came first. If that matters to you, lock the amount at approval.
+
+  - id: tests
+    type: code
+    heading: "Twenty-four tests, no tenant"
+    lang: text
+    code: |
+      $ python -m pytest
+      24 passed in 2.3s
+
+      test_the_requester_can_read_only_their_own_folder
+      test_the_write_back_triggers_one_quiet_run_and_then_it_stops
+      test_amount_changed_after_approval_is_escalated
+      test_get_changes_needs_versioning
+      test_update_item_needs_every_required_column
+      test_without_nometadata_the_id_is_wrapped_and_the_grant_fails
+      test_a_wrong_library_path_fails_the_run_instead_of_leaving_an_open_folder
+    narration: >
+      Twenty-four tests run the real flow definition against an in-memory SharePoint site with versions, a change
+      log, folders and permissions. Each poll runs the flow, and whatever the flow writes back becomes the next
+      change, which is exactly how the loop showed up before it reached the tenant.
+
+  - id: recap
+    type: bullets
+    heading: "Five rules for SharePoint flows"
+    bullets:
+      - "Filter with trigger conditions, not first-step conditions"
+      - "Ask Get changes what changed, with versioning on"
+      - "Every write to the trigger list needs a check"
+      - "Connector first, REST with nometadata for the gaps"
+      - "MERGE only the columns you mean to change"
+    narration: >
+      Five rules. Filter with trigger conditions. Ask get changes what changed, with versioning on. Every write to
+      the list that triggers you needs a check that stops the next run. Use the connector first and REST for the
+      gaps. And merge only the columns you mean to change.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The solution, the in-memory SharePoint site and all twenty-four tests are on GitHub, and the complete guide is
+      on dev lad log dot com. Next in the series: Microsoft Teams integration. Subscribe so you don't miss it.

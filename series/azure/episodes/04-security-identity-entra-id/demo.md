@@ -1,5 +1,16 @@
 # Demo shot list — DEVLADLOG Azure #4, An API with zero secrets
 
+## Lab environment
+
+| Item | What this episode needs |
+|---|---|
+| VMs / tenant apps | none |
+| Lab users | **`alex.demo` (Alex Demo)**: the fictional reader; `az login` as Alex for `call-as-user.sh` (and for `deploy.sh`, or run `deploy.sh` as `labadmin` and pass Alex's object ID). **`labadmin`** (the recording account) for the Microsoft Graph Bicep deployment (needs the app-registration and app-role-assignment permissions listed below) and the Entra admin center shots |
+| Entra | App registration + service principal *contoso orders API*, app roles, app role assignments (created by the Graph Bicep, deleted by `infra/teardown.sh`) |
+| Azure | Resource group **`rg-mglab-azure-04`** in **Sweden Central**: user-assigned managed identity (free) and, per run of `prove-app-token.sh`, one Azure Container Instance 1 vCPU / 1 GB for under a minute (cents). Tear-down: `infra/teardown.sh rg-mglab-azure-04` |
+| Licences / trials | none beyond the subscription (Entra objects are free) |
+| Recording machine | The Windows lab laptop: Entra admin center in the browser; WSL (Ubuntu) bash with Azure CLI ≥ 2.73, .NET SDK 10, Python 3, curl, two terminals (API + caller) |
+
 Everything below **needs the lab tenant** (Entra ID + Azure subscription), except the local checks. The episode
 builder ran only local checks (20 xUnit, 21 pytest, Bicep lint/build with the Graph extension, a local API start).
 No Entra objects or Azure resources were created.
@@ -9,8 +20,8 @@ No Entra objects or Azure resources were created.
 | What | Notes |
 |---|---|
 | Lab tenant + Azure subscription with the €10 budget alert | A resource group you can create; Contributor on it (managed identity, container instance) |
-| An account that can create app registrations and app role assignments | The Graph Bicep deployment runs as you: Learn lists `Application.ReadWrite.All` and `AppRoleAssignment.ReadWrite.All` (+ `Application.Read.All`) as the permissions per resource type. In the lab, use the Global Administrator account; pick a narrower role for real tenants after checking those pages |
-| The fictional reader | Sign in as **Alex Demo** (a lab user) for `call-as-user.sh`, so the claims and portal show a fictional name. `deploy.sh` makes the signed-in user the reader and owner, so run it as Alex Demo, or pass Alex's object ID |
+| An account that can create app registrations and app role assignments | The Graph Bicep deployment runs as you: Learn lists `Application.ReadWrite.All` and `AppRoleAssignment.ReadWrite.All` (+ `Application.Read.All`) as the permissions per resource type. In the lab, use `labadmin`; pick a narrower role for real tenants after checking those pages |
+| The fictional reader | Sign in as **Alex Demo** (`alex.demo`, a lab user) for `call-as-user.sh`, so the claims and portal show a fictional name. `deploy.sh` makes the signed-in user the reader and owner, so run it as Alex Demo, or pass Alex's object ID |
 | Azure CLI ≥ 2.73 | Microsoft Graph Bicep needs it; `az bicep upgrade` so the Bicep CLI matches |
 | .NET SDK 10, Python 3, curl | Run the API locally, show claims |
 | Cost | Managed identity and Entra objects: no charge. One container instance (1 vCPU, 1 GB) for well under a minute per run: cents. Delete everything the same day |
@@ -22,7 +33,7 @@ cd series/azure/episodes/04-security-identity-entra-id
 dotnet test tests/Contoso.Orders.Tests --artifacts-path /tmp/orders-artifacts   # 20 passed, before anything else
 python3 -m pytest tests/python -q                                               # 21 passed
 az login                                                     # as Alex Demo (or an admin, then pass Alex's object ID)
-infra/deploy.sh rg-contoso-identity swedencentral            # what-if, then the deployment (~1-2 min)
+infra/deploy.sh rg-mglab-azure-04 swedencentral              # what-if, then the deployment (~1-2 min)
 infra/lab-preauthorize-cli.sh                                # LAB ONLY: lets `az` request Orders.Read without consent
 ```
 
@@ -32,7 +43,7 @@ created, run `deploy.sh` again (directory replication); note it in the episode i
 ## Screens to capture (match the `screen` scenes in script.yaml)
 
 ### 1. `screens/graph-deploy.jpg` — scene `deploy` (needs tenant)
-Terminal running `infra/deploy.sh rg-contoso-identity swedencentral`: the what-if lines for
+Terminal running `infra/deploy.sh rg-mglab-azure-04 swedencentral`: the what-if lines for
 `Microsoft.ManagedIdentity/userAssignedIdentities`, `Microsoft.Graph/applications`, `servicePrincipals`,
 `appRoleAssignedTo` (×2), then the outputs table. If what-if can't show the Graph resources in detail, capture what
 it shows and the deployment outputs; say so in the narration rather than claiming more.
@@ -54,7 +65,7 @@ Expected: claims with `aud` = API client ID, `scp` = `Orders.Read`, `roles` = `[
 If GET returns 401, check the API terminal: an audience error means the token is v1.0 (see the gotcha scene).
 
 ### 4. `screens/app-token.jpg` — scene `app` (needs tenant)
-`infra/prove-app-token.sh rg-contoso-identity`. Expected log: `aud` = API client ID, `roles` =
+`infra/prove-app-token.sh rg-mglab-azure-04`. Expected log: `aud` = API client ID, `roles` =
 `["Orders.ReadWrite.All"]`, `idtyp` = `app`, `kind` = app-only. The container is deleted at the end.
 If the log says `python3: not found`, the azure-cli image changed: replace the image with a Python image
 (e.g. a Microsoft-published Python base image) and keep the same `--command-line`; note it in README.
@@ -68,7 +79,7 @@ If the log says `python3: not found`, the azure-cli image changed: replace the i
 
 ## Tear-down (needs tenant)
 ```bash
-infra/teardown.sh rg-contoso-identity      # SP + app deleted, app purged from deleted items, group deleted
+infra/teardown.sh rg-mglab-azure-04        # SP + app deleted, app purged from deleted items, group deleted
 az ad app list --display-name "contoso orders API" --query "[].appId"   # []
 ```
 Stop `run-api-local.sh` (Ctrl+C). The managed identity's service principal is removed with the identity; Learn notes

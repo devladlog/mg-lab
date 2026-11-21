@@ -1,11 +1,5 @@
 # Demo shot list — DEVLADLOG Code #3 Async and await, done properly
 
-Everything was built and tested in the container (`dotnet test`: **27 passed**, 10 runs in a row;
-`./demo/expect-errors.sh`: exit code 0). Every screen is the real code running on the recording laptop: the Finance
-API (an ASP.NET Core app we build in this episode) in one terminal pane and the console client in the other. The
-API's 300 ms per lookup is a fixed delay inside the API so timings are reproducible; the HTTP calls, cancellation and
-aborts are real. Reference output: [`demo/expected-output.txt`](demo/expected-output.txt).
-
 ## Lab environment
 | What | Details | Cost |
 |---|---|---|
@@ -14,6 +8,12 @@ aborts are real. Reference output: [`demo/expected-output.txt`](demo/expected-ou
 | Windows Terminal | dark theme, font 18 pt or larger, one window split in two panes (Alt+Shift+D), ~200 columns total | free |
 | VS Code + C# Dev Kit | only to show code if wanted; screens are terminal captures | free |
 | Port | `http://localhost:5080` free (the API's launch profile) | — |
+
+Everything was built and tested in the container (`dotnet test`: **27 passed**, 10 runs in a row;
+`./demo/expect-errors.sh`: exit code 0). Every screen is the real code running on the recording laptop: the Finance
+API (an ASP.NET Core app we build in this episode) in one terminal pane and the console client in the other. The
+API's 300 ms per lookup is a fixed delay inside the API so timings are reproducible; the HTTP calls, cancellation and
+aborts are real. Reference output: [`demo/expected-output.txt`](demo/expected-output.txt).
 
 ## Setup (once, before recording)
 ```powershell

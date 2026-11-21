@@ -1,0 +1,9 @@
+// Log search alert "orders API failure ratio" (infra/main.bicep loads this file).
+// Metric alerts can't divide one count by another; a log alert can.
+// sum(ItemCount), not count(): each sampled row stands for ItemCount real requests.
+AppRequests
+| where AppRoleName == "contoso-orders-api"
+| summarize Total = sum(ItemCount), Failed = sumif(ItemCount, Success == false) by OperationName
+| where Total >= 20 // ignore one failure out of three requests at 3 a.m.
+| extend FailurePercent = round(100.0 * Failed / Total, 1)
+| project OperationName, Total, Failed, FailurePercent

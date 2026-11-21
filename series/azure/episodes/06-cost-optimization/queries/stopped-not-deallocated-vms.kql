@@ -1,0 +1,8 @@
+// VMs that are stopped but not deallocated keep paying for compute.
+// Based on "FinOps best practices for Compute" (Microsoft Learn).
+resources
+| where type =~ 'microsoft.compute/virtualmachines'
+| extend PowerState = tostring(properties.extended.instanceView.powerState.displayStatus)
+| where PowerState !in~ ('VM deallocated', 'VM running')
+| project id, name, type, location, resourceGroup, vmSize = tostring(properties.hardwareProfile.vmSize), PowerState
+| order by id asc

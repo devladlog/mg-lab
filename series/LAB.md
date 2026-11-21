@@ -10,7 +10,7 @@ All demos are recorded for real. Use these shared resources before asking for ne
 - Power Apps Premium, Microsoft 365 Business Standard, Fabric + Power BI 60-day trial (West Europe capacity).
 - Lab users (fictional, all with E5 + Entra ID Governance + Dynamics 365 Sales trial licences, location Portugal):
   `labadmin` (Lab Admin, the recording account), `alex.demo`, `sam.demo`, `jordan.demo`, `riley.demo`, `taylor.demo`
-  (display names "<First> Demo"). Departments, managers, groups and roles are not set yet: each demo.md says what it
+  (display names "<First> Demo"). `labadmin` and `sam.demo` also have the Copilot Studio trial licence. Departments, managers, groups and roles are not set yet: each demo.md says what it
   needs and sets it up in its own steps (and undoes it in tear-down). The owner's own account is never used in demos.
   Premium Power Platform: there are no spare Power Apps Premium licences. A demo user who needs premium connectors
   starts the self-service Power Apps / Power Automate Premium trial the first time (say so in demo.md), or the app

@@ -47,8 +47,8 @@ dotnet run --project src/ExpenseClaims.Api --launch-profile http   # http://loca
 
 1. App registration **contoso-expense-claims-api** (single tenant) → *Expose an API* → App ID URI `api://<client-id>`,
    scope **Claims.Submit**; *Authorized client applications* → add the Azure CLI (`04b07795-8ddb-461a-bbee-02f9e1bf7b46`).
-2. *App roles* → **Claims.Approve** (Users/Groups) → *Enterprise applications* → assign it to the approver user.
-3. `APP=contoso-claims-<unique> TENANT_ID=<tenant> API_CLIENT_ID=<client-id> ./deploy/deploy-appservice.sh`
+2. *App roles* → **Claims.Approve** (Users/Groups) → *Enterprise applications* → assign it to the approver user (lab: Sam Demo, `sam.demo`).
+3. `RG=rg-mglab-net-02 APP=contoso-claims-<unique> TENANT_ID=<tenant> API_CLIENT_ID=<client-id> ./deploy/deploy-appservice.sh`
 4. `./deploy/call-api.sh https://<host> <client-id> [claim-id]`
 
 Step-by-step with screens: [`demo.md`](demo.md). `PACKAGE_ONLY=1 ./deploy/deploy-appservice.sh` was verified here

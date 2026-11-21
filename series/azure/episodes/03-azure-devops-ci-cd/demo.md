@@ -1,5 +1,17 @@
 # Demo shot list — DEVLADLOG Azure #3, A pipeline that knows when to stop
 
+## Lab environment
+
+| Item | What this episode needs |
+|---|---|
+| VMs / tenant apps | none |
+| Azure DevOps | An Azure DevOps organization connected to the lab tenant (Microsoft Entra), **not yet listed in `series/LAB.md`**: free tier, linked to the lab subscription for billing (hosted parallelism), one **private** project `contoso-platform` with the mg-lab repo imported. Free Microsoft-hosted minutes cover the runs (one run ≈ 10–15 min) |
+| Lab users | `labadmin` (the recording account): Project Administrator, Owner on the two resource groups; **`alex.demo` (Alex Demo)** as the `contoso-prod` approver (sign in as Alex in a second browser profile to approve/reject, or keep labadmin as approver and the "requester can't approve" option off) |
+| Azure | Two resource groups in **Sweden Central**: **`rg-contoso-lab`** and **`rg-contoso-prod`**. Exception to the `rg-mglab-<series>-<ep>` rule: the names are part of the pipeline under test (`pipelines/azure-pipelines.yml`, its tests and fixtures); renaming them means changing code, so they stay and are deleted in tear-down. Lab: episode 2's lab profile (B1 plan, 2 private endpoints, 2 private DNS zones, LRS storage, Key Vault, Log Analytics), well under €1 for ~1 hour. Prod: what-if only on an empty group (free); **reject** the prod approval |
+| Entra | Two app registrations created by the automatic service connections (deleted in tear-down) |
+| Licences / trials | none beyond the subscription and the free Azure DevOps tier |
+| Recording machine | The Windows lab laptop: Azure DevOps and the Azure portal in the browser; WSL (Ubuntu) bash with Azure CLI for the setup commands |
+
 Everything below **needs the lab tenant** (Azure DevOps organization + Azure subscription), except the local checks.
 The episode builder ran only the local checks (`ci.sh`, 44 + 15 pytest, 7 xUnit, PSRule, Bicep lint) and `deploy.sh`
 against a fake `az`. No Azure DevOps or Azure resources were created.
@@ -18,7 +30,7 @@ against a fake `az`. No Azure DevOps or Azure resources were created.
 
 ### 1. Resource groups + governance (a person, not the pipeline)
 ```bash
-az login
+az login                 # labadmin, off camera
 for E in lab prod; do
   az group create -n rg-contoso-$E -l swedencentral --tags workload=contoso environment=$E owner=platform-team -o none
   az deployment group create -g rg-contoso-$E --name governance \
@@ -39,7 +51,7 @@ registration → Conditions: *Constrain roles* → Storage Blob Data Reader, Key
 
 ### 3. Environments (Pipelines → Environments) — BEFORE creating the pipeline
 - `contoso-lab`: no checks.
-- `contoso-prod`: Approvals and checks → **Approvals** (approver: the fictional "Alex Demo" account or yourself;
+- `contoso-prod`: Approvals and checks → **Approvals** (approver: **Alex Demo** (`alex.demo`) or `labadmin`;
   if you have a second account, use the advanced option that stops the requester approving their own run) and
   **Exclusive lock**.
 

@@ -1,10 +1,5 @@
 # Demo shot list — DEVLADLOG Windows Server #3: Group Policy Management
 
-Everything in `src/` and `tests/` already ran in the build container: 27 Pester tests (GroupPolicy and
-ActiveDirectory cmdlets stubbed and mocked) and the offline report from the fictional snapshot (`sample/report.md`).
-**Nothing has run against a real domain yet**: every screen below needs the lab. Rewrite the narration of each screen
-scene to what is actually on screen.
-
 ## Lab environment
 
 No new VM. Everything runs on the shared Hyper-V lab from `series/LAB.md` (network `10.20.0.0/24`, domain
@@ -21,6 +16,11 @@ No new VM. Everything runs on the shared Hyper-V lab from `series/LAB.md` (netwo
 - Cost: none (evaluation VMs, no cloud resources). RAM: the three VMs above, ~7 GB maximum together.
 - Account: "lab Administrator" (domain admin of the lab) for the deployment; `CONTOSO\jgoncalves` for the gotcha.
   Passwords are typed by the recorder, never on screen and never in files.
+
+Everything in `src/` and `tests/` already ran in the build container: 27 Pester tests (GroupPolicy and
+ActiveDirectory cmdlets stubbed and mocked) and the offline report from the fictional snapshot (`sample/report.md`).
+**Nothing has run against a real domain yet**: every screen below needs the lab. Rewrite the narration of each screen
+scene to what is actually on screen.
 
 ## Prerequisites (before recording, not filmed)
 

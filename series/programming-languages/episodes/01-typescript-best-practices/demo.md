@@ -1,5 +1,13 @@
 # Demo shot list — DEVLADLOG Code #1 TypeScript best practices
 
+## Lab environment
+
+| Item | What this episode needs |
+|---|---|
+| VMs / tenant / Azure | none: the screens show the real TypeScript compiler, ESLint, Vitest and VS Code on this project |
+| Licences / cost | none |
+| Recording machine | The Windows lab laptop: Node.js 22.12+, VS Code, a terminal (Git Bash or WSL bash for the `export PS1` / `rm -rf` lines below) opened in the episode folder under a neutral path |
+
 Everything in this folder was built and tested in the container (`npm run ci`: typecheck + lint + **40 tests
 passed** + build). **No tenant, no cloud resources, no licences needed**: all four screens are local captures
 (terminal and VS Code). Reference output for every terminal screen: [`demo/expected-output.txt`](demo/expected-output.txt).

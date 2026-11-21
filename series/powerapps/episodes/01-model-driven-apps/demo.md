@@ -1,5 +1,15 @@
 # Demo shot list — DEVLADLOG Power Apps #1, Model-driven apps
 
+## Lab environment
+
+| Item | What this episode needs |
+|---|---|
+| VMs / Azure | none |
+| Tenant environment | Power Platform environment **`DEV`** (Dataverse; not a developer environment). Created here: publisher `contoso`, solution *Equipment Desk*, tables Equipment and Loan, model-driven app, site map, web resource (kept for episodes 2–4, removed in tear-down after the series) |
+| Lab users | `labadmin` (the recording account) with System Administrator or System Customizer in `DEV`; signs in to Azure CLI off camera for the access token. Borrower values in the test loans are the lab users' addresses `alex.demo@contoso.com` / `sam.demo@contoso.com` as plain text (fictional domain) |
+| Licences / trials | **Power Apps Premium** (in the lab) for `labadmin` and any lab user who runs the app; cost 0 |
+| Recording machine | The Windows lab laptop: maker portal / Power Apps Studio / the running app in the browser with `pipeline/mask.js`; WSL (Ubuntu) bash with Node 22.18+ and Azure CLI for the provisioning script |
+
 Everything under `src/` was built and tested locally (`npm test`: 38 passed). The steps below **need the lab tenant**
 and have not been run there yet: the recorder is the first real run, so watch the console output of step 3.
 
@@ -7,7 +17,7 @@ and have not been run there yet: the recorder is the first real run, so watch th
 | What | Notes | Cost |
 |---|---|---|
 | MG Lab **DEV** environment with Dataverse | Use the existing lab DEV environment. Learn: unmanaged developer environments (the ones the Developer Plan created) are deprecated — no new ones since 15 Nov 2026, suspension from 15 Dec 2026. Don't build the demo in one. | existing |
-| Recording user with **System Administrator** or **System Customizer** in DEV | Learn: required to create apps | — |
+| `labadmin` (recording user) with **System Administrator** or **System Customizer** in DEV | Learn: required to create apps | — |
 | Power Apps **premium** licence (or trial) for the recording user | Learn: makers need a licence to build model-driven apps; every user running one needs premium | existing / trial |
 | Azure CLI on the recording machine, signed in as the recording user | for the access token only (`az account get-access-token`) | — |
 | Node 22.18+ | runs the TypeScript directly | — |

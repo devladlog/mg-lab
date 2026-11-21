@@ -1,0 +1,8 @@
+// Latency per operation, last hour. Percentiles, not averages: one slow call hides in an average.
+AppRequests
+| where TimeGenerated > ago(1h)
+| where AppRoleName == "contoso-orders-api"
+| summarize Requests = sum(ItemCount),
+            P50 = percentile(DurationMs, 50), P95 = percentile(DurationMs, 95), P99 = percentile(DurationMs, 99)
+            by OperationName
+| order by P95 desc

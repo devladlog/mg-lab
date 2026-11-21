@@ -1,0 +1,262 @@
+# DEVLADLOG Deep Dive — episode 03. Code and test scenes are real (from this folder); screen scenes need the lab
+# recording described in demo.md. Narration ~870 words.
+episode: 3
+slug: building-secure-business-apps-azure-power-platfo
+series_label: "DEEP DIVE"
+series_name: "DEVLADLOG Deep Dive"
+file_prefix: "deep-dive"
+title: "Building secure business apps"
+subtitle: "Power Apps + a .NET 10 API + Azure SQL, with no secrets"
+voice: am_michael
+thumbnail_text: "THE APP IS\nJUST THE\nSCREEN"
+youtube:
+  title: "Secure Business App: Power Apps + .NET 10 API + Azure SQL with Entra ID | DEVLADLOG Deep Dive #3"
+  tags: [Power Apps, custom connector, ASP.NET Core, .NET 10, Microsoft Entra ID, app roles, JWT bearer, Azure SQL, managed identity, Entra-only authentication, segregation of duties, Bicep, solution architecture]
+sources:
+  - https://www.devladlog.com/articles/deep-dive/2025-04-07-end-to-end-secure-business-app-azure-powerapps-sharepoint-dotnet/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Approve your own request? No."
+    sub: "not even if you hack the app"
+    short: hook
+    narration: >
+      Sam is an approver. Sam also submits purchase requests. So what stops Sam from approving his own? In most
+      low-code apps, a hidden button. Today the app is just the screen. Every rule lives in a dot net API that trusts
+      only the caller's Entra token, and nobody can bypass it, not even with their own valid token. This is the
+      DEVLADLOG Deep Dive.
+
+  - id: architecture
+    type: diagram
+    heading: "Four parts, one identity"
+    nodes: ["App", "Connector", "API", "SQL"]
+    labels: ["Power Apps canvas", "OAuth, user token", ".NET 10 on App Service", "Azure SQL, Entra-only"]
+    narration: >
+      Contoso's purchase requests used to live in a spreadsheet. Now a Power Apps canvas app calls a custom connector.
+      The connector signs in as the user and sends that user's token to an A S P dot net Core API. The API talks to
+      Azure SQL with its own managed identity. Three people: Alex requests, Sam approves, Jordan is the finance approver.
+
+  - id: token
+    type: code
+    heading: "Validate the token yourself"
+    lang: csharp
+    code: |
+      options.Authority = $"{o.Instance.TrimEnd('/')}/{o.TenantId}/v2.0";
+      options.MapInboundClaims = false;          // keep "scp", "roles", "oid" as they are
+      options.TokenValidationParameters = new TokenValidationParameters
+      {
+          ValidIssuers = ValidIssuers(o),        // v1 and v2 issuer, ONE tenant
+          ValidAudiences = ValidAudiences(o),    // client ID and api://client ID
+          ValidateLifetime = true,
+          ValidateIssuerSigningKey = true,
+          RequireSignedTokens = true,
+          NameClaimType = "name",
+          RoleClaimType = "roles",
+      };
+    narration: >
+      First, the API validates every token itself: signature, lifetime, issuer and audience, for one tenant only.
+      Common, or another tenant, gets a four oh one. We accept both token versions, and we turn claim mapping off.
+      Both of those are traps, and we'll come back to them.
+
+  - id: policies
+    type: code
+    heading: "Scope, then roles"
+    lang: csharp
+    code: |
+      AuthorizationPolicyBuilder UserWithScope() => new AuthorizationPolicyBuilder()
+          .RequireAuthenticatedUser()
+          .RequireClaim("oid")
+          .RequireAssertion(ctx => HasScope(ctx.User, requiredScope));
+
+      options.AddPolicy(Read, UserWithScope().Build());
+      options.AddPolicy(Submit, UserWithScope().RequireRole(AppRoles.Requester).Build());
+      options.AddPolicy(Decide, UserWithScope().RequireRole(AppRoles.Approver, AppRoles.FinanceApprover).Build());
+      options.FallbackPolicy = UserWithScope().Build();
+    narration: >
+      Every policy starts with the delegated scope. An app-only token has no scope, so even with every role it's
+      refused. Then the app roles from the API's registration: Requester can submit, Approver can decide. And a
+      fallback policy, so a new endpoint is locked until someone opens it on purpose.
+
+  - id: rules
+    type: code
+    heading: "The rules nobody can skip"
+    short: rules
+    lang: csharp
+    code: |
+      if (request.Status != RequestStatus.Pending)
+          return RuleResult.Conflict($"This request is already {request.Status.ToString().ToLowerInvariant()}.");
+
+      // Segregation of duties: nobody decides on their own request, whatever roles they hold.
+      if (string.Equals(request.RequestedByOid, caller.Oid, StringComparison.OrdinalIgnoreCase))
+          return RuleResult.Forbidden("You can't approve or reject your own request.");
+
+      if (outcome == DecisionOutcome.Approve && request.Amount > policy.FinanceThreshold
+          && !caller.IsFinanceApprover)
+          return RuleResult.Forbidden(string.Create(CultureInfo.InvariantCulture,
+              $"Requests above {policy.FinanceThreshold:N0} {policy.Currency} need a finance approver."));
+
+      return RuleResult.Ok;
+    narration: >
+      Roles say who can try. Business rules say what's allowed. You can't decide on your own request, whatever roles
+      you hold. Above five thousand euros, approval needs the finance role. And these are pure functions, so they're
+      trivial to test. The caller's identity comes from the token, never from the request body.
+
+  - id: strict-input
+    type: code
+    heading: "The body can't name the owner"
+    lang: csharp
+    code: |
+      // Unknown JSON properties are an error, not silently ignored.
+      [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+      public sealed record SubmitRequest(string? Title, string? Justification, decimal Amount, string? Currency);
+
+      RequestedByOid = caller.Oid,          // from the token, never from the body
+      ...
+      db.PurchaseRequests.Add(request);
+      db.AuditEntries.Add(NewAudit(request.Id, AuditActions.Submitted, caller, ...));
+      await db.SaveChangesAsync();   // request + audit entry in one transaction
+    narration: >
+      If a client sends an extra field like requested by, the API answers four hundred instead of quietly ignoring it.
+      The owner comes from the token. And the audit entry is saved in the same transaction as the request, so you can't
+      have one without the other.
+
+  - id: tests
+    type: code
+    heading: "Fifty-eight tests, real tokens"
+    lang: text
+    code: |
+      $ dotnet test tests/PurchaseRequests.Tests -m:1
+        AuthenticationTests.V1_token_with_app_id_uri_audience_is_accepted        Passed
+        AuthenticationTests.Token_from_another_tenant_is_401                     Passed
+        AuthenticationTests.App_only_token_without_scope_is_403_even_with_roles  Passed
+        AuthenticationTests.With_default_claim_mapping_the_same_valid_token_is_403  Passed
+        RequestFlowTests.Approver_cannot_decide_on_their_own_request_and_...     Passed
+        RequestFlowTests.Above_the_threshold_an_approver_needs_the_finance_role  Passed
+        ContractTests.Every_connector_operation_exists_in_the_api_with_...       Passed
+        SchemaTests.Committed_schema_matches_the_ef_model                        Passed
+      Passed!  - Failed: 0, Passed: 58, Skipped: 0, Total: 58
+    narration: >
+      Fifty eight tests run the real app in memory with real signed tokens: wrong tenant, expired, missing scope, wrong
+      role. Other tests compile the Bicep, check that the connector file matches the API, and that the SQL schema
+      file matches the code.
+
+  - id: infra
+    type: code
+    heading: "Bicep: free tiers, no passwords"
+    lang: bicep
+    code: |
+      administrators: {
+        administratorType: 'ActiveDirectory'
+        azureADOnlyAuthentication: true // no SQL logins, no passwords
+        ...
+      }
+      sku: { name: 'GP_S_Gen5_2', tier: 'GeneralPurpose', family: 'Gen5', capacity: 2 }
+      properties: {
+        useFreeLimit: true
+        freeLimitExhaustionBehavior: 'AutoPause' // pause instead of billing
+      }
+      // web app: plan F1, identity SystemAssigned, httpsOnly, FTP and basic auth off
+      connectionString: '...;Authentication=Active Directory Default;Encrypt=True'
+    narration: >
+      The lab costs close to nothing. The database uses the Azure SQL free offer and pauses when the monthly allowance
+      runs out, instead of billing. The API runs on the free App Service tier. SQL accepts only Entra identities, and the
+      app connects with its managed identity. There's no password anywhere to leak.
+
+  - id: grants
+    type: code
+    heading: "Data rights only, audit append-only"
+    lang: sql
+    code: |
+      SET @sql += N'CREATE USER ' + @user + N' FROM EXTERNAL PROVIDER; ';
+      -- Data rights only. No db_ddladmin: the app can't change the schema.
+      SET @sql += N'ALTER ROLE db_datareader ADD MEMBER ' + @user + N'; ';
+      SET @sql += N'ALTER ROLE db_datawriter ADD MEMBER ' + @user + N'; ';
+      -- The audit trail is append-only, even for the app itself.
+      SET @sql += N'DENY UPDATE, DELETE ON dbo.AuditEntries TO ' + @user + N'; ';
+      EXEC sp_executesql @sql;
+    narration: >
+      Microsoft's quickstarts give the app schema rights too, and say that's not for production. We give read and
+      write on data only, and deny update and delete on the audit table. Even if someone owned the app, they couldn't
+      rewrite history.
+
+  - id: roles-screen
+    type: screen
+    heading: "App roles, assigned"
+    image: screens/entra-app-roles.jpg
+    bar: "Microsoft Entra admin center · Enterprise applications"
+    demo: "Entra admin center > Enterprise applications > Contoso Purchase Requests API > Users and groups: Alex Demo = Requester, Sam Demo = Approver and Requester, Jordan Demo = Approver and Finance approver (lab users). Tenant name and IDs masked."
+    narration: >
+      In the lab tenant, the API's app registration defines three app roles. In enterprise applications, users and
+      groups, Alex is a requester, Sam an approver and requester, Jordan an approver with the finance role.
+
+  - id: grants-screen
+    type: screen
+    heading: "The identity's real permissions"
+    image: screens/sql-grants.jpg
+    bar: "SQL Server Management Studio · purchase-requests"
+    demo: "SSMS on the recording laptop connected to the Azure SQL database purchase-requests (rg-mglab-deep-dive-03) as the Entra admin, 002-grant-app.sql just executed: app identity (EXTERNAL_USER) with db_datareader and db_datawriter; DENY UPDATE / DENY DELETE on AuditEntries. Server name masked."
+    narration: >
+      Signed in as the SQL Entra admin, we run the grant script. The web app's identity is a database user with
+      reader and writer roles, and a deny on update and delete for the audit table.
+
+  - id: submit-screen
+    type: screen
+    heading: "Alex submits from Power Apps"
+    image: screens/app-submit.jpg
+    bar: "Power Apps · Contoso Purchase Requests"
+    demo: "Canvas app in play mode signed in as Alex Demo: 'Two lab servers', 7,500 EUR just submitted, green Submitted banner, My requests shows it as Pending."
+    narration: >
+      Now the app, as Alex. Two lab servers, seven thousand five hundred euros. The connector sends Alex's token, the
+      API takes the owner from it, and the request shows as pending.
+
+  - id: decide-screen
+    type: screen
+    heading: "Sam is refused, Jordan approves"
+    image: screens/app-decide.jpg
+    bar: "Power Apps · approver view"
+    demo: "Canvas app as Sam Demo: the 7,500 request selected, red banner 'Requests above 5,000 EUR need a finance approver.' Then as Jordan Demo: status Approved and the audit panel (see demo.md)."
+    narration: >
+      Sam opens it and taps approve. The API refuses: above five thousand euros needs a finance approver, and the app
+      shows that message from the API. Jordan approves it. The audit trail lists all three steps, including the refusal.
+
+  - id: gotcha
+    type: bullets
+    heading: "Valid token, still refused"
+    short: gotcha
+    bullets:
+      - "The API registration picks the token version"
+      - "v1: sts.windows.net issuer, api:// audience"
+      - "v2: login.microsoftonline.com issuer, client ID audience"
+      - "Default claim mapping renames roles and scp: every call 403"
+      - "F1 + SQL: 'Allow Azure services' admits other tenants too"
+    narration: >
+      Three traps. One: the token version is chosen by the API's registration, not the client. Version one has a
+      different issuer and audience than version two, so validate the wrong pair and a good token gets four oh one.
+      Two: default claim mapping renames roles and scope, so every policy fails with four oh three. Our tests prove
+      both. Three: the free tier has no network integration, so SQL needs the allow Azure services rule, and that
+      admits any Azure client, other customers too. Entra-only auth is what protects us. In production, use a private
+      endpoint.
+
+  - id: recap
+    type: bullets
+    heading: "What to take away"
+    bullets:
+      - "The app is the screen; the API decides"
+      - "Scope first, then roles, then business rules"
+      - "Identity from the token, never from the body"
+      - "Managed identity, data rights only, append-only audit"
+      - "Test with real tokens, not with auth turned off"
+    narration: >
+      To recap. The app is the screen, the API decides. Check scope, then roles, then business rules. Take identity
+      from the token, never from the body. Managed identity, data rights only, append-only audit. And test with real
+      tokens, not with authentication switched off.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The API, the tests, the Bicep, the SQL scripts and the connector are on GitHub, and the full guide is on
+      devladlog dot com. Next time: enterprise workflow automation, with approvals that can wait for days. This was the
+      DEVLADLOG Deep Dive, by Momento Galático.

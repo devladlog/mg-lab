@@ -1,5 +1,16 @@
 # Demo shot list — SharePoint #1 Lists & libraries best practices
 
+## Lab environment
+
+| Item | What this episode needs |
+|---|---|
+| VMs / Azure / Power Platform | none |
+| Tenant | **SharePoint** in the lab tenant: test site `/sites/ListsDemo` (communication or team site, created by `labadmin` if missing). Created here: lists *Purchase Requests* (kept for episode 2), *Contracts*, *Legacy Requests* |
+| Lab users | `labadmin` (the recording account): site owner, PnP device-code sign-in off camera. **`alex.demo` (Alex Demo)**: the requester for the 40 seeded items (`-RequesterEmail` = Alex's UPN, masked) |
+| Entra | The existing "MG Lab PnP" app registration (delegated permissions) |
+| Licences / trials | lab E5 licences; cost 0 |
+| Recording machine | The Windows lab laptop: PowerShell 7.4+ with PnP.PowerShell 3.x and Pester; browser with `pipeline/mask.js` for the SharePoint screens |
+
 Everything except the four `screen` scenes is already real output from this folder (lint, tests). The screens need
 the lab tenant. **Needs tenant:** `Invoke-MgListProvisioning`, `Get-MgListAudit`, seeding, and the end-to-end run of
 `Invoke-ListDesign.ps1` with `-SiteUrl` — locally they are covered only by Pester tests that mock the real PnP cmdlets.
@@ -11,7 +22,7 @@ the lab tenant. **Needs tenant:** `Invoke-MgListProvisioning`, `Get-MgListAudit`
 | A test site, e.g. `/sites/ListsDemo` (communication or team site) | site owner is enough; no SharePoint admin role needed | €0 |
 | Entra app for PnP with **delegated** permissions | the existing "MG Lab PnP" app (or `episodes/06-sharepoint-migration-pnp/setup/register-pnp-app.sh`) | €0 |
 | PowerShell 7.4+ with PnP.PowerShell 3.x and Pester | `Install-Module PnP.PowerShell, Pester -Scope CurrentUser` | €0 |
-| A lab user to act as requester | e.g. the demo account shown as "Alex Demo" | €0 |
+| A lab user to act as requester | **Alex Demo** (`alex.demo`) | €0 |
 
 ## Set-up (before recording)
 ```powershell
@@ -30,7 +41,7 @@ run, once the lists exist). Use a terminal with a dark theme and font size 18+. 
    Run (device-code sign-in happens before the capture; don't record the code):
    ```powershell
    ./src/Invoke-ListDesign.ps1 -DesignPath ./src/designs/purchase-requests.json -SiteUrl $site -ClientId $app `
-       -SeedItems 40 -RequesterEmail <lab requester upn>
+       -SeedItems 40 -RequesterEmail <alex.demo UPN>
    ```
    Capture: "Lint ... No findings", the provisioning log (CreateList, SetVersioning, AddField ... indexed, AddView,
    RemoveView), "Seeded 40 items", and both "Audit (live)" blocks ending in "No findings".

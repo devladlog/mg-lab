@@ -1,0 +1,9 @@
+#!/usr/bin/env python3
+"""Reject commit messages that are not Conventional Commits. Bypassable with --no-verify: CI checks the PR title too."""
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "tools"))
+from repo_guard.cli import commit_msg_main  # noqa: E402
+
+sys.exit(commit_msg_main(sys.argv[1:]))

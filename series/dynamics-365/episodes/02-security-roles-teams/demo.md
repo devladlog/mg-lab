@@ -1,5 +1,15 @@
 # Demo shot list — DEVLADLOG Dynamics 365 #2: Security Roles & Teams
 
+## Lab environment
+
+| Item | What this episode needs |
+|---|---|
+| VMs / Azure | none |
+| Tenant environment | Power Platform environment **`DEV`** with episode 1's `mgl_projectrequest` table and data. Created for the recording and removed in tear-down: business units *Sales* and *Sales Portugal*, roles *Project Requester* / *Project Approver* / *PMO Team Member*, teams *PMO Lisbon* (owner), *PR-0004 deal room* (access), optional *Sales Approvers* (Entra group team) |
+| Lab users | `labadmin` (the recording account, System Administrator in `DEV`). **`alex.demo` (Alex Demo)** in place of "test user 1": BU Sales Portugal, role Project Requester. **`sam.demo` (Sam Demo)** in place of "test user 2": BU Sales Portugal, no direct role, member of PMO Lisbon and the deal room. Both already hold E5 + Dynamics 365 Sales trial licences, so they exist as Dataverse users in `DEV` (sync them from the admin center if they don't show) |
+| Licences / trials | none beyond the lab licences; cost 0 |
+| Recording machine | The Windows lab laptop: maker portal / model-driven app in the browser with `pipeline/mask.js`; WSL (Ubuntu) bash with Python 3.10+ (`pip install --user -r requirements.txt`); a private browser window signed in as Alex Demo for Check access |
+
 `explain`, `who` and `audit` on the fictional Contoso model already ran in the build container (33 pytest tests).
 `export` and `verify` were only tested against a stub API: **the four `screen` scenes need the lab tenant**, and the
 verify narration must be rewritten to whatever Dataverse really answers.
@@ -9,7 +19,7 @@ verify narration must be rewritten to whatever Dataverse really answers.
 | Item | Notes | Cost |
 |---|---|---|
 | Episode 1 done in MG Lab DEV | The `mgl_projectrequest` table exists (`python -m dvlab provision` + `import` from episode 1) | none |
-| Two lab test users with Dataverse access | e.g. "Test User 1/2" in the lab tenant, licensed with existing lab licences or trials; no real people | none if trial |
+| Two lab users with Dataverse access | **Alex Demo** (`alex.demo`) and **Sam Demo** (`sam.demo`), already licensed in the lab; no real people | none |
 | Recording account | System Administrator **in the lab environment** (to create BUs/roles/teams and use Check access) | none |
 | Optional: one Microsoft Entra security group | For the "Sales Approvers" group team; skip if not allowed in the lab — the owner/access teams are enough | none |
 | Python 3.10+ with `pip install --user -r requirements.txt` | requests, msal, pytest | none |
@@ -25,12 +35,12 @@ verify narration must be rewritten to whatever Dataverse really answers.
      Member's privilege inheritance = *Direct User (Basic) access level and Team privileges*.
    - **PMO Team Member** — Create/Read/Write/Append/Append To/Assign = User;
      Member's privilege inheritance = **Team privileges only**.
-3. **Users:** Test User 1 → business unit Sales Portugal, role Project Requester. Test User 2 → Sales Portugal,
+3. **Users:** Alex Demo → business unit Sales Portugal, role Project Requester. Sam Demo → Sales Portugal,
    **no direct role**.
-4. **Teams:** owner team **PMO Lisbon** (BU Sales Portugal, role PMO Team Member, member Test User 2); access team
-   **PR-0004 deal room** (BU Sales Portugal, members Test User 1 and 2); optional Entra group team **Sales Approvers**
+4. **Teams:** owner team **PMO Lisbon** (BU Sales Portugal, role PMO Team Member, member Sam Demo); access team
+   **PR-0004 deal room** (BU Sales Portugal, members Alex Demo and Sam Demo); optional Entra group team **Sales Approvers**
    (BU Sales, role Project Approver).
-5. **Records:** assign PR-0001 to Test User 1, PR-0002 to team PMO Lisbon; share PR-0004 with the deal room access
+5. **Records:** assign PR-0001 to Alex Demo, PR-0002 to team PMO Lisbon; share PR-0004 with the deal room access
    team (Read, Write, Append). Note the GUIDs of PR-0001 and PR-0004 (from the record URL).
 6. Terminal: dark theme, font 18+, short prompt. `export DATAVERSE_URL=...`.
 
@@ -48,17 +58,17 @@ and Sales Approvers (Microsoft Entra Security group, if created). If no group te
 ```bash
 cd src
 python3 -m rolecheck export --table mgl_projectrequest --out ../lab.json > /dev/null   # capture only the summary line
-python3 -m rolecheck verify --model ../lab.json --user "Test User 1" --record <PR-0001 guid>
-python3 -m rolecheck verify --model ../lab.json --user "Test User 2" --record <PR-0004 guid>
+python3 -m rolecheck verify --model ../lab.json --user "Alex Demo" --record <PR-0001 guid>
+python3 -m rolecheck verify --model ../lab.json --user "Sam Demo" --record <PR-0004 guid>
 ```
-Expected for Test User 2 on PR-0004: **Read = no** on both sides if Test User 2 really has no role granting Read
+Expected for Sam Demo on PR-0004: **Read = no** on both sides if Sam Demo really has no role granting Read
 (the Eva gotcha, live). Record whatever Dataverse says; if a row differs, keep it in the video and explain it
 (and add it to README "What we learned"). **Verify and note:** that `RetrieveRolePrivilegesRole` returns
 `PrivilegeName` (otherwise the exporter falls back to the `privileges` table — check the warning output) and the
 real `Depth` strings (`Basic`/`Local`/`Deep`/`Global`).
 
 ### 4. `screens/check-access.jpg` — "Check access, in the app" (**needs tenant**)
-Sign in **as Test User 1** (private browser window), open PR-0004 in a model-driven app that includes the Project
+Sign in **as Alex Demo** (private browser window), open PR-0004 in a model-driven app that includes the Project
 Request table → command bar → **Check access**: shows how the user was granted access (expected: shared, through
 the access team). Seeing *other* users' access ("who has access") needs the `IsAccessCheckerAllUsersEnabled`
 environment database setting — don't change it just for the video; if it's already on, it can be shown as an admin.

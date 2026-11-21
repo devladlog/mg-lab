@@ -1,5 +1,16 @@
 # Demo shot list — SharePoint #3 Modern sites and pages
 
+## Lab environment
+
+| Item | What this episode needs |
+|---|---|
+| VMs / Azure / Power Platform | none |
+| Tenant | **SharePoint** in the lab tenant (admin URL + sites). Created here: site scripts and site template *Contoso Purchasing* (tenant-level, removed in tear-down) and the communication site `/sites/Purchasing` (kept for episode 4). Export source: an existing hand-built lab site (e.g. episode 1's `ListsDemo`) |
+| Lab users | `labadmin` (the recording account) with the **SharePoint Administrator** role; PnP device-code sign-ins off camera. FAQ/news items are authored by labadmin (name masked) or Alex Demo |
+| Entra | The existing "MG Lab PnP" app registration (delegated) |
+| Licences / trials | lab E5 licences; cost 0 |
+| Recording machine | The Windows lab laptop: PowerShell 7.4+ with PnP.PowerShell 3.x and Pester; browser with `pipeline/mask.js` for the SharePoint screens |
+
 The code scenes are real output from this folder (lint, Pester). The four `screen` scenes need the lab tenant.
 **Needs tenant:** `Invoke-MgSiteTemplateRegistration`, `Invoke-MgSiteTemplateApply`, `Get-MgSiteTemplateRunReport`,
 `Invoke-MgPageProvisioning`, `Export-MgSiteScript`, and every non-lint path of `Invoke-ModernSite.ps1`. Locally they
@@ -10,7 +21,7 @@ entry script only by a parse check and its lint-only mode.
 | What | Notes | Cost |
 |---|---|---|
 | Lab Microsoft 365 tenant with SharePoint | existing lab tenant | €0 (existing licences) |
-| **SharePoint admin** role for the recording account | registering site scripts / site templates is tenant-level (exists) | €0 |
+| **SharePoint admin** role for `labadmin` (recording account) | registering site scripts / site templates is tenant-level (exists) | €0 |
 | Entra app for PnP with **delegated** permissions | the existing "MG Lab PnP" app (or `episodes/06-sharepoint-migration-pnp/setup/register-pnp-app.sh`) | €0 |
 | PowerShell 7.4+ with PnP.PowerShell 3.x and Pester | `Install-Module PnP.PowerShell, Pester -Scope CurrentUser` | €0 |
 | Free slots: the tenant must have fewer than 100 site scripts and 100 site templates | `Get-PnPSiteScript`, `Get-PnPSiteDesign` (connected to the admin URL) | €0 |

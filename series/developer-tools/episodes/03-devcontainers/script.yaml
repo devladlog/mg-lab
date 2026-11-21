@@ -1,0 +1,279 @@
+# DEVLADLOG Dev Tools — episode 03. Code excerpts and terminal output are real (src/orders-app, tests/,
+# registry data read on 21 Nov 2026). The four `screen` scenes are recorded later on the Windows recording laptop
+# (VS Code + Docker Desktop with WSL 2): see demo.md.
+episode: 3
+slug: devcontainers
+series_label: "DEV TOOLS"
+series_name: "DEVLADLOG Dev Tools"
+file_prefix: "developer-tools"
+title: "Dev Containers: the whole dev environment, in the repo"
+subtitle: ".NET 10, Features, lifecycle scripts, and a pin that froze"
+voice: am_michael
+thumbnail_text: "CLONE.\nREOPEN.\nCODE."
+youtube:
+  title: "Dev Containers for .NET 10 in VS Code: devcontainer.json, Features, Gotchas | DEVLADLOG Dev Tools #3"
+  tags: [Dev Containers, devcontainer.json, VS Code, Docker Desktop, WSL 2, .NET 10, GitHub Codespaces, Dev Container Features, developer environment, DevTools]
+sources:
+  - https://www.devladlog.com/articles/developer-tools/2025-12-27-devcontainers-complete-guide-2025/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Clone. Reopen in Container. Code."
+    sub: "The whole dev environment, versioned in the repo"
+    short: hook
+    narration: >
+      A new developer joins the team. Day one is installing the right SDK, the right Python for the Git hooks,
+      the GitHub CLI, the extensions, and then asking why the tests fail only on their machine. In this episode
+      that whole list becomes one file in the repository. Clone, reopen in container, and the tests pass.
+      Welcome to DEVLADLOG Dev Tools.
+
+  - id: plan
+    type: bullets
+    heading: "What goes in the repo"
+    bullets:
+      - "An image: .NET 10 SDK on Ubuntu, non-root user"
+      - "Features: Python for the hooks, GitHub CLI"
+      - "Ports, a NuGet cache volume, the team's extensions"
+      - "A post-create script: hooks, restore, a summary line"
+      - "Tests for all of it, without a Docker daemon"
+    narration: >
+      Our orders app from the last two episodes is now a dot net ten API. Into the repo go a base image with the
+      SDK, Features for Python and the GitHub CLI, the forwarded port, a cache volume, the team's extensions, a post
+      create script, and tests for all of it that run even without Docker.
+
+  - id: image
+    type: code
+    heading: "devcontainer.json: image and Features"
+    lang: json
+    code: |
+      {
+        "name": "Contoso orders-app (.NET 10)",
+        // "3-" pins the image's own major version: no breaking image change arrives silently.
+        "image": "mcr.microsoft.com/devcontainers/dotnet:3-10.0-noble",
+
+        // Features add tools on top of the image. Pin the major version (":1"), like a package reference.
+        "features": {
+          "ghcr.io/devcontainers/features/python:1": {
+            "version": "os-provided",
+            "installTools": false
+          },
+          "ghcr.io/devcontainers/features/github-cli:1": {}
+        },
+    narration: >
+      The file lives in dot devcontainer. The image is Microsoft's dev container image for dot net ten on Ubuntu
+      twenty four oh four. Notice the three in front of the tag: that pins the image's own major version, and we'll
+      come back to it. Features add tools on top. The hooks only need the distribution's Python, so we skip the extra
+      linters. Each Feature is pinned to its major version, like a package reference.
+
+  - id: config
+    type: code
+    heading: "Ports, a cache volume, lifecycle, extensions"
+    lang: json
+    code: |
+      "forwardPorts": [8080],
+      "mounts": [
+        "source=${localWorkspaceFolderBasename}-nuget,target=/home/vscode/.nuget/packages,type=volume"
+      ],
+      "postCreateCommand": "bash .devcontainer/post-create.sh",
+          "extensions": [
+            "editorconfig.editorconfig",
+            "github.vscode-github-actions",
+            "ms-dotnettools.csdevkit",
+            "-dbaeumer.vscode-eslint"
+          ],
+
+      "hostRequirements": {
+        "cpus": 2,
+        "memory": "4gb"
+      },
+    narration: >
+      Port eight thousand eighty is forwarded. NuGet packages go into a named volume, so a rebuild
+      doesn't download them again. Extensions install inside the container, not on your laptop, and the minus sign
+      removes one we don't want. Host requirements only matter in GitHub Codespaces, where they set the smallest
+      machine you can pick.
+
+  - id: reopen
+    type: screen
+    heading: "Reopen in Container"
+    image: screens/reopen.jpg
+    bar: "VS Code · Dev Containers · orders-app (WSL)"
+    demo: >
+      VS Code connected to WSL, folder ~/src/orders-app (cloned in the WSL file system). F1 → "Dev Containers: Reopen
+      in Container". Capture after the first build: bottom-left remote indicator "Dev Container: Contoso orders-app
+      (.NET 10)", and the terminal output of the postCreateCommand ending with the line
+      "Dev container ready: dotnet 10.0.4xx | Python 3.x | gh 2.x" (real versions, whatever they are).
+    narration: >
+      On the recording laptop: Windows, Docker Desktop with the W S L two engine, and the repo cloned inside the
+      W S L file system. Reopen in container. The first build pulls the image and installs the Features. Then the post
+      create script runs, and its last line tells us exactly which toolchain we got.
+
+  - id: postcreate
+    type: code
+    heading: "post-create.sh: safe to run twice"
+    lang: bash
+    code: |
+      set -euo pipefail
+      cd "$(dirname "$0")/.."
+
+      # 1. The NuGet cache is a named volume (see "mounts"). Docker creates new volumes owned by root,
+      #    and the tools run as the non-root remoteUser, so take ownership once.
+      nuget="${NUGET_PACKAGES:-$HOME/.nuget/packages}"
+      if [ -d "$nuget" ] && [ ! -w "$nuget" ]; then
+        sudo chown -R "$(id -u):$(id -g)" "$nuget"
+      fi
+
+      # 2. Episode 1 guardrails: versioned hooks and safe Git defaults (hooks are not copied by git clone).
+      if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+        bash scripts/setup-dev.sh
+      fi
+      dotnet restore OrdersApp.slnx --verbosity quiet
+    short: postcreate
+    narration: >
+      The script does three things. Docker creates a new named volume owned by root, and our tools run as the
+      vscode user, so it takes ownership once. The VS Code docs do the same with sudo chown. Then it installs the
+      episode one Git hooks, because git clone never copies hooks. Then it restores packages. It runs again after
+      every rebuild, so every step is safe to repeat, and a failed restore stops it.
+
+  - id: run
+    type: screen
+    heading: "Same API, running in Linux"
+    image: screens/run.jpg
+    bar: "VS Code · Dev Container · Ports"
+    demo: >
+      Integrated terminal in the container: `dotnet test` → "Passed! ... Passed: 15", then
+      `dotnet run --project src/Contoso.Orders.Api`. Ports view showing 8080 with label "Orders API" forwarded.
+      Browser on Windows at http://localhost:8080/healthz showing JSON with "os": "Ubuntu 24.04..." and
+      "inContainer": true; second tab http://localhost:8080/orders?page=5 showing 37 items.
+    narration: >
+      Fifteen tests pass inside the container. Dot net run, and VS Code forwards port eight thousand eighty with our
+      label. The browser runs on Windows, but health z reports Ubuntu twenty four oh four, and in container true.
+      Page five of the orders has thirty seven items, the paging rule from episode one.
+
+  - id: lifecycle
+    type: bullets
+    heading: "Which script runs when"
+    bullets:
+      - "initializeCommand: on the host, before anything"
+      - "onCreate, updateContent, postCreate: once per container"
+      - "postStartCommand: every start"
+      - "postAttachCommand: every time a tool attaches"
+      - "If one fails, the ones after it don't run"
+    narration: >
+      The spec defines six lifecycle commands. Initialize command runs on the host. On create, update content and
+      post create run inside the container when it's created, in that order. Post start runs on every start, post
+      attach every time VS Code attaches. And if one fails, the later ones are skipped. That's why our script fails
+      loudly instead of carrying on.
+
+  - id: frozen
+    type: code
+    heading: "Gotcha: the pin that froze"
+    lang: text
+    code: |
+      $ python3 tools/devcontainer_check.py --image mcr.microsoft.com/devcontainers/dotnet:1-10.0-noble
+      Pinned:    1-10.0-noble     image 1.5.5  built 2025-10-16  DOTNET_SDK_VERSION=10.0.100-rc.2.25502.107
+      Floating:  10.0-noble       image 3.0.1  built 2026-11-20  DOTNET_SDK_VERSION=10.0.404
+      STALE: pinned image major 1 but '10.0-noble' is on 3.0.1: the pinned tag no longer gets updates.
+             Review the changes, then move to 3-10.0-noble.
+
+      $ python3 tools/devcontainer_check.py
+      Pinned:    3-10.0-noble     image 3.0.1  built 2026-11-20  DOTNET_SDK_VERSION=10.0.404
+      Floating:  10.0-noble       image 3.0.1  built 2026-11-20  DOTNET_SDK_VERSION=10.0.404
+      OK
+    short: gotcha
+    narration: >
+      Now the honest part. We first pinned the image with a one in front. Reasonable: no surprise breaking changes.
+      But when the image moved to its next major, that tag simply stopped being rebuilt. We checked the registry: our
+      pin was last built in October twenty twenty five, with a release candidate SDK. A year after dot net ten
+      shipped, that's still what we'd get. Nothing failed. So we wrote a small check that reads both tags from the
+      registry, no Docker needed, and exits with an error when the pin falls behind.
+
+  - id: merged
+    type: code
+    heading: "You get more extensions than you list"
+    lang: text
+    code: |
+      $ devcontainer read-configuration --workspace-folder . --include-merged-configuration
+      # mergedConfiguration -> customizations.vscode[*].extensions (comments added)
+      ['dbaeumer.vscode-eslint']                                  # image (Node Feature)
+      ['ms-dotnettools.csharp']                                   # image
+      ['ms-python.python', 'ms-python.vscode-pylance',
+       'ms-python.autopep8']                                      # Python Feature
+      ['editorconfig.editorconfig', 'github.vscode-github-actions',
+       'ms-dotnettools.csdevkit', '-dbaeumer.vscode-eslint']      # ours
+    narration: >
+      Second surprise. The image carries its own metadata, and so does every Feature. The dev container C L I shows
+      the merged result. The dot net image brings E S Lint, because it bakes in Node. The Python Feature brings three
+      Python extensions. We don't have JavaScript, so minus E S Lint removes it, and a test fails if a removal points
+      at something nobody adds.
+
+  - id: extensions
+    type: screen
+    heading: "Installed in the container, not on the laptop"
+    image: screens/extensions.jpg
+    bar: "VS Code · Extensions · Dev Container"
+    demo: >
+      Extensions view inside the dev container: the section "DEV CONTAINER: CONTOSO ORDERS-APP (.NET 10) - INSTALLED"
+      listing C# Dev Kit, C#, EditorConfig, GitHub Actions and the Python extensions; type "eslint" in the search box
+      to show it is NOT installed in the container. Optional: Docker Desktop → Volumes showing "orders-app-nuget".
+    narration: >
+      The dev container has its own installed list: C sharp Dev Kit, EditorConfig, GitHub Actions, the Python ones.
+      E S Lint isn't there.
+
+  - id: tests
+    type: code
+    heading: "Tested without Docker"
+    lang: text
+    code: |
+      $ python3 -m pytest -v tests
+      test_devcontainer_config.py::test_matches_the_official_schemas                    PASSED
+      test_devcontainer_config.py::test_schema_catches_a_typo_in_a_lifecycle_property   PASSED
+      test_devcontainer_config.py::test_feature_options_exist_in_the_published_manif... PASSED
+      test_devcontainer_config.py::test_extensions_are_valid_and_removals_target_som... PASSED
+      test_post_create.py::test_post_create_installs_hooks_and_restores                 PASSED
+      test_post_create.py::test_post_create_is_safe_to_run_twice                        PASSED
+      test_post_create.py::test_root_owned_volume_is_handed_to_the_non_root_user        PASSED
+      test_devcontainer_check.py::test_the_old_major_pin_is_stuck_on_a_release_candi... PASSED
+      test_devcontainer_cli.py::test_merged_configuration_shows_extensions_we_did_no... PASSED
+      ...
+      45 passed in 22.90s
+    narration: >
+      Forty five pytest tests, plus fifteen x unit tests for the API. The official schemas reject unknown
+      properties, so a typo in post create command fails. The post create script runs for real in a throwaway copy,
+      twice, and once as an unprivileged user with a root owned volume. Only building the container needs Docker.
+
+  - id: windows
+    type: screen
+    heading: "Windows: keep the code in WSL"
+    image: screens/wsl.jpg
+    bar: "Windows Terminal · Ubuntu (WSL 2) · Docker Desktop"
+    demo: >
+      Split capture: left, Windows Terminal with the Ubuntu WSL tab: `pwd` → /home/<user>/src/orders-app (mask the
+      user name) and `docker version --format '{{.Server.Os}}'` → linux. Right, Docker Desktop → Settings → General
+      with "Use the WSL 2 based engine" checked, and Resources → WSL integration enabled for Ubuntu.
+    narration: >
+      One Windows rule from Microsoft Learn: keep the project in the W S L file system, not on drive C. From C,
+      Docker goes through a cross O S file share, which is significantly slower, and file watching can miss changes.
+
+  - id: recap
+    type: bullets
+    heading: "Five rules"
+    bullets:
+      - "The environment is code: review it like code"
+      - "Pin image and Feature majors, and check the pin moves"
+      - "Look at the merged config, not just your file"
+      - "Lifecycle scripts: idempotent, fail loudly"
+      - "On Windows, clone into WSL"
+    narration: >
+      Five rules. The dev environment is code, reviewed in pull requests like everything else. Pin the image and
+      Feature majors, and check that your pin still gets updates. Look at the merged configuration, not just your
+      file. Make lifecycle scripts idempotent and loud on failure. And on Windows, clone into W S L.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The dev container, the image check and all the tests are on GitHub, and the complete guide is on devladlog dot
+      com. Next time we take the same API from the dev container to an image of its own, with Docker and Compose and
+      a real SQL Server next to it. Subscribe so you don't miss it. This was DEVLADLOG Dev Tools, by Momento Galático.

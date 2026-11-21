@@ -1,5 +1,16 @@
 # Demo shot list — DEVLADLOG Deep Dive #1, Enterprise document intelligence
 
+## Lab environment
+
+| Item | What this episode needs |
+|---|---|
+| VMs | none |
+| Tenant | Power Platform environment **`DEV`** (Dataverse: solution `Invoice intake`, environment variables incl. the Key Vault secret). **SharePoint**: a lab site `/sites/finance-lab` (create it as `labadmin` if missing; shown masked) with the *Invoices Inbox* library provisioned by `provision/New-InvoiceInbox.ps1` |
+| Lab users | `labadmin` (the recording account): owner of the flow and the solution, SharePoint site owner, Owner on the subscription. **`alex.demo` (Alex Demo)** uploads the three invoices, so *Created by* / *Modified by* show a fictional name |
+| Azure | Resource group **`rg-mglab-deep-dive-01`** in **West Europe** (check `az functionapp list-flexconsumption-locations`), deployed by `infra/main.bicep`: Document Intelligence **S0** (pay per page: three one-page invoices plus retries, cents; F0 also works, free), Function App on Flex Consumption (per execution, cents), Storage, Application Insights; plus the **Key Vault** (Azure RBAC, standard) for `invoice-api-key`, created in the same group so tear-down removes it. Estimated total under €1. Tear-down: delete the resource group, purge the vault |
+| Licences / trials | **Power Automate Premium** for `labadmin` (the HTTP action is premium). Not in the shared lab list: use the Power Automate trial started in `DEV` if it includes premium connectors, otherwise start a Premium trial for labadmin. SharePoint and Dataverse connectors are standard. Register `Microsoft.PowerPlatform` in the subscription |
+| Recording machine | The Windows lab laptop: browser (SharePoint, Power Automate, maker portal) with `pipeline/mask.js`; WSL (Ubuntu) bash with Azure CLI, Functions Core Tools v4, Python 3.11+, Bicep CLI; PowerShell 7.4+ with PnP.PowerShell on Windows for the library script |
+
 Code and test scenes in `script.yaml` are already real (from this folder). The four `screen` scenes need the lab.
 **Status: needs tenant** for everything on screen. Offline: 59 pytest + 13 Pester tests, `bicep build`/`lint` pass.
 
@@ -28,24 +39,24 @@ Code and test scenes in `script.yaml` are already real (from this folder). The f
    ```
 2. **Azure resources**
    ```bash
-   az login                                                      # lab account, off camera
+   az login                                                      # labadmin, off camera
    az functionapp list-flexconsumption-locations -o table        # westeurope must be listed, else change main.bicepparam
-   az group create -n rg-mglab-docintel -l westeurope
-   az deployment group create -g rg-mglab-docintel -f infra/main.bicep -p infra/main.bicepparam \
+   az group create -n rg-mglab-deep-dive-01 -l westeurope
+   az deployment group create -g rg-mglab-deep-dive-01 -f infra/main.bicep -p infra/main.bicepparam \
       --query properties.outputs -o json > /tmp/docintel-outputs.json      # don't show on camera
    cd src && func azure functionapp publish <functionAppName> && cd ..
    ```
    Role assignments can take a few minutes. Smoke test (off camera):
    ```bash
    export INVOICE_API_URL=$(jq -r .extractUrl.value /tmp/docintel-outputs.json)
-   read -rs INVOICE_API_KEY && export INVOICE_API_KEY     # az functionapp keys list -g rg-mglab-docintel -n <app> --query functionKeys.default -o tsv
+   read -rs INVOICE_API_KEY && export INVOICE_API_KEY     # az functionapp keys list -g rg-mglab-deep-dive-01 -n <app> --query functionKeys.default -o tsv
    python samples/smoke.py samples/out/*.pdf
    ```
    Expect `fabrikam-clean.pdf  Ready` and the other two `Needs review` with reasons. A `503` right after deployment
    usually means the role assignment hasn't propagated yet: wait and retry. **Write down the actual confidence values**
    for the README (they are unknown until this run).
-3. **Key Vault secret** for the function key: create a vault with the **Azure RBAC** permission model in the same
-   tenant, add secret `invoice-api-key` = the function key, and follow Learn's *Configure Azure Key Vault* steps
+3. **Key Vault secret** for the function key: create a vault with the **Azure RBAC** permission model in
+   `rg-mglab-deep-dive-01`, add secret `invoice-api-key` = the function key, and follow Learn's *Configure Azure Key Vault* steps
    (Key Vault Secrets User for the maker and for Dataverse).
 4. **SharePoint library**
    ```powershell
@@ -89,14 +100,14 @@ don't edit values by hand.
 
 ## Masking
 - Run `pipeline/mask.js` in the browser before each capture. Mask: tenant name in URLs and the suite bar, user
-  names/avatars (use the *Alex Demo* account), environment name/ID in Power Automate, function app host name in the
+  names/avatars (uploads as *Alex Demo*; labadmin's name masked), environment name/ID in Power Automate, function app host name in the
   HTTP action, subscription/resource IDs in any Azure portal view.
 - Never show the function key, the Key Vault secret value, `/tmp/docintel-outputs.json`, or the `func` publish output
   (it prints the host name).
 
 ## Tear-down
 ```bash
-az group delete -n rg-mglab-docintel --yes --no-wait
+az group delete -n rg-mglab-deep-dive-01 --yes --no-wait
 ```
 Then: turn off and delete the `Invoice intake` flow and its solution (with the environment variables), delete the
 Key Vault (and purge it if soft delete is on), delete the *Invoices Inbox* library, and remove the PnP app

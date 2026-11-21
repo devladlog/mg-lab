@@ -1,5 +1,15 @@
 # Demo shot list: DEVLADLOG Power Automate #3, One expression instead of a loop
 
+## Lab environment
+
+| Item | What this episode needs |
+|---|---|
+| VMs / Azure | none |
+| Tenant | Power Platform environment **`DEV`** (solution `Purchasing Reports`, one scheduled flow). **SharePoint**: site `Purchasing` with episode 2's **Purchase Requests** list |
+| Lab users | `labadmin` (the recording account): maker, flow owner. Requesters creating last week's items: **`alex.demo`**, **`jordan.demo`** and **`taylor.demo`** (Taylor Demo takes the place of "Casey Demo", which exists only in the offline mocks). Recipient: episode 2's Microsoft 365 group **`finance-approvers`** (member `jordan.demo`) |
+| Licences / trials | standard connectors only: lab E5 licences; cost 0 |
+| Recording machine | The Windows lab laptop: browser (SharePoint, make.powerautomate.com, Outlook on the web for the mailboxes) with `pipeline/mask.js`; terminal with Power Platform CLI (`pac`) and Python 3 for export/unpack and the tests |
+
 Everything in `src/` and `tests/` already runs locally (see README). This file is for the recording session in the
 **lab tenant**. Items marked **needs tenant** can't be validated from the build container.
 
@@ -10,7 +20,7 @@ Everything in `src/` and `tests/` already runs locally (see README). This file i
 | MG Lab DEV environment with Dataverse (exists) | Solution-aware flow | none |
 | Standard licence for the maker (Microsoft 365 or Power Automate) | Recurrence, SharePoint, Outlook and data operations are standard | none |
 | SharePoint site `Purchasing` with the `Purchase Requests` list from episode 2 | Data source | none |
-| Test users **Alex Demo**, **Jordan Demo**, **Casey Demo**; a `finance-approvers` test mailbox or group | Requesters and recipient | none |
+| Lab users **Alex Demo**, **Jordan Demo**, **Taylor Demo**; episode 2's `finance-approvers` group | Requesters and recipient | none |
 | Power Platform CLI + Python 3 on the recording machine | Export/unpack and re-run tests | none |
 
 No premium connectors, no trials, no Azure resources.

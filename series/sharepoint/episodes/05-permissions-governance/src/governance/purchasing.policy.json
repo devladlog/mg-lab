@@ -1,0 +1,34 @@
+{
+  "$comment": "Governance policy for the Contoso Purchasing communication site (episodes 3 and 4). Fictional names.",
+  "site": "Contoso Purchasing",
+  "organizationSharingCapability": "ExternalUserAndGuestSharing",
+  "sharing": {
+    "capability": "Disabled",
+    "defaultLinkType": "Direct",
+    "defaultLinkPermission": "View"
+  },
+  "sensitivityLabel": { "name": "Confidential", "id": null },
+  "owners": { "min": 2, "max": 5 },
+  "siteAdmins": { "max": 3 },
+  "forbiddenPrincipals": ["Everyone", "Everyone except external users"],
+  "fullControlOnlyFor": ["@Owners"],
+  "uniquePermissions": {
+    "maxItemScopesPerList": 50,
+    "allowedLists": [
+      {
+        "title": "Supplier Documents",
+        "reason": "Contracts and invoices: Contract Managers edit, the rest of purchasing reads.",
+        "allowItemScopes": false,
+        "access": {
+          "@Owners": "Full Control",
+          "Contract Managers": "Contribute",
+          "@Visitors": "Read"
+        }
+      }
+    ]
+  },
+  "sharingLinks": {
+    "forbiddenScopes": ["Anonymous"],
+    "warnScopes": ["Organization"]
+  }
+}

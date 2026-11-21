@@ -1,0 +1,95 @@
+{
+  "_comment": "Reference definition of the 'Invoice ready to approval queue' cloud flow. Written by hand from the designer steps in demo.md and checked by tests (ContractTests); NOT yet imported. After the lab build, replace it with the exported definition.",
+  "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "$connections": {
+      "defaultValue": {},
+      "type": "Object"
+    },
+    "$authentication": {
+      "defaultValue": {},
+      "type": "SecureObject"
+    },
+    "Site URL (mgl_SiteUrl)": {
+      "defaultValue": "https://contoso.sharepoint.com/sites/finance-lab",
+      "type": "String",
+      "metadata": {
+        "schemaName": "mgl_SiteUrl"
+      }
+    },
+    "Invoices library (mgl_InvoicesLibrary)": {
+      "defaultValue": "00000000-0000-0000-0000-000000000000",
+      "type": "String",
+      "metadata": {
+        "schemaName": "mgl_InvoicesLibrary"
+      }
+    }
+  },
+  "triggers": {
+    "When_a_file_is_created_or_modified_(properties_only)": {
+      "type": "OpenApiConnection",
+      "recurrence": {
+        "interval": 1,
+        "frequency": "Minute"
+      },
+      "splitOn": "@triggerOutputs()?['body/value']",
+      "conditions": [
+        {
+          "expression": "@and(equals(triggerOutputs()?['body/InvStatus/Value'], 'Ready'), or(empty(triggerOutputs()?['body/InvApprovalStatus/Value']), equals(triggerOutputs()?['body/InvApprovalStatus/Value'], 'Not started')))"
+        }
+      ],
+      "inputs": {
+        "host": {
+          "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+          "connectionName": "shared_sharepointonline",
+          "operationId": "GetOnUpdatedFileItems"
+        },
+        "parameters": {
+          "dataset": "@parameters('Site URL (mgl_SiteUrl)')",
+          "table": "@parameters('Invoices library (mgl_InvoicesLibrary)')"
+        },
+        "authentication": "@parameters('$authentication')"
+      }
+    }
+  },
+  "actions": {
+    "Compose_message": {
+      "type": "Compose",
+      "runAfter": {},
+      "inputs": {
+        "invoiceKey": "@triggerOutputs()?['body/InvDedupKey']",
+        "itemId": "@triggerOutputs()?['body/ID']",
+        "vendor": "@triggerOutputs()?['body/InvVendor']",
+        "invoiceNumber": "@triggerOutputs()?['body/InvNumber']",
+        "total": "@triggerOutputs()?['body/InvTotal']",
+        "currency": "@triggerOutputs()?['body/InvCurrency']",
+        "submittedBy": "@triggerOutputs()?['body/Author/Email']",
+        "fileUrl": "@triggerOutputs()?['body/{Link}']"
+      }
+    },
+    "Send_message": {
+      "type": "OpenApiConnection",
+      "runAfter": {
+        "Compose_message": [
+          "Succeeded"
+        ]
+      },
+      "inputs": {
+        "host": {
+          "apiId": "/providers/Microsoft.PowerApps/apis/shared_servicebus",
+          "connectionName": "shared_servicebus",
+          "operationId": "SendMessage"
+        },
+        "parameters": {
+          "entityName": "invoice-approvals",
+          "systemProperties": "None",
+          "message/ContentData": "@{base64(string(outputs('Compose_message')))}",
+          "message/ContentType": "application/json",
+          "message/MessageId": "@triggerOutputs()?['body/InvDedupKey']"
+        },
+        "authentication": "@parameters('$authentication')"
+      }
+    }
+  }
+}

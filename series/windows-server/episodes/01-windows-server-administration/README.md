@@ -33,11 +33,13 @@ pwsh -NoProfile -Command './Invoke-ServerBaseline.ps1 -FromSnapshot ../tests/fix
 
 ## Run it against real servers (lab)
 
-From an admin machine with PowerShell 7.2+ joined to the domain (or with `-Credential`):
+From an admin machine with PowerShell 7.2+ joined to the domain (or with `-Credential`). In the shared lab
+(`series/LAB.md`) that is CON-CLI01, and the targets are CON-DC01, CON-SRV01 (app server) and CON-SRV02 (file
+server, Desktop Experience); see demo.md:
 
 ```powershell
 cd src
-./Invoke-ServerBaseline.ps1 -ComputerName CON-DC01, CON-FS01, CON-APP01 -SnapshotDir ./snapshots -OutFile ./report.md
+./Invoke-ServerBaseline.ps1 -ComputerName CON-DC01, CON-SRV01, CON-SRV02 -SnapshotDir ./snapshots -OutFile ./report.md
 ./Invoke-ServerBaseline.ps1 -FromSnapshot ./snapshots/*.json -OutFile ./report.md     # re-check later, no servers needed
 ```
 

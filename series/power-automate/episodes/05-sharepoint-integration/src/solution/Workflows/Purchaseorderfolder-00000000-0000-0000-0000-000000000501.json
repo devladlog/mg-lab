@@ -1,0 +1,425 @@
+{
+  "properties": {
+    "connectionReferences": {
+      "shared_sharepointonline": {
+        "runtimeSource": "embedded",
+        "connection": {
+          "connectionReferenceLogicalName": "cts_sharedsharepointonline_purchasing"
+        },
+        "api": {
+          "name": "shared_sharepointonline"
+        }
+      },
+      "shared_office365": {
+        "runtimeSource": "embedded",
+        "connection": {
+          "connectionReferenceLogicalName": "cts_sharedoffice365_orders"
+        },
+        "api": {
+          "name": "shared_office365"
+        }
+      }
+    },
+    "definition": {
+      "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+      "contentVersion": "1.0.0.0",
+      "parameters": {
+        "$connections": {
+          "defaultValue": {},
+          "type": "Object"
+        },
+        "$authentication": {
+          "defaultValue": {},
+          "type": "SecureObject"
+        },
+        "Purchasing site URL (cts_PurchasingSiteUrl)": {
+          "defaultValue": "https://contoso.sharepoint.com/sites/Purchasing",
+          "type": "String",
+          "metadata": {
+            "schemaName": "cts_PurchasingSiteUrl",
+            "description": "Purchasing site, no trailing slash"
+          }
+        },
+        "Orders library path (cts_OrdersLibraryPath)": {
+          "defaultValue": "/sites/Purchasing/Orders",
+          "type": "String",
+          "metadata": {
+            "schemaName": "cts_OrdersLibraryPath",
+            "description": "Server-relative path of the Orders library"
+          }
+        }
+      },
+      "triggers": {
+        "When_a_purchase_request_is_modified": {
+          "type": "OpenApiConnection",
+          "recurrence": {
+            "interval": 5,
+            "frequency": "Minute"
+          },
+          "splitOn": "@triggerOutputs()?['body/value']",
+          "conditions": [
+            {
+              "expression": "@equals(triggerBody()?['Status']?['Value'], 'Approved')"
+            }
+          ],
+          "inputs": {
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+              "connectionName": "shared_sharepointonline",
+              "operationId": "GetOnChangedItems"
+            },
+            "parameters": {
+              "dataset": "@parameters('Purchasing site URL (cts_PurchasingSiteUrl)')",
+              "table": "Purchase Requests"
+            },
+            "authentication": "@parameters('$authentication')"
+          }
+        }
+      },
+      "actions": {
+        "Get_changes": {
+          "type": "OpenApiConnection",
+          "runAfter": {},
+          "inputs": {
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+              "connectionName": "shared_sharepointonline",
+              "operationId": "GetItemChanges"
+            },
+            "parameters": {
+              "dataset": "@parameters('Purchasing site URL (cts_PurchasingSiteUrl)')",
+              "table": "Purchase Requests",
+              "id": "@triggerBody()?['ID']",
+              "since": "@triggerBody()?['{TriggerWindowStartToken}']",
+              "until": "@triggerBody()?['{TriggerWindowEndToken}']",
+              "includeDrafts": false
+            },
+            "authentication": "@parameters('$authentication')"
+          }
+        },
+        "PR_reference": {
+          "type": "Compose",
+          "runAfter": {
+            "Get_changes": [
+              "Succeeded"
+            ]
+          },
+          "inputs": "PR-@{formatNumber(triggerBody()?['ID'], '00000')}"
+        },
+        "Needs_order_folder": {
+          "type": "If",
+          "runAfter": {
+            "PR_reference": [
+              "Succeeded"
+            ]
+          },
+          "expression": "@empty(triggerBody()?['OrderFolder'])",
+          "actions": {
+            "Create_order_folder": {
+              "type": "OpenApiConnection",
+              "runAfter": {},
+              "inputs": {
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                  "connectionName": "shared_sharepointonline",
+                  "operationId": "CreateNewFolder"
+                },
+                "parameters": {
+                  "dataset": "@parameters('Purchasing site URL (cts_PurchasingSiteUrl)')",
+                  "table": "Orders",
+                  "path": "@{outputs('PR_reference')}"
+                },
+                "authentication": "@parameters('$authentication')"
+              }
+            },
+            "Ensure_requester": {
+              "type": "OpenApiConnection",
+              "runAfter": {
+                "Create_order_folder": [
+                  "Succeeded"
+                ]
+              },
+              "inputs": {
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                  "connectionName": "shared_sharepointonline",
+                  "operationId": "HttpRequest"
+                },
+                "parameters": {
+                  "dataset": "@parameters('Purchasing site URL (cts_PurchasingSiteUrl)')",
+                  "parameters/method": "POST",
+                  "parameters/uri": "_api/web/ensureuser",
+                  "parameters/headers": {
+                    "Accept": "application/json;odata=nometadata",
+                    "Content-Type": "application/json;odata=nometadata"
+                  },
+                  "parameters/body": "{ \"logonName\": \"@{triggerBody()?['Author']?['Claims']}\" }"
+                },
+                "authentication": "@parameters('$authentication')"
+              }
+            },
+            "Get_read_role": {
+              "type": "OpenApiConnection",
+              "runAfter": {
+                "Create_order_folder": [
+                  "Succeeded"
+                ]
+              },
+              "inputs": {
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                  "connectionName": "shared_sharepointonline",
+                  "operationId": "HttpRequest"
+                },
+                "parameters": {
+                  "dataset": "@parameters('Purchasing site URL (cts_PurchasingSiteUrl)')",
+                  "parameters/method": "GET",
+                  "parameters/uri": "_api/web/roledefinitions/getbyname('Read')?$select=Id",
+                  "parameters/headers": {
+                    "Accept": "application/json;odata=nometadata"
+                  }
+                },
+                "authentication": "@parameters('$authentication')"
+              }
+            },
+            "Break_inheritance": {
+              "type": "OpenApiConnection",
+              "runAfter": {
+                "Create_order_folder": [
+                  "Succeeded"
+                ]
+              },
+              "inputs": {
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                  "connectionName": "shared_sharepointonline",
+                  "operationId": "HttpRequest"
+                },
+                "parameters": {
+                  "dataset": "@parameters('Purchasing site URL (cts_PurchasingSiteUrl)')",
+                  "parameters/method": "POST",
+                  "parameters/uri": "_api/web/GetFolderByServerRelativeUrl('@{parameters('Orders library path (cts_OrdersLibraryPath)')}/@{outputs('PR_reference')}')/ListItemAllFields/breakroleinheritance(copyRoleAssignments=true,clearSubscopes=true)",
+                  "parameters/headers": {
+                    "Accept": "application/json;odata=nometadata"
+                  }
+                },
+                "authentication": "@parameters('$authentication')"
+              }
+            },
+            "Grant_requester_read": {
+              "type": "OpenApiConnection",
+              "runAfter": {
+                "Ensure_requester": [
+                  "Succeeded"
+                ],
+                "Get_read_role": [
+                  "Succeeded"
+                ],
+                "Break_inheritance": [
+                  "Succeeded"
+                ]
+              },
+              "inputs": {
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                  "connectionName": "shared_sharepointonline",
+                  "operationId": "HttpRequest"
+                },
+                "parameters": {
+                  "dataset": "@parameters('Purchasing site URL (cts_PurchasingSiteUrl)')",
+                  "parameters/method": "POST",
+                  "parameters/uri": "_api/web/GetFolderByServerRelativeUrl('@{parameters('Orders library path (cts_OrdersLibraryPath)')}/@{outputs('PR_reference')}')/ListItemAllFields/roleassignments/addroleassignment(principalid=@{body('Ensure_requester')?['Id']},roledefid=@{body('Get_read_role')?['Id']})",
+                  "parameters/headers": {
+                    "Accept": "application/json;odata=nometadata"
+                  }
+                },
+                "authentication": "@parameters('$authentication')"
+              }
+            },
+            "Create_summary_file": {
+              "type": "OpenApiConnection",
+              "runAfter": {
+                "Grant_requester_read": [
+                  "Succeeded"
+                ]
+              },
+              "inputs": {
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                  "connectionName": "shared_sharepointonline",
+                  "operationId": "CreateFile"
+                },
+                "parameters": {
+                  "dataset": "@parameters('Purchasing site URL (cts_PurchasingSiteUrl)')",
+                  "folderPath": "/Orders/@{outputs('PR_reference')}",
+                  "name": "@{outputs('PR_reference')}-summary.html",
+                  "body": "<h1>@{outputs('PR_reference')}: @{triggerBody()?['Title']}</h1><p>Requested by @{triggerBody()?['Author']?['DisplayName']}</p><p>Amount: @{formatNumber(triggerBody()?['Amount'], '#,##0.00', 'en-US')} EUR</p><p>Approved by @{triggerBody()?['DecisionBy']}</p><p>@{triggerBody()?['Justification']}</p>"
+                },
+                "authentication": "@parameters('$authentication')"
+              }
+            },
+            "Tag_summary_file": {
+              "type": "OpenApiConnection",
+              "runAfter": {
+                "Create_summary_file": [
+                  "Succeeded"
+                ]
+              },
+              "inputs": {
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                  "connectionName": "shared_sharepointonline",
+                  "operationId": "PatchFileItem"
+                },
+                "parameters": {
+                  "dataset": "@parameters('Purchasing site URL (cts_PurchasingSiteUrl)')",
+                  "table": "Orders",
+                  "id": "@body('Create_summary_file')?['ItemId']",
+                  "item/RequestId": "@triggerBody()?['ID']",
+                  "item/RequestAmount": "@triggerBody()?['Amount']"
+                },
+                "authentication": "@parameters('$authentication')"
+              }
+            },
+            "Get_list_item_type": {
+              "type": "OpenApiConnection",
+              "runAfter": {
+                "Tag_summary_file": [
+                  "Succeeded"
+                ]
+              },
+              "inputs": {
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                  "connectionName": "shared_sharepointonline",
+                  "operationId": "HttpRequest"
+                },
+                "parameters": {
+                  "dataset": "@parameters('Purchasing site URL (cts_PurchasingSiteUrl)')",
+                  "parameters/method": "GET",
+                  "parameters/uri": "_api/web/lists/GetByTitle('Purchase Requests')?$select=ListItemEntityTypeFullName",
+                  "parameters/headers": {
+                    "Accept": "application/json;odata=nometadata"
+                  }
+                },
+                "authentication": "@parameters('$authentication')"
+              }
+            },
+            "Link_folder_on_request": {
+              "type": "OpenApiConnection",
+              "runAfter": {
+                "Get_list_item_type": [
+                  "Succeeded"
+                ]
+              },
+              "inputs": {
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                  "connectionName": "shared_sharepointonline",
+                  "operationId": "HttpRequest"
+                },
+                "parameters": {
+                  "dataset": "@parameters('Purchasing site URL (cts_PurchasingSiteUrl)')",
+                  "parameters/method": "POST",
+                  "parameters/uri": "_api/web/lists/GetByTitle('Purchase Requests')/items(@{triggerBody()?['ID']})",
+                  "parameters/headers": {
+                    "Accept": "application/json;odata=nometadata",
+                    "Content-Type": "application/json;odata=verbose",
+                    "IF-MATCH": "*",
+                    "X-HTTP-Method": "MERGE"
+                  },
+                  "parameters/body": "{ \"__metadata\": { \"type\": \"@{body('Get_list_item_type')?['ListItemEntityTypeFullName']}\" }, \"OrderFolder\": \"@{parameters('Purchasing site URL (cts_PurchasingSiteUrl)')}/Orders/@{outputs('PR_reference')}\" }"
+                },
+                "authentication": "@parameters('$authentication')"
+              }
+            },
+            "Tell_requester": {
+              "type": "OpenApiConnection",
+              "runAfter": {
+                "Link_folder_on_request": [
+                  "Succeeded"
+                ]
+              },
+              "inputs": {
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365",
+                  "connectionName": "shared_office365",
+                  "operationId": "SendEmailV2"
+                },
+                "parameters": {
+                  "emailMessage/To": "@triggerBody()?['Author']?['Email']",
+                  "emailMessage/Subject": "@{outputs('PR_reference')} is approved: your order folder is ready",
+                  "emailMessage/Body": "<p>Hi @{triggerBody()?['Author']?['DisplayName']},</p><p>Purchasing will keep the quotes, order and invoice for <b>@{triggerBody()?['Title']}</b> in this folder. You can read it; only purchasing can change it.</p><p><a href=\"@{parameters('Purchasing site URL (cts_PurchasingSiteUrl)')}/Orders/@{outputs('PR_reference')}\">Open @{outputs('PR_reference')}</a></p>"
+                },
+                "authentication": "@parameters('$authentication')"
+              }
+            }
+          },
+          "else": {
+            "actions": {}
+          }
+        },
+        "Amount_changed_after_approval": {
+          "type": "If",
+          "runAfter": {
+            "Needs_order_folder": [
+              "Succeeded"
+            ]
+          },
+          "expression": "@and(equals(body('Get_changes')?['ColumnHasChanged']?['Amount'], true), not(equals(body('Get_changes')?['ColumnHasChanged']?['Status'], true)))",
+          "actions": {
+            "Mark_escalated": {
+              "type": "OpenApiConnection",
+              "runAfter": {},
+              "inputs": {
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                  "connectionName": "shared_sharepointonline",
+                  "operationId": "PatchItem"
+                },
+                "parameters": {
+                  "dataset": "@parameters('Purchasing site URL (cts_PurchasingSiteUrl)')",
+                  "table": "Purchase Requests",
+                  "id": "@triggerBody()?['ID']",
+                  "item/Title": "@triggerBody()?['Title']",
+                  "item/Amount": "@triggerBody()?['Amount']",
+                  "item/Status/Value": "Escalated",
+                  "item/DecisionComments": "Amount changed to @{formatNumber(triggerBody()?['Amount'], '#,##0.00', 'en-US')} EUR after approval by @{triggerBody()?['Editor']?['DisplayName']}. Needs a new decision."
+                },
+                "authentication": "@parameters('$authentication')"
+              }
+            },
+            "Notify_purchasing": {
+              "type": "OpenApiConnection",
+              "runAfter": {
+                "Mark_escalated": [
+                  "Succeeded"
+                ]
+              },
+              "inputs": {
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365",
+                  "connectionName": "shared_office365",
+                  "operationId": "SendEmailV2"
+                },
+                "parameters": {
+                  "emailMessage/To": "purchasing-team@contoso.com",
+                  "emailMessage/Subject": "@{outputs('PR_reference')}: amount changed after approval",
+                  "emailMessage/Body": "<p>@{triggerBody()?['Editor']?['DisplayName']} changed the amount of <b>@{triggerBody()?['Title']}</b> to @{formatNumber(triggerBody()?['Amount'], '#,##0.00', 'en-US')} EUR after it was approved. The request is now <b>Escalated</b>.</p><p><a href=\"@{triggerBody()?['{Link}']}\">Open the request</a></p>",
+                  "emailMessage/Importance": "High"
+                },
+                "authentication": "@parameters('$authentication')"
+              }
+            }
+          },
+          "else": {
+            "actions": {}
+          }
+        }
+      },
+      "outputs": {}
+    },
+    "templateName": ""
+  },
+  "schemaVersion": "1.0.0.0"
+}

@@ -1,5 +1,15 @@
 # Demo shot list — DEVLADLOG .NET #4 Dependency Injection & DI Containers
 
+## Lab environment
+
+| Item | What this episode needs |
+|---|---|
+| VMs / Power Platform | none |
+| Lab users | `labadmin` (the recording account): `az login` off camera, portal for the Log stream |
+| Azure | Resource group **`rg-mglab-net-04`** in **West Europe** (the deploy script's default region), created by the deploy script with `RG=rg-mglab-net-04` exported (the script's built-in default is `rg-mglab-net04`): App Service plan **Free F1, Linux** + one web app, SQLite file in `/home` (no database resource, €0). Tear-down: `az group delete --name rg-mglab-net-04` |
+| Licences / trials | none beyond the subscription |
+| Recording machine | The Windows lab laptop: WSL (Ubuntu) bash with .NET SDK 10.0.1xx, Azure CLI, `curl`, `jq`, `zip` (the `deploy/*.sh` scripts are bash); browser on the host for the portal and `localhost` screens (WSL forwards localhost ports) |
+
 Code and tests were built and run in the container (`dotnet test -m:1`: 39 passed, three runs in a row).
 `deploy/local-demo.sh` was run against the local API; output in [`deploy/local-demo.output.txt`](deploy/local-demo.output.txt).
 The startup-validation failure was run for real; output in [`deploy/startup-validation.output.txt`](deploy/startup-validation.output.txt).
@@ -31,6 +41,7 @@ dotnet run --launch-profile http                                       # leave r
 ```bash
 az login                                                               # not on camera
 az account set --subscription <lab subscription>
+export RG=rg-mglab-net-04
 APP=contoso-requests-<4 digits> ./deploy/deploy-appservice.sh          # ends with "Healthy"
 ./deploy/local-demo.sh https://<host>                                  # creates 2 requests (step 1 says Development only)
 ```
@@ -49,7 +60,7 @@ APP=contoso-requests-<4 digits> ./deploy/deploy-appservice.sh          # ends wi
      URL when Channel is 'webhook'`, and `134`. Crop the stack trace lines if the terminal is crowded.
 
 3. **`screens/azure-log-stream.jpg`** — *The worker, live on App Service* (**needs tenant**)
-   - Portal: web app → **Monitoring → Log stream** (or `az webapp log tail -g rg-mglab-net04 -n <app>`).
+   - Portal: web app → **Monitoring → Log stream** (or `az webapp log tail -g rg-mglab-net-04 -n <app>`).
    - Wait for a tick (interval 1 minute): `Digest worker run: 2 pending request(s)`, `Digest: 2 request(s) waiting
      more than 0 day(s) for a decision`, `FIN: 1 request(s), 12,000 total, oldest …`, `OPS: …`.
    - **Mask** app name, subscription, account.
@@ -63,7 +74,7 @@ APP=contoso-requests-<4 digits> ./deploy/deploy-appservice.sh          # ends wi
 
 ## Tear-down
 ```bash
-az group delete --name rg-mglab-net04 --yes --no-wait
+az group delete --name rg-mglab-net-04 --yes --no-wait
 rm -f src/ProjectRequests.Api/requests.db
 rm -rf deploy/out
 ```

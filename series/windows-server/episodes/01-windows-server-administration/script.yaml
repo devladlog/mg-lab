@@ -44,8 +44,8 @@ scenes:
     heading: "The lab"
     bullets:
       - "Windows Server 2025, 180-day evaluation VMs"
-      - "CON-DC01 and CON-APP01: Server Core"
-      - "CON-FS01: Desktop Experience, on purpose"
+      - "CON-DC01 and CON-SRV01: Server Core"
+      - "CON-SRV02: Desktop Experience, on purpose"
       - "Isolated lab network, no production anything"
       - "Mainstream support until November 2029"
     narration: >
@@ -195,8 +195,8 @@ scenes:
     image: screens/live-run.jpg
     bar: "Lab · PowerShell 7 on the admin VM"
     demo: >
-      Terminal on the lab admin machine. Run:
-      ./Invoke-ServerBaseline.ps1 -ComputerName CON-DC01, CON-FS01, CON-APP01 -SnapshotDir ./snapshots -OutFile ./report.md
+      Terminal (pwsh) on the lab admin machine CON-CLI01, in C:\lab\ep01\src. Run:
+      ./Invoke-ServerBaseline.ps1 -ComputerName CON-DC01, CON-SRV01, CON-SRV02 -SnapshotDir ./snapshots -OutFile ./report.md
       Show the full findings table and the summary line "3 server(s), N finding(s), N high."
     narration: >
       Now the real lab. From the admin machine, one command against all three servers. The snapshots are saved as
@@ -211,7 +211,7 @@ scenes:
     short: report
     demo: >
       report.md opened in VS Code preview (or the console table). Summary table per server on top, then the findings
-      with High rows first. Expect on CON-FS01: FS-SMB1 installed, Public firewall profile off, RDP enabled, and the
+      with High rows first. Expect on CON-SRV02 (the file server): FS-SMB1 installed, Public firewall profile off, RDP enabled, and the
       Desktop Experience Low finding. Zoom on the High rows.
     narration: >
       The report puts a summary row per server on top, then every finding, worst first. The file server is the
@@ -222,9 +222,9 @@ scenes:
     type: screen
     heading: "Fix it, run it again"
     image: screens/fixed.jpg
-    bar: "Lab · CON-FS01 fixed, second run"
+    bar: "Lab · CON-SRV02 fixed, second run"
     demo: >
-      Split or two takes. First: Invoke-Command -ComputerName CON-FS01 { Uninstall-WindowsFeature FS-SMB1;
+      Split or two takes, on CON-CLI01. First: Invoke-Command -ComputerName CON-SRV02 { Uninstall-WindowsFeature FS-SMB1;
       Set-NetFirewallProfile -Profile Public -Enabled True }. Second: run Invoke-ServerBaseline.ps1 again and show
       that the ForbiddenFeature and Firewall rows are gone (a pending reboot finding may appear after removing SMB1:
       keep it on screen if it does).
@@ -237,10 +237,10 @@ scenes:
     type: screen
     heading: "Gotcha: Get-HotFix doesn't list every update"
     image: screens/hotfix.jpg
-    bar: "Lab · CON-FS01 · Get-HotFix vs Windows Update history"
+    bar: "Lab · CON-SRV02 · Get-HotFix vs Windows Update history"
     short: gotcha
     demo: >
-      On CON-FS01 (Desktop Experience, so the Settings app exists): left, a PowerShell window with
+      On CON-SRV02 (Desktop Experience, so the Settings app exists; VMConnect console): left, a PowerShell window with
       Get-HotFix | Sort-Object InstalledOn -Descending | Select-Object -First 5. Right, Settings > Windows Update >
       Update history. Show at least one entry in the history that Get-HotFix doesn't list (for example a Defender
       definition update). If none differs on the day, show the Notes section of the Get-HotFix page on Learn instead

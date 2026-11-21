@@ -1,0 +1,274 @@
+# DEVLADLOG Power Apps — episode 05. Draft: code scenes are real excerpts from src/ and tests/, screen scenes need the lab recording.
+episode: 5
+slug: custom-connectors
+series_label: "POWER APPS"
+series_name: "DEVLADLOG Power Apps"
+file_prefix: "powerapps"
+title: "Custom connectors: from OpenAPI file to Power Fx"
+subtitle: "A holiday API, custom code in C#, and the app that stops guessing"
+voice: am_michael
+thumbnail_text: "CUSTOM\nCONNECTOR\n+ C# CODE"
+youtube:
+  title: "Power Apps Custom Connectors: OpenAPI, Custom Code in C#, pac CLI | DEVLADLOG Power Apps #5"
+  tags: [Power Apps, custom connector, OpenAPI, Swagger, custom code, C#, pac CLI, Power Fx, Power Automate, Power Platform, x-ms-dynamic-values, DLP, low code, pro code]
+sources:
+  - https://www.devladlog.com/articles/powerapps/2026-02-21-custom-connectors-complete-guide-2026/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Your app thinks Carnival is a day off"
+    sub: "A custom connector that knows the difference"
+    short: hook
+    narration: >
+      Ask a public holiday API for Portugal and you get seventeen holidays. Only thirteen of them close the office.
+      Plug the raw list into your app and Tuesday the seventeenth of February stops being a working day. In this episode
+      we build a custom connector, from an OpenAPI file and a little C sharp, that gives the app the right answer.
+      Welcome to DEVLADLOG Power Apps.
+
+  - id: plan
+    type: bullets
+    heading: "Contoso Holidays, built from files"
+    bullets:
+      - "Source: Nager.Date, free public API, no key, no Azure"
+      - "OpenAPI 2.0 definition: three operations"
+      - "Custom code: GetDaysOff, the days this office is closed"
+      - "Created in the solution with pac connector create"
+      - "Episode 3's working days now use it, unchanged"
+    narration: >
+      In episode three the phone app counted working days with a hard coded holiday list, and we called it a shortcut.
+      Today we replace it. The connector wraps a free public holiday API, so there's nothing to pay for and no key. It
+      has two plain operations and one of our own, Get Days Off, written as custom code. And we create it from files,
+      with the Power Platform CLI.
+
+  - id: definition
+    type: code
+    heading: "The definition: OpenAPI 2.0, not 3.0"
+    lang: json
+    code: |
+      "/DaysOff/{CountryCode}": {
+        "get": {
+          "operationId": "GetDaysOff",
+          "summary": "Get days off",
+          "x-ms-visibility": "important",
+          "parameters": [
+            { "name": "CountryCode", "in": "path", "required": true, "type": "string",
+              "x-ms-summary": "Country",
+              "x-ms-dynamic-values": { "operationId": "ListCountries",
+                "value-path": "countryCode", "value-title": "name" } },
+            { "name": "fromYear", "in": "query", "required": true, "type": "integer" },
+            { "name": "toYear", "in": "query", "required": false, "type": "integer" },
+            { "name": "subdivision", "in": "query", "type": "string", "x-ms-visibility": "advanced" }
+          ],
+          "responses": { "200": { "schema": { "$ref": "#/definitions/DaysOff" } } }
+    narration: >
+      Custom connectors still only accept OpenAPI two point oh, under one megabyte. The extensions do the maker
+      experience. X M S summary gives each field a friendly title, visibility decides what's shown first, and dynamic
+      values turns the country into a drop down, filled by an internal operation that lists the countries. Learn says if
+      you leave out value collection, the response is read as an array, which is exactly what this API returns.
+
+  - id: create
+    type: code
+    heading: "Create it in the solution"
+    lang: bash
+    code: |
+      # apiProperties.json
+      "connectionParameters": {},                 # public API, no authentication
+      "scriptOperations": [ "GetDaysOff" ]        # empty list = every operation runs the script
+
+      $ pac connector create --api-definition-file apiDefinition.swagger.json \
+          --api-properties-file apiProperties.json --script-file script.csx \
+          --solution-unique-name EquipmentDesk
+      $ pac connector list        # only solution-aware connectors show up here
+    narration: >
+      Three files: the definition, the properties and the script. Script operations matters. An empty list means every
+      operation goes through your code, so we name only Get Days Off, and the plain operations go straight to the API.
+      Custom connectors now live in solutions, so we create it in the Equipment Desk solution from episode one.
+
+  - id: definition-screen
+    type: screen
+    heading: "The connector in the solution"
+    image: screens/connector-definition.jpg
+    bar: "Power Apps · Solutions · Equipment Desk · Contoso Holidays"
+    demo: >
+      Terminal: `pac connector create ...` printing the new connector id, then `pac connector list` showing "Contoso Holidays".
+      Cut to make.powerapps.com, DEV environment, Solutions > Equipment Desk > Contoso Holidays > Edit: the Definition tab
+      with the three actions (Get days off, List public holidays, List countries) and Get days off selected, its
+      parameters Country, From Year, To Year, Subdivision visible. Then the Code tab: "Code enabled" with GetDaysOff selected
+      as the operation. Mask environment name and URL.
+    narration: >
+      Here it is. The CLI returns the connector ID, the solution shows Contoso Holidays, and the definition page has our
+      three actions with their friendly names. On the code tab, custom code is on, for Get Days Off only.
+
+  - id: classify
+    type: code
+    heading: "Custom code: a holiday is not a day off"
+    lang: csharp
+    code: |
+      if (!types.Contains("Public"))
+          reason = types.Count > 0 ? string.Join(", ", types) : "Not public";   // Carnival: "Optional"
+      else if (nationwide)
+          scope = "National";
+      else if (subdivision != null && counties.Contains(subdivision))
+          scope = subdivision;                                                // PT-30: Madeira Day
+      else
+          reason = "Regional (" + string.Join(", ", counties) + ")";          // Azores Day: "Regional (PT-20)"
+
+      if (scope != null) days.Add(new JObject { ["date"] = date, ["name"] = name, ["scope"] = scope, ... });
+      else excluded.Add(new JObject { ["date"] = date, ["name"] = name, ["reason"] = reason });
+    narration: >
+      This is the reason the connector exists. A day off is a public holiday that applies nationwide, or in the office's
+      region. Carnival is in the list, but its type is optional: offices stay open. Azores Day only applies in the Azores.
+      Nothing is silently dropped, though. Every excluded holiday comes back with its reason.
+
+  - id: sendasync
+    type: code
+    heading: "One call, several years, Context.SendAsync"
+    lang: csharp
+    code: |
+      for (int year = request.FromYear; year <= request.ToYear; year++)
+      {
+          var backend = new HttpRequestMessage(HttpMethod.Get, request.SourceUri(year));
+          HttpResponseMessage response = await this.Context.SendAsync(backend, this.CancellationToken);
+          string body = await response.Content.ReadAsStringAsync();
+          if (!response.IsSuccessStatusCode)
+              return Message(response.StatusCode, string.Format(
+                  "The holiday source returned {0} for {1} {2}: {3}", ...));
+          Classify(JArray.Parse(body), request.Subdivision, days, excluded);
+      }
+      // SourceUri: host and base path taken from the incoming request, never hard-coded
+    narration: >
+      The app needs last year to next year, so one call to the connector becomes three calls to the source. Learn says
+      use context dot send async, not your own H T T P client. If any year fails, the whole call fails with the source's
+      explanation. Half a calendar is worse than an error. And the address comes from the request, so pointing the
+      connector at your own H R system later is a definition change, not a code change.
+
+  - id: test-screen
+    type: screen
+    heading: "Test it in the wizard"
+    image: screens/connector-test.jpg
+    bar: "Custom connector · Test · Get days off"
+    demo: >
+      Custom connector wizard, Test tab. New connection created (no sign-in needed). Operation GetDaysOff with Country = PT,
+      From Year = 2026, Subdivision = PT-30, Test operation: Response status 200, body showing "count": 15, the days list with
+      "2026-07-01" "Madeira Day" "scope": "PT-30", and the excluded list with "Carnival" "reason": "Optional" and
+      "Azores Day" "reason": "Regional (PT-20)". Second shot: Country = XX gives status 404 and the message
+      "The holiday source returned 404 for XX 2026: ...". Mask environment and URL.
+    narration: >
+      The test tab runs the real thing. Portugal, twenty twenty six, Madeira: fifteen days off, Madeira Day included,
+      Carnival excluded as optional, Azores Day excluded as regional. A country that doesn't exist gives a four oh four with
+      a sentence a maker can read.
+
+  - id: compile
+    type: code
+    heading: "Compile it like the platform will"
+    lang: csharp
+    short: compile
+    code: |
+      // Learn: "The currently supported .NET version is .NET Standard 2.0"
+      var options = new CSharpParseOptions(LanguageVersion.CSharp7_3);
+      var references = Directory.GetFiles(Metadata("NetStandardRef"), "*.dll")
+          .Append(Metadata("NewtonsoftNetStandard"))
+          .Append(Metadata("LoggingNetStandard"));
+      var compilation = CSharpCompilation.Create("ConnectorScript",
+          new[] { Parse(usings + script), Parse(scriptBaseStubs) }, references, ...);
+
+      [InlineData("var x = new JObject().ToString(Formatting.None);", "CS0104")]
+      // Newtonsoft.Json.Formatting vs System.Xml.Formatting: both are "supported namespaces"
+    narration: >
+      Here's something Learn warns about. If your script doesn't compile, the portal just says internal server error. So
+      we compile it in a test the strict way: dot net standard two point oh, only the supported namespaces. And it caught
+      one. Newtonsoft and System dot X M L both have a type called Formatting. With every supported namespace in scope,
+      Formatting dot None is ambiguous. Qualify it.
+
+  - id: gotcha
+    type: code
+    heading: "The gotcha: feed the raw list and Carnival closes the office"
+    lang: text
+    short: gotcha
+    code: |
+      // what a maker writes first
+      Holidays = ForAll(ContosoHolidays.ListPublicHolidays(2026, "PT"), ThisRecord.date)
+      WorkingDaysBetween(Date(2026, 2, 16), Date(2026, 2, 18))   ->  1
+
+      // with the connector's filter
+      Holidays = ForAll(DaysOff.days, ThisRecord.date)
+      WorkingDaysBetween(Date(2026, 2, 16), Date(2026, 2, 18))   ->  2
+
+      Passed  The_gotcha_using_the_raw_list_makes_Carnival_a_day_off
+    narration: >
+      Now the trap in numbers. With the raw list, Monday to Wednesday in Carnival week counts one working day, because
+      Tuesday looks like a holiday. With the connector's filter it's two. Every overdue reminder that week would be wrong.
+      Putting the rule in the connector means every app and every flow gets the same answer.
+
+  - id: app
+    type: code
+    heading: "The app: one named formula changes"
+    lang: text
+    code: |
+      OfficeCountry = "PT";
+      OfficeSubdivision = "";
+      DaysOff = ContosoHolidays.GetDaysOff(OfficeCountry, Year(Today()) - 1,
+                    { toYear: Year(Today()) + 1, subdivision: OfficeSubdivision });
+      Holidays = ForAll(DaysOff.days, ThisRecord.date);
+      IsWorkingDay(d: Date): Boolean = Weekday(d, StartOfWeek.Monday) <= 5 && !(d in Holidays);
+
+      Passed  The_DaysOff_formula_from_the_app_is_one_connector_call_for_three_years
+      Passed  Episode_3s_working_day_functions_now_use_the_connector_holidays
+    narration: >
+      In the app, required parameters are positional, optional ones go in a record. Holidays is still a single column
+      table of dates, so episode three's functions don't change at all. We tested this with Microsoft's open source Power
+      F x connector library, which reads the same OpenAPI file the platform does. Note the for all: the old table dot
+      column shortcut is deprecated in Power F x.
+
+  - id: app-screen
+    type: screen
+    heading: "Real holidays in the phone app"
+    image: screens/app-monitor.jpg
+    bar: "Power Apps Studio · Equipment Desk (phone) · Monitor"
+    demo: >
+      Power Apps Studio with Equipment Desk (phone): Data pane shows Contoso Holidays next to Equipment and Loans;
+      App.Formulas shows the DaysOff and Holidays lines. Play the Open loans screen: an overdue loan's "N working days late"
+      text. Side by side, Monitor (Advanced tools > Monitor) with one ContosoHolidays GetDaysOff row (status 200) for
+      fromYear 2025 / toYear 2027, not one per gallery row. Mask environment name, user names and avatars.
+    narration: >
+      In Studio the connector sits next to the Dataverse tables. The open loans screen shows working days late, now with
+      real holidays. And Monitor shows one Get Days Off call for the whole screen, not one per row.
+
+  - id: flow-screen
+    type: screen
+    heading: "Same connector in Power Automate"
+    image: screens/flow-dropdown.jpg
+    bar: "Power Automate · New flow · Contoso Holidays · Get days off"
+    demo: >
+      make.powerautomate.com, DEV environment, a new instant flow (not saved), add action > Custom > Contoso Holidays >
+      Get days off: the Country parameter open as a drop-down filled from ListCountries (Portugal, Spain, ...), From Year,
+      and Subdivision under "Show all" (advanced). List countries is not offered as an action (internal). Discard the
+      flow afterwards. Mask environment and user.
+    narration: >
+      The same connector works in Power Automate. There, the country really is a drop down, filled by the internal list
+      countries operation, which makers never see as an action. And subdivision waits under advanced options.
+
+  - id: limits
+    type: bullets
+    heading: "Before you ship a custom connector"
+    bullets:
+      - "OpenAPI 2.0, under 1 MB; one script, under 1 MB, done in 2 minutes"
+      - "Script: .NET Standard 2.0, supported namespaces only"
+      - "Not shared by default: sharing the app shares it"
+      - "DLP: unclassified custom connectors land in the default group"
+      - "A free public API has no SLA: point the host at your own"
+    narration: >
+      Before you ship. The definition must be OpenAPI two point oh, under a megabyte. The script must finish within two
+      minutes. Nobody else can use your connector until you share it, and sharing an app shares it too. Data policies put
+      an unclassified custom connector in the default group, which can block an app that also uses Dataverse. And a free
+      public API has no service level agreement.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The definition, the script and all fifty one tests are on GitHub, and the complete guide is on devladlog dot com.
+      Links are in the description. Next time: Power Automate. The phone app stops copying reminders and starts sending
+      them. Subscribe so you don't miss it.

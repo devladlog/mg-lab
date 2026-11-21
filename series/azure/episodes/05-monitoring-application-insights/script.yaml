@@ -1,0 +1,290 @@
+# DEVLADLOG Azure — episode 05. Draft script: code scenes are real excerpts from src/, queries/, infra/ and tests/;
+# screen scenes are captured by the recorder following demo.md.
+episode: 5
+slug: monitoring-application-insights
+series_label: "AZURE"
+series_name: "DEVLADLOG Azure"
+file_prefix: "azure"
+title: "Monitoring & Application Insights"
+subtitle: "OpenTelemetry, sampling-safe alerts, KQL you can test"
+voice: am_michael
+thumbnail_text: "APP INSIGHTS\nOPENTELEMETRY\nREAL ALERTS"
+youtube:
+  title: "Application Insights with OpenTelemetry on .NET 10: Alerts, KQL, Sampling | DEVLADLOG Azure #5"
+  tags: [Application Insights, Azure Monitor, OpenTelemetry, .NET 10, KQL, Log Analytics, alerts, availability test, sampling, Bicep, xUnit, Azure]
+sources:
+  - https://www.devladlog.com/articles/azure/2026-01-23-monitoring-application-insights-complete-guide-2026/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Is it up? Is it right? Why is it slow?"
+    sub: "Application Insights with OpenTelemetry, alerts that survive sampling"
+    short: hook
+    narration: >
+      Your API returns four hundred for a bad order, and Application Insights calls it a failed request. Your
+      queries count rows, but sampling kept one row in ten. And your alert fires on noise. Today we instrument the
+      contoso orders API with OpenTelemetry, alert on numbers that sampling can't touch, and test our K Q L before
+      it ever runs at three in the morning. Welcome to DEVLADLOG Azure.
+
+  - id: signals
+    type: bullets
+    heading: "Three signals, three jobs"
+    bullets:
+      - "Traces: one request, end to end. Sampled"
+      - "Metrics: counts and totals. Never sampled"
+      - "Logs: what the code said, linked to the trace"
+      - "Alert on metrics, diagnose with traces"
+      - "Default since the new distro: five traces per second"
+    narration: >
+      Three signals, three jobs. Traces show one request from end to end, and they get sampled. Metrics are counts
+      and totals, and Microsoft Learn is explicit that metrics are never sampled. Logs are what the code said, tied
+      to the trace. So alert on metrics and diagnose with traces. That matters, because the Microsoft OpenTelemetry
+      distro for dot net samples at five traces per second by default.
+
+  - id: plan
+    type: diagram
+    heading: "What we're building"
+    nodes: ["API", "Blob", "Insights", "Alerts"]
+    labels: ["dot net 10, OTel", "managed identity", "workspace-based", "e-mail"]
+    narration: >
+      The orders API runs on App Service with dot net ten and writes each order to blob storage with a managed
+      identity. Telemetry goes to a workspace-based Application Insights resource that only accepts Entra I D
+      tokens. An availability test calls the health endpoint, and three alerts send an e-mail.
+
+  - id: distro
+    type: code
+    heading: "The distro, Entra auth and sampling"
+    lang: csharp
+    code: |
+      services.AddOpenTelemetry()
+          .ConfigureResource(r => r.AddService(ServiceName))          // cloud_RoleName
+          .WithTracing(t => t
+              .AddSource(OrdersTelemetry.SourceName)                  // our spans
+              .AddProcessor<ExpectedClientErrorProcessor>())          // 400/404/422 aren't failures
+          .WithMetrics(m => m.AddMeter(OrdersTelemetry.MeterName))    // our counters
+          .UseMicrosoftOpenTelemetry(o =>
+          {
+              o.Exporters = ExportTarget.AzureMonitor;
+              o.AzureMonitor.ConnectionString = connectionString;
+              o.AzureMonitor.Credential = credential;                 // Entra ID: local auth is off
+              o.AzureMonitor.TracesPerSecond = sampling.TracesPerSecond ?? 5;
+          });
+    narration: >
+      One call wires it up: Use Microsoft Open Telemetry, from the Microsoft dot Open Telemetry package. It adds
+      instrumentation for A S P dot net core, Http Client and the Azure S D K. Our own activity source and meter are
+      registered by name, or their data goes nowhere. The credential is the app's managed identity, because local
+      authentication is disabled on the resource. Sampling is explicit, and validated at startup.
+
+  - id: custom
+    type: code
+    heading: "A custom span and an unsampled counter"
+    lang: csharp
+    code: |
+      using (var span = OrdersTelemetry.Source.StartActivity("orders.price"))
+      {
+          span?.SetTag("order.channel", channel);
+          span?.SetTag("order.line_count", requested.Count);
+          lines = Catalog.Price(requested);                  // unknown SKU -> span error, 422
+          span?.SetTag("order.total", (double)lines.Sum(l => l.LineTotal));
+      }
+      await store.SaveAsync(stored, ct);                     // Azure blob dependency, automatic
+      telemetry.OrderCreated(stored.Channel, stored.Total);
+
+      // OrdersTelemetry: low-cardinality dimensions only, never the customer
+      created.Add(1, new("order.channel", channel));
+      value.Record((double)total, new("order.channel", channel));
+    narration: >
+      Pricing gets its own span, so it shows up inside the end-to-end transaction with the channel, the line count
+      and the total. The blob call is a dependency for free. A counter and a histogram record the order with one
+      dimension, the channel. Never the customer: a test checks that the customer I D appears in no span tag.
+
+  - id: fourxx
+    type: code
+    heading: "A 400 is not an outage"
+    lang: csharp
+    code: |
+      public sealed class ExpectedClientErrorProcessor : BaseProcessor<Activity>
+      {
+          public static readonly IReadOnlySet<int> ExpectedStatusCodes = new HashSet<int> { 400, 404, 422 };
+
+          public override void OnEnd(Activity activity)
+          {
+              if (activity.Kind == ActivityKind.Server
+                  && activity.Status == ActivityStatusCode.Unset
+                  && activity.GetTagItem("http.response.status_code") is int status
+                  && ExpectedStatusCodes.Contains(status))
+                  activity.SetStatus(ActivityStatusCode.Ok);   // result code stays 400
+              base.OnEnd(activity);
+          }
+      }
+    narration: >
+      Here's a default worth knowing. The Azure Monitor exporter treats every four hundred response as a failed
+      request when the span status is unset. Our API answers four hundred for a bad order and four oh four for an
+      unknown I D. That's the API working. This processor, the pattern from Microsoft Learn, marks those three codes
+      as successful. Unauthorized, forbidden, throttled and every five hundred still count as failures.
+
+  - id: tests
+    type: code
+    heading: "Testing telemetry, not just code"
+    lang: text
+    code: |
+      $ dotnet test tests/Contoso.Orders.Api.Tests
+        TelemetryTests       7   spans, parent/child, metrics, no customer id, 400/404/422/500
+        Processor + config  17   4xx rules, sampling validation, fault injection
+        KqlTests            12   every .kql file against the workspace schema
+        BicepTests           7   cap, Entra-only, 5 locations, alert = query file
+
+      Passed!  - Failed: 0, Passed: 43, Skipped: 0, Total: 43
+
+      # same Program.cs + an in-memory exporter next to the distro:
+      services.ConfigureOpenTelemetryTracerProvider(t => t.AddInMemoryExporter(Spans));
+    narration: >
+      Forty-three tests, no Azure needed. The telemetry tests run the real app and add an in-memory exporter next to
+      the distro, so they can read the spans and metrics that would go to Azure Monitor. Remove the processor, and
+      three tests fail. The K Q L tests and Bicep guardrails come next.
+
+  - id: kql
+    type: code
+    heading: "Count with sum of ItemCount"
+    lang: kusto
+    short: sampling
+    code: |
+      // queries/alert-failure-ratio.kql (loaded by the log search alert)
+      AppRequests
+      | where AppRoleName == "contoso-orders-api"
+      | summarize Total = sum(ItemCount), Failed = sumif(ItemCount, Success == false) by OperationName
+      | where Total >= 20 // ignore one failure out of three requests at 3 a.m.
+      | extend FailurePercent = round(100.0 * Failed / Total, 1)
+
+      // KqlTests: parsed and type-checked with Kusto.Language against the
+      // App* table columns from Microsoft Learn. A typo fails the build.
+      AppRequests | summarize count() by OperationNmae      // -> error
+    narration: >
+      When sampling keeps one request in ten, each stored row carries an item count of ten. So count with sum of
+      item count, never with count. This query feeds the failure ratio alert, something a metric alert can't
+      compute, and it ignores windows with fewer than twenty requests. Every query file is parsed and type checked
+      against the workspace schema with the Kusto language library, so a misspelled column fails the build.
+
+  - id: bicep
+    type: code
+    heading: "Alerts in Bicep"
+    lang: bicep
+    code: |
+      DisableLocalAuth: true                                  // App Insights: Entra tokens only
+      workspaceCapping: { dailyQuotaGb: dailyCapGb }          // last-resort cost guard
+
+      criteria: {                                             // 1) availability, 3 of 5 locations
+        'odata.type': 'Microsoft.Azure.Monitor.WebtestLocationAvailabilityCriteria'
+        failedLocationCount: length(testLocations) - 2 }
+      metricName: 'requests/failed'                           // 2) standard metric, not sampled
+      query: loadTextContent('../queries/alert-failure-ratio.kql')   // 3) the tested file
+      metricMeasureColumn: 'FailurePercent'
+      dimensions: [ { name: 'OperationName', operator: 'Include', values: ['*'] } ]
+      threshold: 10
+    narration: >
+      All of it is Bicep. The availability alert fires when three of five locations fail, Learn's rule of locations
+      minus two. Failed requests use the standard metric, which sampling doesn't affect. And the log alert loads the
+      exact K Q L file the tests checked. The workspace has a one gigabyte daily cap, as a last resort.
+
+  - id: transaction
+    type: screen
+    heading: "One order, end to end"
+    image: screens/transaction.jpg
+    bar: "Application Insights · Transaction search"
+    demo: >
+      Application Insights, Transaction search (or Performance, POST /orders, a sample). End-to-end transaction
+      details for one POST /orders 201: the request, the child orders.price span with order.channel, order.line_count
+      and order.total in its properties, and the Azure blob dependency (PUT to the orders container). Generated by
+      infra/load.sh. Mask the app, storage account and resource names.
+    narration: >
+      After a run of the load script, this is one order in the portal. The request, our pricing span with its
+      properties, and the blob upload with its duration. One transaction, three components, no extra code for the
+      storage call.
+
+  - id: logs
+    type: screen
+    heading: "Orders per channel, exactly"
+    image: screens/orders-by-channel.jpg
+    bar: "Log Analytics · Logs"
+    demo: >
+      Log Analytics workspace, Logs, queries/orders-by-channel.kql pasted and run: a timechart with two series, web
+      and partner, from AppMetrics where Name is contoso.orders.created. Optionally a second tab with
+      queries/sampling-check.kql showing RetainedPercentage. Mask the workspace name and subscription.
+    narration: >
+      Our counter, split by channel. The log copy of a custom metric keeps every dimension. The copy in metrics
+      explorer has none unless you opt in to custom metric dimensions, which is a preview and billed separately.
+      That's why this chart comes from K Q L.
+
+  - id: alert
+    type: screen
+    heading: "Break it on purpose"
+    image: screens/alert-fired.jpg
+    bar: "Azure Monitor · Alerts"
+    demo: >
+      Left: terminal with infra/chaos.sh <rg> 30, then infra/load.sh <url> 100 showing a tally with HTTP 500 lines.
+      Right: Azure Monitor, Alerts, the fired alerts "alert-orders-failed-requests" (severity 2) and
+      "alert-orders-failure-ratio" with dimension OperationName = POST /orders. Optionally the alert e-mail (mask the
+      address). Afterwards run infra/chaos.sh <rg> 0.
+    narration: >
+      Now we break it. The chaos script sets an app setting that makes thirty percent of saves throw. The load
+      script shows five hundreds. Within minutes the failed requests alert fires, and the failure ratio alert names
+      the operation: post orders. The four hundreds in the same run didn't count, which is the point.
+
+  - id: availability
+    type: screen
+    heading: "Five locations, every five minutes"
+    image: screens/availability.jpg
+    bar: "Application Insights · Availability"
+    demo: >
+      Application Insights, Availability: the standard test orders-api-healthz with green results from the five
+      European locations (scatter plot view), test frequency 5 minutes. Mask the app host name.
+    narration: >
+      The standard test checks the health endpoint and the T L S certificate from five European locations every five
+      minutes. Standard tests replace U R L ping tests, which retire in September twenty twenty-eight, and they're
+      billed per execution: this one costs a few cents per hour.
+
+  - id: gotcha
+    type: code
+    heading: "Gotcha: None means nothing"
+    lang: csharp
+    short: gotcha
+    code: |
+      // First draft: no connection string locally -> "no exporter"
+      o.Exporters = ExportTarget.None;
+      // Test run: Failed: 6. "No server span for /orders. Spans: "  <- zero spans
+
+      // ExportTarget.None doesn't switch the exporter off. It switches telemetry off:
+      // no pipeline, so even the in-memory exporter added by the tests received nothing.
+
+      // Fix: locally, print to the console
+      o.Exporters = ExportTarget.Console;
+      // Passed!  - Failed: 0, Passed: 43
+    narration: >
+      The gotcha. With no connection string, my first draft set the exporter target to none. Six telemetry tests
+      failed with zero spans. None doesn't mean no exporter. It means no pipeline at all, so even the in-memory
+      exporter the tests had added got nothing. Locally the app now uses the console exporter, and you see every span
+      in the terminal.
+
+  - id: recap
+    type: bullets
+    heading: "Five rules"
+    bullets:
+      - "Alert on metrics, diagnose with traces"
+      - "Count with sum(ItemCount)"
+      - "Decide which 4xx codes are failures"
+      - "Entra-only ingestion, managed identity"
+      - "Test your KQL and your telemetry"
+    narration: >
+      Five rules. Alert on metrics and diagnose with traces. Count with sum of item count. Decide which four hundred
+      codes are real failures. Ingest with Entra I D and a managed identity only. And test your K Q L and your
+      telemetry like any other code.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The API, the queries, the Bicep and all forty-three tests are on GitHub, and the complete guide is on devladlog
+      dot com. Next episode: cost optimization, including what all this telemetry costs. This was DEVLADLOG Azure,
+      by Momento Galático.

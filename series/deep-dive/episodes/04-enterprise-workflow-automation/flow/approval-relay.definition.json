@@ -1,0 +1,278 @@
+{
+  "_comment": "Reference definition of the 'Invoice approval relay' cloud flow (HTTP trigger: 'Specific users in my tenant' = the function's managed identity, or 'Anyone' with the SAS URL in Key Vault). Written by hand from demo.md, checked by tests; replace with the exported definition after the lab build.",
+  "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "$connections": {
+      "defaultValue": {},
+      "type": "Object"
+    },
+    "$authentication": {
+      "defaultValue": {},
+      "type": "SecureObject"
+    },
+    "Site URL (mgl_SiteUrl)": {
+      "defaultValue": "https://contoso.sharepoint.com/sites/finance-lab",
+      "type": "String",
+      "metadata": {
+        "schemaName": "mgl_SiteUrl"
+      }
+    },
+    "Invoices library (mgl_InvoicesLibrary)": {
+      "defaultValue": "00000000-0000-0000-0000-000000000000",
+      "type": "String",
+      "metadata": {
+        "schemaName": "mgl_InvoicesLibrary"
+      }
+    }
+  },
+  "triggers": {
+    "manual": {
+      "type": "Request",
+      "kind": "Http",
+      "inputs": {
+        "method": "POST",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string"
+            },
+            "instanceId": {
+              "type": "string"
+            },
+            "itemId": {
+              "type": "integer"
+            },
+            "vendor": {
+              "type": "string"
+            },
+            "invoiceNumber": {
+              "type": "string"
+            },
+            "total": {
+              "type": "number"
+            },
+            "currency": {
+              "type": "string"
+            },
+            "fileUrl": {
+              "type": "string"
+            },
+            "submittedBy": {
+              "type": "string"
+            },
+            "status": {
+              "type": "string"
+            },
+            "statusText": {
+              "type": "string"
+            },
+            "approverEmail": {
+              "type": "string"
+            },
+            "stage": {
+              "type": "string"
+            },
+            "dueUtc": {
+              "type": "string"
+            },
+            "callbackUrl": {
+              "type": "string"
+            },
+            "decidedBy": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "instanceId",
+            "itemId",
+            "vendor",
+            "invoiceNumber",
+            "total",
+            "currency",
+            "fileUrl",
+            "submittedBy",
+            "status",
+            "statusText"
+          ]
+        }
+      }
+    }
+  },
+  "actions": {
+    "Switch_on_kind": {
+      "type": "Switch",
+      "runAfter": {},
+      "expression": "@triggerBody()?['kind']",
+      "cases": {
+        "Approval_request": {
+          "case": "approval-request",
+          "actions": {
+            "Show_who_has_it": {
+              "type": "OpenApiConnection",
+              "runAfter": {},
+              "inputs": {
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                  "connectionName": "shared_sharepointonline",
+                  "operationId": "PatchFileItem"
+                },
+                "parameters": {
+                  "dataset": "@parameters('Site URL (mgl_SiteUrl)')",
+                  "table": "@parameters('Invoices library (mgl_InvoicesLibrary)')",
+                  "id": "@triggerBody()?['itemId']",
+                  "item/InvApprovalStatus/Value": "@triggerBody()?['status']",
+                  "item/InvApprovalWith": "@triggerBody()?['statusText']",
+                  "item/InvApprovalInstance": "@triggerBody()?['instanceId']"
+                },
+                "authentication": "@parameters('$authentication')"
+              }
+            },
+            "Start_and_wait_for_an_approval": {
+              "type": "OpenApiConnectionWebhook",
+              "runAfter": {
+                "Show_who_has_it": [
+                  "Succeeded"
+                ]
+              },
+              "inputs": {
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_approvals",
+                  "connectionName": "shared_approvals",
+                  "operationId": "StartAndWaitForAnApproval"
+                },
+                "parameters": {
+                  "approvalType": "Basic",
+                  "WebhookApprovalCreationInput/title": "Invoice @{triggerBody()?['invoiceNumber']} from @{triggerBody()?['vendor']}: @{triggerBody()?['total']} @{triggerBody()?['currency']}",
+                  "WebhookApprovalCreationInput/assignedTo": "@triggerBody()?['approverEmail']",
+                  "WebhookApprovalCreationInput/details": "@{triggerBody()?['stage']} approval. Uploaded by @{triggerBody()?['submittedBy']}. Please answer before @{triggerBody()?['dueUtc']} (UTC); after that it goes to the escalation approver.",
+                  "WebhookApprovalCreationInput/itemLink": "@triggerBody()?['fileUrl']",
+                  "WebhookApprovalCreationInput/itemLinkDescription": "Open the invoice",
+                  "WebhookApprovalCreationInput/enableNotifications": true
+                },
+                "authentication": "@parameters('$authentication')"
+              }
+            },
+            "Send_decision": {
+              "type": "Http",
+              "runAfter": {
+                "Start_and_wait_for_an_approval": [
+                  "Succeeded"
+                ]
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              },
+              "inputs": {
+                "method": "POST",
+                "uri": "@triggerBody()?['callbackUrl']",
+                "headers": {
+                  "Content-Type": "application/json"
+                },
+                "body": {
+                  "outcome": "@body('Start_and_wait_for_an_approval')?['outcome']",
+                  "responder": "@first(body('Start_and_wait_for_an_approval')?['responses'])?['responder']?['email']",
+                  "comments": "@first(body('Start_and_wait_for_an_approval')?['responses'])?['comments']"
+                },
+                "retryPolicy": {
+                  "type": "exponential",
+                  "count": 3,
+                  "interval": "PT20S"
+                }
+              }
+            },
+            "Tell_late_approver": {
+              "type": "OpenApiConnection",
+              "runAfter": {
+                "Send_decision": [
+                  "Failed"
+                ]
+              },
+              "inputs": {
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365",
+                  "connectionName": "shared_office365",
+                  "operationId": "SendEmailV2"
+                },
+                "parameters": {
+                  "emailMessage/To": "@triggerBody()?['approverEmail']",
+                  "emailMessage/Subject": "Invoice @{triggerBody()?['invoiceNumber']}: your answer was not used",
+                  "emailMessage/Body": "<p>This approval was escalated or already answered before your response arrived. No action needed.</p>"
+                },
+                "authentication": "@parameters('$authentication')"
+              }
+            }
+          }
+        },
+        "Outcome": {
+          "case": "outcome",
+          "actions": {
+            "Record_outcome": {
+              "type": "OpenApiConnection",
+              "runAfter": {},
+              "inputs": {
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                  "connectionName": "shared_sharepointonline",
+                  "operationId": "PatchFileItem"
+                },
+                "parameters": {
+                  "dataset": "@parameters('Site URL (mgl_SiteUrl)')",
+                  "table": "@parameters('Invoices library (mgl_InvoicesLibrary)')",
+                  "id": "@triggerBody()?['itemId']",
+                  "item/InvApprovalStatus/Value": "@triggerBody()?['status']",
+                  "item/InvApprovedBy": "@triggerBody()?['decidedBy']",
+                  "item/InvApprovalNote": "@triggerBody()?['statusText']",
+                  "item/InvApprovalWith": ""
+                },
+                "authentication": "@parameters('$authentication')"
+              }
+            },
+            "Tell_submitter": {
+              "type": "OpenApiConnection",
+              "runAfter": {
+                "Record_outcome": [
+                  "Succeeded"
+                ]
+              },
+              "inputs": {
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365",
+                  "connectionName": "shared_office365",
+                  "operationId": "SendEmailV2"
+                },
+                "parameters": {
+                  "emailMessage/To": "@triggerBody()?['submittedBy']",
+                  "emailMessage/Subject": "Invoice @{triggerBody()?['invoiceNumber']} from @{triggerBody()?['vendor']}: @{triggerBody()?['status']}",
+                  "emailMessage/Body": "<p>@{triggerBody()?['statusText']}</p><p><a href=\"@{triggerBody()?['fileUrl']}\">Open the invoice</a></p>"
+                },
+                "authentication": "@parameters('$authentication')"
+              }
+            }
+          }
+        }
+      },
+      "default": {
+        "actions": {
+          "Unknown_kind": {
+            "type": "Terminate",
+            "runAfter": {},
+            "inputs": {
+              "runStatus": "Failed",
+              "runError": {
+                "code": "UnknownKind",
+                "message": "kind must be approval-request or outcome"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

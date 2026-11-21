@@ -1,0 +1,9 @@
+// Static public IPs attached to nothing (no IP configuration, no NAT gateway).
+// Based on "FinOps best practices for Networking" (Microsoft Learn).
+resources
+| where type =~ 'microsoft.network/publicipaddresses'
+    and isempty(properties.ipConfiguration)
+    and isempty(properties.natGateway)
+    and properties.publicIPAllocationMethod =~ 'Static'
+| project id, name, type, location, resourceGroup, sku, ipAddress = tostring(properties.ipAddress)
+| order by id asc

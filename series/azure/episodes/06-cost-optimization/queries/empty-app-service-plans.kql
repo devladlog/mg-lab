@@ -1,0 +1,8 @@
+// App Service plans with no apps: the plan is billed per instance-hour with or without apps.
+// Based on "FinOps best practices for Web" (Microsoft Learn); Free plans are skipped.
+resources
+| where type =~ 'microsoft.web/serverfarms'
+| where toint(properties.numberOfSites) == 0
+| where sku.tier !~ 'Free'
+| project id, name, type, location, resourceGroup, sku, kind, reserved = tobool(properties.reserved)
+| order by id asc

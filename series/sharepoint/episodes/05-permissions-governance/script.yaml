@@ -1,0 +1,281 @@
+# DEVLADLOG SharePoint — episode 05 (draft: screens to be captured in the lab tenant, see demo.md)
+episode: 5
+slug: permissions-governance
+series_label: "SHAREPOINT"
+series_name: "DEVLADLOG SharePoint"
+file_prefix: "sharepoint"
+title: "Permissions and governance, as code"
+subtitle: "A policy, a snapshot, an audit and a fix for one SharePoint site"
+voice: am_michael
+thumbnail_text: "WHO CAN\nOPEN THIS\nSITE?"
+youtube:
+  title: "SharePoint Permissions Audit with PnP PowerShell: Sharing, Labels, Fixes | DEVLADLOG SharePoint #5"
+  tags: [SharePoint, SharePoint Online, permissions, governance, external sharing, sensitivity labels, oversharing, PnP PowerShell, Pester, Microsoft 365]
+sources:
+  - https://www.devladlog.com/articles/sharepoint/2026-03-26-permissions-governance-complete-guide-2026/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Who can open this site?"
+    sub: "A policy, a snapshot, an audit and a fix"
+    short: hook
+    narration: >
+      Who can open your purchasing site right now? Not who should. Who can. After a year, the honest answer is usually
+      I'm not sure. In this episode we write the rules down as a policy, take a snapshot of what the site really has,
+      audit one against the other, and fix the difference with p n p PowerShell. Welcome to DEVLADLOG SharePoint.
+
+  - id: drift
+    type: bullets
+    heading: "How permissions drift"
+    bullets:
+      - "Full Control for one person, just for today"
+      - "A list that broke inheritance for one request"
+      - "Everyone except external users in Visitors"
+      - "A file shared on its own, an edit link to the company"
+      - "Sharing settings nobody remembers changing"
+    narration: >
+      Nobody plans a mess. Someone gets Full Control just for today. A list breaks inheritance for one request.
+      Everyone except external users ends up in the Visitors group, which opens the site to the whole organization.
+      A contract is shared on its own, an invoice gets an edit link for the whole company, and the sharing settings
+      changed at some point. Each step made sense. Together, nobody knows who has access.
+
+  - id: licensing
+    type: bullets
+    heading: "What you need"
+    bullets:
+      - "Sharing, groups, permissions, links: any SharePoint plan"
+      - "Site sensitivity label: Purview, in our E5 lab"
+      - "SharePoint Advanced Management: not in E5"
+      - "SAM needs a Copilot licence or the SAM Plan 1 add-on"
+    narration: >
+      What do you need? Sharing settings, groups, permissions and links work in any SharePoint plan. The sensitivity
+      label on the site comes from Purview, which our Microsoft 365 E5 lab includes. One thing E5 doesn't include is
+      SharePoint Advanced Management. Learn says it needs a Copilot licence in the organization, or the S A M Plan 1
+      add-on. So everything here uses base SharePoint and labels.
+
+  - id: policy
+    type: code
+    heading: "The policy: write the rules down"
+    lang: json
+    code: |
+      "organizationSharingCapability": "ExternalUserAndGuestSharing",
+      "sharing": { "capability": "Disabled",
+                   "defaultLinkType": "Direct", "defaultLinkPermission": "View" },
+      "sensitivityLabel": { "name": "Confidential", "id": null },
+      "owners": { "min": 2, "max": 5 },
+      "forbiddenPrincipals": ["Everyone", "Everyone except external users"],
+      "fullControlOnlyFor": ["@Owners"],
+      "uniquePermissions": { "maxItemScopesPerList": 50,
+        "allowedLists": [ { "title": "Supplier Documents",
+          "access": { "@Owners": "Full Control",
+                      "Contract Managers": "Contribute", "@Visitors": "Read" } } ] },
+      "sharingLinks": { "forbiddenScopes": ["Anonymous"], "warnScopes": ["Organization"] }
+    narration: >
+      Here's the policy for the purchasing site. Only people in the organization. Default links for specific people,
+      view only. The Confidential label. Two to five owners. Nobody gets Full Control except the owners group, and no
+      Everyone claims. And one list, supplier documents, may have its own permissions, with exactly these groups.
+
+  - id: lint
+    type: code
+    heading: "Lint the policy first"
+    lang: text
+    code: |
+      $ ./Invoke-Governance.ps1 -PolicyPath ./bad/loose.policy.json
+      ERROR   GP001  sharing.defaultLinkPermission
+                     'Write' isn't a link permission: None, View, Edit.
+      ERROR   GP002  sharing.capability
+                     The site can't be more permissive than the organization:
+                     'Anyone' is more than 'New and existing guests'.
+      ERROR   GP005  uniquePermissions.maxItemScopesPerList
+                     60000 is above the supported 50,000 unique permissions per list or library.
+      WARNING GP004  owners.min
+                     Require at least two owners ...
+      ...
+      5 error(s), 2 warning(s); 0 can be fixed automatically
+    narration: >
+      A policy can be wrong too, so we lint it. A link permission that doesn't exist. A site set to Anyone when the
+      organization only allows guests. Learn says the site options depend on the organization setting. And a limit
+      of sixty thousand unique permissions per list, when fifty thousand is the supported maximum and five thousand
+      the recommended one.
+
+  - id: eeeu
+    type: screen
+    heading: "The drift, in the lab site"
+    image: screens/eeeu.jpg
+    bar: "Contoso Purchasing · Site permissions"
+    demo: >
+      Browser on the lab Contoso Purchasing site after New-PermissionDrift.ps1: Settings > Site permissions panel,
+      Site visitors expanded, showing "Everyone except external users" with Read (added by hand as in demo.md), plus
+      Lee Gu listed with Full Control under advanced permissions if visible. Mask tenant URL and avatars.
+    narration: >
+      In the lab, a script recreates that drift on the real site, and one step is done by hand, the way it happens:
+      Everyone except external users added as a visitor. One click, and every page and file the visitors can read is
+      now open to the whole company.
+
+  - id: snapshot
+    type: code
+    heading: "Snapshot what the site really has"
+    lang: powershell
+    code: |
+      $site = Get-PnPTenantSite -Identity $SiteUrl @c       # sharing, default link, label
+      foreach ($g in @(Get-PnPGroup @c)) {
+          [pscustomobject]@{ title = $g.Title
+              members = @(Get-PnPGroupMember -Group $g.Title @c | ForEach-Object { ConvertTo-MgMember $_ }) } }
+      foreach ($list in @(Get-PnPList -Includes HasUniqueRoleAssignments, ItemCount, Hidden, BaseType @c)) {
+          $items = @(Get-PnPListItem -List $list.Id -PageSize 500 -Fields 'FileRef', 'FSObjType' `
+                     -Includes HasUniqueRoleAssignments @c)
+          foreach ($it in $items | Where-Object { $_.HasUniqueRoleAssignments }) {
+              # role assignments of the item, without Limited Access
+          }
+          # files: Get-PnPFileSharingLink -Identity $it['FileRef'] -> keep the ones with a Link
+      }
+    narration: >
+      The snapshot reads what's really there. The site's sharing settings and label, which needs a SharePoint admin.
+      Every group and its members. Every list that breaks inheritance, every item that does, and the sharing links on
+      each file. It's saved as plain JSON, so the audit runs on a file, and you keep a dated record of who had access.
+
+  - id: audit
+    type: screen
+    heading: "Audit the live site"
+    image: screens/audit-live.jpg
+    bar: "PowerShell 7 · Invoke-Governance.ps1"
+    demo: >
+      Terminal (dark theme, font 18+): Invoke-Governance.ps1 -PolicyPath ./src/governance/purchasing.policy.json
+      -SiteUrl -ClientId -SensitivityLabelId -ExportSnapshot ./src/snapshots/before.json against the drifted lab site.
+      Visible: "No findings" for the policy, the summary line (sharing 'Existing guests', default link Internal / Edit,
+      label (none)), then ERROR GV001, GV004, GV007, GV009 and the warnings, ending with the counts line. Mask tenant
+      host and client id.
+    narration: >
+      Against the lab site. External sharing looser than the policy, and no label. Everyone except external users in
+      Visitors. One person with Full Control outside the owners group. A list that broke inheritance for one person,
+      a contract shared on its own, and an edit link for the whole organization. Four errors, eight warnings.
+
+  - id: rules
+    type: code
+    heading: "Rules: groups, not people"
+    lang: powershell
+    code: |
+      $script:IgnoredRoles = @('Limited Access', 'Web-Only Limited Access')
+      foreach ($g in @(Get-MgGrants $scope)) {        # grants without Limited Access
+          $p = $g.Principal
+          if ($p.title -in $forbidden) { New-MgFinding 'GV007' 'Error' ... }
+          if ('Full Control' -in $g.Roles -and $p.title -notin $fullControlOk) {
+              New-MgFinding 'GV009' 'Error' $target "'$($p.title)' has Full Control ..." `
+                  (New-MgRemoveGrantFix $scope $p 'Full Control')
+          }
+          if ($p.principalType -eq 'User' -and $scope.kind -ne 'Item') {
+              New-MgFinding 'GV008' 'Warning' $target "... granted $r directly: grant a group instead."
+          }
+      }
+    narration: >
+      The rules are short. Everyone claims are errors. Full Control outside the owners group is an error, and every
+      finding carries its fix. People granted directly are warnings: grant a group instead. And Limited Access is
+      ignored. Learn documents it as the level SharePoint adds so someone can reach one list or item. It can't be
+      edited, so it isn't a grant anyone made.
+
+  - id: gotcha
+    type: bullets
+    heading: "The gotcha: copy keeps everyone"
+    bullets:
+      - "Break inheritance with copy: the site's groups come along"
+      - "Members keep Edit on the restricted library"
+      - "The library looks restricted, and isn't"
+      - "Declare who may have access, audit the difference"
+    short: gotcha
+    narration: >
+      The gotcha. To restrict the supplier library, the script broke inheritance with copy role assignments, the
+      usual way. That copies the site's role assignments. So Members still have Edit on the restricted library.
+      It looks restricted, and it isn't. That's why the policy declares exactly who may have access to that list,
+      and the audit flags everything else.
+
+  - id: plan
+    type: code
+    heading: "A remediation plan, safest order"
+    lang: text
+    code: |
+      Remediation plan:
+        SetSite               site   SharingCapability=Disabled DefaultSharingLinkType=Direct
+                                     DefaultLinkPermission=View SensitivityLabel=...
+        RemoveSharingLink     GV014  FileUrl=.../INV-10022 Northwind Traders ....txt
+        ResetItemInheritance  GV012  List=Supplier Documents ItemId=7
+        RemoveGrant           GV011  Kind=List Role=Edit Group=Contoso Purchasing Members
+        RemoveGrant           GV009  Kind=Web Role=Full Control User=...lee.gu...
+        ResetListInheritance  GV010  List=Purchase Requests
+        RemoveGroupMember     GV007  ... Group=Contoso Purchasing Visitors
+    short: plan
+    narration: >
+      Findings become a plan. All site settings in one call: sharing, default link and label. Then links, items,
+      grants, lists, and group members, in that order. A grant on a list that's about to inherit again is dropped,
+      because the reset removes it anyway. Run it with what if first, and nothing changes.
+
+  - id: remediate
+    type: screen
+    heading: "Fix, then audit again"
+    image: screens/remediate.jpg
+    bar: "PowerShell 7 · Invoke-Governance.ps1 -Fix"
+    demo: >
+      Terminal: Invoke-Governance.ps1 ... -Fix (without -WhatIf) against the lab site. Visible: the seven "done" rows
+      (SetSite, RemoveSharingLink, ResetItemInheritance, RemoveGrant x2, ResetListInheritance, RemoveGroupMember),
+      then "Audit after remediation:" with the summary line (sharing 'Only people in your organization', label set)
+      and only WARNING GV005 (one owner) left. If anything else is left, record it as is and adjust the narration.
+      Mask tenant host and client id.
+    narration: >
+      Then the fix runs for real, and the script audits again. One finding is left on purpose: the site has one
+      owner, and the policy wants two. Choosing a second owner is a decision for a person, not for a script.
+
+  - id: admin
+    type: screen
+    heading: "The same site in the admin center"
+    image: screens/admin-center.jpg
+    bar: "SharePoint admin center · Active sites"
+    demo: >
+      SharePoint admin center > Sites > Active sites, Sensitivity and External sharing columns visible, Contoso
+      Purchasing row showing "Confidential" and "Only people in your organization"; optionally the site's details
+      pane, Policies tab. Mask tenant name, other sites and admin account.
+    narration: >
+      And in the SharePoint admin center, the purchasing site now shows the Confidential label and only people in
+      your organization. The label is a Purview container label, enabled once for the tenant and published before
+      it can be applied.
+
+  - id: tests
+    type: code
+    heading: "23 Pester tests, real PnP signatures"
+    lang: text
+    code: |
+      $ Invoke-Pester ./tests -Output Detailed
+      Describing Test-MgPermissionSnapshot (the drifted lab site)
+        [+] finds 4 errors and 8 warnings, 11 of them fixable
+        [+] ignores Limited Access: SharePoint assigns it, nobody granted it
+        [+] after the remediation plan only the human decision is left: a second owner
+      Describing Tenant functions (PnP cmdlets mocked)
+        [+] Invoke-MgRemediation calls the right cmdlet for every fix
+        [+] -WhatIf writes nothing
+      Tests Passed: 23, Failed: 0, Skipped: 0
+    narration: >
+      Twenty-three Pester tests: the policy lint, every audit rule on a snapshot of the drifted site, the plan applied
+      to that snapshot until only the owner warning is left, and the snapshot, the fix and the drift script with the
+      real p n p cmdlets mocked.
+
+  - id: recap
+    type: bullets
+    heading: "Five rules"
+    bullets:
+      - "Write the policy down, and lint it"
+      - "Grant groups, never people, never Everyone"
+      - "Declare which lists may break inheritance, and for whom"
+      - "Snapshot, audit, then fix with -WhatIf first"
+      - "Leave owners and guests to a human"
+    narration: >
+      Five rules. Write the policy down, and lint it. Grant groups, never people, and never the Everyone claims.
+      Declare which lists may break inheritance, and for whom. Snapshot, audit, and fix with what if first. And leave
+      owners and guests to a human. Next episode: search and metadata.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The module, the policy, the drift script and the tests are on GitHub, and the full guide is on devladlog dot
+      com. Links are in the description. Subscribe for episode six, search and metadata. This was DEVLADLOG
+      SharePoint, by Momento Galático.

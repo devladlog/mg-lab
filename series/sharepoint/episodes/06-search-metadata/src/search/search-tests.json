@@ -1,0 +1,27 @@
+{
+  "$comment": "Search tests: real queries against the lab site, with the results the episode 4 sample files should give. Tokens: {site} {today} {today+60d} {ct:Name} {term:Path}.",
+  "tests": [
+    { "name": "Everything from Fabrikam",
+      "query": "PurchSupplier:\"Fabrikam\" ContentTypeId:{ct:Purchasing Document}* Path:\"{site}\"",
+      "expect": { "count": 2, "files": ["CTR-2026-0042 Fabrikam*", "INV-10021 Fabrikam*"] } },
+    { "name": "Contracts expiring in the next 60 days",
+      "query": "ContentTypeId:{ct:Contract}* PurchExpiry>={today} PurchExpiry<={today+60d}",
+      "expect": { "count": 1, "files": ["CTR-2026-0042 Fabrikam*"] } },
+    { "name": "Expired contracts",
+      "query": "ContentTypeId:{ct:Contract}* PurchExpiry<{today}",
+      "expect": { "count": 1, "files": ["CTR-2025-0107 Tailspin Toys*"] } },
+    { "name": "Contracts with no expiry date",
+      "query": "ContentTypeId:{ct:Contract}* Path:\"{site}\" NOT PurchExpiry>=1900-01-01",
+      "expect": { "min": 1, "files": ["CTR-2026-0050 Adventure Works*"] } },
+    { "name": "Facilities, the whole branch",
+      "query": "owstaxIdPurchCategory:\"GPP|#{term:Facilities}\"",
+      "expect": { "count": 2, "files": ["CTR-2026-0042 Fabrikam*", "INV-10021 Fabrikam*"] } },
+    { "name": "Refine by supplier",
+      "query": "ContentTypeId:{ct:Purchasing Document}* Path:\"{site}\"",
+      "refiners": "RefinableString00",
+      "expect": { "min": 5, "refiners": { "RefinableString00": ["Adventure Works", "Fabrikam", "Northwind Traders", "Tailspin Toys"] } } },
+    { "name": "The gotcha: a date range on the automatic property",
+      "query": "ExpiryDateOWSDATE<{today}",
+      "lintOnly": true }
+  ]
+}

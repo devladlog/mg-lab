@@ -1,5 +1,16 @@
 # Demo shot list — DEVLADLOG .NET #3 Entity Framework Core
 
+## Lab environment
+
+| Item | What this episode needs |
+|---|---|
+| VMs / Power Platform | none |
+| Lab users | `labadmin` (the recording account): `az login` off camera, becomes the SQL server's **Microsoft Entra admin** (read from `az ad signed-in-user show`) and signs in to the Query editor. Sample data uses fictional `@contoso.com` names only |
+| Azure | Resource group **`rg-mglab-net-03`** in **West Europe** (the deploy script's default region), created by the deploy script with `RG=rg-mglab-net-03` exported (the script's built-in default is `rg-mglab-net03`): **Azure SQL Database free offer** (`--use-free-limit true`, auto-pause at the monthly limit: €0) + App Service plan **Free F1, Linux** + web app with a system-assigned managed identity (€0). Tear-down: `az group delete --name rg-mglab-net-03` |
+| Local screens | `sql-log` and `lost-update` run the real API on the laptop with the SQLite provider the app ships with; they show EF Core's own SQL and concurrency check, not a stand-in for Azure SQL (the two Azure screens show Azure SQL) |
+| Licences / trials | none beyond the subscription |
+| Recording machine | The Windows lab laptop: WSL (Ubuntu) bash with .NET SDK 10.0.1xx, Azure CLI, `curl`, `jq`, `zip` (the `deploy/*.sh` scripts are bash); browser on the host for the portal and `localhost` screens (WSL forwards localhost ports) |
+
 Code and tests were built and run in the container (`dotnet test -m:1`: 26 passed). `deploy/local-demo.sh` was run
 against the local API on SQLite; its output is in [`deploy/local-demo.output.txt`](deploy/local-demo.output.txt) and
 the SQL EF Core logged meanwhile in [`deploy/local-demo.sql-log.txt`](deploy/local-demo.sql-log.txt).
@@ -32,6 +43,7 @@ dotnet run --launch-profile http                                       # http://
 ```bash
 az login                                    # not on camera
 az account set --subscription <lab subscription>
+export RG=rg-mglab-net-03
 APP=contoso-requests-<4 digits> SQL=contoso-sql-<4 digits> ./deploy/deploy-azure.sh infra    # ~5-8 min
 ```
 The script prints the next steps. In the portal: **SQL databases → requests → Query editor (preview)** → sign in with
@@ -70,13 +82,13 @@ free-tier article shows `az sql server firewall-rule create` for one IP), and re
    - `curl https://<host>/healthz` → `Healthy` (the first call can take a while if the database auto-paused:
      free-offer databases pause after 15 minutes idle).
    - `./deploy/local-demo.sh https://<host>` → 201, 200, 200, **409**, 200, 200 (Approved), summary.
-   - Then `az webapp restart -g rg-mglab-net03 -n <app>` and `curl https://<host>/api/requests/<id>` → the approved
+   - Then `az webapp restart -g rg-mglab-net-03 -n <app>` and `curl https://<host>/api/requests/<id>` → the approved
      request is still there (second capture or a cut).
    - **Mask** the host name.
 
 ## Tear-down
 ```bash
-az group delete --name rg-mglab-net03 --yes --no-wait     # web app, plan, SQL server, database
+az group delete --name rg-mglab-net-03 --yes --no-wait     # web app, plan, SQL server, database
 rm -f src/ProjectRequests.Api/requests.db
 rm -rf deploy/out
 ```

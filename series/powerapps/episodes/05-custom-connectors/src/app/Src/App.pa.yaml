@@ -1,0 +1,48 @@
+# Equipment Desk (phone) - episode 5 replaces the hard-coded Holidays list (episode 3) with a call to the
+# Contoso Holidays custom connector (src/connector). Everything else in App.Formulas is unchanged from episode 3.
+#
+# Add the connector to the app first (Data > Add data > Contoso Holidays), then paste this Formulas block.
+#   OfficeCountry / OfficeSubdivision  where the Equipment Desk is ("PT" and "" = Lisbon; "PT-30" for a Madeira office)
+#   DaysOff   one connector call for last year to next year (overdue loans from December count working days into
+#             January); the connector's custom code filters the source to days off for this office
+#   Holidays  the same single-column table of dates episode 3's UDFs already use (d in Holidays)
+# Learn: a named formula is calculated when it is needed and recalculates only when its inputs change, so the
+# gallery rows reuse the same DaysOff value instead of calling the connector per row.
+App:
+  Properties:
+    StartScreen: =BrowseScreen
+    Formulas: |-
+      =DefaultLoanDays = 14;
+      MaxLoanDays = 90;
+      OfficeCountry = "PT";
+      OfficeSubdivision = "";
+      DaysOff = ContosoHolidays.GetDaysOff(OfficeCountry, Year(Today()) - 1, { toYear: Year(Today()) + 1, subdivision: OfficeSubdivision });
+      Holidays = ForAll(DaysOff.days, ThisRecord.date);
+      OverdueCount = CountIf(Loans, IsBlank('Returned on') && 'Due date' < Today());
+      IsWorkingDay(d: Date): Boolean = Weekday(d, StartOfWeek.Monday) <= 5 && !(d in Holidays);
+      WorkingDaysBetween(start: Date, finish: Date): Number =
+          If(finish <= start, 0,
+              CountIf(ForAll(Sequence(DateDiff(start, finish)), DateAdd(start, Value)), IsWorkingDay(Value)));
+      WorkingDays(n: Number): Text = n & If(n = 1, " working day", " working days");
+      LoanState(due: Date, returned: Date): Text =
+          Switch(true,
+              !IsBlank(returned), "Returned",
+              due < Today(), "Overdue",
+              WorkingDaysBetween(Today(), due) <= 2, "Due soon",
+              "On loan");
+      StateColor(state: Text): Color =
+          Switch(state,
+              "Overdue", RGBA(168, 0, 0, 1),
+              "Due soon", RGBA(138, 90, 0, 1),
+              "Returned", RGBA(16, 124, 16, 1),
+              RGBA(50, 49, 48, 1));
+      FirstName(email: Text): Text = Proper(First(Split(First(Split(email, "@")).Value, ".")).Value);
+      ReminderText(asset: Text, email: Text, due: Date): Text =
+          $"Hi {FirstName(email)}, the {asset} you borrowed was due back on {Text(due, "dddd d mmmm", "en-GB")}, {WorkingDays(WorkingDaysBetween(due, Today()))} ago. Please bring it to the Equipment Desk. Thank you!";
+      CopyReminder(asset: Text, email: Text, due: Date): Void = {
+          IfError(
+              Copy(ReminderText(asset, email, due)),
+              Notify("Couldn't copy the reminder: " & FirstError.Message, NotificationType.Error),
+              Notify("Reminder for " & email & " copied", NotificationType.Success)
+          )
+      };

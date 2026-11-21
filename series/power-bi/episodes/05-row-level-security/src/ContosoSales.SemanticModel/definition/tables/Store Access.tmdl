@@ -1,0 +1,28 @@
+/// Security mapping for dynamic RLS: one row per user and store they manage. Hidden, not related to any table:
+/// the Store Managers role reads it with USERPRINCIPALNAME().
+table 'Store Access'
+	isHidden
+
+	column 'User Principal Name'
+		dataType: string
+		isHidden
+		summarizeBy: none
+		sourceColumn: UserPrincipalName
+
+	column StoreKey
+		dataType: int64
+		isHidden
+		formatString: 0
+		summarizeBy: none
+		sourceColumn: StoreKey
+
+	partition 'Store Access' = m
+		mode: import
+		source =
+				let
+				    Source = Csv.Document(File.Contents(DataFolder & "store_access.csv"), [Delimiter = ",", Encoding = 65001, QuoteStyle = QuoteStyle.Csv]),
+				    Promoted = Table.PromoteHeaders(Source, [PromoteAllScalars = true]),
+				    Typed = Table.TransformColumnTypes(Promoted, {{"UserAlias", type text}, {"StoreKey", Int64.Type}}, "en-US"),
+				    WithUpn = Table.AddColumn(Typed, "UserPrincipalName", each Text.Lower(Text.Trim([UserAlias]) & "@" & UpnDomain), type text)
+				in
+				    Table.SelectColumns(WithUpn, {"UserPrincipalName", "StoreKey"})

@@ -1,0 +1,318 @@
+# DEVLADLOG .NET — episode 05 (draft; screens are captured on the lab laptop, see demo.md)
+episode: 5
+slug: testing-with-xunit-nunit
+series_label: ".NET"
+series_name: "DEVLADLOG .NET"
+file_prefix: "net"
+title: "Testing with xUnit and NUnit"
+subtitle: "xUnit v3 and NUnit 5 side by side on Microsoft.Testing.Platform"
+voice: am_michael
+thumbnail_text: "XUNIT V3\nVS NUNIT 5\nONE DOTNET TEST"
+youtube:
+  title: "xUnit v3 vs NUnit 5 in .NET 10: Fixtures, Theories, MTP, Coverage | DEVLADLOG .NET #5"
+  tags: [xUnit, xUnit v3, NUnit, NUnit 5, .NET 10, C#, unit testing, integration testing, Microsoft.Testing.Platform, MTP, dotnet test, code coverage, WebApplicationFactory, EF Core, SQL Server]
+sources:
+  - https://www.devladlog.com/articles/dotnet/2026-05-23-testing-with-xunit-nunit-complete-guide-2026/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Testing with xUnit and NUnit"
+    sub: "Same API, two frameworks, one dotnet test"
+    short: hook
+    narration: >
+      Your team writes x unit. The team next door writes N unit. And somebody asks: can we run both from one
+      command, with one coverage report? Yes, on dot net ten. But one innocent filter will break half of it, and
+      another will silently do nothing. Today we test the same API with both frameworks, side by side. Welcome to
+      DEVLADLOG dot net.
+
+  - id: plan
+    type: bullets
+    heading: "What we're doing"
+    bullets:
+      - "Episode 4's API and its 39 tests, still on xUnit v2 and VSTest"
+      - "Move them to xUnit v3 on Microsoft.Testing.Platform"
+      - "Write the core tests again in NUnit 5"
+      - "One dotnet test, one filter, one coverage report"
+      - "Opt-in tests against a real SQL Server in the lab"
+    narration: >
+      We start from episode four: the project requests API and its thirty-nine tests, on x unit two and the old
+      V S test runner. We move them to x unit three on the Microsoft Testing Platform, write the core tests again in
+      N unit five, and run everything with one command. Plus a few tests that only run when a real SQL Server is
+      around.
+
+  - id: platform
+    type: code
+    heading: "Step one: the test project is an app"
+    lang: xml
+    code: |
+      <!-- global.json: dotnet test runs in Microsoft.Testing.Platform mode (.NET 10 SDK) -->
+      { "test": { "runner": "Microsoft.Testing.Platform" } }
+
+      <!-- xUnit v3 -->
+      <OutputType>Exe</OutputType>
+      <PackageReference Include="xunit.v3" Version="4.0.3" />
+
+      <!-- NUnit: the NUnit runner is opt-in -->
+      <EnableNUnitRunner>true</EnableNUnitRunner>
+      <OutputType>Exe</OutputType>
+      <PackageReference Include="NUnit" Version="5.0.0" />
+      <PackageReference Include="NUnit3TestAdapter" Version="6.3.1" />
+    narration: >
+      With the Microsoft Testing Platform, a test project is an executable. You can run it with dotnet test, dotnet
+      run, or just start it. One line in global dot json switches dotnet test to the new mode. X unit three needs an
+      output type of exe. N unit needs that too, plus enable N unit runner. Don't mix V S test and testing platform
+      projects in one solution: Learn says that's not supported.
+
+  - id: migration
+    type: code
+    heading: "xUnit v2 to v3: two lines, fifty warnings"
+    lang: csharp
+    code: |
+      // csproj: xunit 2.9.3 -> xunit.v3 4.0.3, plus <OutputType>Exe</OutputType>. All 39 tests compiled.
+      // Then the analyzer: 50 x warning xUnit1051
+      //   Calls to methods which accept CancellationToken should use TestContext.Current.CancellationToken
+
+      internal static class TestCancellation      // imported with "using static" in the csproj
+      {
+          public static CancellationToken Ct => TestContext.Current.CancellationToken;
+      }
+
+      var response = await _client.PostAsJsonAsync("/api/requests", NewRequest(75_000m, "it"), Ct);
+      await db.SaveChangesAsync(Ct);
+    narration: >
+      The migration was smaller than expected. Swap the package, make it an exe, and all thirty-nine tests compiled
+      and passed. Then the analyzer spoke up: fifty places where an async call could take a cancellation token and
+      didn't. X unit three gives every test one, so a timeout or an aborted run actually stops the H T T P call. We
+      pass it everywhere.
+
+  - id: theories
+    type: code
+    heading: "Data-driven tests, both ways"
+    lang: csharp
+    code: |
+      // xUnit v3
+      [Theory]
+      [InlineData(49_999.99, Priority.Standard)]          // attributes can't hold decimals: xUnit converts the double
+      [InlineData(50_000, Priority.High)]
+      public void Classify_uses_the_50k_threshold(decimal budget, Priority expected) =>
+          Assert.Equal(expected, PriorityRules.Classify(budget));
+      public static TheoryData<decimal, string?, bool> JustificationCases => new() { { 250_000m, null, false }, /*...*/ };
+
+      // NUnit 5
+      [TestCase(49_999.99, Priority.Standard)]            // NUnit converts the double to decimal too
+      [TestCase(50_000, Priority.High)]
+      public void Classify_uses_the_50k_threshold(decimal budget, Priority expected) =>
+          Assert.That(PriorityRules.Classify(budget), Is.EqualTo(expected));
+      private static IEnumerable<TestCaseData<decimal, string?, bool>> JustificationCases()
+      { yield return new(250_000m, null, false); /*...*/ }
+    narration: >
+      Same business rule, both frameworks. Theory with inline data on the left, test case on the right. Attributes
+      can't hold decimals, so we write a double, and both frameworks convert it. For richer rows, x unit has typed
+      theory data. N unit five adds a generic test case data, so the compiler checks every row too.
+
+  - id: xunitfixture
+    type: code
+    heading: "xUnit: a new instance for every test"
+    lang: csharp
+    code: |
+      public sealed class SeededApi : IAsyncLifetime          // created once per test class
+      {
+          public RequestsApiFactory Factory { get; } = new();
+          public HttpClient Client { get; private set; } = null!;
+
+          public async ValueTask InitializeAsync()            // v3: ValueTask, disposal is IAsyncDisposable
+          {
+              Client = Factory.CreateClient();
+              foreach (var (department, budget) in Seed) { /* POST /api/requests */ }
+          }
+          public async ValueTask DisposeAsync() { await Factory.DisposeAsync(); Factory.DeleteDatabase(); }
+      }
+
+      [Trait("Category", "Integration")]
+      public sealed class SeededApiTests(SeededApi api) : IClassFixture<SeededApi> { /* read-only tests */ }
+    narration: >
+      Here's the big philosophical difference. X unit creates a new instance of the test class for every single
+      test. Anything you want to share, like an app with a seeded database, goes into a fixture. In version three,
+      initialize and dispose return value task. And because the data is shared, every test in this class is read
+      only.
+
+  - id: nunitlifecycle
+    type: code
+    heading: "NUnit: one instance, shared by every test"
+    lang: csharp
+    code: |
+      [assembly: Parallelizable(ParallelScope.Fixtures)]      // NUnit: nothing runs in parallel unless you opt in
+
+      [Category("Integration")]
+      public sealed class ApiTests
+      {
+          private RequestsApiFactory _factory = null!;        // ONE instance of ApiTests for all its tests
+          private HttpClient _client = null!;
+
+          [OneTimeSetUp] public void StartApp() => _factory = new RequestsApiFactory();
+          [SetUp]        public void NewClient() => _client = _factory.CreateClient();
+          [TearDown]     public void DisposeClient() => _client.Dispose();
+          [OneTimeTearDown] public async Task StopApp() { await _factory.DisposeAsync(); _factory.DeleteDatabase(); }
+      }
+    short: lifecycle
+    narration: >
+      N unit does the opposite. One instance of the class, shared by every test in it. So a field is shared state.
+      One time set up starts the app once; set up gives each test a fresh client. And parallelism is flipped too:
+      x unit runs test classes in parallel by default, N unit runs nothing in parallel until you say so. Same
+      words, opposite defaults.
+
+  - id: explorerscreen
+    type: screen
+    heading: "Both frameworks, one Test Explorer"
+    image: screens/test-explorer.jpg
+    bar: "VS Code · Test Explorer + terminal · dotnet test"
+    demo: >
+      VS Code on the lab laptop with the episode folder open (C# Dev Kit). Left: Testing view with both projects
+      expanded, ProjectRequests.Tests.NUnit and ProjectRequests.Tests.Xunit, green ticks, two skipped SQL Server
+      tests. Bottom: integrated terminal (pwsh) after ./deploy/Invoke-Tests.ps1: "Test run summary: Passed!",
+      total 69, succeeded 67, skipped 2 (see deploy/all.output.txt). Nothing to mask.
+    narration: >
+      Both projects in one Test Explorer, and one dotnet test in the terminal. Sixty-nine tests, two skipped. Those
+      two are the SQL Server tests, and we'll get to them.
+
+  - id: asserts
+    type: code
+    heading: "NUnit 5: assertions you must await"
+    lang: csharp
+    code: |
+      // NUnit 5: ThrowsAsync returns a Task. Forget the await and the build fails:
+      //   error NUnit2059: Method 'ThrowsAsync' returns a Task and is not being observed
+      var ex = await Assert.ThrowsAsync<DbUpdateConcurrencyException>(() => approver.SaveChangesAsync(Ct));
+      Assert.That(ex.Entries, Has.Count.EqualTo(1));
+
+      using (Assert.EnterMultipleScope())            // report every failed assert, not just the first
+      {
+          Assert.That(raise.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+          Assert.That(approve.StatusCode, Is.EqualTo(HttpStatusCode.Conflict));
+          Assert.That(now.GetProperty("status").GetString(), Is.EqualTo("Submitted"));
+      }
+    narration: >
+      Two N unit details worth knowing. In N unit five, assert throws async returns a task that you must await. We
+      forgot once, and the N unit analyzer turned it into a build error. And enter multiple scope collects every
+      failing assertion in a block, instead of stopping at the first one.
+
+  - id: failurescreen
+    type: screen
+    heading: "Same bug, two failure messages"
+    image: screens/two-failures.jpg
+    bar: "VS Code terminal · Invoke-Tests.ps1 -Mode Unit with a broken threshold"
+    demo: >
+      In VS Code, change HighThreshold in src/ProjectRequests.Api/Requests/PriorityRules.cs from 50_000m to 49_000m,
+      save, run ./deploy/Invoke-Tests.ps1 -Mode Unit. In frame: the NUnit failure ("Expected: Standard / But was:
+      High", test name Classify_uses_the_50k_threshold(49999.99d,Standard)) and the xUnit failure ("Assert.Equal()
+      Failure: Values differ / Expected: Standard / Actual: High"), then total 18, failed 2. See
+      deploy/failure-messages.output.txt. Revert the change right after. Nothing to mask.
+    narration: >
+      Let's break the threshold on purpose: forty-nine thousand instead of fifty. Both frameworks catch it, at the
+      same boundary, with slightly different words. Expected standard, but was high. Put it back, and we're green.
+
+  - id: gotcha
+    type: code
+    heading: "Gotcha: one filter, two dialects"
+    lang: xml
+    code: |
+      dotnet test --filter-trait Category=Unit
+        NUnit app -> Exit code: 5   Unknown option '--filter-trait'
+
+      <!-- Directory.Build.targets: route each argument to the framework that understands it -->
+      <TestingPlatformCommandLineArguments Condition="'$(XunitTestProject)' == 'true'"
+          >$(TestingPlatformCommandLineArguments) $(XunitArgs)</TestingPlatformCommandLineArguments>
+      <TestingPlatformCommandLineArguments Condition="'$(EnableNUnitRunner)' == 'true'"
+          >$(TestingPlatformCommandLineArguments) $(NUnitArgs)</TestingPlatformCommandLineArguments>
+
+      dotnet test "-p:XunitArgs=--filter-trait Category=Unit" "-p:NUnitArgs=--filter TestCategory=Unit"
+
+      <!-- Same lines in Directory.Build.props: no error, no filter. All 69 tests run. -->
+    short: gotcha
+    narration: >
+      Now the gotcha from the start. X unit three filters with filter trait. N unit keeps the old filter syntax. Pass
+      one to both, and the N unit app refuses to start: unknown option, exit code five. The fix, straight from
+      Learn: route each argument only to the projects that understand it. And put it in directory build targets,
+      not props. In props, those properties don't exist yet, so the condition is false. No error, no filter, all
+      sixty-nine tests run.
+
+  - id: filterscreen
+    type: screen
+    heading: "Exit code 5, then the routed filter"
+    image: screens/filter-gotcha.jpg
+    bar: "VS Code terminal · Invoke-Tests.ps1 -Mode FilterGotcha, then -Mode Unit"
+    demo: >
+      Terminal: ./deploy/Invoke-Tests.ps1 -Mode FilterGotcha. In frame: xUnit app passed (total 8), then "Handshake
+      failures", "Exit code: 5", "Unknown option '--filter-trait'" for ProjectRequests.Tests.NUnit.dll. Then
+      ./deploy/Invoke-Tests.ps1 -Mode Unit: both apps passed, total 18. See deploy/filter-gotcha.output.txt and
+      deploy/unit.output.txt. Crop the pipe path in the command line. Nothing to mask.
+    narration: >
+      Here it is for real. The x unit app runs its eight unit tests, the N unit app exits with code five. With the
+      routed arguments, both run: eighteen unit tests, in a few seconds.
+
+  - id: sqlserver
+    type: code
+    heading: "Tests that need real infrastructure: skip, don't pass"
+    lang: csharp
+    code: |
+      // xUnit v3: skip at run time
+      var server = SqlServerTestDatabase.ServerConnectionString;     // env var REQUESTS_TEST_SQLSERVER
+      Assert.SkipWhen(string.IsNullOrWhiteSpace(server), SqlServerTestDatabase.SkipReason);
+
+      // NUnit
+      if (string.IsNullOrWhiteSpace(server))
+          Assert.Ignore(SqlServerTestDatabase.SkipReason);
+
+      await using var db = SqlServerTestDatabase.CreateContext(server!, "xunit");   // own database per run
+      try
+      {
+          await db.Database.MigrateAsync(Ct);
+          Assert.NotNull(await db.Departments.SingleOrDefaultAsync(d => d.Code == "fin", Ct));   // SQLite: null
+      }
+      finally { await db.Database.EnsureDeletedAsync(Ct); }
+    narration: >
+      Some tests need real infrastructure. These apply the SQL Server migrations to a brand-new database, check that
+      department codes compare case-insensitively there, unlike SQLite, and drop the database. Without a connection
+      string they report skipped, with the reason. Never a fake green.
+
+  - id: sqlscreen
+    type: screen
+    heading: "The same tests against SQL Server in the lab"
+    image: screens/sqlserver-lab.jpg
+    bar: "VS Code terminal · Invoke-Tests.ps1 -Mode SqlServer against CON-SQL01"
+    demo: >
+      Lab laptop, Hyper-V lab running (CON-SQL01, 10.20.0.30). In pwsh set $env:REQUESTS_TEST_SQLSERVER (typed off
+      camera, see demo.md) and run ./deploy/Invoke-Tests.ps1 -Mode SqlServer. In frame: both apps passed, 3 tests
+      (xUnit 2, NUnit 1), 0 skipped. Optional second capture: SSMS Object Explorer on CON-SQL01 during the run,
+      showing a ProjectRequests_xunit_... database that disappears after refresh. Mask the connection string if it
+      ever appears.
+    narration: >
+      And on the lab's SQL Server. Set the connection string, and the same tests run for real: a database appears,
+      gets migrated, checked, and dropped again.
+
+  - id: coveragescreen
+    type: screen
+    heading: "One coverage report for both frameworks"
+    image: screens/coverage-report.jpg
+    bar: "Browser · coverage-report/index.html (ReportGenerator)"
+    demo: >
+      Run ./deploy/Invoke-Tests.ps1 -Mode Coverage, then open coverage-report/index.html in the browser. In frame:
+      "Parser: MultiReport (2x Cobertura)", line coverage about 93 percent, branch coverage about 89 percent, class
+      list with PriorityRules at 50 percent. Then click PriorityRules to show the two red const lines. Nothing to
+      mask (local file).
+    narration: >
+      Finally, coverage. Each app writes a Cobertura file, and Report Generator merges them into one page. One
+      curiosity: our price rules show fifty percent, with the two decimal constants in red. Decimal constants
+      aren't real constants in I L. They're static fields set in a static constructor that never runs, because
+      every caller has the value inlined. Coverage numbers need reading, not worshipping.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      To sum up: pick one test platform for the whole solution, learn which defaults each framework flips, route
+      framework-specific options, and skip what can't run instead of faking it. All sixty-nine tests and the
+      PowerShell runner are on GitHub, and the full guide is on devladlog dot com. Next time: Blazor, WebAssembly
+      and Server. This was DEVLADLOG dot net, by Momento Galático.

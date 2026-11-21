@@ -1,0 +1,314 @@
+{
+    "swagger": "2.0",
+    "info": {
+        "title": "Contoso Holidays",
+        "description": "Public holidays by country from the free Nager.Date API, plus the days off for one office: nationwide public holidays and the holidays of one subdivision.",
+        "version": "1.0",
+        "contact": {
+            "name": "Contoso Equipment Desk",
+            "email": "equipment.desk@contoso.com"
+        }
+    },
+    "host": "date.nager.at",
+    "basePath": "/api/v3",
+    "schemes": [
+        "https"
+    ],
+    "consumes": [],
+    "produces": [
+        "application/json"
+    ],
+    "paths": {
+        "/DaysOff/{CountryCode}": {
+            "get": {
+                "operationId": "GetDaysOff",
+                "summary": "Get days off",
+                "description": "Returns the days off for an office in one country, across up to five years: public holidays that apply nationwide or in the given subdivision. Optional and other regional holidays are listed separately as excluded.",
+                "x-ms-visibility": "important",
+                "parameters": [
+                    {
+                        "name": "CountryCode",
+                        "in": "path",
+                        "required": true,
+                        "type": "string",
+                        "x-ms-summary": "Country",
+                        "description": "Two-letter ISO 3166-1 country code, for example PT.",
+                        "x-ms-dynamic-values": {
+                            "operationId": "ListCountries",
+                            "value-path": "countryCode",
+                            "value-title": "name"
+                        }
+                    },
+                    {
+                        "name": "fromYear",
+                        "in": "query",
+                        "required": true,
+                        "type": "integer",
+                        "format": "int32",
+                        "x-ms-summary": "From Year",
+                        "description": "First year to include, for example 2026."
+                    },
+                    {
+                        "name": "toYear",
+                        "in": "query",
+                        "required": false,
+                        "type": "integer",
+                        "format": "int32",
+                        "x-ms-summary": "To Year",
+                        "description": "Last year to include. Leave empty for one year. At most four years after From Year."
+                    },
+                    {
+                        "name": "subdivision",
+                        "in": "query",
+                        "required": false,
+                        "type": "string",
+                        "x-ms-summary": "Subdivision",
+                        "description": "ISO 3166-2 code of the office region, for example PT-30 for Madeira. Leave empty for nationwide holidays only.",
+                        "x-ms-visibility": "advanced"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "The days off, sorted by date.",
+                        "schema": {
+                            "$ref": "#/definitions/DaysOff"
+                        }
+                    },
+                    "400": {
+                        "description": "A parameter is missing or invalid."
+                    },
+                    "404": {
+                        "description": "The country code isn't known to the holiday source."
+                    }
+                }
+            }
+        },
+        "/PublicHolidays/{Year}/{CountryCode}": {
+            "get": {
+                "operationId": "ListPublicHolidays",
+                "summary": "List public holidays",
+                "description": "Returns every holiday the source knows for one year and country, unfiltered, including optional and regional ones.",
+                "x-ms-visibility": "advanced",
+                "parameters": [
+                    {
+                        "name": "Year",
+                        "in": "path",
+                        "required": true,
+                        "type": "integer",
+                        "format": "int32",
+                        "x-ms-summary": "Year",
+                        "description": "Calendar year, for example 2026."
+                    },
+                    {
+                        "name": "CountryCode",
+                        "in": "path",
+                        "required": true,
+                        "type": "string",
+                        "x-ms-summary": "Country",
+                        "description": "Two-letter ISO 3166-1 country code, for example PT."
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Holidays as returned by the source.",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/PublicHoliday"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "The country code isn't known to the holiday source."
+                    }
+                }
+            }
+        },
+        "/AvailableCountries": {
+            "get": {
+                "operationId": "ListCountries",
+                "summary": "List countries",
+                "description": "Returns the countries the holiday source supports. Used to fill the Country drop-down.",
+                "x-ms-visibility": "internal",
+                "parameters": [],
+                "responses": {
+                    "200": {
+                        "description": "Supported countries.",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/Country"
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "definitions": {
+        "DaysOff": {
+            "type": "object",
+            "properties": {
+                "countryCode": {
+                    "type": "string",
+                    "x-ms-summary": "Country",
+                    "description": "Country code the days off are for."
+                },
+                "subdivision": {
+                    "type": "string",
+                    "x-ms-summary": "Subdivision",
+                    "description": "Subdivision that was included, empty for nationwide only."
+                },
+                "fromYear": {
+                    "type": "integer",
+                    "format": "int32",
+                    "x-ms-summary": "From Year",
+                    "description": "First year included."
+                },
+                "toYear": {
+                    "type": "integer",
+                    "format": "int32",
+                    "x-ms-summary": "To Year",
+                    "description": "Last year included."
+                },
+                "count": {
+                    "type": "integer",
+                    "format": "int32",
+                    "x-ms-summary": "Count",
+                    "description": "Number of days off returned."
+                },
+                "days": {
+                    "type": "array",
+                    "x-ms-summary": "Days",
+                    "description": "One row per day off, sorted by date.",
+                    "items": {
+                        "$ref": "#/definitions/DayOff"
+                    }
+                },
+                "excluded": {
+                    "type": "array",
+                    "x-ms-summary": "Excluded",
+                    "description": "Holidays the source lists that are not days off for this office, with the reason.",
+                    "x-ms-visibility": "advanced",
+                    "items": {
+                        "$ref": "#/definitions/ExcludedHoliday"
+                    }
+                }
+            }
+        },
+        "DayOff": {
+            "type": "object",
+            "properties": {
+                "date": {
+                    "type": "string",
+                    "format": "date",
+                    "x-ms-summary": "Date",
+                    "description": "Day off, yyyy-MM-dd."
+                },
+                "name": {
+                    "type": "string",
+                    "x-ms-summary": "Name",
+                    "description": "English name of the holiday."
+                },
+                "localName": {
+                    "type": "string",
+                    "x-ms-summary": "Local Name",
+                    "description": "Name in the local language."
+                },
+                "scope": {
+                    "type": "string",
+                    "x-ms-summary": "Scope",
+                    "description": "National, or the subdivision code the holiday belongs to."
+                }
+            }
+        },
+        "ExcludedHoliday": {
+            "type": "object",
+            "properties": {
+                "date": {
+                    "type": "string",
+                    "format": "date",
+                    "x-ms-summary": "Date",
+                    "description": "Date of the holiday, yyyy-MM-dd."
+                },
+                "name": {
+                    "type": "string",
+                    "x-ms-summary": "Name",
+                    "description": "English name of the holiday."
+                },
+                "reason": {
+                    "type": "string",
+                    "x-ms-summary": "Reason",
+                    "description": "Why it isn't a day off: Optional, Bank, School, Authorities, Observance or Regional."
+                }
+            }
+        },
+        "PublicHoliday": {
+            "type": "object",
+            "properties": {
+                "date": {
+                    "type": "string",
+                    "format": "date",
+                    "x-ms-summary": "Date",
+                    "description": "Date of the holiday, yyyy-MM-dd."
+                },
+                "localName": {
+                    "type": "string",
+                    "x-ms-summary": "Local Name",
+                    "description": "Name in the local language."
+                },
+                "name": {
+                    "type": "string",
+                    "x-ms-summary": "Name",
+                    "description": "English name of the holiday."
+                },
+                "countryCode": {
+                    "type": "string",
+                    "x-ms-summary": "Country",
+                    "description": "Country code."
+                },
+                "global": {
+                    "type": "boolean",
+                    "x-ms-summary": "Nationwide",
+                    "description": "True when the holiday applies to the whole country."
+                },
+                "counties": {
+                    "type": "array",
+                    "x-ms-summary": "Subdivisions",
+                    "description": "Subdivision codes where a regional holiday applies.",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "types": {
+                    "type": "array",
+                    "x-ms-summary": "Types",
+                    "description": "Public, Bank, School, Authorities, Optional or Observance.",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "Country": {
+            "type": "object",
+            "properties": {
+                "countryCode": {
+                    "type": "string",
+                    "x-ms-summary": "Country Code",
+                    "description": "Two-letter ISO 3166-1 code."
+                },
+                "name": {
+                    "type": "string",
+                    "x-ms-summary": "Name",
+                    "description": "English country name."
+                }
+            }
+        }
+    },
+    "parameters": {},
+    "responses": {},
+    "securityDefinitions": {},
+    "security": [],
+    "tags": []
+}

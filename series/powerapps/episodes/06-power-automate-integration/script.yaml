@@ -1,0 +1,285 @@
+# DEVLADLOG Power Apps — episode 06. Draft: code scenes are real excerpts from src/ and tests/, screen scenes need the lab recording.
+episode: 6
+slug: power-automate-integration
+series_label: "POWER APPS"
+series_name: "DEVLADLOG Power Apps"
+file_prefix: "powerapps"
+title: "Power Automate integration: the app asks, the flow decides"
+subtitle: "Power Apps V2 trigger, Respond to a Power App, and connections that don't leak"
+voice: am_michael
+thumbnail_text: "APP ASKS\nFLOW\nDECIDES"
+youtube:
+  title: "Power Apps + Power Automate, Safely: V2 Trigger, Respond, Connections | DEVLADLOG Power Apps #6"
+  tags: [Power Apps, Power Automate, cloud flow, Power Apps V2 trigger, Respond to a Power App or flow, Dataverse, Office 365 Outlook, connection references, run-only users, Power Fx, ALM, Power Platform]
+sources:
+  - https://www.devladlog.com/articles/powerapps/2026-02-25-power-automate-integration-complete-guide-2026/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Never let the app choose who gets the email"
+    sub: "One id in, one answer out, and the flow checks everything else"
+    short: hook
+    narration: >
+      Most Power Apps that call a flow pass the email address, the subject and the text. Microsoft's own docs warn that
+      those arguments travel as network traffic and can be intercepted and changed. In this episode the phone app sends a
+      flow one thing, a loan id. The flow reads the rest, checks it, sends the reminder and answers back. Welcome to
+      DEVLADLOG Power Apps.
+
+  - id: plan
+    type: bullets
+    heading: "Copy reminder becomes Send reminder"
+    bullets:
+      - "Power Apps (V2) trigger: one input, LoanId"
+      - "Dataverse reads the loan, the flow decides"
+      - "Outlook sends, Respond to a Power App answers"
+      - "Connections provided by the user who taps"
+      - "The flow kept as code, deployed into the solution"
+    narration: >
+      In episode three the overdue loans screen had a copy reminder button. The user pasted the text into an email
+      themselves. Now the button runs a cloud flow. The flow gets the loan from Dataverse, refuses anything that shouldn't
+      get a reminder, sends the email, and tells the app what happened. And the whole flow lives in source control.
+
+  - id: trigger
+    type: code
+    heading: "The trigger: one typed input"
+    lang: json
+    code: |
+      "manual": {
+        "type": "Request",
+        "kind": "PowerAppV2",
+        "inputs": { "schema": {
+          "type": "object",
+          "properties": {
+            "text": { "title": "LoanId", "type": "string",
+                      "x-ms-dynamically-added": true, "x-ms-content-hint": "TEXT",
+                      "description": "Row id (GUID) of the loan. Everything else is read from Dataverse." }
+          },
+          "required": [ "text" ] } }
+      }
+    narration: >
+      The Power Apps V two trigger has typed inputs, so the app sees a proper parameter. We give it exactly one: the loan's
+      row id. No address, no subject, no body text. Whatever someone does to that request on the wire, the worst they can
+      send is a different id.
+
+  - id: getloan
+    type: code
+    heading: "The flow reads the loan itself"
+    lang: json
+    code: |
+      "Get_loan": {
+        "type": "OpenApiConnection",
+        "inputs": {
+          "host": { "connectionName": "shared_commondataserviceforapps", "operationId": "GetItem" },
+          "parameters": {
+            "entityName": "contoso_loans",
+            "recordId": "@triggerBody()['text']",
+            "$select": "contoso_name,contoso_borroweremail,contoso_duedate,contoso_returnedon",
+            "$expand": "contoso_EquipmentId($select=contoso_assettag,contoso_name)"
+          } } }
+
+      Passed  The_app_cannot_choose_who_gets_the_email
+    narration: >
+      Get a row by ID, with only the columns we need and the equipment lookup expanded. The borrower's address, the device
+      and the due date all come from here. A test checks that nothing from the trigger ever reaches the email action.
+
+  - id: designer-screen
+    type: screen
+    heading: "The flow in the solution"
+    image: screens/flow-designer.jpg
+    bar: "Power Automate · Solutions · Equipment Desk · SendLoanReminder"
+    demo: >
+      make.powerautomate.com, DEV environment, Solutions > Equipment Desk: SendLoanReminder (cloud flow) and the two connection
+      references Equipment Desk - commondataserviceforapps and Equipment Desk - office365 listed. Open the flow in the designer:
+      PowerApps (V2) trigger with the LoanId text input, Get loan, Today, Problem, the Can remind condition with
+      Send reminder / Respond sent / Respond send failed in True and Respond skipped in False, and Respond not found.
+      Mask environment name, user names.
+    narration: >
+      Here it is in the Equipment Desk solution, next to its two connection references. The trigger with its one input, the
+      Dataverse read, the check, and a condition with the email on one side. Count the respond actions: four.
+
+  - id: problem
+    type: code
+    heading: "The check, and a time zone"
+    lang: text
+    short: timezone
+    code: |
+      Today:   convertFromUtc(utcNow(), 'GMT Standard Time', 'yyyy-MM-dd')
+
+      Problem: if(not(empty(body('Get_loan')?['contoso_returnedon'])), 'it was already returned',
+               if(not(less(formatDateTime(body('Get_loan')?['contoso_duedate'], 'yyyy-MM-dd'), outputs('Today'))),
+                  'it isn''t overdue yet',
+               if(not(endsWith(coalesce(body('Get_loan')?['contoso_borroweremail'], ''), '@contoso.com')),
+                  'the borrower isn''t a contoso.com address', '')))
+
+      Passed  Overdue_means_overdue_in_Lisbon_not_in_UTC
+    narration: >
+      Three reasons to refuse: already returned, not overdue yet, or an address outside contoso dot com. Watch the date.
+      U T C now is U T C. At half past eleven at night in July, Lisbon is already on the next day, so a loan due that day is
+      overdue there and not in U T C. Convert from U T C fixes the boundary. And ends with ignores case, so capital letters
+      don't sneak past.
+
+  - id: respond
+    type: code
+    heading: "Every path answers, with the same outputs"
+    lang: json
+    code: |
+      "Respond_skipped": {
+        "type": "Response", "kind": "PowerApp",
+        "inputs": { "statusCode": 200,
+          "body": { "sent": false, "message": "No reminder sent: @{outputs('Problem')}." },
+          "schema": { "type": "object", "properties": {
+            "sent":    { "title": "sent",    "type": "boolean" },
+            "message": { "title": "message", "type": "string" } } } } }
+
+      Respond_sent / Respond_send_failed / Respond_skipped / Respond_not_found
+      Passed  Every_path_answers_the_app_exactly_once (8 paths)
+    narration: >
+      The app waits for an answer, and Learn puts the limit at a hundred and twenty seconds. So every path ends in a
+      respond action: sent, send failed, skipped, and loan not found or not readable. All four declare the same two outputs,
+      because Power Apps stores the outputs in the app, and a missing one simply reads as blank.
+
+  - id: button
+    type: code
+    heading: "The button: show what the flow says"
+    lang: text
+    code: |
+      OnSelect:
+        Set(sendingLoan, ThisItem.contoso_loanid);
+        IfError(
+            With({ result: SendLoanReminder.Run(Text(ThisItem.contoso_loanid)) },
+                Notify(result.message, If(result.sent, NotificationType.Success, NotificationType.Warning))),
+            Notify("The reminder flow didn't run: " & FirstError.Message, NotificationType.Error)
+        );
+        Set(sendingLoan, Blank())
+      DisplayMode: If(IsBlank(sendingLoan), DisplayMode.Edit, DisplayMode.Disabled)
+    narration: >
+      In the app, the flow is a function: send loan reminder dot run, with the id. The reply is a record with sent and
+      message. If error catches a flow that's off or broken. And while one reminder is on its way, every reminder button is
+      disabled, so nobody gets three emails. We use the logical name of the id, because episode one called two columns Loan.
+
+  - id: app-screen
+    type: screen
+    heading: "Tap, wait, read the answer"
+    image: screens/app-send.jpg
+    bar: "Equipment Desk (phone) · Open loans · Outlook"
+    demo: >
+      Equipment Desk (phone) playing (browser phone preview or Power Apps mobile), Open loans screen: an overdue loan (CT-0043,
+      borrower alex.demo@contoso.com, a lab mailbox) with the Send reminder button. Tap it: the button text changes to
+      "Sending..." and other reminder buttons grey out; then the green banner "Reminder sent to alex.demo@contoso.com for CT-0043.".
+      Cut to Outlook on the web for that mailbox: the email "Please return CT-0043 Laptop 14" with "was due back on ...".
+      Second shot: a loan due today or returned gives the yellow banner "No reminder sent: it isn't overdue yet.".
+      Mask tenant, real user names; the borrower mailbox must be a lab test user.
+    narration: >
+      On the phone. Tap send reminder, the buttons wait, and the green banner is the flow's own message. In the borrower's
+      inbox, the reminder, with the device and the due date from Dataverse. Try a loan that isn't overdue, and the flow says
+      no, politely, and says why.
+
+  - id: run-screen
+    type: screen
+    heading: "The run history tells the same story"
+    image: screens/flow-run.jpg
+    bar: "Power Automate · SendLoanReminder · Run history"
+    demo: >
+      SendLoanReminder > 28-day run history: two runs from the app. Open the successful one: Get loan, Today, Problem (output empty),
+      Can remind True, Send reminder succeeded, Respond sent succeeded; Respond not found skipped. Open the refused one: Problem
+      output "it isn't overdue yet", False branch, Respond skipped. Mask user names and email addresses except the fictional borrower.
+    narration: >
+      The run history matches. In the first run the check is empty, the true branch sends and responds. In the second, the
+      check has a reason, the false branch responds, and the email action never ran.
+
+  - id: connections
+    type: code
+    heading: "Whose connection runs the flow?"
+    lang: json
+    short: connections
+    code: |
+      "connectionReferences": {
+        "shared_commondataserviceforapps": {
+          "runtimeSource": "invoker",
+          "connection": { "connectionReferenceLogicalName": "contoso_EquipmentDeskDataverse" } },
+        "shared_office365": {
+          "runtimeSource": "invoker",
+          "connection": { "connectionReferenceLogicalName": "contoso_EquipmentDeskOutlook" } }
+      }
+      // Learn: an embedded connection "might have access to data that app users can't access directly"
+    narration: >
+      Here's the decision people skip. When an app runs a flow, whose connection does it use? An embedded connection runs
+      as its owner, and Learn warns it might reach data the app user can't. Provided by run only user means the person who
+      tapped. We pick that for both: the flow can only read loans you can read, and the email comes from you.
+
+  - id: deploy
+    type: code
+    heading: "The flow as code: a workflow row"
+    lang: csharp
+    code: |
+      await SendAsync(HttpMethod.Post, "workflows", new JsonObject
+      {
+          ["category"] = 5,                 // modern flow
+          ["name"] = o.Name,
+          ["type"] = 1,                     // definition
+          ["primaryentity"] = "none",
+          ["description"] = o.Description,
+          ["clientdata"] = clientData,      // a JSON *string*: connectionReferences + definition
+      }, o.Solution, ct);                   // MSCRM.SolutionUniqueName: EquipmentDesk
+
+      // created off; --activate turns it on only when every connection reference has a connection
+    narration: >
+      Flows are rows in Dataverse. Learn documents creating one with the Web API: category five, type one, primary entity
+      none, and the definition as a string in client data. Our deploy tool creates the connection references and the flow in
+      the solution, and only turns it on once a person has picked a connection for each reference.
+
+  - id: runonly-screen
+    type: screen
+    heading: "Run only users: provided by the user"
+    image: screens/run-only-users.jpg
+    bar: "Power Automate · SendLoanReminder · Run only users"
+    demo: >
+      Terminal: `dotnet run -- ../flow/SendLoanReminder.clientdata.json --activate` printing "Connection reference ... has a
+      connection" twice and "Flow 'SendLoanReminder': on". Then the flow details page > Run only users > Edit: both
+      Microsoft Dataverse and Office 365 Outlook set to "Provided by run-only user". Mask environment URL, the token is never shown.
+    narration: >
+      The deploy tool turns the flow on, and the run only users panel confirms it: Dataverse and Outlook, both provided by
+      the run only user.
+
+  - id: changes
+    type: bullets
+    heading: "Changing a flow an app already uses"
+    bullets:
+      - "Edited outside Studio? Refresh it in the Power Automate pane"
+      - "New input, new connection or removed output breaks published versions"
+      - "Live app: Save As a copy of the flow, switch the app"
+      - "120 seconds to respond; Respond first, slow work after"
+      - "Power Apps licence covers flows run from a Power Apps trigger"
+    narration: >
+      Before you change it. Learn says refresh the flow in Studio after editing it elsewhere, or it may fail even in apps
+      you already published. Adding an input or a connection, or removing an output, breaks published versions, so for a live
+      app save a copy and switch. Respond within two minutes. And a Power Apps licence covers flows started by the Power Apps trigger.
+
+  - id: tests
+    type: code
+    heading: "Forty-four tests, and they bite"
+    lang: text
+    code: |
+      $ dotnet test FlowTests
+        Passed  An_overdue_loan_gets_an_email_and_the_app_gets_sent_true
+        Passed  A_loan_the_user_cannot_read_is_a_polite_no_not_a_failed_run
+        Passed  Every_response_is_PowerApp_and_declares_the_same_outputs
+        Passed  Send_reminder_on_an_overdue_loan_sends_the_email_and_shows_the_flows_message
+        Passed  Activate_refuses_while_a_connection_reference_has_no_connection
+      Passed!  - Failed: 0, Passed: 44, Total: 44
+
+      # mutation check: utcNow instead of convertFromUtc, wrong domain, one Respond schema changed
+      Failed!  - Failed: 7, Passed: 37
+    narration: >
+      The tests run the real definition on a small interpreter for the expression language, with fake connectors, plus
+      the app's own button formulas. It isn't Power Automate, so we checked it bites: break the time zone, the domain or one
+      respond schema, and seven tests fail. The lab run proves the rest.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The flow definition, the deploy tool and all forty four tests are on GitHub, and the complete guide is on devladlog
+      dot com. Links are in the description. Next time: component libraries. Subscribe so you don't miss it.

@@ -1,0 +1,419 @@
+{
+  "swagger": "2.0",
+  "info": {
+    "title": "Contoso Purchase Requests",
+    "description": "Submit and decide purchase requests. Every call runs as the signed-in user.",
+    "version": "1.0"
+  },
+  "host": "app-purchreq-CHANGE-ME.azurewebsites.net",
+  "basePath": "/",
+  "schemes": [
+    "https"
+  ],
+  "consumes": [
+    "application/json"
+  ],
+  "produces": [
+    "application/json"
+  ],
+  "paths": {
+    "/api/requests": {
+      "post": {
+        "operationId": "SubmitRequest",
+        "summary": "Submit a purchase request",
+        "description": "Submit a purchase request",
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/SubmitRequest"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Created",
+            "schema": {
+              "$ref": "#/definitions/RequestView"
+            }
+          },
+          "400": {
+            "description": "Invalid input",
+            "schema": {
+              "$ref": "#/definitions/Problem"
+            }
+          },
+          "401": {
+            "description": "Not signed in or token not valid for this API"
+          },
+          "403": {
+            "description": "Signed in but not allowed",
+            "schema": {
+              "$ref": "#/definitions/Problem"
+            }
+          },
+          "429": {
+            "description": "Too many writes, try again in a minute"
+          }
+        }
+      }
+    },
+    "/api/requests/mine": {
+      "get": {
+        "operationId": "ListMyRequests",
+        "summary": "List my requests",
+        "description": "List my requests",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "schema": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/RequestView"
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in or token not valid for this API"
+          },
+          "403": {
+            "description": "Signed in but not allowed",
+            "schema": {
+              "$ref": "#/definitions/Problem"
+            }
+          },
+          "429": {
+            "description": "Too many writes, try again in a minute"
+          }
+        }
+      }
+    },
+    "/api/requests/pending": {
+      "get": {
+        "operationId": "ListPendingRequests",
+        "summary": "List requests waiting for a decision (approvers)",
+        "description": "List requests waiting for a decision (approvers)",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "schema": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/RequestView"
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in or token not valid for this API"
+          },
+          "403": {
+            "description": "Signed in but not allowed",
+            "schema": {
+              "$ref": "#/definitions/Problem"
+            }
+          },
+          "429": {
+            "description": "Too many writes, try again in a minute"
+          }
+        }
+      }
+    },
+    "/api/requests/{id}": {
+      "get": {
+        "operationId": "GetRequest",
+        "summary": "Get one request",
+        "description": "Get one request",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "format": "uuid",
+            "x-ms-summary": "Request ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "schema": {
+              "$ref": "#/definitions/RequestView"
+            }
+          },
+          "401": {
+            "description": "Not signed in or token not valid for this API"
+          },
+          "403": {
+            "description": "Signed in but not allowed",
+            "schema": {
+              "$ref": "#/definitions/Problem"
+            }
+          },
+          "429": {
+            "description": "Too many writes, try again in a minute"
+          },
+          "404": {
+            "description": "Not found or not yours"
+          }
+        }
+      }
+    },
+    "/api/requests/{id}/decision": {
+      "post": {
+        "operationId": "DecideRequest",
+        "summary": "Approve or reject a request (approvers)",
+        "description": "Approve or reject a request (approvers)",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "format": "uuid",
+            "x-ms-summary": "Request ID"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/DecisionRequest"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "schema": {
+              "$ref": "#/definitions/RequestView"
+            }
+          },
+          "400": {
+            "description": "Invalid input",
+            "schema": {
+              "$ref": "#/definitions/Problem"
+            }
+          },
+          "401": {
+            "description": "Not signed in or token not valid for this API"
+          },
+          "403": {
+            "description": "Signed in but not allowed",
+            "schema": {
+              "$ref": "#/definitions/Problem"
+            }
+          },
+          "429": {
+            "description": "Too many writes, try again in a minute"
+          },
+          "404": {
+            "description": "Not found"
+          },
+          "409": {
+            "description": "Already decided",
+            "schema": {
+              "$ref": "#/definitions/Problem"
+            }
+          }
+        }
+      }
+    },
+    "/api/requests/{id}/audit": {
+      "get": {
+        "operationId": "GetRequestAudit",
+        "summary": "Audit trail of one request",
+        "description": "Audit trail of one request",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "format": "uuid",
+            "x-ms-summary": "Request ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "schema": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/AuditView"
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in or token not valid for this API"
+          },
+          "403": {
+            "description": "Signed in but not allowed",
+            "schema": {
+              "$ref": "#/definitions/Problem"
+            }
+          },
+          "429": {
+            "description": "Too many writes, try again in a minute"
+          },
+          "404": {
+            "description": "Not found or not yours"
+          }
+        }
+      }
+    }
+  },
+  "definitions": {
+    "SubmitRequest": {
+      "type": "object",
+      "required": [
+        "title",
+        "justification",
+        "amount",
+        "currency"
+      ],
+      "properties": {
+        "title": {
+          "type": "string",
+          "x-ms-summary": "Title"
+        },
+        "justification": {
+          "type": "string",
+          "x-ms-summary": "Justification"
+        },
+        "amount": {
+          "type": "number",
+          "format": "double",
+          "x-ms-summary": "Amount"
+        },
+        "currency": {
+          "type": "string",
+          "x-ms-summary": "Currency",
+          "default": "EUR"
+        }
+      }
+    },
+    "DecisionRequest": {
+      "type": "object",
+      "required": [
+        "outcome"
+      ],
+      "properties": {
+        "outcome": {
+          "type": "string",
+          "enum": [
+            "Approve",
+            "Reject"
+          ],
+          "x-ms-summary": "Outcome"
+        },
+        "comment": {
+          "type": "string",
+          "x-ms-summary": "Comment"
+        }
+      }
+    },
+    "RequestView": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "title": {
+          "type": "string"
+        },
+        "justification": {
+          "type": "string"
+        },
+        "amount": {
+          "type": "number",
+          "format": "double"
+        },
+        "currency": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "Pending",
+            "Approved",
+            "Rejected"
+          ]
+        },
+        "requestedByName": {
+          "type": "string"
+        },
+        "createdAtUtc": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "decidedByName": {
+          "type": "string",
+          "x-nullable": true
+        },
+        "decidedAtUtc": {
+          "type": "string",
+          "format": "date-time",
+          "x-nullable": true
+        },
+        "decisionComment": {
+          "type": "string",
+          "x-nullable": true
+        }
+      }
+    },
+    "AuditView": {
+      "type": "object",
+      "properties": {
+        "action": {
+          "type": "string"
+        },
+        "actorOid": {
+          "type": "string"
+        },
+        "detail": {
+          "type": "string"
+        },
+        "atUtc": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "Problem": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "status": {
+          "type": "integer"
+        },
+        "detail": {
+          "type": "string"
+        },
+        "errors": {
+          "type": "object"
+        }
+      }
+    }
+  },
+  "securityDefinitions": {
+    "oauth2-auth": {
+      "type": "oauth2",
+      "flow": "accessCode",
+      "authorizationUrl": "https://login.microsoftonline.com/common/oauth2/authorize",
+      "tokenUrl": "https://login.microsoftonline.com/common/oauth2/authorize",
+      "scopes": {}
+    }
+  },
+  "security": [
+    {
+      "oauth2-auth": []
+    }
+  ]
+}

@@ -1,5 +1,15 @@
 # Demo shot list — DEVLADLOG Dynamics 365 #1: Dataverse Deep Dive
 
+## Lab environment
+
+| Item | What this episode needs |
+|---|---|
+| VMs / Azure | none |
+| Tenant environment | Power Platform environment **`DEV`** (Dataverse; Dynamics 365 apps not required, so not the Sales trial). Solution `MGLabDataverse`, publisher prefix `mgl`, option value prefix `72700` (created in setup); table `mgl_projectrequest` with 18 imported records (deleted in tear-down unless episodes 2–4 are next) |
+| Lab users | `labadmin` (the recording account) with **System Customizer** in `DEV`, interactive sign-in. Optional: an app registration + application user with System Customizer for the scripted runs (deleted in tear-down) |
+| Licences / trials | none beyond the lab licences; cost 0 |
+| Recording machine | The Windows lab laptop: maker portal / model-driven app in the browser with `pipeline/mask.js`; WSL (Ubuntu) bash with Python 3.10+ (`pip install --user -r requirements.txt`) |
+
 Everything in `src/` and `tests/` already ran in the build container against the in-memory stand-in
 (`pytest`: 41 passed; `python -m dvlab all --fake`). Nothing has run against a real environment yet:
 **every `screen` scene below needs the lab tenant**, and its narration must be checked against what really appears.
@@ -10,7 +20,7 @@ Everything in `src/` and `tests/` already ran in the build container against the
 |---|---|---|
 | MG Lab DEV environment with Dataverse (exists) | Any Dataverse environment works; Dynamics 365 apps not required | none |
 | Solution `MGLabDataverse`, publisher prefix `mgl`, option value prefix `72700` | Create in make.powerapps.com → Solutions → New solution (new publisher if `mgl` doesn't exist) | none |
-| Identity | Either your own user with System Customizer + the right to create tables, or an app registration + **application user** in the environment with System Customizer. Don't record with a Global Administrator account | none |
+| Identity | Either `labadmin` with System Customizer + the right to create tables, or an app registration + **application user** in the environment with System Customizer. Don't record with a Global Administrator account | none |
 | Python 3.10+ with `pip install --user -r requirements.txt` | requests, msal, pytest | none |
 | Browser with `pipeline/mask.js` | For the maker portal shot | none |
 

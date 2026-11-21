@@ -1,5 +1,15 @@
 # Demo shot list: DEVLADLOG Power Automate #1, Cloud flows fundamentals
 
+## Lab environment
+
+| Item | What this episode needs |
+|---|---|
+| VMs / Azure | none |
+| Tenant | Power Platform environment **`DEV`** (solution `IT Requests`, two cloud flows, connection references). **SharePoint**: site `IT Helpdesk` with list **IT Requests** (created in setup if missing) |
+| Lab users | `labadmin` (the recording account): maker, flow owner, site owner. **`alex.demo` (Alex Demo)**: requester, creates the sample items and receives the acknowledgement. **`taylor.demo` (Taylor Demo)**: the on-call engineer and service desk mailbox (alert and digest recipient), so every email lands in a lab mailbox you can film |
+| Licences / trials | standard connectors only (SharePoint, Office 365 Outlook): covered by the lab E5 licences; cost 0 |
+| Recording machine | The Windows lab laptop: browser (SharePoint, make.powerautomate.com, Outlook on the web for the mailboxes) with `pipeline/mask.js`; terminal with Power Platform CLI (`pac`) and Python 3 for export/unpack and the tests |
+
 Everything in `src/` and `tests/` already runs locally (see README). This file is for the recording session in the
 **lab tenant**. Items marked **needs tenant** can't be validated from the build container.
 
@@ -10,7 +20,7 @@ Everything in `src/` and `tests/` already runs locally (see README). This file i
 | MG Lab DEV environment with Dataverse (exists) | Solutions and connection references need Dataverse | none |
 | A licence with standard connectors for the maker (Microsoft 365 or Power Automate) | SharePoint, Office 365 Outlook are **standard** connectors | none (existing) |
 | SharePoint site `IT Helpdesk` in the lab tenant (create if missing) | List the flows watch | none |
-| Two test mailboxes: one for "Alex Demo" (requester), one shared/test box for on-call + service desk | Emails must land somewhere you can film | none |
+| Two lab mailboxes: **Alex Demo** (`alex.demo`, requester) and **Taylor Demo** (`taylor.demo`, on-call + service desk) | Emails must land somewhere you can film | none |
 | Power Platform CLI (`pac`) + Python 3 on the recording machine | Export/unpack and re-run tests | none |
 
 No premium connectors, no trials, no Azure resources.

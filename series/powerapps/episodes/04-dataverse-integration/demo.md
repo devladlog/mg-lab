@@ -1,5 +1,16 @@
 # Demo shot list — DEVLADLOG Power Apps #4, Dataverse integration
 
+## Lab environment
+
+| Item | What this episode needs |
+|---|---|
+| VMs / Azure | none |
+| Tenant environment | Power Platform environment **`DEV`** with episodes 1–3. Changed here: alternate key *Asset tag key* and change tracking on Equipment (change tracking can't be turned off; harmless), three imported devices |
+| Lab users | `labadmin` (the recording account) with System Customizer for `setup` (interactive OAuth, signed in off camera). The nightly-job identity is an **application user** (app registration with a client secret, custom role *Equipment Sync*), created and removed in this episode; application users are unlicensed |
+| Entra | App registration for the nightly job, client secret with a short expiry; deleted (or its secret deleted) in tear-down |
+| Licences / trials | **Power Apps Premium** (in the lab) for `labadmin` and any lab user who runs the app; cost 0 |
+| Recording machine | The Windows lab laptop: maker portal / Power Apps Studio / the running app in the browser with `pipeline/mask.js`; .NET 8 SDK and a terminal (PowerShell or WSL bash) for `dotnet run` from `src/EquipmentSync` |
+
 EquipmentSync was built and tested locally (`dotnet test`: 47 passed) against an in-memory fake of the Dataverse messages
 it uses; `import --dry-run` runs without a connection. Everything below **needs the lab tenant** and has not been run
 there: `setup` (metadata changes), `import`, `export`, the app user and its role.
@@ -16,7 +27,7 @@ Things to confirm in the lab and report back (fix code/tests/README if they diff
 | What | Notes | Cost |
 |---|---|---|
 | Lab **DEV** environment with episodes 1-3 (Equipment, Loan, both apps) | existing tables and apps | existing |
-| Maker account with **System Customizer** (or System Administrator) | for `setup` only, interactive `AuthType=OAuth` (sign in off camera) | existing |
+| `labadmin` with **System Customizer** (or System Administrator) | for `setup` only, interactive `AuthType=OAuth` (sign in off camera) | existing |
 | Entra **app registration** with a client secret (lab tenant, off camera) | for the nightly-job identity | free |
 | **Application user** for that app in DEV + custom role "Equipment Sync" | Equipment: Create, Write (user/BU is fine), **Read at Organization level** (RetrieveEntityChanges requires it); Learn: application users are unlicensed and need a custom role | free |
 | .NET 8 SDK on the recording machine | `dotnet run` from `src/EquipmentSync` | free |

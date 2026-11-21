@@ -1,0 +1,5 @@
+// Resources nobody can be charged for: no workload tag (episode 2's policy requires it).
+resources
+| where isempty(tostring(tags['workload']))
+| summarize Untagged = count() by type, resourceGroup
+| order by Untagged desc

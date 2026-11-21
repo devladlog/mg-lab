@@ -1,10 +1,5 @@
 # Demo shot list — DEVLADLOG Dynamics 365 #4: Business Process Flows
 
-Already run in the build container: `python3 -m pytest -q tests` (29 tests, Web API stubbed with responses shaped
-like the Learn examples) and the offline `report --from-json` on the fictional sample. **Nothing has run against
-Dataverse yet: all four `screen` scenes need the lab tenant**, and the `path` code scene shows *expected* active
-paths that must be confirmed there.
-
 ## Lab environment
 
 No VMs and no Azure resources: cloud tenant only, recorded from the browser and a terminal on the recording laptop.
@@ -14,10 +9,15 @@ No VMs and no Azure resources: cloud tenant only, recorded from the browser and 
 | Power Platform environment `DEV` (Dataverse, exists) | Custom table only, no Dynamics 365 app needed | none |
 | Licence with BPF use rights | Learn: Power Apps or Power Automate per-user licence, or a Dynamics 365 plan with BPF rights. The lab's **Power Apps Premium** covers the maker and the test users | none (trial) |
 | Episodes 1 and 3 done in `DEV` | `mgl_projectrequest` with 18 records (episode 1) and the **Business Justification** column (episode 3, keep it). Episode 3's business rule can stay | none |
-| Episode 2's test users and *Project Requester* role (optional) | For the security check; otherwise skip that part | none |
+| Episode 2's lab users (Alex Demo, Sam Demo) and *Project Requester* role (optional) | For the security check; otherwise skip that part | none |
 | A model-driven app with Project Request | Same app as episodes 2–3 | none |
-| Identity | Lab user with System Customizer (to design/activate) — the tool itself only needs read/write on the BPF table and read on metadata | none |
+| Identity | `labadmin` (the recording account) with System Customizer (to design/activate) — the tool itself only needs read/write on the BPF table and read on metadata | none |
 | Python 3.10+ with `pip install --user -r requirements.txt`; browser with `pipeline/mask.js` | Recording laptop | none |
+
+Already run in the build container: `python3 -m pytest -q tests` (29 tests, Web API stubbed with responses shaped
+like the Learn examples) and the offline `report --from-json` on the fictional sample. **Nothing has run against
+Dataverse yet: all four `screen` scenes need the lab tenant**, and the `path` code scene shows *expected* active
+paths that must be confirmed there.
 
 ## Setup (before recording)
 
@@ -38,7 +38,7 @@ No VMs and no Azure resources: cloud tenant only, recorded from the browser and 
    and put them back in script order in the edit. Before that, open **PR-0004** in the app once and **verify**
    whether the form creates an instance for a record that has none (note the result in README; if it does, PR-0004
    simply won't appear in the backfill list). Make sure PR-0004 has Budget 75,000 and PR-0001 42,000 (episode 1 data).
-5. **Security check (optional, for the gotcha scene B-roll):** sign in as episode 2's *Test User 1* (role *Project
+5. **Security check (optional, for the gotcha scene B-roll):** sign in as episode 2's *Alex Demo* (`alex.demo`, role *Project
    Requester*) in a private window and open PR-0004 → expected: no process bar. Then Power Platform admin center →
    Security roles → Project Requester → find the **Project Approval** table → Create/Read/Write at Organization (the
    table is organization-scoped) → the bar appears. Record what really happens.

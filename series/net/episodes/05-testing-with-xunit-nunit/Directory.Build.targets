@@ -1,0 +1,19 @@
+<Project>
+
+  <!--
+    One "dotnet test" for two frameworks: their filter options differ (xUnit v3: filter-trait,
+    NUnit: filter), and an option a test app doesn't know fails it with exit code 5.
+    Route framework-specific arguments only to the projects that understand them:
+
+      dotnet test "-p:XunitArgs=(dash dash)filter-trait Category=Unit" "-p:NUnitArgs=(dash dash)filter TestCategory=Unit"
+
+    (an XML comment can't contain two dashes in a row; the real command is in README and deploy/Invoke-Tests.ps1).
+    This is a .targets file, not .props: XunitTestProject (set by the xunit.v3 package) and
+    EnableNUnitRunner (set in the project file) don't exist yet when Directory.Build.props is imported.
+  -->
+  <PropertyGroup>
+    <TestingPlatformCommandLineArguments Condition="'$(XunitTestProject)' == 'true'">$(TestingPlatformCommandLineArguments) $(XunitArgs)</TestingPlatformCommandLineArguments>
+    <TestingPlatformCommandLineArguments Condition="'$(EnableNUnitRunner)' == 'true'">$(TestingPlatformCommandLineArguments) $(NUnitArgs)</TestingPlatformCommandLineArguments>
+  </PropertyGroup>
+
+</Project>

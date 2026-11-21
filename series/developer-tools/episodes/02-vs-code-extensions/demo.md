@@ -1,5 +1,15 @@
 # Demo shot list — DEVLADLOG Dev Tools #2, VS Code extensions
 
+## Lab environment
+
+| Item | What this episode needs |
+|---|---|
+| VMs / tenant / Azure | none (no Microsoft tenant, no cloud resource) |
+| Software | VS Code 1.100+ with a clean profile "DevTools Demo" (created and deleted in the episode), Git, Node 22, Python 3.10+ |
+| Identity in commits | `Alex Demo` / `alex.demo@contoso.com` in the sample repo (fictional, matches the lab persona) |
+| Licences / cost | none |
+| Recording machine | The Windows lab laptop: VS Code (Extension Development Host for the extension), Git Bash for the setup commands, sample repo under a neutral path such as `C:\MGLab\demo\orders-app` (`~/demo/...` below) |
+
 Everything except the three `screen` scenes is already real (code excerpts, `npm test` 15 passed, `pytest` 13 passed,
 `vsce package` output and the `@types/vscode` error, all captured on the build machine). No Microsoft tenant or cloud
 resource is involved. The live part needs **VS Code on a desktop** (Windows, macOS or Linux). Status: **needs desktop**

@@ -1,0 +1,255 @@
+# DEVLADLOG Deep Dive — episode 04. Code and test scenes are real (from this folder); screen scenes need the lab
+# recording described in demo.md. Narration ~860 words.
+episode: 4
+slug: enterprise-workflow-automation
+series_label: "DEEP DIVE"
+series_name: "DEVLADLOG Deep Dive"
+file_prefix: "deep-dive"
+title: "Enterprise workflow automation"
+subtitle: "Durable Functions + Service Bus + Power Automate approvals + SharePoint"
+voice: am_michael
+thumbnail_text: "APPROVALS\nTHAT WAIT\nAND ESCALATE"
+youtube:
+  title: "Invoice Approvals with Durable Functions, Service Bus and Power Automate | DEVLADLOG Deep Dive #4"
+  tags: [Durable Functions, Azure Functions, .NET 10, Flex Consumption, Azure Service Bus, Power Automate, approvals, SharePoint, human in the loop, escalation, managed identity, Bicep, solution architecture]
+sources:
+  - https://www.devladlog.com/articles/deep-dive/2025-02-24-enterprise-workflow-automation-azure-power-platform-sharepoint/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "The manager is on holiday"
+    sub: "so who approves the invoice?"
+    short: hook
+    narration: >
+      An invoice needs approval, and the manager is on holiday. Two days later it should go to someone else
+      automatically. And when the manager comes back and taps approve on the old request, that answer must not count.
+      Today we build approvals that wait, escalate, and can't be answered twice. This is the DEVLADLOG Deep Dive.
+
+  - id: architecture
+    type: diagram
+    heading: "Durable owns the process"
+    nodes: ["Library", "Queue", "Orchestrator", "Approvals"]
+    labels: ["Invoices Inbox", "Service Bus Basic", "Durable Functions", "Power Automate"]
+    narration: >
+      In episode one, invoices landed in SharePoint marked ready. A flow drops each ready invoice on a Service Bus
+      queue. A Durable Functions orchestration runs the approval: manager first, finance director above five thousand
+      euros. A second flow is the human interface: an approval in Teams and Outlook, and updates to the library.
+
+  - id: why-not-flow
+    type: bullets
+    heading: "Why not one big flow?"
+    bullets:
+      - "A cloud flow run lasts at most 30 days, approvals included"
+      - "Deadlines and escalation are rules: keep them in code, with tests"
+      - "While it waits, the orchestration is unloaded"
+      - "Power Automate does what it's best at: people and Microsoft 365"
+    narration: >
+      Why not one big flow? A cloud flow run lasts at most thirty days, including pending approvals. Deadlines,
+      escalation and who approves what are business rules, so they live in code with tests. A durable orchestration can
+      wait for days, unloaded, and Power Automate does what it's best at: people and Microsoft three six five.
+
+  - id: plan
+    type: code
+    heading: "Who approves what"
+    lang: csharp
+    code: |
+      public static IReadOnlyList<Stage> For(InvoiceReady invoice, ApprovalSettings s)
+      {
+          var stages = new List<Stage> { Pick("Manager", s.ManagerEmail, s.EscalationEmail, invoice) };
+          if (invoice.Total > s.FinanceThreshold)
+              stages.Add(Pick("Finance", s.FinanceEmail, s.EscalationEmail, invoice));
+          return stages;
+      }
+
+      /// Nobody approves an invoice they submitted: that stage goes straight to the escalation approver.
+      static Stage Pick(string name, string approver, string escalation, InvoiceReady invoice)
+      {
+          if (string.Equals(approver, invoice.SubmittedBy, StringComparison.OrdinalIgnoreCase))
+              return new Stage(name, escalation, EscalateTo: null);
+          ...
+    narration: >
+      The approval plan is a pure function. The manager always, finance above the threshold, and the same rule as last
+      episode: nobody approves their own invoice. If the submitter is the approver, that stage goes straight to the
+      escalation approver.
+
+  - id: race
+    type: code
+    heading: "A timer races the human"
+    short: race
+    lang: csharp
+    code: |
+      var requestId = context.NewGuid().ToString("N");
+      var due = context.CurrentUtcDateTime.AddSeconds(input.Settings.StageTimeoutSeconds);
+
+      context.SetCustomStatus(new PendingApproval(stage.Name, requestId, approver, attempt, due));
+      await context.CallActivityAsync(ApprovalActivities.SendApprovalRequest, new ApprovalRequest(...), Retry);
+
+      using var timeoutCts = new CancellationTokenSource();
+      Task timeout = context.CreateTimer(due, timeoutCts.Token);
+      Task<DecisionEvent> decision = context.WaitForExternalEvent<DecisionEvent>(DecisionEventName(requestId));
+
+      if (await Task.WhenAny(decision, timeout) == decision)
+      {
+          timeoutCts.Cancel();   // don't leave a timer behind
+          ...
+      }
+      approver = stage.EscalateTo;   // nobody answered in time: ask the escalation approver
+    narration: >
+      Here's the heart of it. Each request gets a new ID and a deadline from the orchestration clock. We send the
+      request through an activity, then race two tasks: a durable timer and an external event. If the person answers
+      first, we cancel the timer. If the timer wins, we escalate once. While it waits, no function is running at all.
+
+  - id: decision
+    type: code
+    heading: "A late answer can't win"
+    lang: csharp
+    code: |
+      if (!signer.Verify(instanceId, requestId, signature))
+          return new(401, "Invalid or missing signature.");
+      ...
+      var pending = instance.ReadCustomStatusAs<PendingApproval>();
+      if (pending is null || pending.RequestId != requestId)
+          return new(409, "This approval request is no longer active: it was escalated or already answered.");
+      if (!string.Equals(pending.Approver, body.Responder.Trim(), StringComparison.OrdinalIgnoreCase))
+          return new(403, "Only the assigned approver can answer this request.");
+
+      await client.RaiseEventAsync(instanceId, InvoiceApprovalOrchestrator.DecisionEventName(requestId),
+          new DecisionEvent(body.Outcome, body.Responder.Trim(), body.Comments?.Trim()), ct);
+    narration: >
+      The flow answers through a callback URL signed for that one request, so the flow stores no secret. The endpoint
+      checks the signature, that this request is still the live one, and that the responder is the assigned approver.
+      Only then it raises the event, with a name unique to the request. A stale answer gets a four oh nine.
+
+  - id: intake
+    type: code
+    heading: "Same invoice, same instance"
+    lang: csharp
+    code: |
+      /// Same invoice, same instance ID: the instance ID is the idempotency key
+      /// (Service Bus Basic has no duplicate detection).
+      public static string InstanceIdFor(string invoiceKey) => "invoice-" + invoiceKey.Replace('|', '-');
+
+      var existing = await client.GetInstanceAsync(instanceId, getInputsAndOutputs: true, ct);
+      if (existing.RuntimeStatus is OrchestrationRuntimeStatus.Running or ... )
+          return (IntakeResult.AlreadyRunning, instanceId);
+      // Approved or rejected is final. Only an expired approval may run again.
+    narration: >
+      The queue is Service Bus Basic, the cheapest tier: queues only, no duplicate detection. So the duplicate key from
+      episode one becomes the orchestration instance ID. A second message for the same invoice finds it running and
+      stops. Approved or rejected is final; only an expired approval can start again.
+
+  - id: tests
+    type: code
+    heading: "A real Durable engine, in memory"
+    lang: text
+    code: |
+      $ dotnet test tests/InvoiceApproval.Tests -m:1
+        OrchestrationTests.Above_the_threshold_the_finance_director_approves_after_...  Passed
+        OrchestrationTests.No_answer_in_time_escalates_and_the_old_link_stops_working  Passed
+        OrchestrationTests.Nobody_answers_at_all_and_the_invoice_expires               Passed
+        OrchestrationTests.The_same_invoice_twice_starts_one_approval                  Passed
+        OrchestrationTests.A_tampered_or_unsigned_callback_is_401                      Passed
+        ContractTests.Relay_trigger_schema_accepts_every_field_the_functions_send      Passed
+        ContractTests.Service_bus_is_basic_and_the_flow_policy_can_only_send_to_...    Passed
+      Passed!  - Failed: 0, Passed: 45, Skipped: 0, Total: 45, Duration: 11 s
+    narration: >
+      Forty five tests. The orchestration runs on the in-memory Durable Task test host: real timers, real events, real
+      replay. The tests play the flow: take the signed link, answer, wait for escalation, answer late. Contract tests
+      keep the flow definitions, the SharePoint columns and the Bicep in line with the code.
+
+  - id: infra
+    type: code
+    heading: "Bicep: one shared key, Send only"
+    lang: bicep
+    code: |
+      sku: { name: 'Basic', tier: 'Basic' } // queues only; no topics, no duplicate detection
+      resource queue 'queues' = {
+        name: queueName
+        properties: { maxDeliveryCount: 5, lockDuration: 'PT1M', ... }
+        resource flowSend 'authorizationRules' = {
+          name: 'flow-send'
+          properties: { rights: ['Send'] }
+        }
+      }
+      // function identity: Service Bus Data Receiver on this queue only
+      Callback__SigningKey: '@Microsoft.KeyVault(VaultName=${keyVault.name};SecretName=callback-signing-key)'
+      runtime: { name: 'dotnet-isolated', version: '10.0' }   // Flex Consumption
+    narration: >
+      Infrastructure is Bicep on Flex Consumption with dot net ten. Storage has shared keys off, the function reads the
+      queue with its managed identity, and secrets come from Key Vault references. The only shared key left is a send
+      only policy on one queue, for the Service Bus connector in the first flow.
+
+  - id: waiting-screen
+    type: screen
+    heading: "The library shows who has it"
+    image: screens/library-waiting.jpg
+    bar: "SharePoint · Invoices Inbox"
+    narration: >
+      Now the lab, with a five minute deadline. Two invoices from episode one are ready. A minute later the library
+      shows approval status waiting, and who has each one: Sam, the manager.
+
+  - id: teams-screen
+    type: screen
+    heading: "The approval, in Teams"
+    image: screens/teams-approval.jpg
+    bar: "Microsoft Teams · Approvals"
+    narration: >
+      Sam gets a normal Power Automate approval in Teams and Outlook, with a link to the invoice. Sam approves the small
+      one. The big one, seven thousand three hundred eighty euros, he ignores.
+
+  - id: escalated-screen
+    type: screen
+    heading: "Five minutes later: escalated"
+    image: screens/escalated.jpg
+    bar: "SharePoint · Invoices Inbox"
+    narration: >
+      Five minutes later the durable timer fires. The library says manager approval escalated to Riley, and Riley
+      has a new approval. Sam finally taps approve on the old one, and gets an email: your answer was not used.
+
+  - id: outcome-screen
+    type: screen
+    heading: "Approved, with the whole story"
+    image: screens/outcome.jpg
+    bar: "SharePoint · Invoices Inbox · after the approvals"
+    narration: >
+      Riley approves, then Jordan approves as finance director. The library shows approved, decided by Jordan, and
+      the summary says manager approved by Riley, escalated, finance approved by Jordan. Alex gets the result by email.
+
+  - id: gotcha
+    type: bullets
+    heading: "Deterministic, or broken"
+    short: gotcha
+    bullets:
+      - "DateTime.UtcNow in the orchestrator: build error DURABLE0001"
+      - "while (true) without ContinueAsNew: DURABLE0011"
+      - "Use context.CurrentUtcDateTime and context.NewGuid()"
+      - "Settings travel in the input; I/O lives in activities"
+    narration: >
+      The trap with orchestrators is replay: the code runs again and again and must make the same decisions. Our first
+      draft had an unbounded while loop, and we tried date time dot utc now in the stage loop. The Durable analyzer,
+      which ships with the extension, failed the build on both. Take time and IDs from the context, pass settings in the input, and
+      keep every call to the outside world in an activity.
+
+  - id: recap
+    type: bullets
+    heading: "What to take away"
+    bullets:
+      - "Durable owns the process; Power Automate owns the people"
+      - "Race a durable timer against the event, cancel the loser"
+      - "One request, one event name, one signed link"
+      - "The business key is the instance ID"
+      - "Test on a real engine: timers and events included"
+    narration: >
+      To recap. Durable owns the process, Power Automate owns the people. Race a durable timer against the event and
+      cancel the loser. One request, one event name, one signed link. Make the business key the instance ID. And test
+      on a real engine, timers included.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The functions, the tests, both flow definitions, the p n p script and the Bicep are on GitHub, and the full guide
+      is on devladlog dot com. Next time: an employee onboarding portal. This was the DEVLADLOG Deep Dive, by Momento
+      Galático.

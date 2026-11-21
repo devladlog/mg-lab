@@ -1,0 +1,10 @@
+// Everything one request did: the request, our orders.price span, the blob call, logs, exceptions.
+// Paste the operation id from a 500 response's traceId (the 32 hex characters after "00-").
+let operationId = "00000000000000000000000000000000";
+union
+    (AppRequests     | project TimeGenerated, Item = "request",    Name, Result = ResultCode, Success, DurationMs, OperationId),
+    (AppDependencies | project TimeGenerated, Item = "dependency", Name = strcat(DependencyType, " ", Name), Result = ResultCode, Success, DurationMs, OperationId),
+    (AppTraces       | project TimeGenerated, Item = "log",        Name = Message, Result = tostring(SeverityLevel), Success = bool(null), DurationMs = real(null), OperationId),
+    (AppExceptions   | project TimeGenerated, Item = "exception",  Name = strcat(ExceptionType, ": ", OuterMessage), Result = "", Success = false, DurationMs = real(null), OperationId)
+| where OperationId == operationId
+| order by TimeGenerated asc

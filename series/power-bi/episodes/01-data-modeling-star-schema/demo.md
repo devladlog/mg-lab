@@ -1,5 +1,14 @@
 # Demo shot list — Power BI #1 Data Modeling & Star Schema
 
+## Lab environment
+
+| Item | What this episode needs |
+|---|---|
+| VMs / tenant / Azure | none. The report is not published, so no workspace and no use of the Fabric/Power BI trial; no sign-in needed |
+| Data | The committed star CSVs `src/data/star/*.csv`, copied to `C:\MGLab\power-bi\star\` on the laptop (the semantic model's real data source: Power BI Desktop reads the files itself; no mock involved) |
+| Licences / cost | Power BI Desktop is free; cost 0 |
+| Recording machine | The Windows lab laptop: current **Power BI Desktop**, signed out (or account masked); terminal B-roll on the same laptop (.NET 8 SDK, Python 3, Node where listed) |
+
 Everything in this episode is local: **no tenant, no workspace, no licence** is needed. Power BI Desktop (free) on a
 Windows machine is the only requirement for the screen scenes. Nothing is published to the Power BI service.
 

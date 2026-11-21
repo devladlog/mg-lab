@@ -1,5 +1,15 @@
 # Demo shot list — DEVLADLOG Microsoft 365 #1: Tenant Administration & Monitoring
 
+## Lab environment
+
+| Item | What this episode needs |
+|---|---|
+| VMs / Azure / Power Platform | none |
+| Tenant | The lab tenant (Microsoft 365 E5 trial): Microsoft 365 admin center (Reports org setting, read only), Microsoft Graph reports, service health, message center, Secure Score, licences, directory roles |
+| Lab users | **`labadmin`** (the recording account) with **Global Reader + Reports Reader** for the live run (assign them to labadmin in setup if it doesn't hold them, remove them in tear-down if they were added only for this). The usage report lists the lab users `alex.demo` … `taylor.demo`; it also lists the owner's real account and any non-lab account: those rows must be masked (concealed names stay ON, which hashes them) |
+| Licences / trials | the lab E5 trial; cost 0 |
+| Recording machine | The Windows lab laptop: PowerShell 7.2+ with `Microsoft.Graph.Authentication`, browser with `pipeline/mask.js`; screen 1 (`sample-run`) is the offline fictional snapshot, run on the same laptop |
+
 Everything in `src/` and `tests/` already ran in the build container (38 Pester tests, offline run from the fictional
 snapshot). This file lists what the human-supervised session must record in the **lab tenant**.
 
@@ -8,7 +18,7 @@ snapshot). This file lists what the human-supervised session must record in the 
 | Item | Notes | Cost |
 |---|---|---|
 | Lab tenant with Microsoft 365 licences (exists) | Any E3/E5 lab; Secure Score and message center exist in every tenant | none |
-| Recording account | Delegated sign-in. Suggested roles: **Global Reader** + **Reports Reader** (Global Reader alone only gets tenant-level usage data). Don't record with a Global Administrator if avoidable | none |
+| Recording account | `labadmin`, delegated sign-in. Suggested roles: **Global Reader** + **Reports Reader** (Global Reader alone only gets tenant-level usage data). Don't record with a Global Administrator if avoidable | none |
 | PowerShell 7.2+ with `Microsoft.Graph.Authentication` | `Install-Module Microsoft.Graph.Authentication -Scope CurrentUser` | none |
 | Consent | First `Connect-MgGraph` asks for the 7 read scopes (`ServiceHealth.Read.All`, `ServiceMessage.Read.All`, `Reports.Read.All`, `ReportSettings.Read.All`, `LicenseAssignment.Read.All`, `RoleManagement.Read.Directory`, `SecurityEvents.Read.All`). An admin may have to grant tenant-wide consent for the Microsoft Graph Command Line Tools app | none |
 | Browser with `pipeline/mask.js` | For the admin center shot | none |

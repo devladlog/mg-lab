@@ -1,5 +1,15 @@
 # Demo shot list — DEVLADLOG Microsoft 365 #3: Microsoft 365 Groups Lifecycle
 
+## Lab environment
+
+| Item | What this episode needs |
+|---|---|
+| VMs / Azure / Power Platform | none |
+| Tenant | Lab tenant: Entra admin center (Groups → Expiration, Deleted groups), Microsoft Graph. Changes the tenant's group expiration policy (state noted in setup, restored in tear-down). Reuses episode 2's teams |
+| Lab users | **`labadmin`** (the recording account) with **Groups Administrator** (policy, renew, restore) and **Teams Administrator** (archive); its mailbox receives the ownerless-group notices (`alternateNotificationEmails` in the local lab copy only). **`alex.demo` (Alex Demo)** creates the two extra groups |
+| Licences / trials | E5 trial (Entra ID P1 for expiration); cost 0 |
+| Recording machine | The Windows lab laptop: PowerShell 7.2+ with `Microsoft.Graph.Authentication`, browser with `pipeline/mask.js` |
+
 Everything in `src/` and `tests/` already ran in the build container (47 Pester tests with the real
 Microsoft.Graph.Authentication module present, offline audit, offline rollout-impact preview). This file lists what
 the human-supervised session must set up and record in the **lab tenant**. Every Graph call below is **needs tenant**.
@@ -10,9 +20,9 @@ the human-supervised session must set up and record in the **lab tenant**. Every
 |---|---|---|
 | Lab tenant (exists) with the episode 2 teams | `Project Falcon` (1 owner), `Old Offsite 2024` (ownerless), `TEAM_Sales_Partner Portal`, `TEAM_Finance_Budget 2027` | none |
 | **Microsoft Entra ID P1** for the members of the groups under the policy | Microsoft 365 E5 in the lab includes it | included |
-| Admin account | **Groups Administrator** is enough for the policy, renew and restore (Learn: Groups Administrator or User Administrator manage the expiration policy); **Teams Administrator** for the archive shot | none |
+| Admin account | `labadmin` with **Groups Administrator** is enough for the policy, renew and restore (Learn: Groups Administrator or User Administrator manage the expiration policy); **Teams Administrator** for the archive shot | none |
 | PowerShell 7.2+ + `Microsoft.Graph.Authentication` | `Install-Module Microsoft.Graph.Authentication -Scope CurrentUser` | none |
-| Admin mailbox for ownerless notices | e.g. a shared mailbox `m365-groups-admin@<lab domain>`; put the real address only in the local lab copy | none |
+| Admin mailbox for ownerless notices | `labadmin`'s mailbox (or a shared mailbox created for the episode); put the real address only in the local lab copy | none |
 | Browser with `pipeline/mask.js` | Entra admin center | none |
 
 Delegated scopes the runner asks for: `Directory.Read.All`, `Group.Read.All`, `GroupMember.Read.All` (audit);

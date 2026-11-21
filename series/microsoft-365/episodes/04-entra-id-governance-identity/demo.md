@@ -1,5 +1,16 @@
 # Demo shot list — DEVLADLOG Microsoft 365 #4: Entra ID Governance & Identity
 
+## Lab environment
+
+| Item | What this episode needs |
+|---|---|
+| VMs / Azure / Power Platform | none. **Do not link an Azure subscription** on the ID Governance dashboard (guest governance billing) |
+| Tenant | Lab tenant: Entra admin center (PIM, Access reviews, Lifecycle workflows), My Access, Microsoft Graph. Reuses episode 2's guest and `TEAM_Sales_Partner Portal` |
+| Lab users | **`labadmin`** (the recording account): Privileged Role Administrator, Identity Governance Administrator, Lifecycle Workflows Administrator. **`alex.demo` (Alex Demo)**: eligible Groups Administrator, owner/reviewer (second browser profile). **`jordan.demo` (Jordan Demo)** replaces "Megan Sample" of the test fixtures. Emergency access accounts: the lab has none, so leave that list empty in the local copy and record what the audit says |
+| Extra objects (created and deleted in this episode) | Throwaway member **`sam.leaver`** ("Sam Leaver", Department `Sales`, E5 + Entra ID Governance trial licences while it exists): the leaver workflow revokes its sessions, removes all its group and team memberships and disables it, which must never run on a shared lab user such as `sam.demo`. Microsoft 365 group **Sales Pipeline Review** (Sam Leaver sole owner) |
+| Licences / trials | E5 trial (Entra ID P2) + **Entra ID Governance trial, ends 20 Dec 2026**: record before ~15 Dec; cost 0 |
+| Recording machine | The Windows lab laptop: PowerShell 7.2+ with `Microsoft.Graph.Authentication`, browser with `pipeline/mask.js`; a second browser profile signed in as Alex Demo (activation, review) |
+
 Everything in `src/` and `tests/` already ran in the build container (53 Pester tests with the real
 Microsoft.Graph.Authentication module present, offline audit, offline `-Preview` of the three request bodies). This
 file lists what the human-supervised session must set up and record in the **lab tenant**. Every Graph call below is
@@ -12,8 +23,8 @@ file lists what the human-supervised session must set up and record in the **lab
 | Microsoft 365 E5 (includes **Entra ID P2**) | PIM and basic access reviews | in the lab |
 | **Entra ID Governance** trial (ends **20 Dec 2026**) | Lifecycle workflows need it. **Record before ~15 Dec.** When it ends, eligible assignments are removed and time-bound active assignments become permanent (Learn) — plan the tear-down before that date | trial, free |
 | **No guest governance billing** | Do **not** link an Azure subscription on the ID Governance dashboard. Everything in this episode stays on P2/employee-licence features: basic guest review (no inactive-user scope, no user-to-group affiliation), workflow scoped to members. The script refuses the billable settings | none |
-| Admin roles for the recording account | **Privileged Role Administrator** (PIM writes), **Identity Governance Administrator** (access reviews), **Lifecycle Workflows Administrator** (workflows); Global Reader is enough for the audit | none |
-| Users | **Alex Demo** (Member), **Megan Sample** (Member), the **guest** in `TEAM_Sales_Partner Portal` (episode 2), two **emergency access** accounts if the lab has them, and a new test user **Sam Leaver** (Department = `Sales`) | none |
+| Admin roles for `labadmin` (recording account) | **Privileged Role Administrator** (PIM writes), **Identity Governance Administrator** (access reviews), **Lifecycle Workflows Administrator** (workflows); Global Reader is enough for the audit | none |
+| Users | **Alex Demo** (`alex.demo`), **Jordan Demo** (`jordan.demo`), the fictional **guest** in `TEAM_Sales_Partner Portal` (episode 2), emergency access accounts (none in the lab), and the throwaway **Sam Leaver** (`sam.leaver`, Department = `Sales`) | none |
 | PowerShell 7.2+ + `Microsoft.Graph.Authentication` | `Install-Module Microsoft.Graph.Authentication -Scope CurrentUser` | none |
 | Browser with `pipeline/mask.js` | Entra admin center; a second browser profile signed in as Alex (activation, review) | none |
 
@@ -86,6 +97,6 @@ honest finding; mask the UPN). `NoGuestReview` should be gone after screen 2. Re
    but don't rely on that).
 2. Access reviews: stop/delete "Quarterly review - guests in Microsoft 365 groups" (so no decision is auto-applied).
 3. Lifecycle workflows: delete the leaver workflow (it goes to deleted workflows first).
-4. Delete Sam Leaver and Sales Pipeline Review (or keep for later episodes, re-enable Sam if needed).
+4. Delete Sam Leaver (then permanently delete it from Deleted users, freeing the licences) and Sales Pipeline Review.
 5. Delete `governance.lab.json`, `inventory.lab.json`, `governance-audit.md`; `Disconnect-MgGraph`; remove delegated
    consent granted only for the recording.

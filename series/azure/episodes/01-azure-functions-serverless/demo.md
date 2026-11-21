@@ -1,5 +1,16 @@
 # Demo shot list — DEVLADLOG Azure #1, Azure Functions & Serverless
 
+## Lab environment
+
+| Item | What this episode needs |
+|---|---|
+| VMs / tenant apps | none |
+| Lab user | `labadmin` (the recording account): Owner on the subscription; runs `az login` and `infra/deploy.sh`; gets Storage Blob/Queue Data Reader on the storage account for the browse shot |
+| Azure | Resource group **`rg-mglab-azure-01`** in **West Europe** (if `az functionapp list-flexconsumption-locations` doesn't list it, use `swedencentral`), deployed by `infra/deploy.sh`: Function App on **Flex Consumption** (on demand, no always-ready instances: per execution and GB-s, cents), Storage account Standard_LRS, Application Insights + Log Analytics workspace (cents for ~1 hour). Estimated total: well under €1. Tear-down: `infra/teardown.sh rg-mglab-azure-01` |
+| Local scene | The `local` screen runs the real Functions host (Core Tools `func start`) with **Azurite**, Microsoft's local Storage emulator, on the laptop. That is the topic of the scene (the local dev loop), not a stand-in for the cloud screens, which all show the deployed app |
+| Licences / trials | none beyond the subscription |
+| Recording machine | The Windows lab laptop: Azure portal in the browser, bash terminal in WSL (Ubuntu) with the tools listed under Prerequisites (the scripts are bash) |
+
 Everything below **needs the lab machine and the lab subscription** (marked *needs tenant*). Nothing here was run in
 Azure by the episode builder; the code, tests, Bicep and scripts were validated locally (see README).
 
@@ -8,8 +19,8 @@ Azure by the episode builder; the code, tests, Bicep and scripts were validated 
 | What | Notes |
 |---|---|
 | Azure subscription with the €10 budget alert | Contributor + **User Access Administrator** (or Owner) on the resource group: the Bicep creates role assignments |
-| Region with Flex Consumption | `az functionapp list-flexconsumption-locations -o table`; the scripts default to `swedencentral` |
-| Azure CLI | Signed in with `az login` on the recording machine (not in the builder container) |
+| Region with Flex Consumption | `az functionapp list-flexconsumption-locations -o table`; the lab uses `westeurope` if listed (the scripts default to `swedencentral`) |
+| Azure CLI | Signed in as `labadmin` with `az login` on the recording machine (not in the builder container) |
 | .NET SDK 10, `zip`, `curl` | For `dotnet publish` and the smoke test |
 | Azure Functions Core Tools v4 + Azurite | Only for the local scene (`npm i -g azurite` or `npx azurite`) |
 | Cost | Flex Consumption on demand bills per execution and GB-s, with no always-ready instances configured; Standard_LRS storage and a Log Analytics workspace for ~1 hour. Expect cents. Check the [pricing page](https://azure.microsoft.com/pricing/details/functions/) and tear down the same day |
@@ -19,8 +30,8 @@ Azure by the episode builder; the code, tests, Bicep and scripts were validated 
 ```bash
 cd series/azure/episodes/01-azure-functions-serverless
 dotnet test tests/OrderIntake.Tests          # 33 passed, before anything else
-infra/deploy.sh rg-orders-demo swedencentral # what-if, deploy, publish, zip deploy (~5 min)
-RG=rg-orders-demo
+infra/deploy.sh rg-mglab-azure-01 westeurope # what-if, deploy, publish, zip deploy (~5 min)
+RG=rg-mglab-azure-01
 APP=$(az functionapp list -g $RG --query "[0].name" -o tsv)
 HOST=$(az functionapp show -g $RG -n $APP --query defaultHostName -o tsv)
 KEY=$(az functionapp function keys list -g $RG -n $APP --function-name SubmitOrder --query default -o tsv)
@@ -76,7 +87,7 @@ a few minutes; wait for it. Optional: Storage browser → Queues → `orders-poi
 
 ## Tear-down (needs tenant)
 ```bash
-infra/teardown.sh rg-orders-demo
-az group exists --name rg-orders-demo        # false when done
+infra/teardown.sh rg-mglab-azure-01
+az group exists --name rg-mglab-azure-01        # false when done
 ```
 Stop Azurite and `func` locally, and delete `src/OrderIntake/local.settings.json`.

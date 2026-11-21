@@ -1,0 +1,288 @@
+# DEVLADLOG Azure — episode 06. Draft script: code scenes are real excerpts from src/, queries/, infra/ and tests/
+# (and real output of the CLI); screen scenes are captured by the recorder following demo.md.
+episode: 6
+slug: cost-optimization
+series_label: "AZURE"
+series_name: "DEVLADLOG Azure"
+file_prefix: "azure"
+title: "Cost Optimization"
+subtitle: "Price it before you deploy, catch what's left running"
+voice: am_michael
+thumbnail_text: "AZURE COST\nBEFORE DEPLOY\nNOT AFTER"
+youtube:
+  title: "Azure Cost Optimization: Price the What-If, Find Waste with Resource Graph | DEVLADLOG Azure #6"
+  tags: [Azure cost optimization, FinOps, Azure Retail Prices API, what-if, Bicep, budgets, Cost Management, Resource Graph, Azure Advisor, Python, pytest, Azure]
+sources:
+  - https://www.devladlog.com/articles/azure/2026-01-26-cost-optimization-complete-guide-2026/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "The bill is decided at deploy time"
+    sub: "Price the what-if, budget by tag, hunt the leftovers"
+    short: hook
+    narration: >
+      Episode two's lab profile costs about twenty-five euros a month before anyone sends a single request. The
+      prod profile costs two hundred and forty-six. Both numbers come from the same template, and both are knowable
+      before you deploy. Today we price a deployment from its what-if, gate it on a budget, and then hunt down what
+      was left running after the project ended. Welcome to DEVLADLOG Azure.
+
+  - id: moments
+    type: bullets
+    heading: "Three moments to save money"
+    bullets:
+      - "Before deploy: price the what-if, fail the build over budget"
+      - "While running: budgets by workload tag, actual and forecast"
+      - "After: Resource Graph finds disks, IPs and plans nobody uses"
+      - "Always-on resources are decided in Bicep"
+      - "Usage charges: measure them, don't guess them"
+    narration: >
+      There are three moments to save money. Before deploying, price the what-if and fail the build when it's over
+      budget. While it runs, use budgets filtered by the workload tag, with actual and forecast thresholds. And
+      afterwards, query Resource Graph for disks, I P addresses and plans nobody uses. The always-on part of the bill
+      is decided in Bicep. Usage charges, you measure.
+
+  - id: plan
+    type: diagram
+    heading: "What we're building"
+    nodes: ["What-if", "Price", "Gate", "Waste"]
+    labels: ["resolved SKUs", "Retail Prices API", "exit 1 over budget", "Resource Graph"]
+    narration: >
+      Here's the tool, called cost watch, in Python. It reads a what-if result, where every SKU and instance count is
+      already resolved for the environment. It prices the always-on resources with the public Azure Retail Prices
+      A P I, which needs no sign-in. It exits with code one when the month is over budget. And a second command runs
+      Resource Graph queries and puts a monthly price on each leftover.
+
+  - id: prices
+    type: code
+    heading: "Asking the price list a precise question"
+    lang: python
+    code: |
+      def odata_filter(self) -> str:
+          parts = [
+              f"serviceName eq {q(self.service)}",
+              f"armRegionName eq {q(self.region)}",
+              f"skuName eq {q(self.sku)}",
+              f"productName eq {q(self.product)}",
+              "priceType eq 'Consumption'",     # not DevTest, not Reservation
+          ]
+          if self.meter:
+              parts.append(f"meterName eq {q(self.meter)}")
+          return " and ".join(parts)
+
+      # a 429 is plain text; wait what x-ms-ratelimit-retailprices-retry-after says, retry
+      # zero rows or two rows -> PriceError. Never guess.
+    narration: >
+      Every price is a precise OData filter: service, region, SKU, product, and always price type equals consumption.
+      Without that, the same query also returns dev test rows and reservation rows, and a reservation row says one
+      hour while the price is for the whole term. Filter values are case sensitive in current A P I versions. And
+      when the A P I rate limits you, the answer is plain text with a retry-after header.
+
+  - id: rules
+    type: code
+    heading: "Mapping resources to meters"
+    lang: python
+    code: |
+      if t == "microsoft.web/serverfarms":
+          sku_name, tier = app_service_sku(name)           # 'P1v3' -> ('P1 v3', 'Premium v3')
+          linux = bool(props.get("reserved")) or "linux" in (resource.get("kind") or "").lower()
+          product = f"Azure App Service {tier} Plan" + (" - Linux" if linux else "")
+          instances = int(sku.get("capacity") or 1)
+
+      if t == "microsoft.network/privateendpoints":       # priced in 'Global', not your region
+          PriceQuery("Virtual Network", "Global", "Standard", "Virtual Network Private Link",
+                     "Standard Private Endpoint")
+
+      if t == "microsoft.compute/disks":                   # 30 GiB is billed as S4 (32 GiB)
+          tier = standard_hdd_tier(int(props.get("diskSizeGB") or 0))
+      return NotEstimated(rid, rtype, "usage-based or not mapped")
+    narration: >
+      The rules map a resource to one meter. A Linux plan is a different product from a Windows plan, and P one v
+      three has a space in the price list. A private endpoint is priced in the global region, not in yours. A disk is
+      billed at the tier its size rounds up to. Everything else is listed as not estimated, out loud, never silently
+      dropped.
+
+  - id: gotcha
+    type: code
+    heading: "Gotcha: zero rows is not zero euros"
+    lang: text
+    short: gotcha
+    code: |
+      $ filter: serviceName eq 'Azure App Service' and armRegionName eq 'swedencentral'
+                and armSkuName eq 'B1'
+      {"Items": [], "Count": 0}          <- a naive estimator adds 0.00 EUR
+
+      $ filter: ... and skuName eq 'B1' and priceType eq 'Consumption'
+      Azure App Service Basic Plan - Linux | B1     | 0.0162 / 1 Hour | Consumption
+      Azure App Service Basic Plan         | B1 App | 0.0673 / 1 Hour | Consumption  <- Windows
+
+      # armSkuName is empty for B1 (filled for P1 v3); Linux needs productName. One row, or exit 2
+    narration: >
+      Here's the trap I fell into. My first query filtered on the A R M SKU name, B one. The A P I answered with an
+      empty list, and an estimator that sums whatever comes back would have said zero euros. For App Service, that
+      field is empty for B one, though it's filled for P one v three. And the SKU name alone returns Linux and
+      Windows. So cost watch demands exactly one row per question. Zero rows, or two, and it stops with exit code two.
+
+  - id: estimate
+    type: code
+    heading: "Episode 2, priced: lab versus prod"
+    lang: text
+    code: |
+      $ python -m costwatch estimate whatif-lab.json --budget 25
+      | plan-contoso-lab   | App Service plan B1 x1 (Linux)   | 11.80 EUR |
+      | pe-contoso-lab-*   | 2 x private endpoint             | 13.10 EUR |
+      | **Fixed monthly estimate**                           | **24.90 EUR** |  within    exit 0
+
+      $ python -m costwatch estimate whatif-prod.json --budget 25
+      | plan-contoso-prod  | App Service plan P1v3 x2 (Linux) | 233.30 EUR |
+      | pe-contoso-prod-*  | 2 x private endpoint             |  13.10 EUR |
+      | **Fixed monthly estimate**                           | **246.40 EUR** | OVER     exit 1
+      ##vso[task.logissue type=error]Estimated 246.40 EUR/month is over the 25.00 budget
+
+      Not estimated: 1 x billed through its App Service plan, 11 x usage-based or not mapped
+    narration: >
+      Here's episode two, priced with real list prices for Sweden Central. Lab: one B one plan and two private
+      endpoints, about twenty-five euros a month. Prod: two P one v three instances for zone redundancy, two hundred
+      and forty-six. Note that the private endpoints cost more than the lab's plan. In a pipeline, exit code one
+      plus the logging command fails the plan stage from episode three.
+
+  - id: tests
+    type: code
+    heading: "Fifty-one tests, no Azure"
+    lang: text
+    code: |
+      $ python3 -m pytest tests -q
+        test_prices    paging, 429 retry, 0 or 2 rows = error, cache       10
+        test_rules     SKU names, Linux vs Windows, Global PE, disk tiers   15
+        test_estimate  lab 24.90, prod 246.40, Delete not priced, exits     9
+        test_waste     fake az: findings, paging, empty disk = 0, exits      6
+        test_infra     bicep build: budget, waste demo; query files         11
+      51 passed in 3.16s
+
+      # prices come from a cache of real API answers (21 Nov 2026); the tests
+      # fail if they try to reach the API
+    narration: >
+      Fifty-one tests run in three seconds. The prices are a cache of real answers from the A P I, captured once, and
+      the tests fail if they try to call it. A fake Azure C L I answers the Resource Graph queries, including a
+      second page with a skip token.
+
+  - id: budget
+    type: code
+    heading: "A budget per workload tag"
+    lang: bicep
+    code: |
+      targetScope = 'subscription'
+      param startDate string = utcNow('yyyy-MM-01')      // budgets start on the 1st
+      resource budget 'Microsoft.Consumption/budgets@2023-11-01' = {
+        properties: {
+          category: 'Cost', amount: amount, timeGrain: 'Monthly'
+          timePeriod: { startDate: startDate }
+          filter: { tags: { name: 'workload', operator: 'In', values: workloads } }
+          notifications: {
+            actual50:    { threshold: 50,  thresholdType: 'Actual', ... }
+            actual90:    { threshold: 90,  thresholdType: 'Actual', ... }
+            forecast100: { threshold: 100, thresholdType: 'Forecasted', ... }
+      } } }
+    narration: >
+      The budget is Bicep at subscription scope, filtered by the workload tag that episode two's policy enforces. Two
+      thresholds on actual cost and one on forecast, which warns before the month is over. Remember what a budget
+      is: Learn says resources aren't affected and consumption isn't stopped. Cost data arrives eight to twenty-four
+      hours late, and budgets are evaluated once a day.
+
+  - id: whatif_screen
+    type: screen
+    heading: "Real what-if, real prices"
+    image: screens/estimate-ep2.jpg
+    bar: "Terminal · az what-if + costwatch"
+    demo: >
+      Terminal on the recording laptop: infra/estimate-ep2.sh rg-contoso-whatif swedencentral 25. Show the two
+      "== what-if" headers, then the lab table (within, about 24.90 EUR) and the prod table (OVER, about 246 EUR,
+      exit 1). The what-if runs against an empty resource group and creates nothing. Mask the subscription ID.
+    narration: >
+      This is the real thing: what-if for both profiles against an empty resource group, which creates nothing,
+      then cost watch with live prices. Lab passes, prod fails the gate, exactly as the tests predicted.
+
+  - id: costanalysis
+    type: screen
+    heading: "Where the lab's money went"
+    image: screens/cost-analysis.jpg
+    bar: "Cost Management · Cost analysis"
+    demo: >
+      Azure portal, Cost Management, Cost analysis at subscription scope, current month, Group by tag "workload":
+      bars for order-intake (episode 1), contoso (episodes 2-3) and contoso-orders (episode 5), plus Untagged.
+      Recorded at least a day after those episodes ran. Mask subscription name and ID.
+    narration: >
+      A day later, cost analysis grouped by the workload tag shows what the earlier episodes really cost. Tags only
+      count from the moment they're applied, they're not retroactive, which is why the tag is required at deploy
+      time.
+
+  - id: budget_screen
+    type: screen
+    heading: "The budget, filtered by tag"
+    image: screens/budget.jpg
+    bar: "Cost Management · Budgets"
+    demo: >
+      Cost Management, Budgets: budget-contoso-lab, 10 per month, filter workload in (order-intake, contoso,
+      contoso-orders), alert conditions Actual 50 percent, Actual 90 percent, Forecasted 100 percent, and the
+      current spend against it. Mask the alert recipient address and subscription.
+    narration: >
+      Here's the budget after deploy budget dot s h: ten a month for the three lab workloads, with its three alert
+      conditions and the spend so far.
+
+  - id: waste
+    type: code
+    heading: "Leftovers, with a price tag"
+    lang: kusto
+    short: waste
+    code: |
+      // queries/unattached-disks.kql (based on Learn's FinOps best practices)
+      resources
+      | where type =~ 'microsoft.compute/disks' and managedBy == ""
+      | extend diskState = tostring(properties.diskState)
+      | where diskState != 'ActiveSAS' and tags !contains 'ASR-ReplicaDisk'
+
+      | App Service plan with no apps | plan-contoso-leftover | 11.80 EUR |
+      | Public IP not attached        | pip-contoso-forgotten |  3.28 EUR |
+      | Unattached managed disk       | disk-orphaned-os      |  1.38 EUR |
+      | Unattached managed disk       | disk-empty-never-used |  0.00 EUR |
+      | **Left on the table**                                 | **16.46 EUR / month** |
+    narration: >
+      Resource Graph finds the leftovers: a plan whose apps are gone, an I P attached to nothing, and two loose disks.
+      But look at the last line. Learn says an empty managed disk has no storage allocated until it's first used, so
+      it costs nothing. The disk left behind by a deleted V M does. Same query result, different bill.
+
+  - id: waste_screen
+    type: screen
+    heading: "Resource Graph Explorer and the report"
+    image: screens/waste.jpg
+    bar: "Resource Graph Explorer · terminal"
+    demo: >
+      Left: Azure portal, Resource Graph Explorer, queries/unattached-disks.kql pasted and run, two rows
+      (disk-orphaned-os FromImage, disk-empty-never-used Empty). Right: terminal with python -m costwatch waste,
+      the priced table (plan, IP, two disks), the untagged table showing the public IP and the Advisor section.
+      Run against rg-contoso-waste created by infra/deploy-waste-demo.sh. Mask subscription ID and the IP address.
+    narration: >
+      In the portal, the same query in Resource Graph Explorer. In the terminal, the full report with the untagged
+      I P and Advisor's cost recommendations. Then the tear-down script deletes all of it.
+
+  - id: recap
+    type: bullets
+    heading: "Five rules"
+    bullets:
+      - "Price the what-if, not the template"
+      - "One price row per question, or stop"
+      - "Budgets by tag: actual and forecast"
+      - "Budgets warn, they don't stop spending"
+      - "Hunt leftovers on a schedule, then tear down"
+    narration: >
+      Five rules. Price the what-if, where the values are resolved, not the template. Demand exactly one price row per
+      question. Set budgets by tag, with actual and forecast thresholds. Remember that budgets warn, they don't stop
+      anything. And hunt for leftovers regularly, then tear them down.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      Cost watch, the queries, the budget Bicep and all fifty-one tests are on GitHub, and the complete guide is on
+      devladlog dot com. Next episode: storage and databases. This was DEVLADLOG Azure, by Momento Galático.

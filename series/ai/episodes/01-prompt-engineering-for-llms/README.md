@@ -42,7 +42,7 @@ Python 3.13.
 ## Run it for real (needs an Azure OpenAI deployment)
 
 ```bash
-az login                                            # identity with "Cognitive Services OpenAI User" on the resource
+az login                                            # identity with "Cognitive Services OpenAI User" on the resource (lab: labadmin, rg-mglab-ai-01)
 export AZURE_OPENAI_ENDPOINT=https://<resource>.openai.azure.com
 PYTHONPATH=src python -m triage.evaluate --data data/tickets.jsonl \
     --prompt v1 --prompt v2 --deployment triage-mini --model gpt-5-mini --show

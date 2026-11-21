@@ -1,0 +1,6 @@
+// What are we paying to ingest? Billable GB per table, last 24 hours (Quantity is in MB).
+Usage
+| where TimeGenerated > ago(1d)
+| where IsBillable == true
+| summarize IngestedGB = round(sum(Quantity) / 1000, 4) by DataType
+| order by IngestedGB desc

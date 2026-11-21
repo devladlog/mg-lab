@@ -1,0 +1,281 @@
+# DEVLADLOG SharePoint — episode 06 (draft: screens to be captured in the lab tenant, see demo.md)
+episode: 6
+slug: search-metadata
+series_label: "SHAREPOINT"
+series_name: "DEVLADLOG SharePoint"
+file_prefix: "sharepoint"
+title: "Search and metadata, as code"
+subtitle: "A term set, a search plan, a KQL linter and search tests"
+voice: am_michael
+thumbnail_text: "YOUR DATES\nARE TEXT\nTO SEARCH"
+youtube:
+  title: "SharePoint Search Schema, Managed Metadata and KQL with PnP PowerShell | DEVLADLOG SharePoint #6"
+  tags: [SharePoint, SharePoint Online, search, search schema, managed properties, refinable properties, KQL, managed metadata, term store, PnP PowerShell]
+sources:
+  - https://www.devladlog.com/articles/sharepoint/2026-03-29-search-metadata-complete-guide-2026/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Your dates are text to search"
+    sub: "A term set, a search plan, a KQL linter and search tests"
+    short: hook
+    narration: >
+      Which supplier contracts expire in the next sixty days? The library knows: every contract has an expiry date.
+      Search doesn't, until you tell it. In this episode we add a term set, map our columns into the search schema
+      properly, lint our queries, and write search tests that prove the answer. Welcome to DEVLADLOG SharePoint.
+
+  - id: problems
+    type: bullets
+    heading: "Why search ignores your metadata"
+    bullets:
+      - "Site columns become managed properties, as text"
+      - "You can't create a refinable property"
+      - "Queries fail quietly: free text instead of a filter"
+      - "Nothing changes until the library is crawled again"
+    narration: >
+      When search crawls a site column, it creates a managed property for it. Useful, but Learn's reference says those
+      automatic properties are all text. In SharePoint in Microsoft 365 you can't create a refinable property either.
+      A small mistake in a query turns a filter into free text, with no error. And a schema change does nothing until
+      the library is crawled again.
+
+  - id: licensing
+    type: bullets
+    heading: "What you need"
+    bullets:
+      - "Term store, search schema, KQL: any SharePoint plan"
+      - "Term Store admin for the terms"
+      - "Site collection admin for the schema and re-index"
+      - "No SharePoint Premium needed here"
+    narration: >
+      Everything in this episode works with any SharePoint plan; our lab has Microsoft 365 E5. You need to be a term
+      store admin to create the terms, and a site collection admin for the search schema and the re-index. Importing
+      terms in the SKOS format would need a pay-as-you-go licence, so we create them with p n p instead.
+
+  - id: termset
+    type: code
+    heading: "A term set with fixed IDs"
+    lang: json
+    code: |
+      "group":   { "name": "Contoso Purchasing", "id": "5f0c2b1e-...-2d8a4b7c1e01" },
+      "termSet": { "name": "Purchasing Categories", "id": "5f0c2b1e-...-2d8a4b7c1e02",
+                   "lcid": 1033, "availableForTagging": true },
+      "terms": [
+        { "name": "Facilities", "id": "5f0c2b1e-...-2d8a4b7c1e10", "children": [
+          { "name": "Cleaning",    "id": "5f0c2b1e-...-2d8a4b7c1e11" },
+          { "name": "Maintenance", "id": "5f0c2b1e-...-2d8a4b7c1e12" } ] },
+        { "name": "Office Supplies", "id": "5f0c2b1e-...-2d8a4b7c1e20", "children": [ ... ] },
+        { "name": "Fleet", "id": "5f0c2b1e-...-2d8a4b7c1e40", "children": [
+          { "name": "Vehicle Leasing", "id": "5f0c2b1e-...-2d8a4b7c1e41" } ] } ]
+    narration: >
+      The categories are a managed metadata term set: Facilities, Office Supplies, Marketing, Fleet and I T, each with
+      its children. Every group, set and term has a fixed I D, so the terms are the same in every tenant, and a query
+      can name a term without looking it up. The linter checks the I Ds and refuses the same label twice at one level.
+
+  - id: termstore
+    type: screen
+    heading: "In the term store"
+    image: screens/termstore.jpg
+    bar: "SharePoint admin center · Term store"
+    demo: >
+      SharePoint admin center > Content services > Term store after Invoke-SearchMetadata.ps1 -Provision: tree with
+      Contoso Purchasing > Purchasing Categories expanded (Facilities > Cleaning, Maintenance; Office Supplies; Marketing;
+      Fleet; IT), the term Facilities selected, its General tab showing the Unique Identifier ending in ...1e10.
+      Mask tenant name and admin account.
+    narration: >
+      After provisioning, the term store has the group, the term set and fourteen terms. Select Facilities, and its
+      unique identifier is the one from the JSON file, not a random one.
+
+  - id: tagging
+    type: code
+    heading: "Tag from what you already know"
+    lang: powershell
+    code: |
+      Add-PnPTaxonomyField -DisplayName 'Category' -InternalName 'PurchCategory' `
+          -TermSetPath 'Contoso Purchasing|Purchasing Categories' -Group $col.group -Id ([guid]$col.id) @c
+      Add-PnPFieldToContentType -Field 'PurchCategory' -ContentType 'Purchasing Document' -UpdateChildren $true @c
+
+      foreach ($it in @(Get-PnPListItem -List $Plan.library -PageSize 500 -Fields 'FileLeafRef', 'FSObjType', 'Supplier', $field @c)) {
+          $term = $map["$($it['Supplier'])"]                   # Fabrikam -> Facilities|Cleaning
+          if (-not $term) { continue }
+          Set-PnPListItem -List $Plan.library -Identity $it.Id -Values @{ $field = "$($term.Id)" } `
+              -UpdateType SystemUpdate @c
+      }
+    narration: >
+      A Category column bound to the term set goes onto the purchasing document content type from episode four, and
+      down to the library. Then every file is tagged from its supplier, which the filing plan already filled in.
+      Fabrikam is cleaning, Northwind Traders is paper and toner. A system update keeps the modified dates.
+
+  - id: library
+    type: screen
+    heading: "Every file has a category"
+    image: screens/library-category.jpg
+    bar: "Contoso Purchasing · Supplier Documents"
+    demo: >
+      Browser: Supplier Documents, a flat view (or inside the document sets) with Name, Supplier, Category, Expiry date
+      columns: Fabrikam files = Cleaning, Northwind Traders = Paper and Toner, Tailspin Toys = Merchandise, Adventure
+      Works = Vehicle Leasing; scan_0001.txt without a category. Mask tenant URL and avatars.
+    narration: >
+      In the library, every supplier's files carry a category. The scan someone dragged in during episode four has no
+      supplier, so the script skipped it and said so.
+
+  - id: planlint
+    type: code
+    heading: "A search plan, linted"
+    lang: text
+    code: |
+      $ ./Invoke-SearchMetadata.ps1 -PlanPath ./bad/bad-search-plan.json
+      ERROR   SP001  mapping 'Supplier'
+                     'Supplier' isn't a default unused managed property ... can't be refinable or sortable
+      ERROR   SP001  mapping 'RefinableString250'
+                     'RefinableString250' doesn't exist: the range is RefinableString00-RefinableString219.
+      ERROR   SP002  mapping 'RefinableString02'
+                     Column 'ExpiryDate' is DateTime but RefinableString02 is Text: dates would compare as text.
+      ERROR   SP005  mapping 'RefinableString03'
+                     Alias 'Title' is the name of an existing managed property ...
+      WARNING SP006  mapping 'Date00'
+                     Date00 can't refine or sort: use the Refinable range (DateTime).
+      ...
+      5 error(s), 3 warning(s)
+    narration: >
+      So we reuse the unused properties Learn lists: refinable string zero to two hundred nineteen, refinable date zero
+      to nineteen, and others, and give each an alias. The plan says supplier goes to refinable string zero zero as
+      purch supplier, expiry date to refinable date zero zero as purch expiry. A bad plan shows the traps: a custom
+      property that can never refine, a number that doesn't exist, a date in a text property, and an alias that
+      shadows Title.
+
+  - id: schema
+    type: screen
+    heading: "Mapped in the search schema"
+    image: screens/schema.jpg
+    bar: "Contoso Purchasing · Site settings · Search Schema"
+    demo: >
+      Browser: Site settings > Site Collection Administration > Search Schema > Managed Properties, filter "Refinable",
+      RefinableDate00 opened in Edit Managed Property: Alias "PurchExpiry", Mappings to crawled properties showing the
+      ExpiryDate crawled property (ows_q_DATE_ExpiryDate or ows_ExpiryDate, whichever SharePoint lists). Second capture
+      if possible: the managed properties list showing RefinableString00 (PurchSupplier), RefinableString01 (PurchDept),
+      RefinableDate00 (PurchExpiry), RefinableDate01 (PurchInvoiceDate). Mask tenant URL.
+    narration: >
+      The mapping itself is done on the site collection's search schema page: refinable date zero zero, alias purch
+      expiry, mapped to the expiry date crawled property. Then the script reads the mappings back and checks them
+      against the plan, and requests a re-index of the library, once, because Learn warns it can load search heavily.
+
+  - id: kql
+    type: code
+    heading: "Lint the query before you trust it"
+    lang: text
+    code: |
+      $ ./Invoke-SearchMetadata.ps1 -PlanPath ./search/search-plan.json -TestsPath ./bad/bad-queries.json
+      x  space after the colon
+         PurchSupplier: "Fabrikam"
+         ERROR   KQ003  space after the colon
+                        White space after 'PurchSupplier:': the restriction becomes free text.
+      !  lowercase operator
+         PurchSupplier:Fabrikam and PurchSupplier:Northwind
+         WARNING KQ002  lowercase operator
+                        'and' is searched as a word: operators are case-sensitive, write AND.
+      x  date in local format
+         PurchExpiry<31/12/2026
+         ERROR   KQ007  date in local format
+                        '31/12/2026' isn't a KQL date: use YYYY-MM-DD (UTC) or a keyword like today, "this month".
+      ...
+      4 error(s), 3 warning(s)
+    short: kql
+    narration: >
+      Queries fail quietly, so we lint them too, with the rules from the K Q L syntax reference. A space after the
+      colon turns the filter into free text. Lowercase and is just a word, because operators are case-sensitive.
+      Dates must be year, month, day, in U T C. Seven queries people really write, seven mistakes found before anyone
+      trusts an empty result.
+
+  - id: gotcha
+    type: bullets
+    heading: "The gotcha: the automatic property is text"
+    bullets:
+      - "ExpiryDateOWSDATE exists, so it looks usable"
+      - "Automatic managed properties are of type Text"
+      - "< > and .. only work on dates and numbers"
+      - "Map the crawled property to RefinableDate00"
+    short: gotcha
+    narration: >
+      The gotcha. Search already made a property for the expiry date, expiry date O W S date, so it looks usable.
+      But automatic properties are text, and K Q L's less than, greater than and range only work on dates and numbers.
+      Expiry date O W S date less than a date can't do what you mean. The linter flags it. Map the crawled property to
+      refinable date zero zero instead.
+
+  - id: searchtests
+    type: code
+    heading: "Search tests: queries with expected results"
+    lang: json
+    code: |
+      { "name": "Contracts expiring in the next 60 days",
+        "query": "ContentTypeId:{ct:Contract}* PurchExpiry>={today} PurchExpiry<={today+60d}",
+        "expect": { "count": 1, "files": ["CTR-2026-0042 Fabrikam*"] } },
+      { "name": "Expired contracts",
+        "query": "ContentTypeId:{ct:Contract}* PurchExpiry<{today}",
+        "expect": { "count": 1, "files": ["CTR-2025-0107 Tailspin Toys*"] } },
+      { "name": "Facilities, the whole branch",
+        "query": "owstaxIdPurchCategory:\"GPP|#{term:Facilities}\"",
+        "expect": { "count": 2, "files": ["CTR-2026-0042 Fabrikam*", "INV-10021 Fabrikam*"] } },
+      { "name": "Refine by supplier", "refiners": "RefinableString00",
+        "expect": { "refiners": { "RefinableString00": ["Adventure Works", "Fabrikam", "..."] } } }
+    narration: >
+      Then the search tests. Contracts expiring in the next sixty days: exactly the Fabrikam contract. Expired:
+      Tailspin Toys. The whole Facilities branch, using the term's fixed I D with the prefix the reference documents
+      for a term and its children. And a refiner on supplier with all four suppliers in it.
+
+  - id: searchrun
+    type: screen
+    heading: "The tests, against real search"
+    image: screens/search-tests.jpg
+    bar: "PowerShell 7 · Invoke-SearchMetadata.ps1 -RunTests"
+    demo: >
+      Terminal (dark theme, font 18+) after the re-index has run: Invoke-SearchMetadata.ps1 ... -CheckMapping -RunTests.
+      Visible: the four mappings read back (RefinableString00 alias PurchSupplier <- crawled property, ...), "No
+      findings", then PASS lines for the six tests with their result counts and the "6 passed, 0 failed" line. If a
+      test fails, record it as is and adjust narration and README. Mask tenant host and client id.
+    narration: >
+      After the next crawl, against the real index. The mappings match the plan, and the tests run as real queries
+      through p n p: contracts by expiry, the category branch, the supplier refiner. Run them again after every schema
+      change, and you'll know search still answers the question.
+
+  - id: tests
+    type: code
+    heading: "31 Pester tests, real PnP signatures"
+    lang: text
+    code: |
+      $ Invoke-Pester ./tests -Output Detailed
+      Describing Automatically created properties (Learn naming convention)
+        [+] reproduces Learn's examples
+      Describing Test-MgKql (KQL syntax reference)
+        [+] accepts Learn's own example queries
+        [+] finds the mistake in each real-world query
+      Describing Tenant functions (PnP cmdlets mocked)
+        [+] creates the term group, the term set, 5 terms and 9 child terms with their fixed IDs
+        [+] runs the search tests with Submit-PnPSearchQuery and reads results and refiners
+      Tests Passed: 31, Failed: 0, Skipped: 0
+    narration: >
+      Thirty-one Pester tests: the naming convention and the K Q L rules checked against Learn's own examples, the plan
+      lint, and the term set, the column, the tagging and the search tests with the real p n p cmdlets mocked.
+
+  - id: recap
+    type: bullets
+    heading: "Five rules"
+    bullets:
+      - "Give terms fixed IDs and create them as code"
+      - "Map columns to Refinable properties of the right type"
+      - "Query by alias, never by RefinableString00"
+      - "Lint every query: KQL fails quietly"
+      - "Re-index once, then run your search tests"
+    narration: >
+      Five rules. Give your terms fixed I Ds and create them as code. Map columns to refinable properties of the right
+      type. Query by alias. Lint every query, because K Q L fails quietly. And re-index once, then run your search
+      tests. Next episode: hub sites and navigation.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The module, the term set, the search plan and the tests are on GitHub, and the full guide is on devladlog dot com.
+      Links are in the description. Subscribe for episode seven, hub sites and navigation. This was DEVLADLOG
+      SharePoint, by Momento Galático.

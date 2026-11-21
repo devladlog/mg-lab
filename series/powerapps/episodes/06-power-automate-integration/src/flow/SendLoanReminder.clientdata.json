@@ -1,0 +1,263 @@
+{
+  "properties": {
+    "connectionReferences": {
+      "shared_commondataserviceforapps": {
+        "runtimeSource": "invoker",
+        "connection": {
+          "connectionReferenceLogicalName": "contoso_EquipmentDeskDataverse"
+        },
+        "api": {
+          "name": "shared_commondataserviceforapps"
+        }
+      },
+      "shared_office365": {
+        "runtimeSource": "invoker",
+        "connection": {
+          "connectionReferenceLogicalName": "contoso_EquipmentDeskOutlook"
+        },
+        "api": {
+          "name": "shared_office365"
+        }
+      }
+    },
+    "definition": {
+      "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+      "contentVersion": "1.0.0.0",
+      "parameters": {
+        "$connections": {
+          "defaultValue": {},
+          "type": "Object"
+        },
+        "$authentication": {
+          "defaultValue": {},
+          "type": "SecureObject"
+        }
+      },
+      "triggers": {
+        "manual": {
+          "type": "Request",
+          "kind": "PowerAppV2",
+          "inputs": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "text": {
+                  "title": "LoanId",
+                  "type": "string",
+                  "x-ms-dynamically-added": true,
+                  "description": "Row id (GUID) of the loan. Everything else is read from Dataverse.",
+                  "x-ms-content-hint": "TEXT"
+                }
+              },
+              "required": [
+                "text"
+              ]
+            }
+          }
+        }
+      },
+      "actions": {
+        "Get_loan": {
+          "runAfter": {},
+          "type": "OpenApiConnection",
+          "inputs": {
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+              "connectionName": "shared_commondataserviceforapps",
+              "operationId": "GetItem"
+            },
+            "parameters": {
+              "entityName": "contoso_loans",
+              "recordId": "@triggerBody()['text']",
+              "$select": "contoso_name,contoso_borroweremail,contoso_duedate,contoso_returnedon",
+              "$expand": "contoso_EquipmentId($select=contoso_assettag,contoso_name)"
+            },
+            "authentication": "@parameters('$authentication')"
+          }
+        },
+        "Today": {
+          "runAfter": {},
+          "type": "Compose",
+          "inputs": "@convertFromUtc(utcNow(), 'GMT Standard Time', 'yyyy-MM-dd')"
+        },
+        "Problem": {
+          "runAfter": {
+            "Get_loan": [
+              "Succeeded"
+            ],
+            "Today": [
+              "Succeeded"
+            ]
+          },
+          "type": "Compose",
+          "inputs": "@if(not(empty(body('Get_loan')?['contoso_returnedon'])), 'it was already returned', if(not(less(formatDateTime(body('Get_loan')?['contoso_duedate'], 'yyyy-MM-dd'), outputs('Today'))), 'it isn''t overdue yet', if(not(endsWith(coalesce(body('Get_loan')?['contoso_borroweremail'], ''), '@contoso.com')), 'the borrower isn''t a contoso.com address', '')))"
+        },
+        "Can_remind": {
+          "runAfter": {
+            "Problem": [
+              "Succeeded"
+            ]
+          },
+          "type": "If",
+          "expression": {
+            "and": [
+              {
+                "equals": [
+                  "@outputs('Problem')",
+                  ""
+                ]
+              }
+            ]
+          },
+          "actions": {
+            "Send_reminder": {
+              "runAfter": {},
+              "type": "OpenApiConnection",
+              "inputs": {
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365",
+                  "connectionName": "shared_office365",
+                  "operationId": "SendEmailV2"
+                },
+                "parameters": {
+                  "emailMessage/To": "@{body('Get_loan')?['contoso_borroweremail']}",
+                  "emailMessage/Subject": "Please return @{body('Get_loan')?['contoso_EquipmentId']?['contoso_assettag']} @{body('Get_loan')?['contoso_EquipmentId']?['contoso_name']}",
+                  "emailMessage/Body": "<p>Hi,</p><p>The @{body('Get_loan')?['contoso_EquipmentId']?['contoso_assettag']} @{body('Get_loan')?['contoso_EquipmentId']?['contoso_name']} you borrowed from the Equipment Desk was due back on @{formatDateTime(body('Get_loan')?['contoso_duedate'], 'dddd d MMMM yyyy', 'en-GB')}. Please bring it back as soon as you can.</p><p>Thank you!</p>",
+                  "emailMessage/Importance": "Normal"
+                },
+                "authentication": "@parameters('$authentication')"
+              }
+            },
+            "Respond_sent": {
+              "runAfter": {
+                "Send_reminder": [
+                  "Succeeded"
+                ]
+              },
+              "type": "Response",
+              "kind": "PowerApp",
+              "inputs": {
+                "statusCode": 200,
+                "body": {
+                  "sent": true,
+                  "message": "Reminder sent to @{body('Get_loan')?['contoso_borroweremail']} for @{body('Get_loan')?['contoso_EquipmentId']?['contoso_assettag']}."
+                },
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "sent": {
+                      "title": "sent",
+                      "x-ms-dynamically-added": true,
+                      "type": "boolean"
+                    },
+                    "message": {
+                      "title": "message",
+                      "x-ms-dynamically-added": true,
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            },
+            "Respond_send_failed": {
+              "runAfter": {
+                "Send_reminder": [
+                  "Failed",
+                  "TimedOut"
+                ]
+              },
+              "type": "Response",
+              "kind": "PowerApp",
+              "inputs": {
+                "statusCode": 200,
+                "body": {
+                  "sent": false,
+                  "message": "The reminder couldn't be sent: @{coalesce(body('Send_reminder')?['error']?['message'], body('Send_reminder')?['message'], 'no details')}"
+                },
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "sent": {
+                      "title": "sent",
+                      "x-ms-dynamically-added": true,
+                      "type": "boolean"
+                    },
+                    "message": {
+                      "title": "message",
+                      "x-ms-dynamically-added": true,
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "else": {
+            "actions": {
+              "Respond_skipped": {
+                "runAfter": {},
+                "type": "Response",
+                "kind": "PowerApp",
+                "inputs": {
+                  "statusCode": 200,
+                  "body": {
+                    "sent": false,
+                    "message": "No reminder sent: @{outputs('Problem')}."
+                  },
+                  "schema": {
+                    "type": "object",
+                    "properties": {
+                      "sent": {
+                        "title": "sent",
+                        "x-ms-dynamically-added": true,
+                        "type": "boolean"
+                      },
+                      "message": {
+                        "title": "message",
+                        "x-ms-dynamically-added": true,
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "Respond_not_found": {
+          "runAfter": {
+            "Get_loan": [
+              "Failed",
+              "TimedOut"
+            ]
+          },
+          "type": "Response",
+          "kind": "PowerApp",
+          "inputs": {
+            "statusCode": 200,
+            "body": {
+              "sent": false,
+              "message": "No reminder sent: the loan couldn't be read. It may not exist, or you may not have access to it."
+            },
+            "schema": {
+              "type": "object",
+              "properties": {
+                "sent": {
+                  "title": "sent",
+                  "x-ms-dynamically-added": true,
+                  "type": "boolean"
+                },
+                "message": {
+                  "title": "message",
+                  "x-ms-dynamically-added": true,
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "schemaVersion": "1.0.0.0"
+}

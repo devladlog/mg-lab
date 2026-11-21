@@ -70,8 +70,8 @@ scenes:
     image: screens/promote.jpg
     bar: "Lab · CON-DC01 · New-LabForest.ps1"
     demo: >
-      On CON-DC01 (Server Core console or a remote session): ./New-LabForest.ps1 -DomainName lab.contoso.com
-      -NetbiosName CONTOSOLAB -WhatIf. Show the line "ForestMode values accepted here: ..." and the
+      On the throwaway VM CON-FOREST01 (Server Core console, isolated Private switch; never the shared CON-DC01):
+      ./New-LabForest.ps1 -DomainName lab.contoso.com -NetbiosName CONTOSO -WhatIf. Show the line "ForestMode values accepted here: ..." and the
       Test-ADDSForestInstallation result (Status Success). Then the real run and the restart prompt (B-roll).
     narration: >
       On the lab server, a what if run first. Here is the list of functional levels this build accepts, and the
@@ -150,10 +150,10 @@ scenes:
     bar: "Lab · CON-DC01 · Invoke-AdLabProvisioning"
     short: idempotent
     demo: >
-      Two runs of Invoke-AdLabProvisioning -CsvPath ./users.csv -DomainDn 'DC=lab,DC=contoso,DC=com'
+      On the shared CON-DC01 (pwsh): two runs of Invoke-AdLabProvisioning -CsvPath ./users.csv -DomainDn 'DC=lab,DC=contoso,DC=com'
       -UpnSuffix lab.contoso.com -InitialPassword (Read-Host -AsSecureString) | Group-Object Action, Type | Format-Table Count, Name.
       First run: Created OU 9, Created Group 5, Created User 8. Second run: Exists 22, Created 0.
-      Optional third shot: Active Directory Users and Computers with the OU tree.
+      Optional third shot: Active Directory Users and Computers (on CON-SRV02) with the OU tree.
     narration: >
       In the lab, the first run creates nine OUs, five groups and eight users, each with must change password at next
       logon. Run it again and everything comes back as exists. Nothing created twice. That's the property you want
@@ -231,8 +231,8 @@ scenes:
     image: screens/report.jpg
     bar: "Lab · CON-DC01 · Invoke-AdHygieneReport.ps1"
     demo: >
-      ./Invoke-AdHygieneReport.ps1 -SnapshotFile ./lab-snapshot.json -OutFile ./ad-report.md on CON-DC01 (or the admin
-      VM with RSAT). Show the findings table: expect RecycleBin (Medium), PasswordPolicy (Medium), LockoutPolicy if the
+      ./Invoke-AdHygieneReport.ps1 -SnapshotFile ./lab-snapshot.json -OutFile ./ad-report.md on the shared CON-DC01
+      (pwsh). Show the findings table: expect RecycleBin (Medium), PasswordPolicy (Medium), LockoutPolicy if the
       threshold is 0, PrivilegedGroup if adm-alex was added to Domain Admins, plus the adminCount demo user.
     narration: >
       Now the real lab domain. Rewrite this to the findings on screen. Even a brand new forest isn't clean: the
@@ -246,7 +246,7 @@ scenes:
     bar: "Lab · CON-DC01 · lastLogon vs lastLogonTimestamp"
     short: gotcha
     demo: >
-      Sign in twice as CONTOSO\jgoncalves on CON-FS01 a few minutes apart (or run a command with -Credential twice).
+      Sign in twice as CONTOSO\jgoncalves on CON-SRV02 a few minutes apart (or run a command with -Credential twice).
       Then: Get-ADUser jgoncalves -Properties lastLogon, lastLogonTimestamp | Select-Object Name,
       @{n='lastLogon';e={[datetime]::FromFileTimeUtc($_.lastLogon)}}, @{n='lastLogonTimestamp';e={[datetime]::FromFileTimeUtc($_.lastLogonTimestamp)}}.
       lastLogon shows the second sign-in, lastLogonTimestamp still the first.

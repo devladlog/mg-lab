@@ -1,5 +1,15 @@
 # Demo shot list — DEVLADLOG AI #1, Prompt engineering for LLMs
 
+## Lab environment
+
+| Item | What this episode needs |
+|---|---|
+| VMs / tenant apps | none |
+| Lab user | `labadmin` (the recording account): signs in to the portal and `az login`; gets **Cognitive Services OpenAI User** on the resource |
+| Azure | Resource group **`rg-mglab-ai-01`** in **Sweden Central** (pay-as-you-go lab subscription): one Microsoft Foundry (Azure OpenAI) resource, S0, with one deployment `triage-mini` = gpt-5-mini 2025-08-07, smallest TPM that works (e.g. 10k). No fixed hourly cost; tokens only: one evaluation run is 40 small calls, expect a few cents (check the pricing page). Tear-down: delete the resource group |
+| Licences / trials | none beyond the subscription |
+| Recording machine | The Windows lab laptop: Foundry/Azure portal in the browser, bash terminal in WSL (Ubuntu) with Azure CLI, Python 3.10+ and this folder (the commands below are bash) |
+
 Everything except the four `screen` scenes is already real (code excerpts and test output from this folder).
 The live part needs **one Azure OpenAI deployment** in the lab subscription. Status: **needs tenant** for the
 scorecard, the A02 answer and the temperature call; tests and `--dry-run` run offline.
@@ -9,21 +19,22 @@ scorecard, the A02 answer and the temperature call; tests and `--dry-run` run of
   20 tickets × 2 prompts = 40 small calls (the v2 request is about 3,000 characters of messages and schema per call, plus hidden reasoning tokens on the output side); check the
   [Azure OpenAI pricing page](https://azure.microsoft.com/pricing/details/cognitive-services/openai-service/) for
   gpt-5-mini before recording and expect a few cents. Don't loop the run.
-- A Microsoft Foundry (Azure OpenAI) resource in a region where **gpt-5-mini 2025-08-07** is available for your
-  deployment type (check *Model availability* on Learn). gpt-5-mini is GA with retirement 2027-07-13.
-- Your lab user has **Cognitive Services OpenAI User** on that resource (role assignment can take up to 5 minutes).
+- A Microsoft Foundry (Azure OpenAI) resource in `rg-mglab-ai-01` (Sweden Central) — check that **gpt-5-mini 2025-08-07** is available for your
+  deployment type there (check *Model availability* on Learn; if not, pick another EU region and note it). gpt-5-mini is GA with retirement 2027-07-13.
+- `labadmin` has **Cognitive Services OpenAI User** on that resource (role assignment can take up to 5 minutes).
 - Local: Python 3.10+, Azure CLI, this folder.
 
 ## Setup (lab tenant)
+0. `az group create -n rg-mglab-ai-01 -l swedencentral`, then create the Foundry (Azure OpenAI) resource in it (portal, S0).
 1. Foundry portal → your resource → **Models + endpoints** → **Deploy model** → `gpt-5-mini`, version `2025-08-07`,
    deployment name **`triage-mini`**, smallest TPM that works (e.g. 10k). Keep the default guardrail (content filter).
-2. Resource → **Access control (IAM)** → add **Cognitive Services OpenAI User** for the lab user.
+2. Resource → **Access control (IAM)** → add **Cognitive Services OpenAI User** for `labadmin`.
 3. Terminal:
    ```bash
    cd series/ai/episodes/01-prompt-engineering-for-llms
    python -m venv .venv && . .venv/bin/activate && pip install -r requirements.txt
    python -m pytest tests -q                       # expect 37 passed
-   az login                                        # lab user (browser sign-in, not on camera)
+   az login                                        # labadmin (browser sign-in, not on camera)
    export AZURE_OPENAI_ENDPOINT=https://<resource>.openai.azure.com
    PYTHONPATH=src python -m triage.evaluate --data data/tickets.jsonl --prompt v2 --dry-run | head -20   # sanity
    ```
@@ -65,5 +76,5 @@ like a fluke; LLM output varies between runs, so say "in this run" in the narrat
 ## Tear-down
 1. Foundry portal → **Models + endpoints** → delete `triage-mini`.
 2. Remove the temporary role assignment if it was created only for the demo.
-3. Keep the resource if episode 02 is recorded next; otherwise delete the resource group.
+3. `az group delete -n rg-mglab-ai-01 --yes`, then purge the soft-deleted account (`az cognitiveservices account purge -g rg-mglab-ai-01 -n <resource> -l swedencentral`).
 4. `deactivate && rm -rf .venv`.

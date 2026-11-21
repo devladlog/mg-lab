@@ -1,5 +1,15 @@
 # Demo shot list — DEVLADLOG AI #3 (RAG patterns and vector search)
 
+## Lab environment
+
+| Item | What this episode needs |
+|---|---|
+| VMs / tenant apps | none |
+| Lab user | `labadmin` (the recording account): Owner on the subscription; its object ID is passed as `developerPrincipalId` (data-plane roles on Search and Azure OpenAI) |
+| Azure | Resource group **`rg-mglab-ai-03`** in **Sweden Central**, deployed by `infra/main.bicep`: Azure AI Search **Basic** (1 replica / 1 partition, billed per hour while it exists: roughly €0.10/hour, check the pricing page; semantic ranker on the free plan), one Azure OpenAI account with `embed-small` (text-embedding-3-small, Standard, 50k TPM) and `chat` (gpt-5-mini 2025-08-07, Data Zone Standard, 10k TPM): a few thousand tokens, cents. Deploy right before recording; tear-down deletes the group and purges the account |
+| Licences / trials | none beyond the subscription |
+| Recording machine | The Windows lab laptop: Foundry/Azure portal in the browser, bash terminal in WSL (Ubuntu) with Azure CLI, Python 3.10+ and this folder (the commands below are bash), plus `jq` in WSL |
+
 Everything in `src/` and `infra/` is tested locally (38 pytest tests, Bicep build + lint). The four `screen` scenes
 **need the lab tenant**: they show the real index, the real scorecard and real model answers.
 
@@ -25,9 +35,9 @@ Everything in `src/` and `infra/` is tested locally (38 pytest tests, Bicep buil
 cd series/ai/episodes/03-rag-patterns-vector-search
 python -m venv .venv && . .venv/bin/activate && pip install -r requirements.txt
 python -m pytest tests -q                                       # expect 38 passed
-az login                                                        # lab user, off camera
-az group create -n rg-mglab-rag -l swedencentral
-az deployment group create -g rg-mglab-rag -f infra/main.bicep -p infra/main.bicepparam \
+az login                                                        # labadmin, off camera
+az group create -n rg-mglab-ai-03 -l swedencentral
+az deployment group create -g rg-mglab-ai-03 -f infra/main.bicep -p infra/main.bicepparam \
    -p developerPrincipalId=$(az ad signed-in-user show --query id -o tsv) \
    --query properties.outputs -o json > /tmp/rag-outputs.json  # don't show this file on camera
 export SEARCH=$(jq -r .searchEndpoint.value /tmp/rag-outputs.json)
@@ -70,8 +80,8 @@ Optional B-roll: portal → index → **Search explorer**, a hybrid query in JSO
 
 ## Tear-down
 ```bash
-az group delete -n rg-mglab-rag --yes
+az group delete -n rg-mglab-ai-03 --yes
 # Azure OpenAI (Cognitive Services) accounts are soft-deleted; purge so the name and quota are released:
-az cognitiveservices account purge -g rg-mglab-rag -n <aoai-account-name> -l swedencentral
+az cognitiveservices account purge -g rg-mglab-ai-03 -n <aoai-account-name> -l swedencentral
 rm /tmp/rag-outputs.json; deactivate; rm -rf .venv
 ```

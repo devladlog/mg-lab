@@ -1,14 +1,10 @@
 # Demo shot list — DEVLADLOG Dynamics 365 #3: Dynamics 365 Customization
 
-Already run in the build container: `npm test` in `formscript/` (tsc build + 13 `node --test` tests against the
-compiled web resource) and `python3 -m pytest -q tests` (35 tests, Web API stubbed), plus `custkit render`.
-**Nothing has run against Dataverse yet: all five `screen` scenes need the lab tenant**, and the `deploy` and
-`probe-rule` narration must be checked against what really appears.
-
 ## Lab environment
 
-No VMs and no Azure resources. Everything is in the cloud tenant, recorded from the browser and a terminal on the
-recording laptop.
+No VMs and no Azure resources. Everything is in the cloud tenant (`DEV`, not the Sales trial: custom table only),
+recorded from the browser and a WSL (Ubuntu) bash terminal on the Windows recording laptop. Recording account:
+`labadmin`; no other lab user is needed (the sample data is episode 1's fictional records).
 
 | Item | Notes | Cost |
 |---|---|---|
@@ -16,9 +12,14 @@ recording laptop.
 | Episode 1 done in `DEV` | `mgl_projectrequest` in solution `MGLabDataverse` (publisher prefix `mgl`), 18 records imported | none |
 | A few fictional accounts | e.g. "Contoso Ltd" and "Fabrikam (sample)"; set Customer Account on 3+ requests so one account has several open requests (PR-0004, PR-0011, PR-0013 → Contoso Ltd) | none |
 | A model-driven app with the Project Request table | The one used in episode 2, or create "Project Requests" in the solution (New → App → Model-driven app, add the table) | none |
-| Identity | Your lab user with **System Customizer** in `DEV` (not a Global Administrator), or an app registration + application user with System Customizer | none |
+| Identity | `labadmin` with **System Customizer** in `DEV`, or an app registration + application user with System Customizer | none |
 | Node 22 + npm, Python 3.10+ with `pip install --user -r requirements.txt` | On the recording laptop | none |
 | Browser with `pipeline/mask.js` | Maker portal and app shots | none |
+
+Already run in the build container: `npm test` in `formscript/` (tsc build + 13 `node --test` tests against the
+compiled web resource) and `python3 -m pytest -q tests` (35 tests, Web API stubbed), plus `custkit render`.
+**Nothing has run against Dataverse yet: all five `screen` scenes need the lab tenant**, and the `deploy` and
+`probe-rule` narration must be checked against what really appears.
 
 ## Setup (before recording)
 

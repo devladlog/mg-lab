@@ -1,0 +1,13 @@
+// Unattached managed disks. Based on "FinOps best practices for Storage" (Microsoft Learn):
+// skips disks in an active SAS transfer and Azure Site Recovery replica/seed disks.
+resources
+| where type =~ 'microsoft.compute/disks' and managedBy == ""
+| extend diskState = tostring(properties.diskState)
+| where diskState != 'ActiveSAS'
+    and tags !contains 'ASR-ReplicaDisk'
+    and tags !contains 'asrseeddisk'
+| project id, name, type, location, resourceGroup, sku,
+    diskSizeGB = toint(properties.diskSizeGB), diskState,
+    createOption = tostring(properties.creationData.createOption),
+    lastOwnershipUpdate = coalesce(tostring(properties.LastOwnershipUpdateTime), tostring(properties.lastOwnershipUpdateTime))
+| order by id asc

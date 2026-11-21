@@ -1,5 +1,15 @@
 # Demo shot list — DEVLADLOG Dev Tools #1, Git & GitHub best practices
 
+## Lab environment
+
+| Item | What this episode needs |
+|---|---|
+| VMs / tenant / Azure | none (no Microsoft tenant, no cloud resource) |
+| GitHub | The lab GitHub account (GitHub Free) and a **public** throwaway repository `guardrails-demo`, created in setup and deleted in tear-down. Optional: a second GitHub account as reviewer |
+| Identity in commits | `git config user.name "Alex Demo"` / `user.email alex.demo@contoso.com` in the demo repo (fictional, matches the lab persona) |
+| Licences / cost | none |
+| Recording machine | The Windows lab laptop: Git Bash (Git 2.30+), Python 3.10+, `gh` CLI signed in as the repo admin off camera; browser for the GitHub screens |
+
 Everything except the four `screen` scenes is already real (code excerpts and test output from this folder,
 `python3 -m pytest -q` → 54 passed). No Microsoft tenant is involved. The live part needs **a GitHub account and a
 throwaway repository**. Status: **needs GitHub** for `ruleset` and `pr`; `badcommit` and `secret` only need a terminal.

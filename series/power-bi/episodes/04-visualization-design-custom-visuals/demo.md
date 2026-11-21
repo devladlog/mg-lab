@@ -1,5 +1,16 @@
 # Demo shot list — Power BI #4 Visualization Design & Custom Visuals
 
+## Lab environment
+
+| Item | What this episode needs |
+|---|---|
+| VMs / tenant / Azure | none. The report is not published, so no workspace and no use of the Fabric/Power BI trial; no sign-in needed |
+| Data | Episode 2's star CSVs in `C:\MGLab\power-bi\star\` (the semantic model's real data source: Power BI Desktop reads the files itself; no mock involved) |
+| Custom visual | `dist/*.pbiviz` packaged with `npx pbiviz package` (Node.js 20.19+, in the build container or on the laptop), imported from a file into this report only (Developer visual setting on for the session) |
+| Accessibility | Windows **contrast theme** switched on for the high-contrast shot and back to *None* afterwards |
+| Licences / cost | Power BI Desktop is free; cost 0 |
+| Recording machine | The Windows lab laptop: current **Power BI Desktop**, signed out (or account masked); terminal B-roll on the same laptop (.NET 8 SDK, Python 3, Node where listed) |
+
 **Local only**, like episodes 1–3: no tenant, workspace or licence. Power BI Desktop (free) on Windows for the
 report and the custom visual; everything else was built and tested in the Linux container.
 

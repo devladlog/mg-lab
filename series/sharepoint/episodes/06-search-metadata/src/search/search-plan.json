@@ -1,0 +1,32 @@
+{
+  "$comment": "Search plan for the episode 4 Supplier Documents library. Mappings are made at site collection level (Site settings > Search Schema).",
+  "library": "Supplier Documents",
+  "contentTypes": {
+    "Purchasing Document": "0x010100D5F0B586695B489A84366F90C59E9249",
+    "Contract": "0x010100D5F0B586695B489A84366F90C59E924901",
+    "Invoice": "0x010100D5F0B586695B489A84366F90C59E924902"
+  },
+  "columns": [
+    { "internalName": "Supplier",        "type": "Text" },
+    { "internalName": "PurchDepartment", "type": "Choice" },
+    { "internalName": "ExpiryDate",      "type": "DateTime" },
+    { "internalName": "InvoiceDate",     "type": "DateTime" },
+    { "internalName": "PurchCategory",   "type": "TaxonomyFieldType" }
+  ],
+  "mappings": [
+    { "managedProperty": "RefinableString00", "alias": "PurchSupplier",    "column": "Supplier",        "refine": true },
+    { "managedProperty": "RefinableString01", "alias": "PurchDept",        "column": "PurchDepartment", "refine": true },
+    { "managedProperty": "RefinableDate00",   "alias": "PurchExpiry",      "column": "ExpiryDate",      "refine": true },
+    { "managedProperty": "RefinableDate01",   "alias": "PurchInvoiceDate", "column": "InvoiceDate",     "refine": true }
+  ],
+  "categoryColumn": {
+    "internalName": "PurchCategory", "displayName": "Category", "id": "9c3e7d52-0b8a-4f6e-a1d4-6e2f8b9c0a31",
+    "group": "Contoso Purchasing", "termSetPath": "Contoso Purchasing|Purchasing Categories", "contentType": "Purchasing Document"
+  },
+  "supplierCategories": {
+    "Fabrikam": "Facilities|Cleaning",
+    "Northwind Traders": "Office Supplies|Paper and Toner",
+    "Tailspin Toys": "Marketing|Merchandise",
+    "Adventure Works": "Fleet|Vehicle Leasing"
+  }
+}

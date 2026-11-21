@@ -1,5 +1,16 @@
 # Demo shot list — SharePoint #4 Document management
 
+## Lab environment
+
+| Item | What this episode needs |
+|---|---|
+| VMs / Azure / Power Platform | none |
+| Tenant | **SharePoint** in the lab tenant: episode 3's communication site `/sites/Purchasing`. Changed here: Document Sets and Document ID Service features (site collection), 8 site columns, 4 content types, library *Supplier Documents* (all removed in tear-down; features may stay) |
+| Lab users | `labadmin` (the recording account): site collection admin, runs the script and drags the file in; Modified By shows labadmin (mask) or upload as Alex Demo (`alex.demo`, site member) |
+| Entra | The existing "MG Lab PnP" app registration (delegated) |
+| Licences / trials | lab E5 licences; cost 0 |
+| Recording machine | The Windows lab laptop: PowerShell 7.4+ with PnP.PowerShell 3.x and Pester; browser with `pipeline/mask.js` for the SharePoint screens |
+
 The code scenes are real output from this folder (lint, filing plan, Pester). The three `screen` scenes need the lab
 tenant. **Needs tenant:** `Invoke-MgDocMgmtProvisioning`, `Invoke-MgFiling`, `Get-MgLibraryAudit` and every
 `-SiteUrl` path of `Invoke-DocumentManagement.ps1`. Locally they are covered only by Pester tests that mock the real

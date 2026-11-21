@@ -1,0 +1,9 @@
+# The Dockerfile most of us wrote first. It works, and that's the problem.
+FROM mcr.microsoft.com/dotnet/sdk:latest
+WORKDIR /app
+COPY . .
+RUN dotnet restore
+RUN dotnet publish src/Contoso.Orders.Api/Contoso.Orders.Api.csproj -c Release -o out
+ENV ConnectionStrings__Orders="Server=db;User Id=sa;Password=Passw0rd!" DB_PASSWORD=Passw0rd!
+EXPOSE 80
+ENTRYPOINT dotnet out/Contoso.Orders.Api.dll

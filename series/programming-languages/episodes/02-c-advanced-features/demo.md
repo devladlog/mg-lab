@@ -1,5 +1,13 @@
 # Demo shot list — DEVLADLOG Code #2 Advanced C# (C# 14 on .NET 10)
 
+## Lab environment
+
+| Item | What this episode needs |
+|---|---|
+| VMs / tenant / Azure | none: the screens show the real C# 14 compiler, the demo app and VS Code IntelliSense on this project |
+| Licences / cost | none (VS Code + C# Dev Kit; no Visual Studio licence needed) |
+| Recording machine | The Windows lab laptop: .NET SDK 10.0.1xx, VS Code + C# Dev Kit, a bash terminal (Git Bash or WSL) for `./demo/expect-errors.sh`, opened under a neutral path |
+
 Everything here was built and tested in the container (`dotnet test`: **53 passed**; `./demo/expect-errors.sh`:
 all checks ok). **No tenant, no cloud resources, no licences needed**: all three screens are local captures.
 Reference output: [`demo/expected-output.txt`](demo/expected-output.txt).

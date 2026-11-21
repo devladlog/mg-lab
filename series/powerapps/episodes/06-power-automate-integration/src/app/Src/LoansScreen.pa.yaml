@@ -1,0 +1,130 @@
+# Equipment Desk (phone) - episode 6: the Open loans screen from episode 3 (with episode 5's connector-based
+# holidays in App.Formulas). Only btnRemind changes: "Copy reminder" becomes "Send reminder", which runs the
+# SendLoanReminder cloud flow (src/flow) and shows the flow's answer.
+# Add the flow first: Power Automate pane > Add flow > SendLoanReminder (it must be in the same environment, have a
+# Power Apps trigger, and you need access to it). The flow's display name becomes the Power Fx name.
+Screens:
+  LoansScreen:
+    Properties:
+      Fill: =RGBA(245, 246, 250, 1)
+    Children:
+      - lblLoansTitle:
+          Control: Label
+          Properties:
+            Text: ="Open loans"
+            X: =24
+            Y: =24
+            Width: =Parent.Width - 48
+            Height: =48
+            Size: =24
+            FontWeight: =FontWeight.Semibold
+      - lblSummary:
+          Control: Label
+          Properties:
+            # OverdueCount is a named formula (CountIf delegates to Dataverse and is exact up to 50,000 rows).
+            Text: |-
+              =If(
+                  OverdueCount = 0, "Nothing overdue",
+                  OverdueCount = 1, "1 loan is overdue",
+                  OverdueCount & " loans are overdue"
+              )
+            Color: =If(OverdueCount = 0, StateColor("Returned"), StateColor("Overdue"))
+            X: =24
+            Y: =72
+            Width: =Parent.Width - 48
+            Height: =32
+      - tglOverdueOnly:
+          Control: Classic/Toggle
+          Properties:
+            Default: =false
+            X: =24
+            Y: =112
+            Width: =96
+            Height: =40
+      - lblOverdueOnly:
+          Control: Label
+          Properties:
+            Text: ="Overdue only"
+            X: =128
+            Y: =112
+            Width: =200
+            Height: =40
+      - galLoans:
+          Control: Gallery
+          Properties:
+            # Delegable to Dataverse: Filter, IsBlank and < on a date column, Sort on one column. Today() is a constant
+            # for every row, so it is sent as a value. The per-row maths (working days, state) lives in the template
+            # labels, not in AddColumns: AddColumns output is capped at the data row limit (Learn: table shaping).
+            Items: |-
+              =Sort(
+                  Filter(
+                      Loans,
+                      IsBlank('Returned on') && (!tglOverdueOnly.Value || 'Due date' < Today())
+                  ),
+                  'Due date'
+              )
+            TemplateSize: =112
+            X: =0
+            Y: =160
+            Width: =Parent.Width
+            Height: =Parent.Height - 160
+          Children:
+            - lblLoanTitle:
+                Control: Label
+                Properties:
+                  Text: =ThisItem.Equipment.'Asset tag' & " · " & ThisItem.Equipment.Name
+                  X: =24
+                  Y: =8
+                  Width: =Parent.TemplateWidth - 160
+                  Height: =32
+                  FontWeight: =FontWeight.Semibold
+            - lblLoanDetail:
+                Control: Label
+                Properties:
+                  # With names a scalar once; the record never holds a table, so nothing here affects delegation.
+                  Text: |-
+                    =With(
+                        { state: LoanState(ThisItem.'Due date', ThisItem.'Returned on') },
+                        ThisItem.'Borrower email' & " · " &
+                        Switch(state,
+                            "Overdue", WorkingDays(WorkingDaysBetween(ThisItem.'Due date', Today())) & " late",
+                            "Due soon", "due " & Text(ThisItem.'Due date', "ddd d mmm", "en-GB") & " (soon)",
+                            "due " & Text(ThisItem.'Due date', "ddd d mmm", "en-GB"))
+                    )
+                  Color: =StateColor(LoanState(ThisItem.'Due date', ThisItem.'Returned on'))
+                  X: =24
+                  Y: =40
+                  Width: =Parent.TemplateWidth - 160
+                  Height: =28
+            - lblLoanNotes:
+                Control: Label
+                Properties:
+                  Text: =Coalesce(ThisItem.Notes, "No notes")
+                  X: =24
+                  Y: =70
+                  Width: =Parent.TemplateWidth - 160
+                  Height: =28
+            - btnRemind:
+                Control: Classic/Button
+                Properties:
+                  # Episode 6: the button no longer copies a reminder, it asks the SendLoanReminder flow to send it.
+                  # Only the loan id goes to the flow (Learn: arguments from Power Apps can be intercepted, so the flow
+                  # reads the borrower, device and due date from Dataverse itself and checks them).
+                  # sendingLoan holds the id while the flow runs: every reminder button is disabled until it answers.
+                  Text: =If(sendingLoan = ThisItem.contoso_loanid, "Sending...", "Send reminder")
+                  DisplayMode: =If(IsBlank(sendingLoan), DisplayMode.Edit, DisplayMode.Disabled)
+                  Visible: =LoanState(ThisItem.'Due date', ThisItem.'Returned on') = "Overdue"
+                  OnSelect: |-
+                    =Set(sendingLoan, ThisItem.contoso_loanid);
+                    IfError(
+                        With(
+                            { result: SendLoanReminder.Run(Text(ThisItem.contoso_loanid)) },
+                            Notify(result.message, If(result.sent, NotificationType.Success, NotificationType.Warning))
+                        ),
+                        Notify("The reminder flow didn't run: " & FirstError.Message, NotificationType.Error)
+                    );
+                    Set(sendingLoan, Blank())
+                  X: =Parent.TemplateWidth - 128
+                  Y: =32
+                  Width: =112
+                  Height: =40

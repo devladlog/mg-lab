@@ -1,0 +1,67 @@
+// Contoso orders-app: one development environment for the whole team.
+// Opened by VS Code (Dev Containers: Reopen in Container) or GitHub Codespaces.
+// Reference: https://containers.dev/implementors/json_reference/
+{
+  "name": "Contoso orders-app (.NET 10)",
+
+  // Microsoft's dev container image: .NET 10 SDK on Ubuntu 24.04 (noble) with a non-root "vscode" user.
+  // "3-" pins the image's own major version: no breaking image change arrives silently.
+  // But a pinned major stops getting updates when the next one ships: tools/devcontainer_check.py warns you.
+  "image": "mcr.microsoft.com/devcontainers/dotnet:3-10.0-noble",
+
+  // Features add tools on top of the image. Pin the major version (":1"), like a package reference.
+  "features": {
+    // The episode 1 Git hooks are Python: the distro's python3 is enough, skip the extra linters.
+    "ghcr.io/devcontainers/features/python:1": {
+      "version": "os-provided",
+      "installTools": false
+    },
+    "ghcr.io/devcontainers/features/github-cli:1": {}
+  },
+
+  // The API listens on 8080 (launchSettings.json), the same port the .NET container images use.
+  "forwardPorts": [8080],
+  "portsAttributes": {
+    "8080": { "label": "Orders API", "onAutoForward": "notify" }
+  },
+
+  "containerEnv": {
+    "DOTNET_CLI_TELEMETRY_OPTOUT": "1",
+    "DOTNET_NOLOGO": "1"
+  },
+
+  // NuGet packages in a named volume: they survive "Rebuild Container", so restores stay fast.
+  // Docker creates a new volume owned by root; post-create.sh hands it to the vscode user.
+  "mounts": [
+    "source=${localWorkspaceFolderBasename}-nuget,target=/home/vscode/.nuget/packages,type=volume"
+  ],
+
+  // Runs once, inside the container, after it is created (and again after every rebuild).
+  "postCreateCommand": "bash .devcontainer/post-create.sh",
+
+  "customizations": {
+    "vscode": {
+      // Installed inside the container, not on your laptop. Same ids as the team's extensions.json (episode 2).
+      // The image and each Feature add their own extensions too; a leading "-" removes one we don't want.
+      "extensions": [
+        "editorconfig.editorconfig",
+        "github.vscode-github-actions",
+        "ms-dotnettools.csdevkit",
+        "-dbaeumer.vscode-eslint"
+      ],
+      "settings": {
+        "editor.formatOnSave": true,
+        "files.eol": "\n",
+        "dotnet.defaultSolution": "OrdersApp.slnx"
+      }
+    }
+  },
+
+  // Codespaces picks a machine at least this big; ignored by local Docker.
+  "hostRequirements": {
+    "cpus": 2,
+    "memory": "4gb"
+  },
+
+  "remoteUser": "vscode"
+}

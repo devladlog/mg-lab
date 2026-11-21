@@ -1,0 +1,7 @@
+// Our counter contoso.orders.created, split by channel. Metrics are never sampled, so this is exact.
+// The log-based copy keeps every dimension; the Metrics explorer copy has none unless you opt in.
+AppMetrics
+| where TimeGenerated > ago(1h)
+| where Name == "contoso.orders.created"
+| summarize Orders = sum(Sum) by Channel = tostring(Properties["order.channel"]), bin(TimeGenerated, 5m)
+| render timechart

@@ -1,5 +1,14 @@
 # Demo shot list — Power BI #2 Advanced DAX
 
+## Lab environment
+
+| Item | What this episode needs |
+|---|---|
+| VMs / tenant / Azure | none. The report is not published, so no workspace and no use of the Fabric/Power BI trial; no sign-in needed |
+| Data | Episode 1's star CSVs in `C:\MGLab\power-bi\star\` (same files as this episode's `src/data/star`) (the semantic model's real data source: Power BI Desktop reads the files itself; no mock involved) |
+| Licences / cost | Power BI Desktop is free; cost 0 |
+| Recording machine | The Windows lab laptop: current **Power BI Desktop**, signed out (or account masked); terminal B-roll on the same laptop (.NET 8 SDK, Python 3, Node where listed) |
+
 Like episode 1, this is **local only**: no tenant, workspace or licence. Power BI Desktop (free) on Windows runs the
 DAX; everything else was built and tested in the Linux container.
 

@@ -1,5 +1,16 @@
 # Demo shot list — DEVLADLOG Deep Dive #2, Enterprise AI copilot
 
+## Lab environment
+
+| Item | What this episode needs |
+|---|---|
+| VMs | none |
+| Tenant | Power Platform environment **`DEV`** (custom connector, Copilot Studio agent `HR Policy Copilot`). **SharePoint**: lab site `/sites/hr-lab` with libraries *Policies* and *Managers* (created in setup, deleted in tear-down). **Entra**: groups `HR Copilot - Employees`, `HR Copilot - Managers`; app registrations `HR Copilot API`, `HR Copilot Connector`, `HR Copilot Indexer` (all created in setup, deleted in tear-down) |
+| Lab users | **`alex.demo` (Alex Demo)**: employee (Employees group). **`sam.demo` (Sam Demo)**: manager (both groups; maker access to `DEV` to test in Copilot Studio). `labadmin` (the recording account): admin consent, SharePoint site owner, maker, Owner on the subscription |
+| Azure | Resource group **`rg-mglab-deep-dive-02`** in **Sweden Central** (Azure OpenAI), deployed by `infra/main.bicep`: Azure AI Search **Basic** (per hour while it exists, roughly €0.10/hour), Azure OpenAI with gpt-5.4-mini 2026-03-17 (Data Zone Standard, 20k TPM) and text-embedding-3-small (Standard) — a few hundred thousand tokens, under €1; Function App on Flex Consumption (cents). Deploy right before recording; tear-down deletes the group and purges the Cognitive Services accounts |
+| Licences / trials | Custom connectors are premium: **Power Apps Premium** (in the lab) for the makers/users. **Copilot Studio**: not in the shared lab list; start a Copilot Studio trial for `labadmin` (maker) and, if Sam tests in the published agent, for `sam.demo` |
+| Recording machine | The Windows lab laptop: browser (Copilot Studio, maker portal, Entra) with `pipeline/mask.js`, separate browser profiles for Alex and Sam; WSL (Ubuntu) bash with Azure CLI, Functions Core Tools v4, Python 3.11+, Bicep CLI |
+
 Code and test scenes in `script.yaml` are real (from this folder). The three `screen` scenes need the lab.
 **Status: needs tenant** for everything on screen. Offline: 73 pytest tests, `bicep build`/`lint` pass.
 
@@ -9,8 +20,8 @@ Code and test scenes in `script.yaml` are real (from this folder). The three `sc
   `gpt-5.4-mini` `2026-03-17` is offered as **Data Zone Standard** in the region of `main.bicepparam` (Sweden
   Central) and that you have 20k TPM quota; `text-embedding-3-small` v1 as **Standard** there. Otherwise change
   region or `chatSku` and note it in README.
-- **Microsoft 365 lab tenant:** two test users **Alex Demo** (employee) and **Sam Demo** (manager), a SharePoint site
-  `/sites/hr-lab`, a Power Platform environment.
+- **Microsoft 365 lab tenant:** lab users **Alex Demo** (`alex.demo`, employee) and **Sam Demo** (`sam.demo`, manager), a SharePoint site
+  `/sites/hr-lab`, the Power Platform environment `DEV`.
 - **Licences:** custom connectors are a premium feature (Power Apps/Power Automate premium or a trial); Copilot Studio
   licence or trial for the maker, and for Sam if he tests in the published agent.
 - **Cost:** Azure AI Search **Basic** bills per hour while it exists; Azure OpenAI tokens (a few hundred thousand for
@@ -39,9 +50,9 @@ Code and test scenes in `script.yaml` are real (from this folder). The three `sc
    inheriting permissions and grant only `HR Copilot - Managers`, so SharePoint and the index agree.
 6. **Azure**
    ```bash
-   az login                                                     # lab account, off camera
-   az group create -n rg-mglab-copilot -l swedencentral
-   az deployment group create -g rg-mglab-copilot -f infra/main.bicep -p infra/main.bicepparam \
+   az login                                                     # labadmin, off camera
+   az group create -n rg-mglab-deep-dive-02 -l swedencentral
+   az deployment group create -g rg-mglab-deep-dive-02 -f infra/main.bicep -p infra/main.bicepparam \
       -p apiClientId=<HR Copilot API client id> \
          ingestPrincipalId=$(az ad sp show --id <indexer client id> --query id -o tsv) ingestPrincipalType=ServicePrincipal \
       --query properties.outputs -o json > /tmp/copilot-outputs.json          # don't show on camera
@@ -91,7 +102,7 @@ and adjust the narration to what is on screen.
 
 ## Tear-down
 ```bash
-az group delete -n rg-mglab-copilot --yes --no-wait
+az group delete -n rg-mglab-deep-dive-02 --yes --no-wait
 ```
 Then delete the custom connector and its connections, the Copilot Studio agent, the three app registrations, the two
 groups (or keep them for other episodes), the *Policies* and *Managers* libraries, and `indexer/libraries.local.json`.

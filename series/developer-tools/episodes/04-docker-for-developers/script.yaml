@@ -1,0 +1,318 @@
+# DEVLADLOG Dev Tools — episode 04. Code excerpts, linter and test output are real (src/orders-app, tests/,
+# registry data read on 21 Nov 2026). The four `screen` scenes are recorded later on the Windows recording laptop
+# (Docker Desktop with WSL 2): see demo.md.
+episode: 4
+slug: docker-for-developers
+series_label: "DEV TOOLS"
+series_name: "DEVLADLOG Dev Tools"
+file_prefix: "developer-tools"
+title: "Docker for developers: a real image and a local stack"
+subtitle: "Multi-stage, chiseled, non-root, Compose with SQL Server"
+voice: am_michael
+thumbnail_text: "YOUR FIRST\nDOCKERFILE\nIS WRONG"
+youtube:
+  title: "Docker for .NET Devs: Multi-Stage, Chiseled, Non-Root, Compose + SQL Server | DEVLADLOG Dev Tools #4"
+  tags: [Docker, Dockerfile, Docker Compose, .NET 10, ASP.NET Core, chiseled containers, SQL Server container, multi-stage build, Docker Desktop, DevTools]
+sources:
+  - https://www.devladlog.com/articles/developer-tools/2025-12-02-docker-for-developers-complete-guide-2025/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Your first Dockerfile works. That's the problem."
+    sub: "From dev container to a real image and a local stack"
+    short: hook
+    narration: >
+      Your first Dockerfile builds, the container runs, the demo works. It also ships the whole SDK, runs as root,
+      bakes a password into the image and downloads every package again when you change one line. In this episode we
+      fix all of that for our orders API, and run it next to a real SQL Server with one command. Welcome to DEVLADLOG
+      Dev Tools.
+
+  - id: plan
+    type: bullets
+    heading: "What we'll build"
+    bullets:
+      - "The API gets a database: SQLite or SQL Server"
+      - "Multi-stage Dockerfile: SDK to build, chiseled to run"
+      - "A build context of seven files"
+      - "Compose: API plus SQL Server, health check, volume"
+      - "A linter and tests that need no Docker daemon"
+    narration: >
+      Last episode the orders API got a dev container. Now it gets a database through Entity Framework Core: SQLite
+      for a single container, SQL Server in the local stack. Plus a linter and tests that run without Docker.
+
+  - id: naive
+    type: code
+    heading: "The Dockerfile we all wrote first"
+    lang: text
+    code: |
+      $ python3 tools/container_lint.py dockerfile Dockerfile.naive
+      ✗ DF001 (line 2): mcr.microsoft.com/dotnet/sdk:latest: use a version tag, not latest
+      ! DF002 (line 2): mcr.microsoft.com/dotnet/sdk:latest: pin the digest too (tag@sha256:...) for reproducible builds
+      ✗ DF003 (line 2): the SDK image ships: use a multi-stage build
+      ✗ DF003 (line 2): single-stage build: build tools end up in the image
+      ✗ DF004 (line 2): runs as root: add USER $APP_UID to the final stage
+      ! DF009 (line 2): final stage doesn't EXPOSE 8080
+      ✗ DF008 (line 4): source copied before restore: every edit re-downloads packages
+      ✗ DF008 (line 5): copy the project file(s) before restore
+      ✗ DF006 (line 7): DB_PASSWORD: secrets in ENV/ARG stay in the image history
+      ✗ DF006 (line 7): password in a connection string baked into the image
+      ✗ DF009 (line 8): port below 1024 needs root; .NET uses 8080
+      ✗ DF007 (line 9): ENTRYPOINT in shell form: /bin/sh -c won't pass SIGTERM to the app
+      ✗ 10 error(s), 2 warning(s)
+    short: naive
+    narration: >
+      Here's the Dockerfile most of us wrote first, through a small linter we built for this episode. Latest tag.
+      One stage, so the SDK ships. Root. Source copied before restore, so every edit downloads packages again. A
+      password in an environment variable, which stays in the image history. Port eighty. And a shell form entry
+      point, which never passes the stop signal to the app. Ten errors.
+
+  - id: build
+    type: code
+    heading: "Build stage: restore is its own layer"
+    lang: docker
+    code: |
+      FROM mcr.microsoft.com/dotnet/sdk:10.0-noble@sha256:bef136a3...ffbc9b4 AS build
+      ARG TARGETARCH
+      WORKDIR /src
+
+      # 1. Restore from the project file only: reused until a package changes.
+      COPY global.json ./
+      COPY src/Contoso.Orders.Api/Contoso.Orders.Api.csproj src/Contoso.Orders.Api/
+      RUN --mount=type=cache,id=nuget,target=/root/.nuget/packages \
+          dotnet restore src/Contoso.Orders.Api/Contoso.Orders.Api.csproj -a $TARGETARCH
+
+      # 2. Then the source. Editing a .cs file only re-runs from here.
+      COPY src/ src/
+      RUN --mount=type=cache,id=nuget,target=/root/.nuget/packages \
+          dotnet publish src/Contoso.Orders.Api/Contoso.Orders.Api.csproj -c Release \
+            -a $TARGETARCH --no-restore -o /app \
+       && mkdir /data
+    narration: >
+      The fixed version, stage one. The SDK image is pinned by tag for humans and by digest for reproducible builds,
+      which Microsoft Learn calls a best practice. We copy only the project file and restore, so that layer is reused
+      until a package changes. A BuildKit cache mount keeps NuGet packages between builds. Then the source, and
+      publish for the target architecture.
+
+  - id: final
+    type: code
+    heading: "Final stage: chiseled, non-root, port 8080"
+    lang: docker
+    code: |
+      # Chiseled = no shell, no package manager, non-root by default.
+      # "-extra" adds ICU and tzdata.
+      FROM mcr.microsoft.com/dotnet/aspnet:10.0-noble-chiseled-extra@sha256:cae5b962...a68115b AS final
+      WORKDIR /app
+      COPY --from=build /app .
+      # An empty /data owned by the app user, for SQLite (mount a volume here to keep the data).
+      COPY --from=build --chown=$APP_UID:$APP_UID /data /data
+      ENV Database__Provider=Sqlite \
+          ConnectionStrings__Orders="Data Source=/data/orders.db"
+      USER $APP_UID
+      EXPOSE 8080
+      ENTRYPOINT ["./Contoso.Orders.Api"]
+    narration: >
+      Stage two is what ships. A chiseled Ubuntu image: no shell, no package manager, and it runs as the non root app
+      user, U I D sixteen fifty four. The extra variant adds the globalization libraries. The app user can't write to
+      slash app, so we hand it an empty data folder for SQLite. Port eight thousand eighty, the default since dot net
+      eight, because port eighty needs root. And an exec form entry point.
+
+  - id: buildrun
+    type: screen
+    heading: "Build it, run it, ask who it is"
+    image: screens/buildrun.jpg
+    bar: "Windows Terminal · Ubuntu (WSL 2) · Docker Desktop"
+    demo: >
+      Terminal in ~/src/orders-app: `docker build -t contoso/orders-api:dev .` (second run, showing CACHED on the
+      restore step after editing only Program.cs), `docker images contoso/orders-api` (size column), then
+      `docker run -d --name orders -p 127.0.0.1:8080:8080 -v orders-data:/data contoso/orders-api:dev` and
+      `curl -s localhost:8080/healthz` showing "database":"Sqlite", "user":"app", "inContainer":true, "os" Ubuntu.
+    narration: >
+      On the recording laptop, Docker Desktop with W S L two. Change one line and rebuild: restore comes from cache.
+      Run it with a volume on slash data, and health z answers: SQLite, Ubuntu, and the user is app, not root.
+
+  - id: context
+    type: code
+    heading: "The build context: seven files"
+    lang: text
+    code: |
+      # .dockerignore
+      **/bin/
+      **/obj/
+      **/*.db
+      .git*
+      tests/
+      tools/
+      .env
+      .env.*
+
+      $ python3 tools/container_lint.py context .
+      OrdersApp.slnx
+      global.json
+      src/Contoso.Orders.Api/Contoso.Orders.Api.csproj
+      src/Contoso.Orders.Api/Orders.cs
+      ...                                     (7 files)
+    narration: >
+      Everything in the folder is sent to the builder unless dot docker ignore says otherwise. Build output, the Git
+      history, tests and, above all, dot env stay out. Patterns are relative to the root, so bin without two stars only
+      matches the top folder. Seven files go in, and a test checks that every copy in the Dockerfile still finds its
+      source.
+
+  - id: compose
+    type: code
+    heading: "compose.yaml: API plus SQL Server"
+    lang: yaml
+    code: |
+      services:
+        api:
+          build: .
+          depends_on:
+            db:
+              condition: service_healthy     # wait until SQL Server answers, not just until it starts
+        db:
+          image: mcr.microsoft.com/mssql/server:2025-latest
+          environment:
+            MSSQL_SA_PASSWORD: ${MSSQL_SA_PASSWORD:?set MSSQL_SA_PASSWORD in .env}
+          healthcheck:
+            test:
+              - CMD-SHELL
+              - >-
+                /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$$MSSQL_SA_PASSWORD"
+                -No -b -Q "SELECT 1" -o /dev/null
+    narration: >
+      The local stack. The API is built from our Dockerfile and finds the database by its service name, d b.
+      Depends on with service healthy waits until SQL Server answers a real query, not just until the container
+      starts. Not shown here: ports bound to loopback only, a volume for the data, and a watch rule.
+
+  - id: secrets
+    type: bullets
+    heading: "One password, never in the file"
+    bullets:
+      - ".env holds MSSQL_SA_PASSWORD; .gitignore keeps it out of Git"
+      - ".env.example is committed, with an empty value"
+      - "${MSSQL_SA_PASSWORD:?message}: missing means Compose stops"
+      - "$$MSSQL_SA_PASSWORD: read inside the container"
+      - "Tested by interpolating the real compose.yaml"
+    narration: >
+      The password lives in dot env, which Git ignores. Colon question mark makes it required: if it's missing,
+      Compose stops with our message instead of quietly using an empty string. In the health check, the double dollar
+      sign means the container reads its own variable, so the password never appears in the file. Both are tested by
+      interpolating the real file.
+
+  - id: stack
+    type: screen
+    heading: "One command, a healthy stack"
+    image: screens/stack.jpg
+    bar: "Windows Terminal · docker compose · Docker Desktop"
+    demo: >
+      First `docker compose up` WITHOUT a .env file: the error naming MSSQL_SA_PASSWORD and "set MSSQL_SA_PASSWORD in
+      .env". Then `cp .env.example .env`, set a password off camera, `docker compose up --build -d`, and
+      `docker compose ps` with db "(healthy)" and api "Up". `curl -s localhost:8080/healthz` → "database":"SqlServer".
+      Docker Desktop Containers view with the contoso-orders stack expanded (db, api).
+    narration: >
+      Without a dot env, Compose refuses to start and tells us why. With one, the database comes up, turns healthy,
+      and only then the API starts. Health z now says SQL Server. Docker Desktop shows the stack as one group.
+
+  - id: gotcha
+    type: code
+    heading: "Gotcha: encrypted by default, self-signed in dev"
+    lang: text
+    code: |
+      # Microsoft.Data.SqlClient 4.0+: Encrypt=true by default (EF Core 7 breaking change).
+      # The SQL Server container uses a self-signed certificate. Without the flag:
+      #   "The certificate chain was issued by an authority that is not trusted."
+      Server=db;Database=Orders;User Id=sa;Password=...;TrustServerCertificate=True
+
+      # Learn: TrustServerCertificate=true "only for controlled development
+      #   environments where validation isn't possible". Never in production.
+
+      # And chiseled has no shell, so this fails by design:
+      $ docker compose exec api sh
+    narration: >
+      Two honest gotchas. Since version four, the SQL client encrypts by default and validates the certificate. The
+      dev SQL Server container has a self signed one, so the connection fails until you add trust server certificate.
+      Microsoft Learn is clear: only in controlled development environments, never in production. And remember,
+      chiseled means no shell: docker exec into the API fails, by design.
+
+  - id: watch
+    type: screen
+    heading: "Edit, save, rebuilt"
+    image: screens/watch.jpg
+    bar: "VS Code · Program.cs · docker compose watch"
+    demo: >
+      VS Code with src/Contoso.Orders.Api/Program.cs on the left, terminal on the right running `docker compose watch`.
+      Change the healthz status text or add a field, save; capture the terminal showing Compose rebuilding the api
+      service and recreating its container, then `curl -s localhost:8080/healthz` with the new field. Also capture
+      `docker compose exec api sh` failing (no shell in the chiseled image).
+    narration: >
+      Docker compose watch closes the inner loop. Save a change in Program dot c s, and Compose rebuilds the API image
+      and replaces the container. Thanks to the restore layer, only the publish step runs again.
+
+  - id: nodockerfile
+    type: code
+    heading: "No Dockerfile, no daemon: the .NET SDK"
+    lang: text
+    code: |
+      <ContainerRepository>contoso/orders-api</ContainerRepository>
+      <ContainerFamily>noble-chiseled-extra</ContainerFamily>
+
+      $ dotnet publish src/Contoso.Orders.Api -c Release --os linux --arch x64 /t:PublishContainer \
+          -p ContainerArchiveOutputPath=./images/orders-api.tar.gz -p ContainerImageTag=dev
+        Building image 'contoso/orders-api' with tags 'dev' on top of base image
+          'mcr.microsoft.com/dotnet/aspnet:10.0-noble-chiseled-extra'.
+        Pushed image 'contoso/orders-api:dev' to local archive at
+          '.../orders-app/src/Contoso.Orders.Api/images/orders-api.tar.gz'.
+
+      # image config, read from the archive
+      {'User': '1654', 'ExposedPorts': {'8080/tcp': {}}, 'Entrypoint': ['dotnet', '/app/Contoso.Orders.Api.dll']}
+    short: sdk
+    narration: >
+      And the alternative. The dot net SDK can build the image itself, no Dockerfile, and to an archive without any
+      Docker daemon. Same chiseled base, user sixteen fifty four, port eight thousand eighty. We ran this on a build
+      machine with no Docker at all. The catch: there's no build stage to create our data folder, so for SQLite in a
+      volume we keep the Dockerfile.
+
+  - id: tests
+    type: code
+    heading: "Tested without Docker"
+    lang: text
+    code: |
+      $ SDK_CONTAINER=1 python3 -m pytest -v tests
+      test_dockerfile.py::test_every_copy_source_is_in_the_build_context             PASSED
+      test_dockerfile.py::test_the_naive_first_dockerfile_breaks_ten_rules           PASSED
+      test_dockerignore.py::test_context_holds_only_what_the_dockerfile_needs        PASSED
+      test_compose.py::test_matches_the_compose_specification                        PASSED
+      test_compose.py::test_missing_password_stops_compose_instead_of_starting_wi... PASSED
+      test_compose.py::test_csharp_test_uses_the_exact_string_compose_produces       PASSED
+      test_publish_and_run.py::test_runs_like_the_container_and_survives_a_restart  PASSED
+      test_sdk_container.py::test_sdk_image_is_non_root_on_8080_from_the_same_base   PASSED
+      ...
+      56 passed in 16.98s
+    narration: >
+      Fifty six pytest tests and twenty x unit tests. Compose is validated against the official specification. The
+      tests run the Dockerfile's own restore and publish commands, start the result with the image's entry point and
+      settings, stop it with the same signal docker stop sends, and start it again to prove the data survived. SQL
+      Server itself only runs on the recording laptop.
+
+  - id: recap
+    type: bullets
+    heading: "Five rules"
+    bullets:
+      - "Two stages: build on the SDK, run on chiseled"
+      - "Restore before source; keep the context small"
+      - "Non-root, port 8080, exec-form entry point"
+      - "Secrets from .env, required with :?"
+      - "Wait for healthy, not just started"
+    narration: >
+      Five rules. Build on the SDK, run on a chiseled image. Restore before you copy the source, and keep the build
+      context small. Non root, port eight thousand eighty, exec form entry point. Secrets come from dot env and are
+      required. And wait for healthy, not just started.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The Dockerfile, the Compose file, the linter and every test are on GitHub, and the complete guide is on
+      devladlog dot com. Next time we put all of this in a CI and CD pipeline. Subscribe so you don't miss it. This
+      was DEVLADLOG Dev Tools, by Momento Galático.

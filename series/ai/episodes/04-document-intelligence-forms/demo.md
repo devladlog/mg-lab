@@ -1,5 +1,15 @@
 # Demo shot list — DEVLADLOG AI #4 (Document Intelligence and forms)
 
+## Lab environment
+
+| Item | What this episode needs |
+|---|---|
+| VMs / tenant apps | none |
+| Lab user | `labadmin` (the recording account): Owner on the subscription; its object ID is passed as `developerPrincipalId` (gets *Cognitive Services User*) |
+| Azure | Resource group **`rg-mglab-ai-04`** in **West Europe**, deployed by `infra/main.bicep`: one Azure AI Document Intelligence resource, **F0 (free)**: cost 0 (fallback S0, pay per page: a few dozen pages, cents). Tear-down deletes the group and purges the account |
+| Licences / trials | none beyond the subscription |
+| Recording machine | The Windows lab laptop: Foundry/Azure portal in the browser, bash terminal in WSL (Ubuntu) with Azure CLI, Python 3.10+ and this folder (the commands below are bash), plus `jq` in WSL; VS Code and an image viewer on the laptop (open the WSL files via `\\wsl$`) |
+
 Everything in `src/` and `infra/` is tested locally (26 pytest tests, Bicep build + lint, the sample generator).
 The four `screen` scenes **need the lab tenant**: they show real analyze results from the service.
 
@@ -20,9 +30,9 @@ The four `screen` scenes **need the lab tenant**: they show real analyze results
 cd series/ai/episodes/04-document-intelligence-forms
 python -m venv .venv && . .venv/bin/activate && pip install -r requirements.txt
 python -m pytest tests -q                                      # expect 26 passed
-az login                                                       # lab user, off camera
-az group create -n rg-mglab-docintel -l westeurope
-az deployment group create -g rg-mglab-docintel -f infra/main.bicep -p infra/main.bicepparam \
+az login                                                       # labadmin, off camera
+az group create -n rg-mglab-ai-04 -l westeurope
+az deployment group create -g rg-mglab-ai-04 -f infra/main.bicep -p infra/main.bicepparam \
    -p developerPrincipalId=$(az ad signed-in-user show --query id -o tsv) \
    --query properties.outputs -o json > /tmp/docintel-outputs.json   # don't show this file on camera
 export DOCINTEL=$(jq -r .endpoint.value /tmp/docintel-outputs.json)
@@ -61,8 +71,8 @@ After recording, fill the TODOs in `script.yaml`:
 
 ## Tear-down
 ```bash
-az group delete -n rg-mglab-docintel --yes
+az group delete -n rg-mglab-ai-04 --yes
 # Cognitive Services accounts are soft-deleted; purge to release the name:
-az cognitiveservices account purge -g rg-mglab-docintel -n <docintel-name> -l westeurope
+az cognitiveservices account purge -g rg-mglab-ai-04 -n <docintel-name> -l westeurope
 rm -rf samples results /tmp/docintel-outputs.json; deactivate; rm -rf .venv
 ```

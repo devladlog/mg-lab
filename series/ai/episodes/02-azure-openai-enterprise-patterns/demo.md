@@ -1,5 +1,15 @@
 # Demo shot list — DEVLADLOG AI #2, Azure OpenAI enterprise patterns
 
+## Lab environment
+
+| Item | What this episode needs |
+|---|---|
+| VMs / tenant apps | none |
+| Lab user | `labadmin` (the recording account): Owner on the subscription, runs `az login` and the deployment |
+| Azure | Resource group **`rg-mglab-ai-02`** in **Sweden Central**, deployed by `infra/main.bicep`: API Management **Basic v2** (billed per hour while it exists: roughly €1 for a 3-hour recording window, check the pricing page), two Azure OpenAI accounts (Sweden Central + Germany West Central, gpt-5-mini 2025-08-07 Data Zone Standard, 10k TPM each: tokens only, cents), Application Insights + Log Analytics (ingestion: cents). Deploy right before recording; tear-down deletes the group and purges both soft-deleted services |
+| Licences / trials | none beyond the subscription |
+| Recording machine | The Windows lab laptop: Foundry/Azure portal in the browser, bash terminal in WSL (Ubuntu) with Azure CLI, Python 3.10+ and this folder (the commands below are bash) |
+
 Code scenes and the test output are already real (from this folder). The four `screen` scenes need a deployment in
 the lab subscription. Status: **needs tenant** for everything on screen; tests, `bicep build` and `bicep lint` run
 offline.
@@ -23,9 +33,9 @@ offline.
 cd series/ai/episodes/02-azure-openai-enterprise-patterns
 python -m venv .venv && . .venv/bin/activate && pip install -r requirements.txt
 python -m pytest tests -q                                   # expect 37 passed
-az login                                                    # lab user, off camera
-az group create -n rg-mglab-aoai -l swedencentral
-az deployment group create -g rg-mglab-aoai -f infra/main.bicep -p infra/main.bicepparam \
+az login                                                    # labadmin, off camera
+az group create -n rg-mglab-ai-02 -l swedencentral
+az deployment group create -g rg-mglab-ai-02 -f infra/main.bicep -p infra/main.bicepparam \
    --query properties.outputs -o json > /tmp/aoai-outputs.json          # don't show this file on camera
 ```
 Then:
@@ -51,7 +61,7 @@ Then:
 
 | Scene id | File | What must be on screen |
 |---|---|---|
-| `deployed` | `screens/deployed.jpg` | Portal, resource group `rg-mglab-aoai` overview: API Management service (Basic v2), two Azure OpenAI accounts with their two regions in the Location column, Application Insights, Log Analytics workspace. |
+| `deployed` | `screens/deployed.jpg` | Portal, resource group `rg-mglab-ai-02` overview: API Management service (Basic v2), two Azure OpenAI accounts with their two regions in the Location column, Application Insights, Log Analytics workspace. |
 | `burst` | `screens/burst.jpg` | Terminal: `APIM_SUBSCRIPTION_KEY=$HR_KEY PYTHONPATH=src python -m aoai_gateway.smoke --requests 12` — the `remaining-this-minute` values going down, the `429 throttled retry-after=…` rows, the summary and the token CSV. If no 429 appears, raise `--requests` (the limit is 2,000 tokens per minute per subscription). |
 | `other-team` | `screens/other-team.jpg` | Immediately after `burst`: `APIM_SUBSCRIPTION_KEY=$SALES_KEY PYTHONPATH=src python -m aoai_gateway.smoke --requests 2` showing `200` lines. |
 | `metrics` | `screens/metrics.jpg` | Application Insights → **Metrics** → metric namespace `aoai-gateway` → total tokens, **Apply splitting** by `Subscription ID`, last 30 minutes. Custom metrics can take a few minutes to show up; record this screen last. |
@@ -71,11 +81,11 @@ priorities 1 and 2, and the circuit-breaker rule on `aoai-primary`.
 
 ## Tear-down
 ```bash
-az group delete -n rg-mglab-aoai --yes
+az group delete -n rg-mglab-ai-02 --yes
 # Both services are soft-deleted; purge them so nothing lingers (names come from /tmp/aoai-outputs.json):
 az apim deletedservice purge --service-name <apim-name> --location swedencentral
-az cognitiveservices account purge -g rg-mglab-aoai -n <primary-account> -l swedencentral
-az cognitiveservices account purge -g rg-mglab-aoai -n <secondary-account> -l germanywestcentral
+az cognitiveservices account purge -g rg-mglab-ai-02 -n <primary-account> -l swedencentral
+az cognitiveservices account purge -g rg-mglab-ai-02 -n <secondary-account> -l germanywestcentral
 rm /tmp/aoai-outputs.json; deactivate; rm -rf .venv
 ```
 API Management soft-delete keeps the instance for 48 hours (name not reusable) unless purged.

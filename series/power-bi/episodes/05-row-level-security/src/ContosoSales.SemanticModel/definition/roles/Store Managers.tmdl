@@ -1,0 +1,13 @@
+/// Dynamic RLS. A member sees the stores mapped to their UPN in 'Store Access', and nothing else:
+/// a user who isn't in the table gets an empty Store table, so no sales.
+role 'Store Managers'
+	modelPermission: read
+
+	tablePermission Store =
+			'Store'[StoreKey]
+			    IN CALCULATETABLE(
+			        VALUES('Store Access'[StoreKey]),
+			        'Store Access'[User Principal Name] = USERPRINCIPALNAME()
+			    )
+
+	tablePermission 'Store Access' = 'Store Access'[User Principal Name] = USERPRINCIPALNAME()

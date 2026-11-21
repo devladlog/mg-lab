@@ -1,5 +1,15 @@
 # Demo shot list — DEVLADLOG .NET #1 Minimal APIs
 
+## Lab environment
+
+| Item | What this episode needs |
+|---|---|
+| VMs / Power Platform | none |
+| Lab users | `labadmin` (the recording account): `az login` off camera, portal for the app settings screen. The API's sample data uses fictional `alex.demo@contoso.com` addresses only |
+| Azure | Resource group **`rg-mglab-net-01`** in **West Europe** (the deploy script's default region), created by the deploy script with `RG=rg-mglab-net-01` exported (the script's built-in default is `rg-mglab-net01`): App Service plan **Free F1, Linux** + one web app (€0). Tear-down: `az group delete --name rg-mglab-net-01` |
+| Licences / trials | none beyond the subscription |
+| Recording machine | The Windows lab laptop: WSL (Ubuntu) bash with .NET SDK 10.0.1xx, Azure CLI, `curl`, `jq`, `zip` (the `deploy/*.sh` scripts are bash); browser on the host for the portal and `localhost` screens (WSL forwards localhost ports) |
+
 Everything in `src/` and `tests/` was built and tested in the container (`dotnet test`: 22 passed). The local
 screens (`local-smoke`, `openapi`) need no tenant. **Needs tenant (Azure subscription):** `live-smoke`, `readonly`,
 `restart-empty`.
@@ -37,14 +47,14 @@ dotnet run --project src/ProjectRequests.Api      # leave running for the two lo
    - Stop `dotnet run` afterwards.
 
 3. **`screens/live-smoke.jpg`** — *Live on App Service* (**needs tenant**)
-   - `APP=contoso-requests-XXXX ./deploy/deploy-appservice.sh` (≈ 2–4 min). Capture the tail: `==> https://…/healthz`
+   - `export RG=rg-mglab-net-01`, then `APP=contoso-requests-XXXX ./deploy/deploy-appservice.sh` (≈ 2–4 min). Capture the tail: `==> https://…/healthz`
      and `Healthy`.
    - Then `./deploy/smoke.sh https://<host>` and capture step 3 (201, High) and step 5 (200, Approved).
    - **Mask** the host name except `.azurewebsites.net`. Leave this request in place for screen 5.
 
 4. **`screens/readonly.jpg`** — *Pause writes without a deploy* (**needs tenant**)
    - Portal → the web app → **Settings → Environment variables → App settings** → set `Api__ReadOnly` to `true` →
-     **Apply** (or `az webapp config appsettings set -g rg-mglab-net01 -n $APP --settings Api__ReadOnly=true`).
+     **Apply** (or `az webapp config appsettings set -g rg-mglab-net-01 -n $APP --settings Api__ReadOnly=true`).
    - Terminal next to it:
      `curl -i -X POST https://<host>/api/requests -H "Content-Type: application/json" -d '{"title":"CRM rollout","budget":75000,"requestedBy":"alex.demo@contoso.com"}'`
      → `HTTP/1.1 503`, `Retry-After: 120`, title "The API is in read-only mode."; then `curl -i https://<host>/api/requests` → 200.
@@ -56,7 +66,7 @@ dotnet run --project src/ProjectRequests.Api      # leave running for the two lo
 
 ## Tear-down
 ```bash
-az group delete --name rg-mglab-net01 --yes --no-wait
+az group delete --name rg-mglab-net-01 --yes --no-wait
 rm -rf deploy/out
 ```
 Confirm in the portal that the resource group is gone.

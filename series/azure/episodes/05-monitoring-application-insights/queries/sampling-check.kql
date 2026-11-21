@@ -1,0 +1,5 @@
+// Is sampling on? Below 100 means that table is being sampled (pattern from Microsoft Learn).
+union AppRequests, AppDependencies, AppTraces, AppExceptions
+| where TimeGenerated > ago(1d)
+| summarize RetainedPercentage = 100.0 / avg(ItemCount) by bin(TimeGenerated, 1h), Type
+| order by TimeGenerated desc

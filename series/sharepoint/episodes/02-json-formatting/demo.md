@@ -1,5 +1,16 @@
 # Demo shot list — SharePoint #2 JSON formatting
 
+## Lab environment
+
+| Item | What this episode needs |
+|---|---|
+| VMs / Azure / Power Platform | none |
+| Tenant | **SharePoint** in the lab tenant: episode 1's site `/sites/ListsDemo` and its seeded **Purchase Requests** list (formats applied here, reset in tear-down) |
+| Lab users | `labadmin` (the recording account): site owner, runs the script, owns "own requests". **`alex.demo` (Alex Demo)**: the other requester (from episode 1's seed) |
+| Entra | The existing "MG Lab PnP" app registration (delegated) |
+| Licences / trials | lab E5 licences; cost 0 |
+| Recording machine | The Windows lab laptop: PowerShell 7.4+ with PnP.PowerShell 3.x and Pester; browser with `pipeline/mask.js` for the SharePoint screens; Python 3.10+ on PATH (the apply script runs formatlint first) |
+
 The code scenes are real output from this folder (formatlint, pytest). The four `screen` scenes need the lab tenant.
 **Needs tenant:** `Set-ListFormatting.ps1` against a real list (apply / export / reset) and everything the browser
 shows. Locally the script is covered by Pester tests that mock the real PnP cmdlets, and the formats by the local
@@ -23,7 +34,7 @@ renderer, which is a test harness, not SharePoint.
    - one **open** request due in **3–5 days** (amber)
    - one **Closed** request with an **old** due date (plain)
    - one request with **no due date** (plain)
-   - at least one requested by the recording account and one by another (fictional) user
+   - at least one requested by `labadmin` (the recording account) and one by Alex Demo
 3. Reset any formatting: `./src/Set-ListFormatting.ps1 -SiteUrl $site -ClientId $app -Reset`.
 
 ## Screens to capture (match the `screen` scenes in script.yaml)
