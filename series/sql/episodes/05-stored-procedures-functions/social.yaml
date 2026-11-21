@@ -1,0 +1,73 @@
+episode: 5
+series: "DEVLADLOG SQL"
+status: draft-hold-for-review
+ai_label: true
+youtube_url: "{YOUTUBE_URL}"
+linkedin_company:
+  text: |
+    This stored procedure wraps everything in a transaction. A customer orders three wheels when stock is two. The procedure fails, and the order is saved anyway, with its lines, while the stock never moves.
+
+    DEVLADLOG SQL #5 builds a small order system on SQL Server 2022 and tests every result:
+    - Scalar functions that SQL Server can inline, and the built-in call that quietly switches inlining off
+    - Inline table-valued functions versus multi-statement ones
+    - A table-valued parameter that takes a whole order in one call
+    - SET XACT_ABORT ON, TRY/CATCH, ROLLBACK and THROW, so an order is all or nothing
+
+    The naive version is in the episode too, so you can see exactly why a transaction alone is not enough.
+
+    Watch the episode: {YOUTUBE_URL}
+    Code: {REPO_URL}
+    Guide: {BLOG_URL}
+
+    Narration uses an AI voice.
+
+    #SQLServer #StoredProcedures #TSQL #ErrorHandling
+linkedin_personal:
+  text: |
+    A transaction does not make a stored procedure safe. With XACT_ABORT off, a constraint violation rolls back only the statement that failed, and the procedure carries on to the next line, which is COMMIT. I reproduce that in episode 5 of DEVLADLOG SQL: one new order and two order lines committed, stock unchanged.
+
+    The fix is short: SET XACT_ABORT ON, a TRY block, ROLLBACK in CATCH, then THROW with no arguments. Let the check constraint guard the stock.
+
+    {YOUTUBE_URL}
+
+    Narration uses an AI voice.
+
+    #SQLServer #TSQL
+facebook:
+  text: |
+    A transaction that still half-saves an order? It happens when XACT_ABORT is off. In this DEVLADLOG SQL episode we build a small order procedure two ways, naive and safe, and show what each leaves behind after a failed order. We also look at when SQL Server can inline a scalar function. Watch: {YOUTUBE_URL}
+
+    Narration uses an AI voice.
+
+    #SQLServer #StoredProcedures
+shorts:
+  - id: hook
+    youtube_short_title: "It used a transaction. It still half-saved the order #Shorts"
+    instagram_reel:
+      caption: |
+        A stored procedure wraps everything in a transaction. A customer orders three wheels when we have two. The procedure fails, and the order is saved anyway, with its lines, and the stock never moves. Functions SQL Server can inline, a procedure that takes a whole order in one call, and the two lines that make it all or nothing.
+        Full episode: link in bio
+        #SQLServer #StoredProcedures #TSQL
+      cover_text: "A transaction wasn't enough"
+    tiktok:
+      caption: "A transaction around everything, and the order still half-saved. Stock never moved. Stored procedure error handling in SQL Server. #SQLServer #StoredProcedures #TSQL"
+  - id: inlining
+    youtube_short_title: "One built-in call turns off scalar UDF inlining #Shorts"
+    instagram_reel:
+      caption: |
+        Since SQL Server 2019, at compatibility level 150 or higher, a simple scalar function can be inlined into the calling query. But a function that calls GETDATE is never inlineable, per Microsoft's documentation. It still works, it just runs once per row, and nothing warns you. The catalog does: sys.sql_modules has an is_inlineable column.
+        Full episode: link in bio
+        #SQLServer #TSQL #UDF
+      cover_text: "Is your UDF inlineable?"
+    tiktok:
+      caption: "One call to GETDATE and SQL Server will not inline your scalar function. No warning. Check is_inlineable in sys.sql_modules. #SQLServer #TSQL #UDF"
+  - id: gotcha
+    youtube_short_title: "The order nobody can ship: XACT_ABORT off in SQL Server #Shorts"
+    instagram_reel:
+      caption: |
+        Carla orders three wheelsets and we have two. The update fails with a check constraint error, and yet one new order and two order lines are committed. The stock still says two. With XACT_ABORT off, only the failed statement rolls back and the procedure carries on to COMMIT. The safe procedure leaves nothing behind.
+        Full episode: link in bio
+        #SQLServer #TSQL #Transactions
+      cover_text: "The order nobody can ship"
+    tiktok:
+      caption: "XACT_ABORT off: the failed statement rolls back, the procedure carries on, and COMMIT saves a half order. #SQLServer #TSQL #Transactions"

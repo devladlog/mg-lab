@@ -1,0 +1,73 @@
+episode: 6
+series: "DEVLADLOG SQL"
+status: draft-hold-for-review
+ai_label: true
+youtube_url: "{YOUTUBE_URL}"
+linkedin_company:
+  text: |
+    A search procedure takes a customer name. Type a name, get one customer. Type a crafted name, get all of them.
+
+    DEVLADLOG SQL #6 locks down the order database from the previous episode, and every claim is tested by impersonating each user with EXECUTE AS USER and recording what is allowed or denied:
+    - Application roles that can execute procedures and have no table permissions
+    - The injectable search, and the fix with sp_executesql and QUOTENAME
+    - The gotcha: dynamic SQL breaks the ownership chain, and module signing fixes it without granting SELECT
+    - Row-level security, and dynamic data masking with an honest look at what masking does not protect
+
+    Watch the episode: {YOUTUBE_URL}
+    Code: {REPO_URL}
+    Guide: {BLOG_URL}
+
+    Narration uses an AI voice.
+
+    #SQLServer #SQLInjection #RowLevelSecurity #DatabaseSecurity
+linkedin_personal:
+  text: |
+    I fixed the SQL injection in a search procedure and promptly broke the app. Dynamic SQL runs as a separate batch, so the ownership chain stops there and SQL Server checks the caller's own SELECT permission. Granting SELECT on the table would undo the whole point.
+
+    The documented answer is module signing: sign the procedure with a certificate, and give the certificate's user the SELECT.
+
+    Episode 6 of DEVLADLOG SQL also shows masking being guessed letter by letter. Masking stops accidents, not ad hoc queries.
+
+    {YOUTUBE_URL}
+
+    Narration uses an AI voice.
+
+    #SQLServer #DatabaseSecurity
+facebook:
+  text: |
+    One name typed into a search box returned every customer. In this DEVLADLOG SQL episode we show the SQL injection, fix it, and then fix the permission error the fix causes, using module signing. We also add row-level security and data masking, and test each as a different user. Watch: {YOUTUBE_URL}
+
+    Narration uses an AI voice.
+
+    #SQLServer #SQLInjection
+shorts:
+  - id: hook
+    youtube_short_title: "One name in a search box returned every customer #Shorts"
+    instagram_reel:
+      caption: |
+        A search procedure takes a customer name. Type a name, get one customer. Type a strange name, and you get all of them. We lock down the order database: users who can only run procedures, a search that cannot be injected, rows filtered per user, and a masked column, with an honest look at what masking does not protect.
+        Full episode: link in bio
+        #SQLServer #SQLInjection #DatabaseSecurity
+      cover_text: "One name, every customer"
+    tiktok:
+      caption: "Type a name, get one customer. Type a crafted name, get all six. SQL injection in a search procedure, and the fix. #SQLServer #SQLInjection #DatabaseSecurity"
+  - id: injection
+    youtube_short_title: "SQL injection: one customer, or all of them #Shorts"
+    instagram_reel:
+      caption: |
+        The search glues the user's input into the text of a query and executes it. A name that starts with a quote closes the string, adds OR 1=1, and comments out the rest. Run as a database owner, which is what too many applications connect as, the name Alex returns one row and the crafted name returns all six customers.
+        Full episode: link in bio
+        #SQLServer #SQLInjection #TSQL
+      cover_text: "One customer, or all"
+    tiktok:
+      caption: "Dynamic SQL built by concatenation: the input becomes code. A quote, OR 1=1 and a comment return every customer. #SQLServer #SQLInjection #TSQL"
+  - id: masking
+    youtube_short_title: "Dynamic data masking gets guessed letter by letter #Shorts"
+    instagram_reel:
+      caption: |
+        The analyst sees a masked email. Then the analyst guesses: starts with c, one match. Carla dot e, one match. Carla dot x, none. Letter by letter, the real address comes back. Masking changes what a query returns, not what its WHERE clause can test. Microsoft documents this: masking stops accidents, not ad hoc queries.
+        Full episode: link in bio
+        #SQLServer #DataMasking #DatabaseSecurity
+      cover_text: "Masking is not security"
+    tiktok:
+      caption: "Masked email, still guessable: the WHERE clause tests the real value. Dynamic data masking is not access control. #SQLServer #DataMasking #DatabaseSecurity"

@@ -1,0 +1,73 @@
+episode: 4
+series: "DEVLADLOG SQL"
+status: draft-hold-for-review
+ai_label: true
+youtube_url: "{YOUTUBE_URL}"
+linkedin_company:
+  text: |
+    The index is there, it is the right index, and SQL Server still reads the whole thing. Or it does sixty thousand key lookups to return one customer's orders.
+
+    DEVLADLOG SQL #4 shows three ways a query keeps a good index from doing its job, each proven from the actual execution plan and then fixed:
+    - A function on the column (YEAR on a date) versus a range on the bare column
+    - A number passed for a varchar column, and the CONVERT_IMPLICIT warning on the SELECT
+    - Parameter sniffing: whoever calls the procedure first decides the plan
+    - Fixes: OPTION (RECOMPILE), and forcing a plan from Query Store
+
+    We also cover what a forced plan costs you afterwards.
+
+    Watch the episode: {YOUTUBE_URL}
+    Code: {REPO_URL}
+    Guide: {BLOG_URL}
+
+    Narration uses an AI voice.
+
+    #SQLServer #QueryOptimization #QueryStore #ParameterSniffing
+linkedin_personal:
+  text: |
+    Parameter sniffing is really about who calls first. If the customer with 60,000 orders runs the procedure first, the cached plan is a scan, and a customer with seven orders scans the whole table. Flip the order and the big customer gets one key lookup per order.
+
+    Episode 4 of DEVLADLOG SQL reproduces this on purpose (I turn off parameter sensitive plan optimization for the lab), then fixes it with OPTION (RECOMPILE) and with a forced plan in Query Store. A forced plan is a decision you now own, so check the failure count.
+
+    {YOUTUBE_URL}
+
+    Narration uses an AI voice.
+
+    #SQLServer #QueryStore
+facebook:
+  text: |
+    The right index can still lose. In this DEVLADLOG SQL episode we look at three things that stop SQL Server using a good index: a function on the column, a mismatched data type, and parameter sniffing. Everything is proven from the actual plan, then fixed. Watch: {YOUTUBE_URL}
+
+    Narration uses an AI voice.
+
+    #SQLServer #QueryOptimization
+shorts:
+  - id: hook
+    youtube_short_title: "Right index, wrong plan in SQL Server #Shorts"
+    instagram_reel:
+      caption: |
+        The index is there. It is the right index. And SQL Server still reads the whole thing, or does sixty thousand lookups to return one customer's orders. Three ways a query keeps a good index from doing its job, proven from the actual execution plan, and fixed.
+        Full episode: link in bio
+        #SQLServer #QueryOptimization #ExecutionPlan
+      cover_text: "Right index. Wrong plan."
+    tiktok:
+      caption: "The right index exists and SQL Server still scans. Three causes, each proven from the actual execution plan. #SQLServer #QueryOptimization #ExecutionPlan"
+  - id: sargable
+    youtube_short_title: "YEAR(OrderDate) = 2025 stops the index seek in SQL Server #Shorts"
+    instagram_reel:
+      caption: |
+        A function on the column: YEAR(OrderDate) = 2025 reads nicely, but SQL Server has to compute the year for every row before it can compare, so the index can only be scanned. Write the same question as a range on the bare column, from the first of March up to the first of April. Same answer, and now the index can seek.
+        Full episode: link in bio
+        #SQLServer #SARGable #QueryOptimization
+      cover_text: "Functions kill seeks"
+    tiktok:
+      caption: "YEAR(OrderDate) = 2025 forces a scan. A range on the bare column gives the same answer and an index seek. #SQLServer #SARGable #QueryOptimization"
+  - id: first-caller
+    youtube_short_title: "Parameter sniffing: whoever runs first decides the plan #Shorts"
+    instagram_reel:
+      caption: |
+        If the customer with 60,000 orders calls the procedure first, the cached plan is a scan, and the next customer scans the whole table to get seven rows. Recompile and let the small customer go first, and the big one inherits a seek plan: one key lookup per order, sixty thousand times. Same procedure, same index. Only the first caller differs.
+        Full episode: link in bio
+        #SQLServer #ParameterSniffing #QueryStore
+      cover_text: "Who called first?"
+    tiktok:
+      caption: "Same procedure, same index, different plan, depending on who called first. Parameter sniffing in SQL Server, shown in the plan. #SQLServer #ParameterSniffing #QueryStore"

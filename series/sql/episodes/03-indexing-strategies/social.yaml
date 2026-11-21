@@ -1,0 +1,75 @@
+episode: 3
+series: "DEVLADLOG SQL"
+status: draft-hold-for-review
+ai_label: true
+youtube_url: "{YOUTUBE_URL}"
+linkedin_company:
+  text: |
+    Two indexes on the same three columns. One finds a customer's orders with a single seek. The other makes SQL Server read the whole index. The only difference is column order.
+
+    DEVLADLOG SQL #3 designs indexes for three real queries on a generated Contoso Bikes database of 20,000 customers and 200,000 orders, and measures every step from SQL Server's actual execution plan:
+    - No index versus a narrow index with key lookups
+    - A covering index in the wrong order versus the right order
+    - A filtered index for open orders only
+    - A columnstore index for a report that reads every row
+
+    We also look at why missing index requests are hints, not designs, and what each index costs.
+
+    Watch the episode: {YOUTUBE_URL}
+    Code: {REPO_URL}
+    Guide: {BLOG_URL}
+
+    Narration uses an AI voice.
+
+    #SQLServer #Indexing #ExecutionPlan #PerformanceTuning
+linkedin_personal:
+  text: |
+    Same three columns, same covering index, two different column orders. One seeks. The other scans its entire leaf level.
+
+    Equality columns first, then the sort or range column. The order is the design.
+
+    In episode 3 of DEVLADLOG SQL I measure four index steps from the actual plan, reading logical reads per operator, and check that the rows never change. I also go through why the green missing-index hint is a starting point, not a design.
+
+    {YOUTUBE_URL}
+
+    Narration uses an AI voice.
+
+    #SQLServer #Indexing
+facebook:
+  text: |
+    Same columns, different order, very different plan. In this DEVLADLOG SQL episode we build indexes for three queries on 200,000 generated orders and read SQL Server's actual execution plan after every change: scan, seek, key lookup, filtered index and columnstore. Watch: {YOUTUBE_URL}
+
+    Narration uses an AI voice.
+
+    #SQLServer #Indexing
+shorts:
+  - id: hook
+    youtube_short_title: "Same three columns, one index seeks, one scans #Shorts"
+    instagram_reel:
+      caption: |
+        Two indexes. The same three columns. One finds a customer's orders with a single seek. The other makes SQL Server read the entire index. The difference is the order of the columns. We design indexes for three real queries and measure every step from the actual execution plan.
+        Full episode: link in bio
+        #SQLServer #Indexing #ExecutionPlan
+      cover_text: "Right columns, wrong order"
+    tiktok:
+      caption: "Two indexes, same three columns. One seek, one full index read. The difference is column order. Measured from the actual plan. #SQLServer #Indexing #ExecutionPlan"
+  - id: key-order
+    youtube_short_title: "Index column order: equality first, then sort #Shorts"
+    instagram_reel:
+      caption: |
+        Both indexes cover the query, so no lookups. But the first leads with the order date, so one customer's rows are scattered across the index and SQL Server can only scan it. The second puts the equality column first, then the sort column: one seek, rows already in order, no sort. Same columns. The order is the design.
+        Full episode: link in bio
+        #SQLServer #Indexing #PerformanceTuning
+      cover_text: "The order is the design"
+    tiktok:
+      caption: "Covering index, two column orders. Date first: scan. Customer first, then date: one seek, no sort, no lookup. #SQLServer #Indexing #PerformanceTuning"
+  - id: missing-index
+    youtube_short_title: "Missing index hints in SQL Server are not designs #Shorts"
+    instagram_reel:
+      caption: |
+        The green missing index text in a plan is a hint. Per Microsoft's documentation, key columns come with no order, filtered and unique indexes are never suggested, INCLUDE lists have no size check, trivial plans get nothing, and the lists clear on restart. Review it, combine it, then design.
+        Full episode: link in bio
+        #SQLServer #Indexing #ExecutionPlan
+      cover_text: "Hint, not a design"
+    tiktok:
+      caption: "The green missing index suggestion has no key order, never suggests filtered indexes, and resets on restart. Review it, then design. #SQLServer #Indexing #ExecutionPlan"

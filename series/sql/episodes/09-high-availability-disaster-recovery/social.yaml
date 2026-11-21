@@ -1,0 +1,75 @@
+episode: 9
+series: "DEVLADLOG SQL"
+status: draft-hold-for-review
+ai_label: true
+youtube_url: "{YOUTUBE_URL}"
+linkedin_company:
+  text: |
+    If your database died right now, how much data would you lose, and how long until the shop sells again? Most teams guess.
+
+    DEVLADLOG SQL #9 measures it. We build log shipping by hand with a primary and a readable standby on one lab server, break the chain on purpose, then fail over with a stopwatch running:
+    - An RPO query from the msdb backup history
+    - A standby restored WITH STANDBY, and the error you get writing to it (3906)
+    - Error 4305 after a colleague takes an extra log backup, and the repair
+    - Tail-log backup, restore WITH RECOVERY, and a failover step that fails above sixty seconds, our own target
+
+    The surprise at the end: after failover the promoted copy has no backup history, and the RPO report says so.
+
+    Watch the episode: {YOUTUBE_URL}
+    Code: {REPO_URL}
+    Guide: {BLOG_URL}
+
+    Narration uses an AI voice.
+
+    #SQLServer #DisasterRecovery #LogShipping #RPO
+linkedin_personal:
+  text: |
+    One log backup chain, one owner. In episode 9 of DEVLADLOG SQL a colleague takes an extra log backup of the primary, to a file the shipping job never sees. The next cycle fails with error 4305 and the standby is stuck. Nothing is corrupt; the chain has a hole.
+
+    The fix is boring: restore the missing log first, then the one that failed.
+
+    I also time a failover with a stopwatch, and show that the promoted copy has no backup history afterwards. Failing over is not the end of the job.
+
+    {YOUTUBE_URL}
+
+    Narration uses an AI voice.
+
+    #SQLServer #DisasterRecovery
+facebook:
+  text: |
+    How much data would you lose if the database died at noon? In this DEVLADLOG SQL episode we build a standby by hand, break the log chain on purpose, repair it, and fail over with a stopwatch running. Then we ask the server how exposed we really are. Watch: {YOUTUBE_URL}
+
+    Narration uses an AI voice.
+
+    #SQLServer #DisasterRecovery
+shorts:
+  - id: hook
+    youtube_short_title: "If the database dies at noon, how much do you lose? #Shorts"
+    instagram_reel:
+      caption: |
+        If your database died right now, how much data would you lose, and how long until the shop is selling again? Most teams guess. We measure it. We build a standby copy by hand, break it twice on purpose, fail over with a stopwatch running, and then ask the server how exposed we really are.
+        Full episode: link in bio
+        #SQLServer #DisasterRecovery #RPO
+      cover_text: "How much would you lose?"
+    tiktok:
+      caption: "Database dies at noon: how much data do you lose? Measure RPO and RTO instead of guessing. Log shipping and a failover drill. #SQLServer #DisasterRecovery #RPO"
+  - id: gotcha
+    youtube_short_title: "Log shipping error 4305: someone took a log backup #Shorts"
+    instagram_reel:
+      caption: |
+        A colleague takes an extra log backup of the primary, to a file the shipping job never sees. The next cycle fails with error 4305: the log is too recent to apply, an earlier log backup is missing. Nothing is corrupt. The chain simply has a hole. One log backup chain, one owner. Other tools must use copy only backups.
+        Full episode: link in bio
+        #SQLServer #LogShipping #DBA
+      cover_text: "Someone took a log backup"
+    tiktok:
+      caption: "One extra log backup breaks log shipping: error 4305, the chain has a hole. Restore the missing log first. One chain, one owner. #SQLServer #LogShipping #DBA"
+  - id: failover
+    youtube_short_title: "SQL Server failover drill with a stopwatch #Shorts"
+    instagram_reel:
+      caption: |
+        The drill: a tail-log backup with NORECOVERY captures the last order and leaves the old primary in the restoring state, so nobody writes there by mistake. Restore that tail on the standby WITH RECOVERY and it is a normal writable database with all twelve orders. The runner prints how long the step took and fails it above sixty seconds.
+        Full episode: link in bio
+        #SQLServer #DisasterRecovery #Failover
+      cover_text: "Failover, with a stopwatch"
+    tiktok:
+      caption: "Tail-log backup, then restore WITH RECOVERY on the standby: no data lost, timed with a stopwatch. SQL Server failover drill. #SQLServer #DisasterRecovery #Failover"

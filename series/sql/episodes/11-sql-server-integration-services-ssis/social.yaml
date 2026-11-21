@@ -1,0 +1,74 @@
+episode: 11
+series: "DEVLADLOG SQL"
+status: draft-hold-for-review
+ai_label: true
+youtube_url: "{YOUTUBE_URL}"
+linkedin_company:
+  text: |
+    Every morning a bike dealer sends a file of yesterday's sales. This morning it arrived twice. If your load is not built for that, you now have duplicate sales, and nobody notices until the month end report.
+
+    DEVLADLOG SQL #11 builds an Integration Services package for a fictional Contoso Bikes partner file with eight lines, three of them wrong:
+    - Control flow: prepare, data flow, merge
+    - A conditional split that sends bad rows to a rejects table, with the reason kept
+    - The business rules in a stored procedure, so a rerun inserts nothing twice
+    - Deployment to the SSIS catalog, run from T-SQL, with the server name in a catalog environment
+    - The gotcha: Basic logging records no row counts for the data flow
+
+    Three runs, each checked against an expected result: first load, repeat, correction.
+
+    Watch the episode: {YOUTUBE_URL}
+    Code: {REPO_URL}
+    Guide: {BLOG_URL}
+
+    Narration uses an AI voice.
+
+    #SQLServer #SSIS #ETL #DataEngineering
+linkedin_personal:
+  text: |
+    Make the load safe to run twice. In episode 11 of DEVLADLOG SQL a partner file arrives twice, and the second run inserts nothing and updates nothing, because the merge procedure only inserts a line if its product exists and its key is not already there.
+
+    A small lesson on debugging: at the default Basic logging level, the SSIS catalog records no row counts for the data flow. Set the logging level to Verbose before you start digging.
+
+    {YOUTUBE_URL}
+
+    Narration uses an AI voice.
+
+    #SQLServer #SSIS
+facebook:
+  text: |
+    A dealer sent the same sales file twice. Does your load survive that? In this DEVLADLOG SQL episode we build an SSIS package that rejects bad rows with a reason and can run again without doing any harm, then deploy it to the catalog and run it from T-SQL. Watch: {YOUTUBE_URL}
+
+    Narration uses an AI voice.
+
+    #SQLServer #SSIS
+shorts:
+  - id: hook
+    youtube_short_title: "A dealer sent the same sales file twice #Shorts"
+    instagram_reel:
+      caption: |
+        Every morning a bike dealer sends a file of yesterday's sales. This morning it arrived twice. If your load is not built for that, you now have duplicate sales, and nobody will notice until the month end report. We build an Integration Services package that reads the file, throws out the bad rows, and can run again without doing any harm.
+        Full episode: link in bio
+        #SQLServer #SSIS #ETL
+      cover_text: "The file arrived twice"
+    tiktok:
+      caption: "The same sales file arrived twice. A load that is safe to rerun inserts nothing the second time. SSIS package, bad rows rejected with a reason. #SQLServer #SSIS #ETL"
+  - id: idempotent
+    youtube_short_title: "The MERGE that makes an SSIS rerun harmless #Shorts"
+    instagram_reel:
+      caption: |
+        The package only moves rows. The rules live in a stored procedure, so you can test them without Integration Services. A line is inserted only if its product exists and its key is not already there. Load the same file twice, and the second run finds every line present and inserts nothing. A corrected line is updated by the step before.
+        Full episode: link in bio
+        #SQLServer #SSIS #ETL
+      cover_text: "Safe to run twice"
+    tiktok:
+      caption: "Keep the rules in T-SQL and let the SSIS package move rows. Insert only if the product exists and the key is new. Rerun: nothing inserted. #SQLServer #SSIS #ETL"
+  - id: gotcha
+    youtube_short_title: "SSIS Basic logging hides data flow row counts #Shorts"
+    instagram_reel:
+      caption: |
+        The gotcha: at the default Basic logging level, the SSIS catalog records no row counts for the data flow, so run one showed zero. Only Verbose fills the data statistics view, where eight rows left the source. If you debug a data flow from the catalog, set the logging level first.
+        Full episode: link in bio
+        #SQLServer #SSIS #ETL
+      cover_text: "Basic logging shows zero"
+    tiktok:
+      caption: "SSIS catalog at Basic logging records no data flow row counts. Switch to Verbose before you debug. #SQLServer #SSIS #ETL"

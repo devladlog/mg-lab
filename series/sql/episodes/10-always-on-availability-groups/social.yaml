@@ -1,0 +1,76 @@
+episode: 10
+series: "DEVLADLOG SQL"
+status: draft-hold-for-review
+ai_label: true
+youtube_url: "{YOUTUBE_URL}"
+linkedin_company:
+  text: |
+    Last episode we failed over by hand. This time the server is allowed to die.
+
+    DEVLADLOG SQL #10 builds an Always On availability group on two lab machines in one Windows cluster, synchronous commit with automatic failover, and the database seeded automatically:
+    - Prerequisites checked by querying the instances: same version, same collation, cluster in quorum
+    - Endpoints, the group, and the secondary joining with GRANT CREATE ANY DATABASE
+    - A small report that turns the health rows into a yes or no verdict
+    - The classic trap: error 976 on a secondary created with readable secondary set to no, and the one-line fix
+    - A planned failover with nothing lost
+
+    The limits are stated too: an availability group is not a backup, and a bad delete replicates to both copies.
+
+    Watch the episode: {YOUTUBE_URL}
+    Code: {REPO_URL}
+    Guide: {BLOG_URL}
+
+    Narration uses an AI voice.
+
+    #SQLServer #AlwaysOn #AvailabilityGroups #HighAvailability
+linkedin_personal:
+  text: |
+    A colleague runs a report against the secondary replica to take load off the primary and gets error 976: the database is in an availability group and is not accessible for queries. Nothing is broken. The replica was created with readable secondary set to no.
+
+    The fix in episode 10 of DEVLADLOG SQL is one statement per replica, with no restart and no new seeding. Do both replicas, because after a failover the other one becomes the secondary.
+
+    Also: an availability group is not a backup.
+
+    {YOUTUBE_URL}
+
+    Narration uses an AI voice.
+
+    #SQLServer #AlwaysOn
+facebook:
+  text: |
+    What if the primary just dies? In this DEVLADLOG SQL episode we build a two-node Always On availability group, watch the data stream across by itself, hit error 976 when reading the secondary, fix it with one statement, and switch roles with no data lost. Watch: {YOUTUBE_URL}
+
+    Narration uses an AI voice.
+
+    #SQLServer #AlwaysOn
+shorts:
+  - id: hook
+    youtube_short_title: "What if the SQL Server primary just dies? Always On AG #Shorts"
+    instagram_reel:
+      caption: |
+        Last time we failed over by hand and the old server had to be told what to do. This time the server is allowed to die. We build an availability group on two real machines and a Windows cluster, watch the data stream across by itself, trip over one classic error, and then switch roles with no data lost.
+        Full episode: link in bio
+        #SQLServer #AlwaysOn #HighAvailability
+      cover_text: "What if the primary dies?"
+    tiktok:
+      caption: "A two-node Always On availability group: automatic seeding, one classic error, and a role switch with no data lost. #SQLServer #AlwaysOn #HighAvailability"
+  - id: gotcha
+    youtube_short_title: "Always On error 976 and the one-line fix #Shorts"
+    instagram_reel:
+      caption: |
+        Someone queries the secondary and gets error 976: the database is in an availability group and is not accessible for queries. Nothing is broken, data movement is fine. The replica was created with readable secondary set to no. The fix is one statement per replica, MODIFY REPLICA with allow connections ALL. No restart, no new seeding. Do both replicas.
+        Full episode: link in bio
+        #SQLServer #AlwaysOn #AvailabilityGroups
+      cover_text: "Error 976, one-line fix"
+    tiktok:
+      caption: "Always On error 976: the secondary is not readable because allow connections is off. One MODIFY REPLICA per replica fixes it. #SQLServer #AlwaysOn #AvailabilityGroups"
+  - id: failover
+    youtube_short_title: "Always On planned failover: roles swapped, nothing lost #Shorts"
+    instagram_reel:
+      caption: |
+        The planned failover is one statement, and you run it on the replica that should become the primary. It needs synchronous commit and a synchronized secondary, so nothing is lost. The second server is now the primary with all nine orders and accepts writes. The first becomes the secondary. Do not use the cluster manager to fail over an availability group.
+        Full episode: link in bio
+        #SQLServer #AlwaysOn #Failover
+      cover_text: "Roles swapped"
+    tiktok:
+      caption: "Planned AG failover: run one statement on the new primary. Synchronous plus synchronized means no data lost. #SQLServer #AlwaysOn #Failover"

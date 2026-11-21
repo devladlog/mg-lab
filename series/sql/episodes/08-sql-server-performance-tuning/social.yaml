@@ -1,0 +1,75 @@
+episode: 8
+series: "DEVLADLOG SQL"
+status: draft-hold-for-review
+ai_label: true
+youtube_url: "{YOUTUBE_URL}"
+linkedin_company:
+  text: |
+    The app is slow and everybody has a theory: add an index, add memory, restart the server. Most of those theories are guesses.
+
+    DEVLADLOG SQL #8 measures instead. On the Contoso Bikes performance database we look at:
+    - Configuration defaults: max server memory, MAXDOP and cost threshold for parallelism
+    - Top statements ranked by total cost, not by execution count
+    - A real blocking incident we cause on purpose, diagnosed from the requests view
+    - Wait statistics read as the difference between two snapshots
+
+    The gotcha: the blocker is not busy, it is idle with an open transaction. Then we try read committed snapshot as a server-side fix, with its costs stated: rows grow, the version store lives in tempdb.
+
+    Watch the episode: {YOUTUBE_URL}
+    Code: {REPO_URL}
+    Guide: {BLOG_URL}
+
+    Narration uses an AI voice.
+
+    #SQLServer #PerformanceTuning #WaitStatistics #Blocking
+linkedin_personal:
+  text: |
+    When a query is stuck, the blocker is often not running anything. It is idle, with an open transaction, maybe waiting on a web service call. And the wait statistics view will show nothing yet, because the wait has not finished.
+
+    In episode 8 of DEVLADLOG SQL I cause that blocking on purpose and diagnose it from the requests view. Then I turn on read committed snapshot and the same reader returns immediately. It is a trade: rows grow and the version store lives in tempdb.
+
+    The better fix is a shorter transaction in the app.
+
+    {YOUTUBE_URL}
+
+    Narration uses an AI voice.
+
+    #SQLServer #PerformanceTuning
+facebook:
+  text: |
+    Slow app, many theories. In this DEVLADLOG SQL episode we measure instead: server settings, the costliest statements, a blocking incident we cause on purpose, and wait statistics from two snapshots. The surprise is who is doing the blocking, and what actually fixes it. Watch: {YOUTUBE_URL}
+
+    Narration uses an AI voice.
+
+    #SQLServer #PerformanceTuning
+shorts:
+  - id: hook
+    youtube_short_title: "The app is slow. Where do you even start in SQL Server? #Shorts"
+    instagram_reel:
+      caption: |
+        The app is slow, and everybody has a theory. Add an index, add memory, restart the server. Most of those theories are guesses. We measure instead: the configuration, the expensive queries, a real blocking incident we cause on purpose, and the wait statistics that show what the server was actually waiting for.
+        Full episode: link in bio
+        #SQLServer #PerformanceTuning #WaitStats
+      cover_text: "Slow app? Measure first"
+    tiktok:
+      caption: "Slow app, lots of guesses. Measure the config, costly queries, blocking and wait stats first. SQL Server performance tuning. #SQLServer #PerformanceTuning #WaitStats"
+  - id: gotcha
+    youtube_short_title: "The SQL Server blocker is idle, not busy #Shorts"
+    instagram_reel:
+      caption: |
+        The gotcha in a blocking incident: the blocker is not running anything. It is idle, with an open transaction. The requests view shows who waits, for how long and which session blocks them, and the connections view holds the blocker's last statement. The wait statistics view shows nothing yet, because the wait has not finished.
+        Full episode: link in bio
+        #SQLServer #Blocking #PerformanceTuning
+      cover_text: "The blocker is idle"
+    tiktok:
+      caption: "The session blocking you may be idle with an open transaction. Find it in the requests view, not in wait stats. #SQLServer #Blocking #PerformanceTuning"
+  - id: rcsi
+    youtube_short_title: "Read committed snapshot: same writer, same reader, no wait #Shorts"
+    instagram_reel:
+      caption: |
+        Same writer, still holding its transaction. Same reader. With read committed snapshot the reader returns immediately and sees the last committed value, not the uncommitted one. It is a trade, not a free lunch: rows grow by up to fourteen bytes and the version store lives in tempdb. The real cure is a shorter transaction.
+        Full episode: link in bio
+        #SQLServer #RCSI #PerformanceTuning
+      cover_text: "Reader no longer waits"
+    tiktok:
+      caption: "Read committed snapshot: the reader no longer waits on the open writer and sees the last committed value. Costs: row size, tempdb. #SQLServer #RCSI #PerformanceTuning"

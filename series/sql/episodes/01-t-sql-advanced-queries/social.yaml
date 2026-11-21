@@ -1,0 +1,75 @@
+episode: 1
+series: "DEVLADLOG SQL"
+status: draft-hold-for-review
+ai_label: true
+youtube_url: "{YOUTUBE_URL}"
+linkedin_company:
+  text: |
+    Your running total looks right, it runs, and on two days it is wrong.
+
+    In DEVLADLOG SQL #1 we write ten advanced T-SQL queries against a small, fictional Contoso Bikes database and check every one against an independent calculation:
+    - Window functions: running total and change versus the previous row
+    - CROSS APPLY and OUTER APPLY for per-row subqueries
+    - Gaps and islands, a recursive CTE, PIVOT and GROUPING SETS
+    - The default window frame, which repeats a total on tied dates
+
+    The tests run locally with no server, using a T-SQL parser and DuckDB. Then the same files run on SQL Server 2022 and the rows match.
+
+    Full walkthrough, with the query that lies: {YOUTUBE_URL}
+    Code: {REPO_URL}
+    Guide: {BLOG_URL}
+
+    Narration uses an AI voice.
+
+    #SQLServer #TSQL #WindowFunctions #DataEngineering
+linkedin_personal:
+  text: |
+    A running total in T-SQL can be wrong without any error. If you write SUM(...) OVER (ORDER BY OrderDate) with no frame, SQL Server uses RANGE, and RANGE counts every row with the same date. Two orders on the same day both show the same total.
+
+    The fix is to say ROWS and add a unique tie-breaker to the ORDER BY.
+
+    I put this in episode 1 of DEVLADLOG SQL, together with APPLY, gaps and islands, recursive CTEs, PIVOT and GROUPING SETS. Each query is checked against an independent calculation.
+
+    {YOUTUBE_URL}
+
+    Narration uses an AI voice.
+
+    #SQLServer #TSQL
+facebook:
+  text: |
+    Ever trusted a running total that was quietly wrong? In this first DEVLADLOG SQL episode we write ten advanced T-SQL queries, check each one against an independent calculation, and run them on SQL Server 2022. One of them lies on purpose: the default window frame. Watch it here: {YOUTUBE_URL}
+
+    Narration uses an AI voice.
+
+    #SQLServer #TSQL
+shorts:
+  - id: hook
+    youtube_short_title: "Your T-SQL running total is wrong on two days #Shorts"
+    instagram_reel:
+      caption: |
+        A running total in T-SQL that runs fine and is still wrong on two days. In this series opener we write ten advanced queries on a fictional Contoso Bikes database: window functions, APPLY, recursion, PIVOT and GROUPING SETS. Every query is checked against an independent calculation, then run on SQL Server 2022. One of them lies, and we show why.
+        Full episode: link in bio
+        #SQLServer #TSQL #WindowFunctions
+      cover_text: "Your running total lies"
+    tiktok:
+      caption: "A T-SQL running total that runs fine and is wrong on two days. Ten advanced queries, each checked against an independent calculation. #SQLServer #TSQL #WindowFunctions"
+  - id: islands
+    youtube_short_title: "Gaps and islands in T-SQL: login streaks in one query #Shorts"
+    instagram_reel:
+      caption: |
+        Gaps and islands: find streaks of consecutive login days. Subtract the row number from the date and each streak gets the same anchor, so it becomes one group. The catch: take distinct days first. Without DISTINCT, two logins on the same day shift every row number and the query invents a streak. A test proves it.
+        Full episode: link in bio
+        #SQLServer #TSQL #GapsAndIslands
+      cover_text: "Gaps and islands"
+    tiktok:
+      caption: "Login streaks in T-SQL: subtract the row number from the date. But take distinct days first, or the query invents a streak. #SQLServer #TSQL #GapsAndIslands"
+  - id: gotcha
+    youtube_short_title: "The default window frame in SQL Server repeats totals #Shorts"
+    instagram_reel:
+      caption: |
+        With ORDER BY and no frame, SQL Server uses RANGE UNBOUNDED PRECEDING to CURRENT ROW. RANGE includes every row with the same ORDER BY value, so two orders on the same date both show the same total. This is documented behavior, not an engine bug. The fix: say ROWS, and add a unique tie-breaker.
+        Full episode: link in bio
+        #SQLServer #TSQL #WindowFunctions
+      cover_text: "The frame that lies"
+    tiktok:
+      caption: "SUM() OVER (ORDER BY date) with no frame uses RANGE, so tied dates repeat the same total. Say ROWS and add a tie-breaker. #SQLServer #TSQL #WindowFunctions"
