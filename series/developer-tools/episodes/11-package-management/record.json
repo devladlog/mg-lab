@@ -1,0 +1,132 @@
+{
+  "note": "Live-session recording of the screen scenes (series/tools/rec). prepare/teardown run on the laptop, not recorded; commands are typed and run for real. Prepare statements run in one PowerShell session with the episode folder as current directory; variables do not survive into the screens, so each screen re-derives what it needs.",
+  "prepare": [
+    "$ep = (Get-Location).Path",
+    "# owner signs in: az login as labadmin, then the Azure DevOps sign-in; the organization name is typed on the laptop only (never in a file): $env:MG_ADO_ORG = '<organization>'",
+    "$org = $env:MG_ADO_ORG; $proj = 'contoso-packages-demo'",
+    "az extension add --name azure-devops --only-show-errors",
+    "az devops project create --name $proj --visibility private --source-control git --organization \"https://dev.azure.com/$org\" --output none",
+    "az repos create --name orders-app --organization \"https://dev.azure.com/$org\" --project $proj --output none",
+    "# owner, in the browser: Artifacts > Create Feed 'contoso-packages' (scope Project, upstream sources off); Feed settings > Permissions: add 'Project Collection Build Service' and 'contoso-packages-demo Build Service' as Feed Publisher (Contributor)",
+    "New-Item -ItemType Directory -Force C:\\work | Out-Null; Remove-Item C:\\work\\orders-app, C:\\work\\orders-report -Recurse -Force -ErrorAction SilentlyContinue",
+    "git clone \"https://$org@dev.azure.com/$org/$proj/_git/orders-app\" C:\\work\\orders-app",
+    "Set-Location C:\\work\\orders-app",
+    "robocopy \"$ep\\src\\orders-app\" . /E /XD bin obj .nuget .venv /NFL /NDL /NJH /NJS",
+    "git config user.name 'Alex Demo'; git config user.email 'alex.demo@contoso.com'",
+    "git add -A; git commit -m 'chore: import orders api'; git push -u origin main",
+    "az pipelines create --name orders-contracts --repository orders-app --repository-type tfsgit --branch main --yml-path /azure-pipelines.yml --skip-first-run true --organization \"https://dev.azure.com/$org\" --project $proj --output none",
+    "# owner: run the pipeline once (warm-up, not recorded) and click Permit for the feed if asked; expect both jobs green and Contoso.Orders.Contracts 1.0.0 in the feed",
+    "az pipelines run --name orders-contracts --branch main --organization \"https://dev.azure.com/$org\" --project $proj --output none",
+    "dotnet tool update --global Microsoft.Artifacts.CredentialProvider.NuGet.Tool --add-source https://api.nuget.org/v3/index.json",
+    "Copy-Item -Recurse \"$ep\\src\\consumer\" C:\\work\\orders-report; Set-Location C:\\work\\orders-report",
+    "(Get-Content nuget.config) -replace 'ORGANIZATION', $org -replace 'PROJECT', $proj | Set-Content nuget.config",
+    "# owner signs in through the credential provider (browser or device flow)",
+    "dotnet restore --interactive",
+    "Set-Location C:\\work\\orders-app; git switch -c feat/legacy-client",
+    "dotnet new console -o src/Contoso.Orders.LegacyClient --no-restore",
+    "dotnet package add Microsoft.AspNet.WebApi.Client --version 5.2.9 --project src/Contoso.Orders.LegacyClient",
+    "dotnet sln OrdersApp.slnx add src/Contoso.Orders.LegacyClient",
+    "dotnet restore",
+    "# not committed or pushed yet"
+  ],
+  "screens": [
+    {
+      "name": "audit",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "C:\\work\\orders-app",
+      "prompt": "$ ",
+      "commands": [
+        "(Get-ChildItem -Recurse -Include *.csproj, Directory.*.props | Select-String Newtonsoft).Count",
+        "dotnet restore src/Contoso.Orders.LegacyClient --force",
+        "#pause 4",
+        "dotnet restore src/Contoso.Orders.LegacyClient --force -p:AuditPipeline=true",
+        "#pause 4",
+        "# dotnet nuget why draws its tree only on a real console, so it is started with its own console handles",
+        "Start-Process dotnet 'nuget why src/Contoso.Orders.LegacyClient Newtonsoft.Json' -NoNewWindow -Wait",
+        "#pause 4",
+        "python tools/pkg_audit.py --project src/Contoso.Orders.LegacyClient",
+        "#pause 4"
+      ],
+      "note": "Expected: warning NU1903 for Newtonsoft.Json 10.0.1 (GHSA-5crp-9r3c-p9vr), then error NU1903 as an error with AuditPipeline, then the tree Microsoft.AspNet.WebApi.Client (v5.2.9) -> Newtonsoft.Json (v10.0.1), then 'HIGH Newtonsoft.Json 10.0.1 ... transitive'. Optional capture: dotnet package update --vulnerable. Show Directory.Packages.props in VS Code beside the terminal."
+    },
+    {
+      "name": "auditjob",
+      "kind": "browser",
+      "url": "https://dev.azure.com/<organization>/contoso-packages-demo/_build",
+      "account": "labadmin",
+      "prepare": [
+        "$org = $env:MG_ADO_ORG; $proj = 'contoso-packages-demo'",
+        "Set-Location C:\\work\\orders-app",
+        "git add -A; git commit -m 'feat(orders): add legacy client'; git push -u origin feat/legacy-client",
+        "az pipelines run --name orders-contracts --branch feat/legacy-client --organization \"https://dev.azure.com/$org\" --project $proj --output none"
+      ],
+      "steps": [
+        "Open the pipeline orders-contracts and the run of branch feat/legacy-client (pushed by prepare)",
+        "Run summary: the build job green with a warning (the Package audit step annotated 'Newtonsoft.Json 10.0.1 has a known high severity vulnerability'), the audit job red with 'error NU1903' in the 'Restore with audit as errors' step",
+        "Note that the package pushed from the branch is 1.0.0-ci.<build id>, a pre-release",
+        "In C:\\work\\orders-app add the pin to Directory.Packages.props (ItemGroup Label 'Pinned transitive packages', Newtonsoft.Json 13.0.4), dotnet restore (regenerates the lock files), commit, push, Run pipeline again on the branch",
+        "Show both jobs green"
+      ],
+      "mask": [
+        "Azure DevOps organization name in the browser address bar, pkgs.dev.azure.com URLs and the account menu",
+        "labadmin e-mail in the account menu",
+        "never show nuget.config with the real organization (use the placeholder copy or the masking command)"
+      ]
+    },
+    {
+      "name": "consume",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "C:\\work\\orders-report",
+      "prompt": "$ ",
+      "commands": [
+        "Get-Content nuget.config | ForEach-Object { $_ -replace $env:MG_ADO_ORG, 'contoso' }",
+        "#pause 4",
+        "dotnet restore --interactive",
+        "dotnet restore --force -v n | Select-String 'Contoso.Orders.Contracts' | ForEach-Object { $_.Line -replace $env:MG_ADO_ORG, 'contoso' }",
+        "#pause 4",
+        "dotnet run --project OrdersReport -- sample-orders.csv",
+        "#pause 5",
+        "# map Contoso.* to the wrong source: the package can no longer be found",
+        "(Get-Content nuget.config) -replace 'Contoso\\.\\*', 'Fabrikam.*' | Set-Content nuget.config",
+        "dotnet restore --force",
+        "#pause 5",
+        "(Get-Content nuget.config) -replace 'Fabrikam\\.\\*', 'Contoso.*' | Set-Content nuget.config"
+      ],
+      "note": "Expect 'line 3: total: total must be greater than zero', 'line 4: customer: customer is required (max 100 characters)', '2 invalid', then error NU1101 'No packages exist with this id in source(s): nuget.org'. The masking filters replace the organization name in anything that is printed; check the first restore output for the feed URL and mask it in the edit if it shows. Optional NU1507 check: remove the packageSourceMapping section and restore."
+    },
+    {
+      "name": "publish",
+      "kind": "browser",
+      "url": "https://dev.azure.com/<organization>/contoso-packages-demo/_build",
+      "account": "labadmin",
+      "steps": [
+        "Open the main run of orders-contracts: the 'Authenticate to Azure Artifacts' and 'Push to the feed' steps green; expand 'Push to the feed': 'Pushing Contoso.Orders.Contracts.1.0.0.nupkg to ...' (mask the URL) and 'Your package was pushed.'",
+        "Artifacts > contoso-packages: Contoso.Orders.Contracts with versions 1.0.0 and 1.0.0-ci.<id> (from the feat/legacy-client run)",
+        "Use Run new on main with no new commit (Rerun failed jobs is not enough): the push step ends with a warning for the existing version ('409 (Conflict ...)') and the job succeeds; capture the exact text",
+        "Optional off camera: remove --skip-duplicate on a branch and note the failure message"
+      ],
+      "mask": [
+        "Azure DevOps organization name in the browser address bar, pkgs.dev.azure.com URLs and the account menu",
+        "labadmin e-mail in the account menu",
+        "never show nuget.config with the real organization (use the placeholder copy or the masking command)"
+      ]
+    }
+  ],
+  "teardown": [
+    "# owner: Artifacts > contoso-packages > Feed settings > Delete feed, then Deleted Feeds > Permanently Delete Feed (deleted feeds keep using storage for 30 days)",
+    "$org = $env:MG_ADO_ORG; $proj = 'contoso-packages-demo'",
+    "$pid2 = az devops project show --project $proj --organization \"https://dev.azure.com/$org\" --query id -o tsv; if ($pid2) { az devops project delete --id $pid2 --organization \"https://dev.azure.com/$org\" --yes }",
+    "Set-Location C:\\work; Remove-Item C:\\work\\orders-app, C:\\work\\orders-report -Recurse -Force -ErrorAction SilentlyContinue",
+    "dotnet nuget locals all --clear",
+    "dotnet tool uninstall --global Microsoft.Artifacts.CredentialProvider.NuGet.Tool",
+    "# owner: check Organization settings > Billing / Artifacts storage the next day (back to 0 GiB, can take 48 hours)"
+  ],
+  "needs": [
+    "azure-devops",
+    "tenant",
+    "env:MG_ADO_ORG",
+    "vscode"
+  ]
+}

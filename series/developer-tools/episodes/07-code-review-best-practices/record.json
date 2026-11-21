@@ -1,0 +1,110 @@
+{
+  "note": "Live-session recording of the screen scenes (series/tools/rec). prepare/teardown run on the laptop, not recorded; commands are typed and run for real. Prepare statements run in one PowerShell session with the episode folder as current directory; variables do not survive into the screens, so each screen re-derives what it needs.",
+  "prepare": [
+    "$ep = (Get-Location).Path",
+    "New-Item -ItemType Directory -Force C:\\work\\bin | Out-Null",
+    "[IO.File]::WriteAllText('C:\\work\\bin\\python3', \"#!/bin/sh`nexec python `\"`$@`\"`n\")",
+    "if ($env:PATH -notlike '*C:\\work\\bin*') { $env:PATH = 'C:\\work\\bin;C:\\Program Files\\Git\\bin;' + $env:PATH + ';C:\\Program Files\\Git\\usr\\bin' }",
+    "$env:PYTHON = 'python'",
+    "# owner signed in off camera: gh auth login. One GitHub identity only: the review is a Comment review (authors cannot approve their own pull request).",
+    "$owner = gh api user --jq .login",
+    "$id = gh api user --jq .id",
+    "New-Item -ItemType Directory -Force C:\\work | Out-Null; Remove-Item C:\\work\\orders-app-review-demo -Recurse -Force -ErrorAction SilentlyContinue",
+    "if (gh repo view \"$owner/orders-app-review-demo\" --json name 2>$null) { gh repo delete \"$owner/orders-app-review-demo\" --yes }",
+    "Copy-Item -Recurse \"$ep\\src\\orders-app\" C:\\work\\orders-app-review-demo",
+    "Get-ChildItem 'C:\\work\\orders-app-review-demo' -Recurse -File -Force -Include *.cs,*.csproj,*.props,*.slnx,*.slnf,*.json,*.md,*.yml,*.yaml,*.py,*.sh,*.toml,*.config,*.http,*.runsettings,*.playlist,*.ts,Dockerfile,compose.yaml,CODEOWNERS,.gitignore,.gitattributes,.editorconfig,pre-commit,commit-msg -ErrorAction SilentlyContinue | Where-Object { $_.FullName -notmatch '\\\\(node_modules|bin|obj|\\.git)\\\\' } | ForEach-Object { [IO.File]::WriteAllText($_.FullName, ([IO.File]::ReadAllText($_.FullName) -replace \"`r`n\", \"`n\")) }",
+    "Set-Location C:\\work\\orders-app-review-demo",
+    "git init -q -b main; git config core.autocrlf false; git config user.name 'Lab Admin'",
+    "git config user.email \"$id+$owner@users.noreply.github.com\"",
+    "(Get-Content .github\\CODEOWNERS) -replace '@contoso/[a-z-]*', \"@$owner\" | Set-Content .github\\CODEOWNERS",
+    "git add -A; git commit -q -m 'chore: baseline (orders API from episode 5)'",
+    "gh repo create orders-app-review-demo --public --source=. --push",
+    "git switch -c feat/cancel-order",
+    "git am \"$ep\\src\\review-demo\\0001-feat-orders-cancel-an-order.patch\"",
+    "git push -u origin feat/cancel-order",
+    "gh pr create --title \"feat(orders): cancel an order\" --body-file \"$ep\\src\\review-demo\\pr-body.good.md\""
+  ],
+  "screens": [
+    {
+      "name": "pr-open",
+      "kind": "browser",
+      "url": "https://github.com/devladlog/orders-app-review-demo/pull/1",
+      "account": "the lab GitHub account",
+      "steps": [
+        "Conversation tab: the title, the four-section description, the Checks box with pr-size, pr-description and review-routing all green",
+        "Open the pr-size run Summary: 'size/S: 31 changed lines in 3 files' and the area table; then the review-routing summary (the account for every file)",
+        "In Windows Terminal (C:\\work\\orders-app-review-demo, with $ep = the episode folder) run: gh pr edit 1 --body-file $ep\\src\\review-demo\\pr-body.bad.md",
+        "The pr-description check re-runs (edited trigger) and turns red with the four findings",
+        "Restore with: gh pr edit 1 --body-file $ep\\src\\review-demo\\pr-body.good.md   and show it green again"
+      ],
+      "mask": [
+        "GitHub account name if it is not the public lab account",
+        "never show gh auth status or tokens",
+        "patch author is the fictional Alex Demo; no real names or addresses"
+      ]
+    },
+    {
+      "name": "review",
+      "kind": "browser",
+      "url": "https://github.com/devladlog/orders-app-review-demo/pull/1/files",
+      "account": "the lab GitHub account",
+      "steps": [
+        "Files changed: hover the 'order!.Status' line, add a comment 'issue (blocking): ...' and click the suggestion button to show the suggestion block",
+        "Post the whole review at once: python $ep\\src\\review-demo\\review-payload.py > review.json   then   gh api repos/<owner>/orders-app-review-demo/pulls/1/reviews --input review.json",
+        "If the API rejects the multi-line comment, post the review with single-line comments only and add the suggestion by hand in the UI",
+        "Conversation tab: the review with seven threads, review type Comment (say on camera that approve and request changes are not available to the author)",
+        "Windows Terminal: gh api repos/<owner>/orders-app-review-demo/pulls/1/comments --paginate > comments.json   then   python tools/review_kit/cli.py comments comments.json   -> label table and 'Blocking (3)'"
+      ],
+      "mask": [
+        "GitHub account name if it is not the public lab account",
+        "never show gh auth status or tokens",
+        "patch author is the fictional Alex Demo; no real names or addresses"
+      ]
+    },
+    {
+      "name": "followup",
+      "kind": "browser",
+      "url": "https://github.com/devladlog/orders-app-review-demo/pull/1",
+      "account": "the lab GitHub account",
+      "steps": [
+        "Terminal: git am \"$ep\\src\\review-demo\\0002-fix-orders-answer-404-for-an-unknown-order-and-409-w.patch\"   then   git push",
+        "Checks re-run: pr-size now 'size/S: 67 changed lines'; Files changed shows the new tests",
+        "Reply to the three blocking threads (replies from review-comments.json, ids 108 and 109) and click Resolve conversation on each: 'All conversations resolved'",
+        "Squash and merge, delete the branch (the kit only runs on pull requests, main gets no run)",
+        "Say on camera that with two people the ruleset from episode 1 also needs an approval, which one account cannot give"
+      ],
+      "mask": [
+        "GitHub account name if it is not the public lab account",
+        "never show gh auth status or tokens",
+        "patch author is the fictional Alex Demo; no real names or addresses"
+      ]
+    },
+    {
+      "name": "metrics",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "C:\\work\\orders-app-review-demo",
+      "prompt": "$ ",
+      "commands": [
+        "$owner = gh api user --jq .login",
+        "python tools/review_kit/cli.py metrics --repo \"$owner/orders-app-review-demo\" --limit 5",
+        "#pause 5"
+      ],
+      "note": "One merged pull request: lines, hours to merge and 'Never reviewed by anyone but the author: #1' (the author's own Comment review is ignored on purpose). If Lines shows '-', note it in the README.",
+      "prepare": [
+        "New-Item -ItemType Directory -Force C:\\work\\bin | Out-Null",
+        "[IO.File]::WriteAllText('C:\\work\\bin\\python3', \"#!/bin/sh`nexec python `\"`$@`\"`n\")",
+        "if ($env:PATH -notlike '*C:\\work\\bin*') { $env:PATH = 'C:\\work\\bin;C:\\Program Files\\Git\\bin;' + $env:PATH + ';C:\\Program Files\\Git\\usr\\bin' }",
+        "$env:PYTHON = 'python'"
+      ]
+    }
+  ],
+  "teardown": [
+    "$owner = gh api user --jq .login; gh repo delete \"$owner/orders-app-review-demo\" --yes",
+    "Set-Location C:\\work; Remove-Item C:\\work\\orders-app-review-demo -Recurse -Force -ErrorAction SilentlyContinue"
+  ],
+  "needs": [
+    "github",
+    "gh-cli-signed-in"
+  ]
+}

@@ -1,0 +1,89 @@
+{
+  "note": "Live-session recording of the screen scenes (series/tools/rec). prepare/teardown run on the laptop, not recorded; commands are typed and run for real. Prepare statements run in one PowerShell session with the episode folder as current directory; variables do not survive into the screens, so each screen re-derives what it needs.",
+  "prepare": [
+    "$ep = (Get-Location).Path",
+    "# owner, once: Visual Studio 2026 (Community is enough) with the ASP.NET and web development workload, side by side with 2022; in the Installer > Modify > Individual components untick .NET profiling tools and IntelliCode; sign-in skipped ('Skip this for now')",
+    "Remove-Item C:\\demo\\orders-app -Recurse -Force -ErrorAction SilentlyContinue",
+    "robocopy \"$ep\\src\\orders-app\" C:\\demo\\orders-app /E /XD bin obj .nuget /NFL /NDL /NJH /NJS",
+    "Set-Location C:\\demo\\orders-app",
+    "git init -q; git config user.name 'Alex Demo'; git config user.email 'alex.demo@contoso.com'; git add -A; git commit -qm 'chore: import orders api'",
+    "dotnet restore OrdersApp.slnx",
+    "python tools\\vs_files.py check . --known-ids \"$ep\\tests\\fixtures\\learn-component-ids.txt\"",
+    "# owner, in Visual Studio: Tools > Options > All Settings > Test > untick 'Auto detect runsettings files'; Debugging > .NET/C++ Hot Reload > tick 'Enable when not debugging'; font 16+, zoom 125 %; Focus assist on"
+  ],
+  "screens": [
+    {
+      "name": "vsopen",
+      "kind": "app",
+      "app": "Visual Studio 2026",
+      "steps": [
+        "Double-click C:\\demo\\orders-app\\OrdersApp.Api.slnf: Solution Explorer shows the funnel glyph and the name with '1 project loaded'",
+        "Close the solution, then open OrdersApp.slnx: because .vsconfig sits in the solution root, the yellow bar 'Some components are missing ...' appears; capture it with the two component names visible",
+        "Click Install only in a second take, off camera"
+      ],
+      "mask": [
+        "Windows user name in the title bar, paths, recent-projects list and the Installer",
+        "no Microsoft account picture or name (sign-in skipped)",
+        "machine name in the Installer title bar"
+      ]
+    },
+    {
+      "name": "nav",
+      "kind": "app",
+      "app": "Visual Studio 2026",
+      "steps": [
+        "Open Orders.cs; Ctrl+T (Go To All), type Paging: capture the results",
+        "F12 on Normalize, then Alt+F12 (Peek Definition) on Clamp: capture the peek window",
+        "Ctrl+. (Quick Actions) on Paging.Normalize(page, pageSize) in Program.cs",
+        "Multi-caret: select \"customer\", press Shift+Alt+. twice, type; and Ctrl+Alt+click on two lines; capture the carets",
+        "If a binding differs in the profile in use, say so on camera"
+      ],
+      "mask": [
+        "Windows user name in the title bar, paths, recent-projects list and the Installer",
+        "no Microsoft account picture or name (sign-in skipped)",
+        "machine name in the Installer title bar"
+      ]
+    },
+    {
+      "name": "testexplorer",
+      "kind": "app",
+      "app": "Visual Studio 2026",
+      "steps": [
+        "Ctrl+E, T opens Test Explorer; group by Traits",
+        "Open the playlist tests\\Contoso.Orders.Api.Tests\\Smoke.playlist: four tests including The_repository_runsettings_reached_the_test_host; Ctrl+R, T to run",
+        "Test > Configure Run Settings: show 'Auto Detect runsettings Files' off and, in the Test Explorer output, the settings test passing because RunSettingsFilePath is set",
+        "Separate take: turn auto detect on, delete the RunSettingsFilePath line temporarily, run again and note whether Test Explorer finds the root .runsettings (dotnet test does not)"
+      ],
+      "mask": [
+        "Windows user name in the title bar, paths, recent-projects list and the Installer",
+        "no Microsoft account picture or name (sign-in skipped)",
+        "machine name in the Installer title bar"
+      ]
+    },
+    {
+      "name": "hotreload",
+      "kind": "app",
+      "app": "Visual Studio 2026",
+      "steps": [
+        "Choose the launch profile 'Orders API (20 orders, OpenAPI)' in the toolbar, press Ctrl+F5: the browser opens openapi/v1.json",
+        "In Orders.cs change 1 to 2 in Math.Clamp(pageSize ?? DefaultPageSize, 1, MaxPageSize), click Hot Reload (the flame), refresh http://localhost:8081/orders?pageSize=1: 'pageSize':2",
+        "Edit the string \"ok\" in the /healthz handler of Program.cs and note exactly what Visual Studio says (restart needed / Rebuild and Apply)"
+      ],
+      "mask": [
+        "Windows user name in the title bar, paths, recent-projects list and the Installer",
+        "no Microsoft account picture or name (sign-in skipped)",
+        "machine name in the Installer title bar",
+        "browser address bar shows localhost only, close other tabs"
+      ]
+    }
+  ],
+  "teardown": [
+    "# owner, in Visual Studio: close the solution, File > Clear recent items; Code Snippets Manager: remove ordtest and ordscope; Installer > Modify: put .NET profiling tools and IntelliCode back",
+    "Set-Location C:\\; Remove-Item C:\\demo\\orders-app -Recurse -Force -ErrorAction SilentlyContinue"
+  ],
+  "needs": [
+    "install:visual-studio-2026",
+    "vs-installer-internet"
+  ],
+  "blocked": "Visual Studio 2026 is not installed: the recording laptop has Visual Studio Professional 2022 only, and episode 12 is written for Visual Studio 2026 (install it side by side first; Community edition is enough)."
+}

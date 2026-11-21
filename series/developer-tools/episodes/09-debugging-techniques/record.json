@@ -1,0 +1,143 @@
+{
+  "note": "Live-session recording of the screen scenes (series/tools/rec). prepare/teardown run on the laptop, not recorded; commands are typed and run for real. Prepare statements run in one PowerShell session with the episode folder as current directory; variables do not survive into the screens, so each screen re-derives what it needs.",
+  "prepare": [
+    "$ep = (Get-Location).Path",
+    "New-Item -ItemType Directory -Force C:\\work\\bin | Out-Null",
+    "[IO.File]::WriteAllText('C:\\work\\bin\\python3', \"#!/bin/sh`nexec python `\"`$@`\"`n\")",
+    "if ($env:PATH -notlike '*C:\\work\\bin*') { $env:PATH = 'C:\\work\\bin;C:\\Program Files\\Git\\bin;' + $env:PATH + ';C:\\Program Files\\Git\\usr\\bin' }",
+    "$env:PYTHON = 'python'",
+    "# owner, once: VS Code with C# Dev Kit (check the licence first) and REST Client, Docker Desktop, .NET SDK 10",
+    "New-Item -ItemType Directory -Force C:\\work | Out-Null; Remove-Item C:\\work\\orders-debug, C:\\work\\orders-history -Recurse -Force -ErrorAction SilentlyContinue",
+    "Copy-Item -Recurse \"$ep\\src\\orders-app\" C:\\work\\orders-debug",
+    "Get-ChildItem 'C:\\work\\orders-debug' -Recurse -File -Force -Include *.cs,*.csproj,*.props,*.slnx,*.slnf,*.json,*.md,*.yml,*.yaml,*.py,*.sh,*.toml,*.config,*.http,*.runsettings,*.playlist,*.ts,Dockerfile,compose.yaml,CODEOWNERS,.gitignore,.gitattributes,.editorconfig,pre-commit,commit-msg -ErrorAction SilentlyContinue | Where-Object { $_.FullName -notmatch '\\\\(node_modules|bin|obj|\\.git)\\\\' } | ForEach-Object { [IO.File]::WriteAllText($_.FullName, ([IO.File]::ReadAllText($_.FullName) -replace \"`r`n\", \"`n\")) }",
+    "bash \"$ep\\bugs\\make-history.sh\" C:/work/orders-history",
+    "Set-Location C:\\work\\orders-debug",
+    "dotnet tool restore; dotnet build src/Contoso.Orders.Api; dotnet test",
+    "docker build -t contoso/orders-api:dev .",
+    "git init -q -b main; git config core.autocrlf false; git config user.name 'Alex Demo'; git config user.email 'alex.demo@contoso.com'",
+    "git add -A; git commit -q -m \"feat(reports): monthly revenue per customer\""
+  ],
+  "screens": [
+    {
+      "name": "redtest",
+      "kind": "app",
+      "app": "VS Code (C# Dev Kit, Testing view)",
+      "prepare": [
+        "$ep = (Get-Location).Path",
+        "Set-Location C:\\work\\orders-debug",
+        "git apply --check \"$ep\\bugs\\01-month-end-off-by-one.patch\" 2>$null; if ($?) { git apply \"$ep\\bugs\\01-month-end-off-by-one.patch\" }"
+      ],
+      "steps": [
+        "Open C:\\work\\orders-debug in VS Code; Source Control shows the 5-line change in Reports.cs (patch 01 applied by prepare)",
+        "Testing view: run MonthEnd_orders_are_part_of_the_month and Every_order_lands_in_exactly_one_month",
+        "Capture both red, the message 'Expected: 30' / 'Actual: 29' (and 237 / 230) and the failing line highlighted in the editor"
+      ],
+      "mask": [
+        "Windows user name in the title bar, paths and recent list (folder is under C:\\work)",
+        "Accounts icon / Settings Sync badge"
+      ],
+      "note": "C# Dev Kit needs a Visual Studio Professional/Enterprise subscription for organisations (Learn, Eligibility). If there is none, use the open-source C# extension and show dotnet test output instead."
+    },
+    {
+      "name": "debugger",
+      "kind": "app",
+      "app": "VS Code (C# debugger, REST Client)",
+      "prepare": [
+        "$ep = (Get-Location).Path",
+        "Set-Location C:\\work\\orders-debug",
+        "git apply --check \"$ep\\bugs\\01-month-end-off-by-one.patch\" 2>$null; if ($?) { git apply \"$ep\\bugs\\01-month-end-off-by-one.patch\" }",
+        "docker rm -f orders-api 2>$null"
+      ],
+      "steps": [
+        "Run and Debug view > 'Orders API (debug)' > F5 (runs the build task first; the API listens on http://localhost:8080; stop the Docker container first)",
+        "Set a breakpoint on the 'var customers = ...' line of Reports.MonthlyRevenueAsync (the first line after ToListAsync)",
+        "Open .vscode/orders.http and click Send Request on GET /reports/monthly?month=2026-01",
+        "Stopped: Variables (firstDay and lastDay), Watch orders.Count = 29; Debug Console: orders.Any(o => o.Created == new DateOnly(2026, 1, 31)) -> false; hover an Order for the DebuggerDisplay text",
+        "Right-click the gutter at the 'return new MonthlyRevenue(...)' line > Add Logpoint with {firstDay} has {orders.Count} orders; right-click the first breakpoint > Edit Breakpoint > Expression: firstDay.Month == 1",
+        "Send the January request again, then month=2026-03: the breakpoint stops only for January and the logpoint prints in the Debug Console without stopping",
+        "Stop the session, revert the bug (git apply -R bugs\\01-month-end-off-by-one.patch), run the two tests: green; commit 'fix(reports): a month is a half-open range'"
+      ],
+      "mask": [
+        "Windows user name in the title bar, paths and recent list (folder is under C:\\work)",
+        "Accounts icon / Settings Sync badge"
+      ]
+    },
+    {
+      "name": "trace",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "C:\\work\\orders-debug",
+      "prompt": "$ ",
+      "prepare": [
+        "New-Item -ItemType Directory -Force C:\\work\\bin | Out-Null",
+        "[IO.File]::WriteAllText('C:\\work\\bin\\python3', \"#!/bin/sh`nexec python `\"`$@`\"`n\")",
+        "if ($env:PATH -notlike '*C:\\work\\bin*') { $env:PATH = 'C:\\work\\bin;C:\\Program Files\\Git\\bin;' + $env:PATH + ';C:\\Program Files\\Git\\usr\\bin' }",
+        "$env:PYTHON = 'python'",
+        "docker rm -f orders-api 2>$null",
+        "Get-CimInstance Win32_Process -Filter \"Name='dotnet.exe'\" | Where-Object CommandLine -like '*Contoso.Orders.Api.dll*' | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }"
+      ],
+      "commands": [
+        "docker run --rm -d --name orders-api -p 127.0.0.1:8080:8080 -e Logging__Console__FormatterName=json -e Logging__Console__FormatterOptions__IncludeScopes=true contoso/orders-api:dev",
+        "#pause 5",
+        "$resp = curl.exe -s -i -H \"traceparent: 00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01\" \"http://localhost:8080/reports/monthly?month=2026-13\"; $resp",
+        "#pause 4",
+        "$tid = ($resp | Select-Object -Last 1 | ConvertFrom-Json).traceId; $tid",
+        "docker logs orders-api 2>&1 | python tools/trace_lines.py $tid",
+        "#pause 4",
+        "docker logs orders-api 2>&1 | Select-Object -Last 1",
+        "#pause 5",
+        "docker rm -f orders-api"
+      ],
+      "note": "Runs in PowerShell 7 (no BOM problem). Expect HTTP/1.1 400, the traceId field, one 'Warning Contoso.Orders.Reports: Rejected month 2026-13: expected yyyy-MM' line and the raw JSON line with its Scopes array and TraceId 4bf92f35..."
+    },
+    {
+      "name": "hang",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "C:\\work\\orders-debug",
+      "prompt": "$ ",
+      "prepare": [
+        "New-Item -ItemType Directory -Force C:\\work\\bin | Out-Null",
+        "[IO.File]::WriteAllText('C:\\work\\bin\\python3', \"#!/bin/sh`nexec python `\"`$@`\"`n\")",
+        "if ($env:PATH -notlike '*C:\\work\\bin*') { $env:PATH = 'C:\\work\\bin;C:\\Program Files\\Git\\bin;' + $env:PATH + ';C:\\Program Files\\Git\\usr\\bin' }",
+        "$env:PYTHON = 'python'",
+        "$ep = (Get-Location).Path",
+        "Set-Location C:\\work\\orders-debug",
+        "docker rm -f orders-api 2>$null",
+        "git apply --check -R \"$ep\\bugs\\01-month-end-off-by-one.patch\" 2>$null; if ($?) { git apply -R \"$ep\\bugs\\01-month-end-off-by-one.patch\" }",
+        "git apply --check \"$ep\\bugs\\02-lock-order-deadlock.patch\" 2>$null; if ($?) { git apply \"$ep\\bugs\\02-lock-order-deadlock.patch\" }",
+        "dotnet build src/Contoso.Orders.Api"
+      ],
+      "commands": [
+        "$env:ASPNETCORE_URLS = 'http://localhost:8080'; $env:Orders__Cache__HoldMs = '50'",
+        "$api = Start-Process dotnet 'src/Contoso.Orders.Api/bin/Debug/net10.0/Contoso.Orders.Api.dll' -PassThru -WindowStyle Hidden",
+        "#pause 6",
+        "$j = @(Start-Job { curl.exe -s -m 20 -X POST http://localhost:8080/reports/cache/invalidate }; Start-Job { curl.exe -s -m 20 http://localhost:8080/reports/cache })",
+        "#pause 4",
+        "Get-Job | Format-Table Id, State",
+        "curl.exe -s http://localhost:8080/healthz",
+        "dotnet tool run dotnet-stack ps",
+        "bash scripts/triage-hang.sh $api.Id",
+        "#pause 6",
+        "# the dump holds the whole heap: delete it",
+        "Remove-Item -Recurse -Force triage",
+        "Stop-Process $api; $j | Remove-Job -Force"
+      ],
+      "note": "Windows is new here: dotnet-dump collect writes a Windows dump, syncblk and clrstack -all should read the same. If a step fails in Git Bash, run the script's commands by hand and fix scripts/triage-hang.sh (report it). A heap dump of this API was 232 MB on Linux: check free disk space."
+    }
+  ],
+  "teardown": [
+    "docker rm -f orders-api 2>$null; docker rmi contoso/orders-api:dev",
+    "Get-CimInstance Win32_Process -Filter \"Name='dotnet.exe'\" | Where-Object CommandLine -like '*Contoso.Orders.Api.dll*' | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }",
+    "'ASPNETCORE_URLS', 'ASPNETCORE_ENVIRONMENT', 'Orders__Cache__HoldMs', 'Orders__SeedCount', 'ConnectionStrings__Orders' | ForEach-Object { Remove-Item \"Env:$_\" -ErrorAction SilentlyContinue }",
+    "# owner: VS Code > Run > Remove All Breakpoints (extensions stay)",
+    "Set-Location C:\\work; Remove-Item C:\\work\\orders-debug, C:\\work\\orders-history -Recurse -Force -ErrorAction SilentlyContinue"
+  ],
+  "needs": [
+    "docker",
+    "vscode",
+    "licence:csharp-devkit",
+    "licence:docker-desktop"
+  ],
+  "blocked": "Docker Desktop is not installed on the recording laptop (the trace screen needs the API container); the C# Dev Kit licence for the company must be checked before the redtest and debugger screens (open-source C# extension fallback is described in the note)."
+}

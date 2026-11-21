@@ -1,0 +1,122 @@
+{
+  "note": "Live-session recording of the screen scenes (series/tools/rec). prepare/teardown run on the laptop, not recorded; commands are typed and run for real. Prepare statements run in one PowerShell session with the episode folder as current directory; variables do not survive into the screens, so each screen re-derives what it needs.",
+  "prepare": [
+    "$ep = (Get-Location).Path; $app = Join-Path $ep 'src\\orders-app'",
+    "# owner signs in before the run: az login (as labadmin, lab subscription selected) and gh auth login (scopes repo, workflow, read:packages, delete_repo, delete:packages)",
+    "$owner = gh api user --jq .login",
+    "$repo = 'orders-app-ci-demo'; $rg = 'rg-mglab-devtools-05'",
+    "$appName = 'contoso-orders-' + (-join ((97..122) | Get-Random -Count 4 | ForEach-Object { [char]$_ }))",
+    "gh repo create \"$owner/$repo\" --public --description \"DEVLADLOG Dev Tools #5 demo (throwaway)\" ",
+    "$subj = (gh api \"repos/$owner/$repo\" | python \"$app\\tools\\oidc_subject.py\" --environment production | Select-Object -Last 1)",
+    "az group create -n $rg -l westeurope --output none",
+    "$o = az deployment group create -g $rg -f \"$app\\infra\\main.bicep\" -p appName=$appName githubSubject=$subj --query properties.outputs -o json | ConvertFrom-Json",
+    "# the outputs stay in $o and are never printed; wait for the federated credential to propagate (AADSTS70021)",
+    "Start-Sleep -Seconds 240",
+    "$uid = gh api user --jq .id",
+    "@{ reviewers = @(@{ type = 'User'; id = [int]$uid }); prevent_self_review = $false; deployment_branch_policy = @{ protected_branches = $false; custom_branch_policies = $true } } | ConvertTo-Json -Depth 5 | gh api -X PUT \"repos/$owner/$repo/environments/production\" --input -",
+    "gh api -X POST \"repos/$owner/$repo/environments/production/deployment-branch-policies\" -f name=main -f type=branch",
+    "gh secret set AZURE_CLIENT_ID --env production --repo \"$owner/$repo\" --body $o.AZURE_CLIENT_ID.value",
+    "gh secret set AZURE_TENANT_ID --env production --repo \"$owner/$repo\" --body $o.AZURE_TENANT_ID.value",
+    "gh secret set AZURE_SUBSCRIPTION_ID --env production --repo \"$owner/$repo\" --body $o.AZURE_SUBSCRIPTION_ID.value",
+    "gh variable set AZURE_WEBAPP_NAME --env production --repo \"$owner/$repo\" --body $appName",
+    "gh variable set AZURE_RESOURCE_GROUP --env production --repo \"$owner/$repo\" --body $rg",
+    "New-Item -ItemType Directory -Force C:\\work\\ep05 | Out-Null; Remove-Item C:\\work\\ep05\\$repo -Recurse -Force -ErrorAction SilentlyContinue",
+    "git clone \"https://github.com/$owner/$repo.git\" C:\\work\\ep05\\$repo",
+    "Set-Location C:\\work\\ep05\\$repo",
+    "Copy-Item -Recurse -Force \"$app\\*\" .",
+    "git config user.name 'Alex Demo'; git config user.email 'alex.demo@contoso.com'",
+    "Get-ChildItem -Force .github\\workflows",
+    "git add -A; git commit -m 'chore: import orders api'; git push -u origin main",
+    "# owner, now: GitHub > profile > Packages > orders-app-ci-demo > Package settings > Change visibility > Public (once the first publish job is green), then approve the waiting deployment in the Actions tab",
+    "gh run watch (gh run list --limit 1 --json databaseId --jq '.[0].databaseId') --exit-status",
+    "# prepare the pull request of the first screen, do not open it yet",
+    "git switch -c feat/service-name",
+    "(Get-Content -Raw src\\Contoso.Orders.Api\\Program.cs) -replace '(MapGet\\(\"/healthz\".*?new\\s*\\{)', '$1 service = \"contoso-orders\",' | Set-Content src\\Contoso.Orders.Api\\Program.cs",
+    "git add -A; git commit -m 'feat(orders): name the service in healthz'; git push -u origin feat/service-name"
+  ],
+  "screens": [
+    {
+      "name": "prchecks",
+      "kind": "browser",
+      "url": "https://github.com/devladlog/orders-app-ci-demo/pulls",
+      "account": "the lab GitHub account",
+      "steps": [
+        "In Windows Terminal (C:\\work\\ep05\\orders-app-ci-demo) run: gh pr create --fill",
+        "Open the pull request, scroll to the checks list: guardrails, build-test and e2e green; publish and deploy skipped",
+        "Open the Checks tab, the e2e job, expand the step that runs scripts/e2e.sh: 'docker compose up' with db Healthy, the SQL Server tests (Passed: 4), then the smoke lines ending '7 passed, 0 failed'",
+        "Open the run Summary page: the Tests tables (unit and SQL Server) and the Smoke test list"
+      ],
+      "mask": [
+        "Azure subscription id, tenant id and client id (the portal does not mask them)",
+        "labadmin account picker and e-mail in the Azure portal",
+        "GitHub avatar/menu, and the owner name if it is not the public lab account",
+        "never show the Azure CLI deployment output"
+      ]
+    },
+    {
+      "name": "package",
+      "kind": "browser",
+      "url": "https://github.com/devladlog?tab=packages",
+      "account": "the lab GitHub account",
+      "steps": [
+        "Merge the pull request first (squash, the title is the commit message) and wait for the publish job of the main run",
+        "Open Packages > orders-app-ci-demo: tags sha-<commit> and main, digest visible",
+        "Open the publish job Summary: image, digest, verify command",
+        "In Windows Terminal run: gh attestation verify oci://ghcr.io/<owner>/orders-app-ci-demo@<digest> -R <owner>/orders-app-ci-demo   (digest copied from the page) and keep the success output with the signer workflow .github/workflows/ci-cd.yml"
+      ],
+      "mask": [
+        "Azure subscription id, tenant id and client id (the portal does not mask them)",
+        "labadmin account picker and e-mail in the Azure portal",
+        "GitHub avatar/menu, and the owner name if it is not the public lab account",
+        "never show the Azure CLI deployment output"
+      ]
+    },
+    {
+      "name": "approval",
+      "kind": "browser",
+      "url": "https://github.com/devladlog/orders-app-ci-demo/actions",
+      "account": "the lab GitHub account (reviewer of the production environment)",
+      "steps": [
+        "Open the ci-cd run on main: graph with guardrails, build-test, e2e, publish green and deploy 'Waiting'",
+        "Capture the graph, then click Review deployments, tick production, comment 'release', click Approve and deploy",
+        "Capture the graph again with deploy running"
+      ],
+      "mask": [
+        "Azure subscription id, tenant id and client id (the portal does not mask them)",
+        "labadmin account picker and e-mail in the Azure portal",
+        "GitHub avatar/menu, and the owner name if it is not the public lab account",
+        "never show the Azure CLI deployment output"
+      ]
+    },
+    {
+      "name": "live",
+      "kind": "browser",
+      "url": "https://github.com/devladlog/orders-app-ci-demo/actions",
+      "account": "the lab GitHub account; the Azure portal only for the optional Deployment Center shot (labadmin)",
+      "steps": [
+        "Open the deploy job log: azure/login 'Login successful' (OIDC), webapps-deploy, then the smoke step polling and '/healthz ok and version <sha>' and '4 passed, 0 failed'",
+        "Click the environment URL in the run graph and open /healthz: version equals the merge commit SHA, database Sqlite, user app",
+        "Place the commit on GitHub (its SHA) next to the JSON; optional: Azure portal > the web app > Deployment Center > Logs showing the image ghcr.io/...:sha-<commit>"
+      ],
+      "mask": [
+        "Azure subscription id, tenant id and client id (the portal does not mask them)",
+        "labadmin account picker and e-mail in the Azure portal",
+        "GitHub avatar/menu, and the owner name if it is not the public lab account",
+        "never show the Azure CLI deployment output"
+      ]
+    }
+  ],
+  "teardown": [
+    "az group delete -n rg-mglab-devtools-05 --yes --no-wait",
+    "# owner: gh auth refresh -s delete:packages,delete_repo (once), later gh auth refresh -r delete:packages,delete_repo to drop the scopes",
+    "$owner = gh api user --jq .login; gh api -X DELETE /user/packages/container/orders-app-ci-demo",
+    "gh repo delete \"$owner/orders-app-ci-demo\" --yes",
+    "Set-Location C:\\work; Remove-Item C:\\work\\ep05 -Recurse -Force -ErrorAction SilentlyContinue"
+  ],
+  "needs": [
+    "github",
+    "gh-cli-signed-in",
+    "azure",
+    "tenant"
+  ]
+}

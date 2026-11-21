@@ -1,0 +1,127 @@
+{
+  "note": "Live-session recording of the screen scenes (series/tools/rec). prepare/teardown run on the laptop, not recorded; commands are typed and run for real. Prepare statements run in one PowerShell session with the episode folder as current directory; variables do not survive into the screens, so each screen re-derives what it needs.",
+  "prepare": [
+    "$ep = (Get-Location).Path; $f = Join-Path $ep 'tests\\fixtures'",
+    "# owner signed in off camera: gh auth login (scopes repo, workflow, read:packages, delete_repo, delete:packages)",
+    "$owner = gh api user --jq .login",
+    "$repo = 'orders-app-quality-demo'",
+    "python -m pip install --quiet ruff==0.16.9",
+    "gh repo create \"$owner/$repo\" --public --description \"DEVLADLOG Dev Tools #6 demo (throwaway)\" ",
+    "$uid = gh api user --jq .id",
+    "@{ reviewers = @(@{ type = 'User'; id = [int]$uid }); prevent_self_review = $false; deployment_branch_policy = @{ protected_branches = $false; custom_branch_policies = $true } } | ConvertTo-Json -Depth 5 | gh api -X PUT \"repos/$owner/$repo/environments/production\" --input -",
+    "# (the production environment has the recording account as reviewer and no secrets; the baseline deploy job is rejected)",
+    "New-Item -ItemType Directory -Force C:\\work\\ep06 | Out-Null; Remove-Item C:\\work\\ep06\\$repo -Recurse -Force -ErrorAction SilentlyContinue",
+    "git clone \"https://github.com/$owner/$repo.git\" C:\\work\\ep06\\$repo",
+    "Set-Location C:\\work\\ep06\\$repo",
+    "Copy-Item -Recurse -Force \"$ep\\src\\orders-app\\*\" .",
+    "git config user.name 'Alex Demo'; git config user.email 'alex.demo@contoso.com'",
+    "# do NOT run scripts/setup-dev.sh here: episode 1 hooks refuse commits on main",
+    "git add -A; git commit -m 'chore: import orders api'; git push -u origin main",
+    "# owner, now: when deploy shows 'Waiting' in the Actions tab, Review deployments > Reject (no Azure behind it). Check the build-test summary: Coverage product code 80/80",
+    "gh run watch (gh run list --limit 1 --json databaseId --jq '.[0].databaseId')",
+    "git switch -c feat/export-orders-csv",
+    "Copy-Item \"$f\\OrderExport.bad.cs\" src\\Contoso.Orders.Api\\OrderExport.cs; Copy-Item \"$f\\OrderExportTests.cs\" tests\\Contoso.Orders.Api.Tests\\OrderExportTests.cs",
+    "Copy-Item \"$f\\Discounts.cs\" src\\Contoso.Orders.Api\\Discounts.cs; Copy-Item \"$f\\bad_report.py\" tools\\bad_report.py",
+    "git add -A; git commit -m 'feat(orders): export orders as csv'",
+    "# not pushed yet: the first screen pushes it"
+  ],
+  "screens": [
+    {
+      "name": "ci-fails",
+      "kind": "browser",
+      "url": "https://github.com/devladlog/orders-app-quality-demo/pulls",
+      "account": "the lab GitHub account",
+      "steps": [
+        "In Windows Terminal (C:\\work\\ep06\\orders-app-quality-demo) run: git push -u origin feat/export-orders-csv   then   gh pr create --fill",
+        "Checks list: guardrails green, quality red, build-test red, e2e skipped",
+        "Open the quality job: the 'dotnet format --verify-no-changes' step failed with the error IDE0161 / WHITESPACE lines, and the Ruff steps below it still ran and are red",
+        "Files changed tab: annotations on OrderExport.cs (rule IDs such as IDE0161, CA1305) and on tools/bad_report.py (ruff F401, S105 ...)",
+        "Open the build-test job: the dotnet build step failing with eight diagnostics on OrderExport.cs"
+      ],
+      "mask": [
+        "GitHub avatar/menu and owner name if it is not the public lab account",
+        "path of the mg-lab checkout in the terminal (use a short prompt)",
+        "never run gh auth status on camera"
+      ]
+    },
+    {
+      "name": "local",
+      "kind": "app",
+      "app": "VS Code + Windows Terminal",
+      "steps": [
+        "Open C:\\work\\ep06\\orders-app-quality-demo in VS Code; open src/Contoso.Orders.Api/OrderExport.cs: squiggles and the Problems panel with the same rule IDs (if the C# extension does not report them, say so in a note)",
+        "Open tools/bad_report.py: Ruff squiggles; save the file and show the formatting change",
+        "Windows Terminal: dotnet format --verify-no-changes   (fails)",
+        "dotnet format   (prints 'Unable to fix CA1305. No associated code fix found.')",
+        "dotnet build   (only CA1305 left)",
+        "ruff check --fix .   -> 'Found 12 errors (6 fixed, 6 remaining).'",
+        "ruff format .",
+        "Hand fixes (off the main take): OrderExport.cs gets using System.Globalization and CultureInfo.InvariantCulture; bad_report.py gets its six remaining findings fixed (the second commit's prepare copies the hand-fixed files)"
+      ],
+      "mask": [
+        "GitHub avatar/menu and owner name if it is not the public lab account",
+        "path of the mg-lab checkout in the terminal (use a short prompt)",
+        "never run gh auth status on camera",
+        "Settings Sync badge and Accounts icon in VS Code"
+      ]
+    },
+    {
+      "name": "coverage",
+      "kind": "browser",
+      "url": "https://github.com/devladlog/orders-app-quality-demo/pulls",
+      "account": "the lab GitHub account",
+      "prepare": [
+        "$ep = (Get-Location).Path; $f = Join-Path $ep 'tests\\fixtures'",
+        "Set-Location C:\\work\\ep06\\orders-app-quality-demo",
+        "Copy-Item \"$f\\OrderExport.fixed.cs\" src\\Contoso.Orders.Api\\OrderExport.cs -Force; Copy-Item \"$f\\bad_report.fixed.py\" tools\\bad_report.py -Force",
+        "dotnet build src/Contoso.Orders.Api -nologo -v q; ruff check .",
+        "git add -A; git commit -m 'style: apply the quality rules'; git push"
+      ],
+      "steps": [
+        "Open the pull request run after the second commit: quality green, build-test red only at the 'Coverage gate' step",
+        "Expand the step: '| changed lines | 5/13 | 38.5 |' and 'Not covered, changed in this PR: ... Discounts.cs lines 7, 9, 12-17'",
+        "Open the run Summary: the Coverage table",
+        "Files changed tab: the warning 'Changed line not executed by any test' on Discounts.cs"
+      ],
+      "mask": [
+        "GitHub avatar/menu and owner name if it is not the public lab account",
+        "path of the mg-lab checkout in the terminal (use a short prompt)",
+        "never run gh auth status on camera"
+      ]
+    },
+    {
+      "name": "green",
+      "kind": "browser",
+      "url": "https://github.com/devladlog/orders-app-quality-demo/pulls",
+      "account": "the lab GitHub account",
+      "prepare": [
+        "$ep = (Get-Location).Path; $f = Join-Path $ep 'tests\\fixtures'",
+        "Set-Location C:\\work\\ep06\\orders-app-quality-demo",
+        "Copy-Item \"$f\\DiscountTests.cs\" tests\\Contoso.Orders.Api.Tests\\DiscountTests.cs",
+        "git add -A; git commit -m 'test(orders): cover discount codes'; git push"
+      ],
+      "steps": [
+        "Open the pull request after the third commit: Checks list guardrails, quality, build-test and e2e green (publish and deploy skipped on a PR)",
+        "Open the run Summary: '| changed lines | 13/13 | 100.0 |'",
+        "Do not merge (or squash-merge to show the main run, which stops at deploy again: reject it)"
+      ],
+      "mask": [
+        "GitHub avatar/menu and owner name if it is not the public lab account",
+        "path of the mg-lab checkout in the terminal (use a short prompt)",
+        "never run gh auth status on camera"
+      ]
+    }
+  ],
+  "teardown": [
+    "# owner: gh auth refresh -s delete:packages,delete_repo (once)",
+    "$owner = gh api user --jq .login; gh api -X DELETE /user/packages/container/orders-app-quality-demo",
+    "gh repo delete \"$owner/orders-app-quality-demo\" --yes",
+    "Set-Location C:\\work; Remove-Item C:\\work\\ep06 -Recurse -Force -ErrorAction SilentlyContinue",
+    "# owner: gh auth refresh -r delete:packages,delete_repo drops the extra scopes"
+  ],
+  "needs": [
+    "github",
+    "gh-cli-signed-in",
+    "vscode"
+  ]
+}

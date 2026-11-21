@@ -1,0 +1,96 @@
+{
+  "note": "Live-session recording of the screen scenes (series/tools/rec). prepare/teardown run on the laptop, not recorded; commands are typed and run for real. Prepare statements run in one PowerShell session with the episode folder as current directory; variables do not survive into the screens, so each screen re-derives what it needs.",
+  "prepare": [
+    "$ep = (Get-Location).Path",
+    "New-Item -ItemType Directory -Force C:\\work\\bin | Out-Null",
+    "[IO.File]::WriteAllText('C:\\work\\bin\\python3', \"#!/bin/sh`nexec python `\"`$@`\"`n\")",
+    "if ($env:PATH -notlike '*C:\\work\\bin*') { $env:PATH = 'C:\\work\\bin;C:\\Program Files\\Git\\bin;' + $env:PATH + ';C:\\Program Files\\Git\\usr\\bin' }",
+    "$env:PYTHON = 'python'",
+    "# close other heavy programs first: only the ratios between runs matter, not the exact milliseconds",
+    "New-Item -ItemType Directory -Force C:\\work | Out-Null; Remove-Item C:\\work\\orders-perf, C:\\work\\01-load-everything.patch -Recurse -Force -ErrorAction SilentlyContinue",
+    "Copy-Item -Recurse \"$ep\\src\\orders-app\" C:\\work\\orders-perf; Copy-Item \"$ep\\bugs\\01-load-everything.patch\" C:\\work\\01-load-everything.patch",
+    "Get-ChildItem 'C:\\work\\orders-perf' -Recurse -File -Force -Include *.cs,*.csproj,*.props,*.slnx,*.slnf,*.json,*.md,*.yml,*.yaml,*.py,*.sh,*.toml,*.config,*.http,*.runsettings,*.playlist,*.ts,Dockerfile,compose.yaml,CODEOWNERS,.gitignore,.gitattributes,.editorconfig,pre-commit,commit-msg -ErrorAction SilentlyContinue | Where-Object { $_.FullName -notmatch '\\\\(node_modules|bin|obj|\\.git)\\\\' } | ForEach-Object { [IO.File]::WriteAllText($_.FullName, ([IO.File]::ReadAllText($_.FullName) -replace \"`r`n\", \"`n\")) }",
+    "[IO.File]::WriteAllText('C:\\work\\01-load-everything.patch', ([IO.File]::ReadAllText('C:\\work\\01-load-everything.patch') -replace \"`r`n\", \"`n\"))",
+    "Set-Location C:\\work\\orders-perf",
+    "dotnet tool restore; dotnet test -m:1",
+    "git apply C:\\work\\01-load-everything.patch",
+    "dotnet build src/Contoso.Orders.Api -c Release",
+    "$env:ASPNETCORE_URLS = 'http://localhost:5080'; $env:ASPNETCORE_ENVIRONMENT = 'Production'; $env:Orders__SeedCount = '100000'; $env:ConnectionStrings__Orders = 'Data Source=perf.db'",
+    "$api = Start-Process dotnet 'src/Contoso.Orders.Api/bin/Release/net10.0/Contoso.Orders.Api.dll' -PassThru -WindowStyle Hidden; $api.Id | Set-Content api.pid",
+    "Start-Sleep -Seconds 15"
+  ],
+  "screens": [
+    {
+      "name": "counters",
+      "kind": "app",
+      "app": "Windows Terminal (two tabs)",
+      "steps": [
+        "Tab 1 (C:\\work\\orders-perf): python tools/load.py http://localhost:5080 --seconds 60",
+        "Tab 2: $id = Get-Content api.pid; dotnet tool run dotnet-counters monitor -p $id --counters System.Runtime   (the live table: allocation rate, GC collections per generation, GC pause time moving while the load runs; press q to stop)",
+        "Then: bash scripts/profile.sh http://localhost:5080 $id 15   and keep the final line 'window 14 s: ... allocated ... MB ... GC pause ... gen0/gen1/gen2 ...' (say your own numbers)"
+      ],
+      "mask": [],
+      "note": "dotnet-counters monitor is a live console UI and only renders on a real console, so it is not played by the scripted terminal. If it cannot attach on Windows without elevation, run the terminal as the same user as the API."
+    },
+    {
+      "name": "trace",
+      "kind": "browser",
+      "url": "https://www.speedscope.app",
+      "account": "none (public site, nothing is uploaded)",
+      "steps": [
+        "Windows Terminal: show the dotnet-trace collect line inside scripts/profile.sh (profile dotnet-sampled-thread-time, --format Speedscope) and the file profile\\trace.speedscope.json (run profile.sh again if it is missing)",
+        "Open https://www.speedscope.app and drag profile\\trace.speedscope.json in (it is read locally)",
+        "Pick the busiest thread, switch to Sandwich, sort by Self: the SQLite and change-tracking frames are at the top",
+        "Terminal next to it: python tools/speedscope_top.py profile/trace.speedscope.json --top 6 --match Reports.MonthlyRevenueAsync",
+        "Say on camera that the expected culprit, formatting the date text, is not in the list"
+      ],
+      "mask": [
+        "Windows user name in the browser file picker and window titles",
+        "browser profile picture and bookmarks bar"
+      ],
+      "note": "If the laptop has no internet during the recording, use Visual Studio's profiler to open the .nettrace instead (not verified)."
+    },
+    {
+      "name": "after",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "C:\\work\\orders-perf",
+      "prompt": "$ ",
+      "prepare": [
+        "New-Item -ItemType Directory -Force C:\\work\\bin | Out-Null",
+        "[IO.File]::WriteAllText('C:\\work\\bin\\python3', \"#!/bin/sh`nexec python `\"`$@`\"`n\")",
+        "if ($env:PATH -notlike '*C:\\work\\bin*') { $env:PATH = 'C:\\work\\bin;C:\\Program Files\\Git\\bin;' + $env:PATH + ';C:\\Program Files\\Git\\usr\\bin' }",
+        "$env:PYTHON = 'python'",
+        "Set-Location C:\\work\\orders-perf",
+        "git apply --check C:\\work\\01-load-everything.patch 2>$null; if ($?) { git apply C:\\work\\01-load-everything.patch; dotnet build src/Contoso.Orders.Api -c Release }",
+        "if (-not ((Test-Path api.pid) -and (Get-Process -Id (Get-Content api.pid) -ErrorAction SilentlyContinue))) { $env:ASPNETCORE_URLS = 'http://localhost:5080'; $env:ASPNETCORE_ENVIRONMENT = 'Production'; $env:Orders__SeedCount = '100000'; $env:ConnectionStrings__Orders = 'Data Source=perf.db'; $api = Start-Process dotnet 'src/Contoso.Orders.Api/bin/Release/net10.0/Contoso.Orders.Api.dll' -PassThru -WindowStyle Hidden; $api.Id | Set-Content api.pid; Start-Sleep -Seconds 15 }"
+      ],
+      "commands": [
+        "python tools/load.py http://localhost:5080 --requests 30",
+        "#pause 4",
+        "Stop-Process -Id (Get-Content api.pid)",
+        "git apply -R C:\\work\\01-load-everything.patch",
+        "dotnet build src/Contoso.Orders.Api -c Release",
+        "$env:ASPNETCORE_URLS = 'http://localhost:5080'; $env:ASPNETCORE_ENVIRONMENT = 'Production'; $env:Orders__SeedCount = '100000'; $env:ConnectionStrings__Orders = 'Data Source=perf.db'",
+        "$api = Start-Process dotnet 'src/Contoso.Orders.Api/bin/Release/net10.0/Contoso.Orders.Api.dll' -PassThru -WindowStyle Hidden; $api.Id | Set-Content api.pid",
+        "#pause 10",
+        "python tools/load.py http://localhost:5080 --requests 30",
+        "#pause 4",
+        "dotnet test -m:1 --filter \"FullyQualifiedName~ReportPerformanceTests\"",
+        "#pause 5",
+        "Stop-Process $api"
+      ],
+      "note": "The first load.py line is the slow build (the script shows 1846 / 2908 ms p50/p95; expect the same order of magnitude), the second the fixed build (20 / 50 ms). Optionally show the red guard message from the patched build: 'one report allocated ... bytes ... the budget is 1,000,000'."
+    }
+  ],
+  "teardown": [
+    "Get-CimInstance Win32_Process -Filter \"Name='dotnet.exe'\" | Where-Object CommandLine -like '*Contoso.Orders.Api.dll*' | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }",
+    "'ASPNETCORE_URLS', 'ASPNETCORE_ENVIRONMENT', 'Orders__Cache__HoldMs', 'Orders__SeedCount', 'ConnectionStrings__Orders' | ForEach-Object { Remove-Item \"Env:$_\" -ErrorAction SilentlyContinue }",
+    "# owner: close the speedscope.app tab (nothing was uploaded)",
+    "Set-Location C:\\work; Remove-Item C:\\work\\orders-perf, C:\\work\\01-load-everything.patch -Recurse -Force -ErrorAction SilentlyContinue"
+  ],
+  "needs": [
+    "windows-terminal",
+    "internet"
+  ]
+}

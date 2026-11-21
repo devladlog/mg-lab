@@ -1,0 +1,127 @@
+{
+  "note": "Live-session recording of the screen scenes (series/tools/rec). prepare/teardown run on the laptop, not recorded; commands are typed and run for real. Prepare statements run in one PowerShell session with the episode folder as current directory; variables do not survive into the screens, so each screen re-derives what it needs.",
+  "prepare": [
+    "$ep = (Get-Location).Path",
+    "New-Item -ItemType Directory -Force C:\\work\\bin | Out-Null",
+    "[IO.File]::WriteAllText('C:\\work\\bin\\python3', \"#!/bin/sh`nexec python `\"`$@`\"`n\")",
+    "if ($env:PATH -notlike '*C:\\work\\bin*') { $env:PATH = 'C:\\work\\bin;C:\\Program Files\\Git\\bin;' + $env:PATH + ';C:\\Program Files\\Git\\usr\\bin' }",
+    "$env:PYTHON = 'python'",
+    "# owner, once: Docker Desktop running, Node.js, Postman desktop app (free plan) signed in with the lab labadmin mailbox, gh auth login",
+    "New-Item -ItemType Directory -Force C:\\work | Out-Null; Remove-Item C:\\work\\orders-app-api-tests -Recurse -Force -ErrorAction SilentlyContinue",
+    "Copy-Item -Recurse \"$ep\\src\\orders-app\" C:\\work\\orders-app-api-tests",
+    "Get-ChildItem 'C:\\work\\orders-app-api-tests' -Recurse -File -Force -Include *.cs,*.csproj,*.props,*.slnx,*.slnf,*.json,*.md,*.yml,*.yaml,*.py,*.sh,*.toml,*.config,*.http,*.runsettings,*.playlist,*.ts,Dockerfile,compose.yaml,CODEOWNERS,.gitignore,.gitattributes,.editorconfig,pre-commit,commit-msg -ErrorAction SilentlyContinue | Where-Object { $_.FullName -notmatch '\\\\(node_modules|bin|obj|\\.git)\\\\' } | ForEach-Object { [IO.File]::WriteAllText($_.FullName, ([IO.File]::ReadAllText($_.FullName) -replace \"`r`n\", \"`n\")) }",
+    "Push-Location C:\\work\\orders-app-api-tests\\api-tests; npm ci --no-audit --no-fund; Pop-Location",
+    "Set-Location C:\\work\\orders-app-api-tests",
+    "git init -q -b main; git config core.autocrlf false; git config user.name 'Alex Demo'; git config user.email 'alex.demo@contoso.com'",
+    "git add -A; git commit -q -m 'chore: import the orders API with its Postman collection'",
+    "docker build -t contoso/orders-api:dev .",
+    "docker rm -f orders-api 2>$null; docker run --rm -d --name orders-api -p 127.0.0.1:8080:8080 contoso/orders-api:dev",
+    "Start-Sleep -Seconds 5; curl.exe -s http://localhost:8080/healthz"
+  ],
+  "screens": [
+    {
+      "name": "import",
+      "kind": "app",
+      "app": "Postman desktop app",
+      "steps": [
+        "Create a new empty workspace named orders-api-demo",
+        "Import > Files > api-tests\\openapi.v1.json (from C:\\work\\orders-app-api-tests)",
+        "Show the import options (collection only vs. specification with a collection) and choose collection",
+        "Show the generated collection: folders and requests for /healthz, /orders, /orders/{id}",
+        "Open the POST /orders request and one saved example response; open its Tests tab: empty (this is the point of the scene)",
+        "Then import orders-api.postman_collection.json and environments\\local.postman_environment.json (as a second collection named 'Contoso Orders API')"
+      ],
+      "mask": [
+        "Postman account name and e-mail, workspace owner",
+        "Windows user name in file pickers"
+      ]
+    },
+    {
+      "name": "runner",
+      "kind": "app",
+      "app": "Postman desktop app",
+      "steps": [
+        "Select the environment 'local' (baseUrl http://localhost:8080); the API container is running (prepare)",
+        "Open Contoso Orders API > Orders > Create order; show the Pre-request Script and Tests tabs and press Send: Test Results shows 5 passing",
+        "Open the collection's Variables tab: orderId and createdOrder are filled",
+        "Run collection (Runner): tick Health, Orders, Validation (Data-driven off), Run; all requests green and the assertion totals (31 with expectedVersion empty)",
+        "Optional: run Data-driven with data\\invalid-orders.json (6 iterations); if Postman asks for a paid plan skip it (the regression screen shows the same run in the terminal). Do not buy a plan."
+      ],
+      "mask": [
+        "Postman account name and e-mail, workspace owner",
+        "Windows user name in file pickers"
+      ]
+    },
+    {
+      "name": "regression",
+      "kind": "terminal",
+      "target": "host",
+      "workdir": "C:\\work\\orders-app-api-tests",
+      "prompt": "$ ",
+      "prepare": [
+        "New-Item -ItemType Directory -Force C:\\work\\bin | Out-Null",
+        "[IO.File]::WriteAllText('C:\\work\\bin\\python3', \"#!/bin/sh`nexec python `\"`$@`\"`n\")",
+        "if ($env:PATH -notlike '*C:\\work\\bin*') { $env:PATH = 'C:\\work\\bin;C:\\Program Files\\Git\\bin;' + $env:PATH + ';C:\\Program Files\\Git\\usr\\bin' }",
+        "$env:PYTHON = 'python'",
+        "Set-Location C:\\work\\orders-app-api-tests",
+        "git checkout -- . 2>$null"
+      ],
+      "commands": [
+        "bash scripts/run-api-tests.sh; \"exit code: $LASTEXITCODE\"",
+        "#pause 5",
+        "# break the page-size cap on purpose",
+        "(Get-Content src/Contoso.Orders.Api/Orders.cs) -replace 'MaxPageSize = 100;', 'MaxPageSize = 1000;' | Set-Content src/Contoso.Orders.Api/Orders.cs",
+        "git diff --stat",
+        "bash scripts/run-api-tests.sh; \"exit code: $LASTEXITCODE\"",
+        "#pause 6",
+        "git checkout -- src/Contoso.Orders.Api/Orders.cs",
+        "git status --short"
+      ],
+      "note": "First run: both Newman tables green, gate lines 'junit-main.xml: 31 passed' and 'junit-data.xml: 24 passed', exit code 0. Second run: exactly one failure 'cap: asking for 500 returns at most 100', gate line with the failed assertion, exit code 1. The script picks a free port, so the container on 8080 does not conflict."
+    },
+    {
+      "name": "ci",
+      "kind": "browser",
+      "url": "https://github.com/devladlog/orders-app-api-tests/pulls",
+      "account": "the lab GitHub account",
+      "prepare": [
+        "New-Item -ItemType Directory -Force C:\\work\\bin | Out-Null",
+        "[IO.File]::WriteAllText('C:\\work\\bin\\python3', \"#!/bin/sh`nexec python `\"`$@`\"`n\")",
+        "if ($env:PATH -notlike '*C:\\work\\bin*') { $env:PATH = 'C:\\work\\bin;C:\\Program Files\\Git\\bin;' + $env:PATH + ';C:\\Program Files\\Git\\usr\\bin' }",
+        "$env:PYTHON = 'python'",
+        "Set-Location C:\\work\\orders-app-api-tests",
+        "gh repo create orders-app-api-tests --public --source=. --push",
+        "git switch -c test/show-the-gates",
+        "[IO.File]::WriteAllText(\"$PWD\\CHANGELOG.md\", \"# Changelog`n\")",
+        "git add -A; git commit -m 'docs: add a changelog'; git push -u origin test/show-the-gates",
+        "gh pr create --fill",
+        "gh run watch (gh run list --limit 1 --json databaseId --jq '.[0].databaseId') --exit-status"
+      ],
+      "steps": [
+        "Open the pull request 'docs: add a changelog' and its Checks tab, the workflow run 'api-tests'",
+        "Step 'Lint the collection and the environments': '10 requests, 1 environment(s): no problems'",
+        "Step 'Every documented operation and response has a test': the 4-row table, all ok, '4 operations, all covered'",
+        "Step 'Run the collection against the API built from this commit': Newman output; the gate lines show 32 and 24 (CI sets EXPECTED_VERSION)",
+        "Run Summary: the artifact api-test-results (junit-main.xml, junit-data.xml)"
+      ],
+      "mask": [
+        "GitHub account name if it is not the public lab account",
+        "avatar menu"
+      ]
+    }
+  ],
+  "teardown": [
+    "docker rm -f orders-api 2>$null; docker rmi contoso/orders-api:dev",
+    "# owner: Postman > delete the workspace orders-api-demo (collections and environment inside); the free account stays",
+    "$owner = gh api user --jq .login; if (gh repo view \"$owner/orders-app-api-tests\" --json name 2>$null) { gh repo delete \"$owner/orders-app-api-tests\" --yes }",
+    "Set-Location C:\\work; Remove-Item C:\\work\\orders-app-api-tests -Recurse -Force -ErrorAction SilentlyContinue"
+  ],
+  "needs": [
+    "docker",
+    "github",
+    "gh-cli-signed-in",
+    "postman-account",
+    "licence:docker-desktop"
+  ],
+  "blocked": "Docker Desktop is not installed on the recording laptop (the API under test runs as a container for the Postman screens); the Postman account must be created with the lab mailbox, and the Runner's availability on the free plan checked before recording."
+}
