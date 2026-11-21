@@ -1,0 +1,121 @@
+# Equipment Desk (phone) - episode 10: the "Return check" screen. It extends the Returned flow of episode 7: the row's
+# Returned button sets returnLoan and navigates here (Navigate(ReturnCheckScreen)) instead of closing the loan at once.
+# The person types what they see; 'ReturnNoteTriage'.Predict (an AI Builder prompt, see src/prompt) suggests a status;
+# the person picks the status and confirms. The AI never writes to Dataverse.
+Screens:
+  ReturnCheckScreen:
+    Properties:
+      Fill: =RGBA(245, 246, 250, 1)
+    Children:
+      - lblTitle:
+          Control: Label
+          Properties:
+            Text: ="Return check"
+            Size: =20
+            FontWeight: =FontWeight.Semibold
+            X: =24
+            Y: =24
+            Width: =Parent.Width - 48
+            Height: =40
+      - lblLoan:
+          Control: Label
+          Properties:
+            Text: =returnLoan.Equipment.'Asset tag' & " " & returnLoan.Equipment.Name & " from " & returnLoan.'Borrower email'
+            X: =24
+            Y: =68
+            Width: =Parent.Width - 48
+            Height: =32
+      - txtNote:
+          Control: Classic/TextInput
+          Properties:
+            Mode: =TextMode.MultiLine
+            MaxLength: =TriageMaxChars
+            HintText: ="What condition is it in? Scratches, missing charger, cracked screen..."
+            Default: =""
+            X: =24
+            Y: =108
+            Width: =Parent.Width - 48
+            Height: =140
+      - lblCount:
+          Control: Label
+          Properties:
+            Text: =Len(txtNote.Text) & " / " & TriageMaxChars
+            X: =24
+            Y: =252
+            Width: =Parent.Width - 48
+            Height: =28
+      - btnCheck:
+          Control: Classic/Button
+          Properties:
+            Text: =If(checking, "Checking...", "Check with AI")
+            # Short or empty notes never reach the model: no call, no credits.
+            DisplayMode: =If(CanTriage(txtNote.Text) && !checking, DisplayMode.Edit, DisplayMode.Disabled)
+            OnSelect: |-
+              =Set(checking, true);
+              Set(triageRaw, IfError('ReturnNoteTriage'.Predict(TriageInput(txtNote.Text)).text, ""));
+              Set(checking, false);
+              If(
+                  TriageCondition(triageRaw) = "unclear",
+                  Notify(
+                      If(triageRaw = "", "The AI check isn't available right now. Choose the status yourself.", "The AI wasn't sure. Choose the status yourself."),
+                      NotificationType.Information
+                  )
+              )
+            X: =24
+            Y: =288
+            Width: =Parent.Width - 48
+            Height: =48
+      - lblSuggestion:
+          Control: Label
+          Properties:
+            Text: |-
+              =If(
+                  TriageCondition(triageRaw) = "unclear", "",
+                  "AI suggestion: " & ConditionLabel(TriageCondition(triageRaw)) & " - " & TriageSummary(triageRaw)
+              )
+            Visible: =TriageCondition(triageRaw) <> "unclear"
+            X: =24
+            Y: =344
+            Width: =Parent.Width - 48
+            Height: =64
+      - drpStatus:
+          Control: Classic/DropDown
+          Properties:
+            Items: =["Available", "In repair"]
+            Default: =If(SuggestedStatus(TriageCondition(triageRaw)) = "", "Available", SuggestedStatus(TriageCondition(triageRaw)))
+            X: =24
+            Y: =416
+            Width: =Parent.Width - 48
+            Height: =48
+      - btnConfirm:
+          Control: Classic/Button
+          Properties:
+            Text: ="Mark returned"
+            # Two writes, one IfError pair each, success last (episode 2's lesson: ';' doesn't stop on an error).
+            OnSelect: |-
+              =IfError(
+                  Patch(Loans, returnLoan, { 'Returned on': Today(), Notes: If(IsBlank(Trim(txtNote.Text)), returnLoan.Notes, Trim(txtNote.Text)) }),
+                  Notify("Couldn't mark it as returned: " & FirstError.Message, NotificationType.Error),
+                  Patch(Equipment, returnLoan.Equipment, { Status: If(drpStatus.Selected.Value = "In repair", 'Status (Equipment)'.'In repair', 'Status (Equipment)'.Available) }),
+                  Notify("Loan closed, but the device status wasn't updated: " & FirstError.Message, NotificationType.Warning),
+                  Notify(returnLoan.Equipment.'Asset tag' & " is back: " & drpStatus.Selected.Value, NotificationType.Success)
+              );
+              Set(returnLoan, Blank());
+              Set(triageRaw, "");
+              Back()
+            X: =24
+            Y: =480
+            Width: =Parent.Width - 48
+            Height: =48
+      - btnCancel:
+          Control: Classic/Button
+          Properties:
+            Text: ="Cancel"
+            OnSelect: |-
+              =Set(returnLoan, Blank());
+              Set(triageRaw, "");
+              Back()
+            X: =24
+            Y: =536
+            Width: =Parent.Width - 48
+            Height: =48

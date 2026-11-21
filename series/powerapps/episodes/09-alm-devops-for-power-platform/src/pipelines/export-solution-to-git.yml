@@ -1,0 +1,77 @@
+# Equipment Desk: export the solution from DEV, unpack it and push the result to a branch for a pull request.
+# Run it by hand after the makers are done. Nothing is committed to main by the pipeline.
+name: export-$(Date:yyyyMMdd)$(Rev:.r)
+
+trigger: none
+
+variables:
+  solutionName: EquipmentDesk
+  sourceFolder: solution/EquipmentDesk
+
+pool:
+  vmImage: ubuntu-latest
+
+steps:
+  - checkout: self
+    persistCredentials: true   # so the last step can push; the build service needs Contribute + Create branch
+
+  - task: microsoft-IsvExpTools.PowerPlatform-BuildTools.tool-installer.PowerPlatformToolInstaller@2
+    displayName: Power Platform Tool Installer
+    inputs:
+      DefaultVersion: true
+      AddToolsToPath: true
+
+  - task: microsoft-IsvExpTools.PowerPlatform-BuildTools.whoami.PowerPlatformWhoAmi@2
+    displayName: Power Platform WhoAmI (DEV)
+    inputs:
+      authenticationType: PowerPlatformSPN
+      PowerPlatformSPN: mglab-dev
+
+  # SolutionPackager rule: the unmanaged zip is Name.zip and the managed one Name_managed.zip in the same folder
+  - task: microsoft-IsvExpTools.PowerPlatform-BuildTools.export-solution.PowerPlatformExportSolution@2
+    displayName: Export unmanaged
+    inputs:
+      authenticationType: PowerPlatformSPN
+      PowerPlatformSPN: mglab-dev
+      SolutionName: $(solutionName)
+      SolutionOutputFile: $(Agent.TempDirectory)/export/$(solutionName).zip
+      Managed: false
+      AsyncOperation: true
+      MaxAsyncWaitTime: 60
+
+  - task: microsoft-IsvExpTools.PowerPlatform-BuildTools.export-solution.PowerPlatformExportSolution@2
+    displayName: Export managed
+    inputs:
+      authenticationType: PowerPlatformSPN
+      PowerPlatformSPN: mglab-dev
+      SolutionName: $(solutionName)
+      SolutionOutputFile: $(Agent.TempDirectory)/export/$(solutionName)_managed.zip
+      Managed: true
+      AsyncOperation: true
+      MaxAsyncWaitTime: 60
+
+  # unpack into an empty folder: pac solution unpack never deletes files from an existing one
+  - task: microsoft-IsvExpTools.PowerPlatform-BuildTools.unpack-solution.PowerPlatformUnpackSolution@2
+    displayName: Unpack as Both
+    inputs:
+      SolutionInputFile: $(Agent.TempDirectory)/export/$(solutionName).zip
+      SolutionTargetFolder: $(Agent.TempDirectory)/unpacked
+      SolutionType: Both
+
+  - pwsh: ./scripts/Sync-SolutionSource.ps1 -UnpackedPath $(Agent.TempDirectory)/unpacked -SourcePath $(sourceFolder) -ExpectedName $(solutionName)
+    displayName: Mirror into source and lint
+
+  - bash: |
+      set -euo pipefail
+      branch="export/$(Build.BuildNumber)"
+      git config user.name "Equipment Desk pipeline"
+      git config user.email "pipeline@contoso.com"
+      git checkout -b "$branch"
+      git add "$(sourceFolder)"
+      if git diff --cached --quiet; then
+        echo "No change in $(solutionName) since the last export."
+        exit 0
+      fi
+      git commit -m "Export $(solutionName) from DEV ($(Build.BuildNumber))"
+      git push origin "$branch"
+    displayName: Commit and push to export branch

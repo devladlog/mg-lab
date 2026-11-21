@@ -1,0 +1,130 @@
+# Equipment Desk: build the solution from source, check it, deploy it to TEST, then to PROD after an approval.
+# Repo layout (the contents of this episode's src folder are the repo root):
+#   solution/EquipmentDesk  unpacked solution (pac solution unpack --packagetype Both)
+#   settings/               deployment settings templates, scripts/ helper scripts, pipelines/ this file
+# Set up once in Azure DevOps (see demo.md): service connections mglab-dev, mglab-test, mglab-prod,
+# variable groups equipmentdesk-test and equipmentdesk-prod, environments equipmentdesk-test and
+# equipmentdesk-prod (the PROD environment gets an Approval check).
+name: $(Date:yyyyMMdd)$(Rev:.r)
+
+trigger:
+  branches:
+    include: [main]
+  paths:
+    include: [solution/*, settings/*, scripts/*, pipelines/*]
+
+# Pull requests: Azure Repos Git ignores a pr: block. Add this pipeline as a Build validation policy on main
+# (Learn: Build Azure Repos Git repositories, PR triggers); the Test and Prod stages skip those runs.
+
+parameters:
+  - name: upgradeExisting
+    displayName: Upgrade an already installed solution (turn off for the very first install)
+    type: boolean
+    default: true
+
+variables:
+  solutionName: EquipmentDesk
+  sourceFolder: solution/EquipmentDesk
+
+pool:
+  vmImage: ubuntu-latest
+
+stages:
+  - stage: Build
+    displayName: Build and check
+    jobs:
+      - job: build
+        displayName: Pack, check, publish
+        steps:
+          - checkout: self
+
+          - task: microsoft-IsvExpTools.PowerPlatform-BuildTools.tool-installer.PowerPlatformToolInstaller@2
+            displayName: Power Platform Tool Installer
+            inputs:
+              DefaultVersion: true
+              AddToolsToPath: true
+
+          - pwsh: ./scripts/Test-SolutionSource.ps1 -Path $(sourceFolder) -ExpectedName $(solutionName)
+            displayName: Gate - lint the solution source
+
+          # Build.BuildNumber is yyyyMMdd.r (name above): 20261121.3 -> build 20261121, revision 3
+          - pwsh: |
+              $build, $revision = '$(Build.BuildNumber)'.Split('.')
+              ./scripts/Set-SolutionVersion.ps1 -Path $(sourceFolder) -BuildVersion $build -RevisionVersion $revision
+            displayName: Stamp the version
+
+          - pwsh: ./scripts/Invoke-SolutionPack.ps1 -SourcePath $(sourceFolder) -OutputDirectory $(Build.ArtifactStagingDirectory)/solution
+            displayName: Pack unmanaged and managed
+
+          - task: microsoft-IsvExpTools.PowerPlatform-BuildTools.checker.PowerPlatformChecker@2
+            displayName: Power Platform Checker (managed zip)
+            inputs:
+              PowerPlatformSPN: mglab-dev
+              RuleSet: 0ad12346-e108-40b8-a956-9a8f95ea18c9
+              FilesToAnalyze: $(Build.ArtifactStagingDirectory)/solution/*_managed.zip
+              ErrorLevel: HighIssueCount
+              ErrorThreshold: 0
+              FailOnPowerAppsCheckerAnalysisError: true
+              ArtifactDestinationName: CheckerResults
+
+          # the deploy stages need the scripts, the settings templates and the source (to validate the settings)
+          - task: CopyFiles@2
+            displayName: Add scripts and settings to the artifact
+            inputs:
+              SourceFolder: $(Build.SourcesDirectory)
+              Contents: |
+                scripts/**
+                settings/**
+              TargetFolder: $(Build.ArtifactStagingDirectory)
+          - task: CopyFiles@2
+            displayName: Add the solution source to the artifact
+            inputs:
+              SourceFolder: $(Build.SourcesDirectory)/$(sourceFolder)
+              Contents: '**'
+              TargetFolder: $(Build.ArtifactStagingDirectory)/source
+
+          - task: PublishPipelineArtifact@1
+            displayName: Publish artifact drop
+            inputs:
+              targetPath: $(Build.ArtifactStagingDirectory)
+              artifact: drop
+
+  - stage: Test
+    displayName: Deploy to TEST
+    dependsOn: Build
+    condition: and(succeeded(), ne(variables['Build.Reason'], 'PullRequest'))
+    variables:
+      - group: equipmentdesk-test
+    jobs:
+      - deployment: deploy_test
+        displayName: Import into TEST
+        environment: equipmentdesk-test
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - template: templates/deploy-managed.yml
+                  parameters:
+                    target: test
+                    serviceConnection: mglab-test
+                    upgradeExisting: ${{ parameters.upgradeExisting }}
+
+  - stage: Prod
+    displayName: Deploy to PROD
+    dependsOn: Test
+    condition: and(succeeded(), ne(variables['Build.Reason'], 'PullRequest'))
+    variables:
+      - group: equipmentdesk-prod
+    jobs:
+      - deployment: deploy_prod
+        displayName: Import into PROD (after approval)
+        environment: equipmentdesk-prod
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - template: templates/deploy-managed.yml
+                  parameters:
+                    target: prod
+                    serviceConnection: mglab-prod
+                    upgradeExisting: ${{ parameters.upgradeExisting }}

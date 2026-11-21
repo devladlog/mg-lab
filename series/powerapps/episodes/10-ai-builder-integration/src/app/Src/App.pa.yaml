@@ -1,0 +1,32 @@
+# Equipment Desk (phone) - episode 10: the rules around the AI Builder prompt 'ReturnNoteTriage'.
+# Only the triage rules are listed here; DefaultLoanDays, DaysOff, LoanState and the rest of App.Formulas from
+# episodes 3 to 7 are unchanged and are tested there.
+#
+# The prompt answers with one JSON object: { "condition": ..., "confidence": ..., "summary": ... }.
+# Everything the model returns is untrusted text: it is parsed here, checked against an allow-list and a confidence
+# gate, and only ever becomes a SUGGESTION that the person at the desk confirms.
+# TriageConfidence treats a missing confidence as 0 on purpose: Min(1, Blank()) is 1 and would sail through the gate.
+App:
+  Properties:
+    StartScreen: =ReturnCheckScreen
+    Formulas: |-
+      =TriageMaxChars = 600;
+      TriageMinChars = 8;
+      TriageMinConfidence = 0.7;
+      TriageConditions = ["ok", "damaged", "missing_accessory", "needs_repair"];
+      CanTriage(note: Text): Boolean = Len(Trim(note)) >= TriageMinChars;
+      TriageInput(note: Text): Text = Left(Trim(note), TriageMaxChars);
+      TriageJson(raw: Text): Text = Trim(Substitute(Substitute(raw, "```json", ""), "```", ""));
+      TriageConfidence(raw: Text): Number =
+          IfError(With({ v: Value(ParseJSON(TriageJson(raw)).confidence) }, If(IsBlank(v), 0, Max(0, Min(1, v)))), 0);
+      TriageCondition(raw: Text): Text =
+          IfError(
+              With({ c: Lower(Trim(Text(ParseJSON(TriageJson(raw)).condition))) },
+                  If(c in TriageConditions && TriageConfidence(raw) >= TriageMinConfidence, c, "unclear")),
+              "unclear");
+      TriageSummary(raw: Text): Text =
+          IfError(Left(Substitute(Substitute(Trim(Text(ParseJSON(TriageJson(raw)).summary)), Char(10), " "), Char(13), " "), 140), "");
+      SuggestedStatus(condition: Text): Text =
+          Switch(condition, "ok", "Available", "missing_accessory", "Available", "damaged", "In repair", "needs_repair", "In repair", "");
+      ConditionLabel(condition: Text): Text =
+          Switch(condition, "ok", "Looks fine", "damaged", "Damaged", "missing_accessory", "Missing accessory", "needs_repair", "Needs repair", "Not sure");

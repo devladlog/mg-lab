@@ -1,0 +1,269 @@
+# DEVLADLOG Power Apps — episode 09. Draft: code scenes are real excerpts from src/ and tests/, screen scenes need the lab recording.
+episode: 9
+slug: alm-devops-for-power-platform
+series_label: "POWER APPS"
+series_name: "DEVLADLOG Power Apps"
+file_prefix: "powerapps"
+title: "ALM and DevOps for Power Platform: from DEV to PROD without clicking in PROD"
+subtitle: "Solutions in source control, Build Tools pipelines, deployment settings and an approval"
+voice: am_michael
+thumbnail_text: "DEV\nTEST\nPROD"
+youtube:
+  title: "Power Platform ALM with Azure Pipelines: Export, Build, Test, Approve | DEVLADLOG Power Apps #9"
+  tags: [Power Apps, Power Platform ALM, Azure DevOps, Power Platform Build Tools, pac CLI, solutions, managed solutions, environment variables, connection references, deployment settings, solution checker, Dataverse]
+sources:
+  - https://www.devladlog.com/articles/powerapps/2026-03-08-alm-devops-for-power-platform-complete-guide-2026/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Nobody clicks in production"
+    sub: "Source control, two pipelines, one approval"
+    short: hook
+    narration: >
+      Our Equipment Desk app has lived in one environment, and every change was a click by hand. Today it gets a path.
+      Development, test, production. The solution in source control, a pipeline that builds it, and an approval before
+      anything reaches production. Welcome to DEVLADLOG Power Apps.
+
+  - id: plan
+    type: bullets
+    heading: "Two pipelines and a few guards"
+    bullets:
+      - "Export twice, unpack as Both, push a branch"
+      - "Lint, version, pack and check on every build"
+      - "Settings per environment, no connection ids in git"
+      - "TEST first, PROD after an approval"
+      - "84 tests, including the real pac command line"
+    narration: >
+      Two pipelines. The export pipeline pulls the solution out of development and into git. The release pipeline builds a
+      managed package, checks it, and deploys it to test, then to production once someone approves. Small scripts guard the
+      mistakes that only show up late, and eighty four tests prove that they do.
+
+  - id: envvar
+    type: code
+    heading: "Definitions in git, values in the target"
+    lang: xml
+    code: |
+      <environmentvariabledefinition schemaname="contoso_ReminderDomain">
+        <defaultvalue>contoso.com</defaultvalue>
+        <displayname default="Reminder domain">
+          <label description="Reminder domain" languagecode="1033" />
+        </displayname>
+        <introducedversion>1.0.0.0</introducedversion>
+        <iscustomizable>1</iscustomizable>
+        <isrequired>0</isrequired>
+        <secretstore>0</secretstore>
+        <type>100000000</type>
+      </environmentvariabledefinition>
+    narration: >
+      This is an environment variable as it sits in source control. A name, a type, a default. The value that test and
+      production use is not here. Learn says to ship the definition with the solution and give the value at deployment, so a
+      gate fails the build if a file with current values sneaks into the source.
+
+  - id: settings
+    type: code
+    heading: "Configuration is written down, identifiers are tokens"
+    lang: json
+    short: settings
+    code: |
+      {
+        "EnvironmentVariables": [
+          { "SchemaName": "contoso_ReminderDomain", "Value": "test.contoso.com" }
+        ],
+        "ConnectionReferences": [
+          {
+            "LogicalName": "contoso_EquipmentDeskOutlook",
+            "ConnectionId": "${TEST_CONNECTION_OUTLOOK}",
+            "ConnectorId": "/providers/Microsoft.PowerApps/apis/shared_office365"
+          }
+        ]
+      }
+    narration: >
+      The deployment settings file tells the import what to use in each environment. The reminder domain is configuration,
+      so it's written down. The connection id identifies something in the target, so it's a token. A variable group in Azure
+      DevOps fills it at run time, and the log prints the name of the token, never the value. Nothing from the lab ends up
+      in git.
+
+  - id: solution-screen
+    type: screen
+    heading: "The solution in DEV"
+    image: screens/solution-dev.jpg
+    bar: "Power Apps · Solutions · Equipment Desk (DEV)"
+    demo: >
+      make.powerapps.com, DEV environment, Solutions > Equipment Desk (unmanaged). Components list showing the environment variable
+      "Reminder domain" (contoso_ReminderDomain), the connection references "Equipment Desk Dataverse" and "Equipment Desk Outlook",
+      the cloud flow SendLoanReminder. Open the environment variable: Default value contoso.com, Current value empty (after "Remove from this
+      solution"). Open SendLoanReminder in the designer: the Problem expression uses the Reminder domain variable from Dynamic content.
+      Mask environment name and user.
+    narration: >
+      In development, the solution has two connection references and the environment variable. The flow from episode six now
+      reads its domain from the variable instead of a hard coded text. I removed the current value before exporting, so only the
+      definition travels.
+
+  - id: export
+    type: code
+    heading: "Export twice, unpack as Both"
+    lang: yaml
+    code: |
+      - task: microsoft-IsvExpTools.PowerPlatform-BuildTools.export-solution.PowerPlatformExportSolution@2
+        inputs:
+          SolutionName: $(solutionName)
+          SolutionOutputFile: $(Agent.TempDirectory)/export/$(solutionName)_managed.zip
+          Managed: true
+      # ...the same task with Managed: false and $(solutionName).zip
+      - task: microsoft-IsvExpTools.PowerPlatform-BuildTools.unpack-solution.PowerPlatformUnpackSolution@2
+        inputs:
+          SolutionInputFile: $(Agent.TempDirectory)/export/$(solutionName).zip
+          SolutionTargetFolder: $(Agent.TempDirectory)/unpacked
+          SolutionType: Both
+      - pwsh: ./scripts/Sync-SolutionSource.ps1 -UnpackedPath $(Agent.TempDirectory)/unpacked -SourcePath $(sourceFolder) -ExpectedName $(solutionName)
+    narration: >
+      The export pipeline exports twice, once unmanaged and once managed, and the managed file is named like the first one plus
+      underscore managed. That's the naming the solution packager expects. Then it unpacks as both, into an empty temporary
+      folder, because the unpack command never deletes files that are no longer there.
+
+  - id: export-screen
+    type: screen
+    heading: "Export run and pull request"
+    image: screens/export-run.jpg
+    bar: "Azure DevOps · Pipelines · export-solution-to-git"
+    demo: >
+      dev.azure.com, the private lab project (name masked), Pipelines > export-solution-to-git, one finished run: steps Export unmanaged,
+      Export managed, Unpack as Both, "Mirror into source and lint" with the printed lines (added / changed / removed ... and "OK EquipmentDesk
+      source ... passed all checks"), Commit and push. Then Repos > Branches shows export/<run number>; open the pull request screen: the file
+      diff (Solution.xml version, one environment variable folder added). Complete the PR into main. Mask the organization and user names.
+    narration: >
+      Run it, and a branch appears in the repo. The diff is the real change. A script mirrors the unpacked folder, so removals
+      show up too, and a gate lints the result before anything is pushed. I open the pull request, review, and merge.
+
+  - id: gotcha
+    type: code
+    heading: "Gotcha: unmanaged source can't become a managed zip"
+    lang: text
+    short: gotcha
+    code: |
+      # source unpacked as Unmanaged
+      $ pac solution pack --packagetype Managed --folder unmanaged-only
+      Error: Solution package type did not match requested type.
+      Command line argument: Managed
+      Package type: Unmanaged
+
+      # source unpacked as Both (export twice)
+      <Managed>2</Managed>      # one folder packs both zips
+
+      Passed  test_a_source_unpacked_as_unmanaged_cannot_be_packed_as_managed
+      Passed  test_pack_then_unpack_as_both_gives_back_the_same_source
+    narration: >
+      Here's the one that cost me a while. Learn's unpack task recommends unmanaged. I unpacked that way, then asked for a
+      managed package, and pack said the package type did not match. The solution file says managed zero. Export both, unpack as
+      both, and the same folder packs both. A test keeps it honest, and a gate checks the flag.
+
+  - id: build
+    type: code
+    heading: "Build: lint, version, pack, check"
+    lang: yaml
+    code: |
+      - pwsh: ./scripts/Test-SolutionSource.ps1 -Path $(sourceFolder) -ExpectedName $(solutionName)
+        displayName: Gate - lint the solution source
+      - pwsh: |
+          $build, $revision = '$(Build.BuildNumber)'.Split('.')
+          ./scripts/Set-SolutionVersion.ps1 -Path $(sourceFolder) -BuildVersion $build -RevisionVersion $revision
+      - pwsh: ./scripts/Invoke-SolutionPack.ps1 -SourcePath $(sourceFolder) -OutputDirectory $(Build.ArtifactStagingDirectory)/solution
+      - task: microsoft-IsvExpTools.PowerPlatform-BuildTools.checker.PowerPlatformChecker@2
+        inputs:
+          RuleSet: 0ad12346-e108-40b8-a956-9a8f95ea18c9
+          FilesToAnalyze: $(Build.ArtifactStagingDirectory)/solution/*_managed.zip
+          ErrorLevel: HighIssueCount
+          ErrorThreshold: 0
+    narration: >
+      The build stage gates the source, stamps the version from the run number, packs the unmanaged and the managed zip, and runs
+      the solution checker on the managed one. High severity issues fail the build. Learn's version task works on the
+      environment, so ours stamps the source instead, and pac needs two calls, one for the build part and one for the revision.
+
+  - id: release-screen
+    type: screen
+    heading: "Build, TEST, then an approval for PROD"
+    image: screens/release-run.jpg
+    bar: "Azure DevOps · Pipelines · build-and-release"
+    demo: >
+      Pipelines > build-and-release, a run on main: stages Build (green), Test (green), Prod (waiting). In Build open the Checker step log
+      (no high severity issues) and the published artifact "drop" with EquipmentDesk_1_0_<build>_<rev>.zip and ..._managed.zip. Open the Test
+      Import step log. Then the Prod stage "Waiting for approval" banner; approve with the comment "TEST checked"; the Prod stage runs and turns green.
+      Mask the organization and user names.
+    narration: >
+      A run on main. Build is green, and the artifact holds both zips with the version in their names. Test deploys by itself.
+      Production waits, because the production environment has an approval check. I approve, and it goes.
+
+  - id: deploy
+    type: code
+    heading: "The same steps for every environment"
+    lang: yaml
+    code: |
+      - task: microsoft-IsvExpTools.PowerPlatform-BuildTools.import-solution.PowerPlatformImportSolution@2
+        inputs:
+          authenticationType: PowerPlatformSPN
+          PowerPlatformSPN: ${{ parameters.serviceConnection }}
+          SolutionInputFile: $(managedZip)
+          HoldingSolution: ${{ parameters.upgradeExisting }}
+          AsyncOperation: true
+          UseDeploymentSettingsFile: true
+          DeploymentSettingsFile: $(Agent.TempDirectory)/${{ parameters.target }}.settings.json
+      - task: microsoft-IsvExpTools.PowerPlatform-BuildTools.apply-solution-upgrade.PowerPlatformApplySolutionUpgrade@2
+        condition: and(succeeded(), eq('${{ parameters.upgradeExisting }}', 'true'))
+    narration: >
+      Both deploy stages use one template. Find the managed zip, fill the settings, check the connection, import as a holding
+      solution, then apply the upgrade. Only the managed zip is ever imported, and the settings file has to be the one the
+      resolve step wrote. A linter in the tests fails if either changes.
+
+  - id: prod-screen
+    type: screen
+    heading: "PROD: managed, with its own values"
+    image: screens/prod-managed.jpg
+    bar: "Power Apps · Solutions · Equipment Desk (PROD)"
+    demo: >
+      make.powerapps.com, the PROD environment (name masked), Solutions > Equipment Desk shown as Managed with the version from the run (1.0.<build>.<rev>).
+      Open the environment variable Reminder domain: Default value contoso.com, Current value contoso.com. Switch to the TEST environment: Current value
+      test.contoso.com. Open SendLoanReminder in PROD: status On, the connection reference rows show connections (names masked). Show that components can't be
+      edited (managed). Mask environment names, users and connection names.
+    narration: >
+      In production the solution is managed, so nobody can edit it in place. The environment variable has its own value, and in
+      test it's a different one. The flow is on, because the import had a connection for every reference.
+
+  - id: before-you-ship
+    type: bullets
+    heading: "Before you ship"
+    bullets:
+      - "Share OAuth connections with the service principal user"
+      - "Azure Repos ignores pr: use a build validation policy"
+      - "The build service needs Create branch and Contribute"
+      - "Change a variable outside an import: flows keep the old value"
+      - "Holding import on a first install: not verified, so a switch"
+    narration: >
+      Five things from Learn. An O Auth connection can only be shared with the user that represents the service principal, so
+      the import can turn the flow on. In Azure Repos, pull request validation is a branch policy, not a line of YAML. The
+      build service identity needs permission to create branches. A variable changed by hand doesn't reach a running flow until
+      it's saved. And I didn't verify a holding import on a first install, so there's a switch for it.
+
+  - id: tests
+    type: code
+    heading: "84 tests, the real pac, no tenant"
+    lang: text
+    code: |
+      $ python3 -m pytest -v
+      test_pack.py::test_pack_then_unpack_as_both_gives_back_the_same_source PASSED
+      test_source_lint.py::test_the_committed_source_passes_every_rule PASSED
+      test_settings.py::test_the_log_names_the_tokens_but_never_prints_the_values PASSED
+      test_pipelines.py::test_build_and_release_passes_every_rule PASSED
+      84 passed in 230s
+    narration: >
+      The tests run the real power platform command line, offline. Pack and unpack give back byte identical source. Every gate
+      rule fails on the mistake it's for, and twenty eight broken copies of the pipelines are caught by the linter. What they
+      can't prove is the service itself, and that's what the lab run was for.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The scripts, the pipelines and the tests are on GitHub, and the complete guide is on devladlog dot com. Links are in the
+      description. Next time: AI Builder, with a prompt that reads the notes on a returned laptop. Subscribe so you don't miss it.

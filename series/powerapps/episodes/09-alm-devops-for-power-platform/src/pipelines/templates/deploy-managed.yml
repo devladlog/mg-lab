@@ -1,0 +1,57 @@
+# Steps that deploy the managed zip from the build artifact to one environment.
+# Used by the Test and Prod stages of build-and-release.yml (the artifact is downloaded
+# to $(Pipeline.Workspace)/drop by the deployment job).
+parameters:
+  - name: target              # test | prod, picks settings/<target>.settings.json
+    type: string
+  - name: serviceConnection   # Power Platform service connection of the target environment
+    type: string
+  - name: upgradeExisting     # true: import as holding solution, then apply the upgrade
+    type: boolean
+
+steps:
+  - task: microsoft-IsvExpTools.PowerPlatform-BuildTools.tool-installer.PowerPlatformToolInstaller@2
+    displayName: Power Platform Tool Installer
+    inputs:
+      DefaultVersion: true
+      AddToolsToPath: true
+
+  - pwsh: ./scripts/Get-Package.ps1 -Directory ./solution -SetVariable managedZip
+    displayName: Find the managed zip
+    workingDirectory: $(Pipeline.Workspace)/drop
+
+  - pwsh: >
+      ./scripts/Resolve-DeploymentSettings.ps1
+      -Template ./settings/${{ parameters.target }}.settings.json
+      -SolutionPath ./source
+      -Output $(Agent.TempDirectory)/${{ parameters.target }}.settings.json
+    displayName: Fill the deployment settings (${{ parameters.target }})
+    workingDirectory: $(Pipeline.Workspace)/drop
+
+  - task: microsoft-IsvExpTools.PowerPlatform-BuildTools.whoami.PowerPlatformWhoAmi@2
+    displayName: Power Platform WhoAmI (${{ parameters.target }})
+    inputs:
+      authenticationType: PowerPlatformSPN
+      PowerPlatformSPN: ${{ parameters.serviceConnection }}
+
+  - task: microsoft-IsvExpTools.PowerPlatform-BuildTools.import-solution.PowerPlatformImportSolution@2
+    displayName: Power Platform Import Solution (${{ parameters.target }})
+    inputs:
+      authenticationType: PowerPlatformSPN
+      PowerPlatformSPN: ${{ parameters.serviceConnection }}
+      SolutionInputFile: $(managedZip)
+      HoldingSolution: ${{ parameters.upgradeExisting }}
+      AsyncOperation: true
+      MaxAsyncWaitTime: 60
+      UseDeploymentSettingsFile: true
+      DeploymentSettingsFile: $(Agent.TempDirectory)/${{ parameters.target }}.settings.json
+
+  - task: microsoft-IsvExpTools.PowerPlatform-BuildTools.apply-solution-upgrade.PowerPlatformApplySolutionUpgrade@2
+    displayName: Power Platform Apply Solution Upgrade (${{ parameters.target }})
+    condition: and(succeeded(), eq('${{ parameters.upgradeExisting }}', 'true'))
+    inputs:
+      authenticationType: PowerPlatformSPN
+      PowerPlatformSPN: ${{ parameters.serviceConnection }}
+      SolutionName: $(solutionName)
+      AsyncOperation: true
+      MaxAsyncWaitTime: 60
