@@ -1,0 +1,255 @@
+# DEVLADLOG Azure — episode 08. Draft script: code scenes are real excerpts from src/, infra/ and k8s/ (tests/infra/test_script.py
+# checks that every line exists in the folder); screen scenes are captured by the recorder following demo.md.
+episode: 8
+slug: container-apps-aks
+series_label: "AZURE"
+series_name: "DEVLADLOG Azure"
+file_prefix: "azure"
+title: "Container Apps & AKS"
+subtitle: "One image, two platforms: scale to zero or pay for a node"
+voice: am_michael
+thumbnail_text: "CONTAINER APPS\nvs AKS\nSAME IMAGE"
+youtube:
+  title: "Azure Container Apps vs AKS: One .NET Image, Scale to Zero, Real Cost | DEVLADLOG Azure #8"
+  tags: [Azure Container Apps, AKS, Azure Kubernetes Service, scale to zero, Kubernetes, health probes, revisions, traffic splitting, Azure Container Registry, managed identity, Bicep, .NET 10, Azure]
+sources:
+  - https://www.devladlog.com/articles/azure/2026-02-03-container-apps-aks-complete-guide-2026/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Scale to zero, or pay for a node all day"
+    sub: "Container Apps and AKS, same image"
+    short: hook
+    narration: >
+      Container Apps can scale your A P I to zero, so an idle night costs nothing. A K S keeps a node running whether
+      a single pod is busy or not. Today we ship one contoso orders image to both, on a real Azure subscription, and
+      compare what each one costs and what each one makes you write down. Welcome to DEVLADLOG Azure.
+
+  - id: choice
+    type: bullets
+    heading: "Same image, two platforms"
+    bullets:
+      - "Container Apps: revisions, HTTP scaling, scale to zero"
+      - "AKS: the full Kubernetes API, and a node you pay for"
+      - "One image from dotnet publish: no Dockerfile, no Docker daemon"
+      - "Same probes, same graceful shutdown, same version header"
+      - "Lab only: AKS Free tier, one node, deleted right after"
+    narration: >
+      Container Apps hides Kubernetes and gives you revisions, H T T P scaling and scale to zero. A K S gives you the
+      whole Kubernetes A P I, and a node that bills by the hour. We build one image with the dot net S D K, and the
+      same health probes and the same shutdown behaviour work on both.
+
+  - id: image
+    type: code
+    heading: "The image: dotnet publish, no Docker"
+    lang: bash
+    code: |
+      DOTNET_CONTAINER_REGISTRY_UNAME=00000000-0000-0000-0000-000000000000 \
+      DOTNET_CONTAINER_REGISTRY_PWORD=$(az acr login --name "$ACR" --expose-token --query accessToken -o tsv) \
+        dotnet publish "$HERE/../src/Contoso.Orders.Api" -c Release /t:PublishContainer \
+          -p Version="$VERSION" \
+          -p ContainerRegistry="$LOGIN" \
+          -p ContainerBaseImage="$LOGIN/dotnet/aspnet:10.0"
+    narration: >
+      The image comes straight from dot net publish, and the registry token from az acr login with expose token, so
+      no Docker is needed. One catch from Learn: those credentials are used for the source registry and the
+      destination, so we import the base image into our own registry first. A test builds the image and checks it
+      listens on port eight zero eight zero and runs as a numeric, non root user.
+
+  - id: probes
+    type: code
+    heading: "Two probes, two questions"
+    lang: csharp
+    short: probes
+    code: |
+      // Liveness: the process can answer. Never checks dependencies (a slow database must not restart every replica).
+      app.MapGet("/healthz/live", () => Results.Ok("live"));
+
+      // Readiness: send me traffic. False while warming up and while draining after SIGTERM.
+      app.MapGet("/healthz/ready", (Readiness r) =>
+          r.State == ReadyState.Ready ? Results.Ok("ready") : Results.Json(new { state = r.State.ToString() }, statusCode: 503));
+    narration: >
+      Two probes, two questions. Live asks whether the process can answer, and it never touches a dependency, because
+      a slow database must not restart every replica. Ready asks whether to send traffic, and says no while the app
+      warms up and while it drains. Container Apps and Kubernetes both call these same two paths.
+
+  - id: aca_bicep
+    type: code
+    heading: "Container Apps in Bicep: no registry password"
+    lang: bicep
+    code: |
+      adminUserEnabled: false // no registry password: Entra ID for people, managed identity for the app
+      azureADAuthenticationAsArmPolicy: { status: 'enabled' }
+      registries: [
+        { server: acr.properties.loginServer, identity: pullIdentity.id }
+      ]
+      scale: {
+        minReplicas: 0 // scale to zero: no replica, no vCPU/memory charge
+        maxReplicas: maxReplicas
+        rules: [
+          { name: 'http', http: { metadata: { concurrentRequests: string(concurrentRequests) } } }
+        ]
+      }
+    narration: >
+      The Bicep has no registry password. The admin user is off, and the app pulls with a managed identity that holds
+      the AcrPull role. Learn says the registry must accept Azure Resource Manager audience tokens for that, so the
+      template turns that policy on. The scale rule is H T T P, up to three replicas, and down to zero.
+
+  - id: deploy_screen
+    type: screen
+    heading: "Deploy in two phases"
+    image: screens/deploy-aca.jpg
+    bar: "Terminal · infra/deploy-aca.sh"
+    demo: >
+      Terminal, end of infra/deploy-aca.sh rg-mglab-azure-08 westeurope: "phase 1", the push of 1.0.0 with the tag list
+      table, the what-if for the container app, then the JSON from GET / with platform "container-apps", a revision
+      name ending in --v1-0-0 and version 1.0.0. Mask: subscription ID, the registry and app host names.
+    narration: >
+      Deploying takes two phases, because the app cannot be created before its image exists. First the registry and
+      the environment, then we push version one point zero point zero, then the app. The first request answers with
+      the platform it runs on: container apps.
+
+  - id: scale_screen
+    type: screen
+    heading: "Under load, then back to zero"
+    image: screens/scale-out.jpg
+    bar: "Terminal · load.py and replicas.sh"
+    demo: >
+      Two terminals. Left: infra/load.py <app url> 24 90 printing total, per_second and {"200": N}. Right:
+      infra/replicas.sh rg-mglab-azure-08 9 printing the replica count every 30 s: 0 or 1, then 3 under load,
+      then 0 about five minutes after the load stops. Optional second shot: portal, container app, Revisions and
+      replicas, replica count. Mask: app host name.
+    narration: >
+      Now load, a few dozen requests a second for ninety seconds. Learn says the H T T P rule divides the requests of
+      the last fifteen seconds by fifteen and compares that with our threshold of twenty, so up to three replicas
+      appear. When the load stops and the five minute cool down passes, the revision goes back to zero replicas, and
+      the meter stops.
+
+  - id: drain
+    type: code
+    heading: "SIGTERM: stop being ready first"
+    lang: csharp
+    code: |
+      public async Task StoppingAsync(CancellationToken ct)
+      {
+          readiness.BeginDrain();
+          log.LogInformation("SIGTERM received: readiness is now 503, draining for {Seconds} s", options.Value.DrainSeconds);
+          await Task.Delay(TimeSpan.FromSeconds(options.Value.DrainSeconds), time, ct);
+      }
+
+      builder.Services.Configure<HostOptions>(o => o.ShutdownTimeout = TimeSpan.FromSeconds(25));
+    narration: >
+      When a replica scales in, the platform sends S I G T E R M, and Learn says S I G K I L L follows after thirty
+      seconds. Our app flips readiness to five oh three first, keeps answering for five seconds, and allows
+      twenty five seconds for requests in flight. Five plus twenty five is thirty. A test sends the stop signal and
+      checks it, and we ran the published app here too: ready returned five oh three, live still two hundred.
+
+  - id: revisions_screen
+    type: screen
+    heading: "Version 1.1.0 next to 1.0.0, 20 % of traffic"
+    image: screens/revisions-split.jpg
+    bar: "Terminal · infra/release-v2.sh and split.sh"
+    demo: >
+      Terminal: infra/release-v2.sh rg-mglab-azure-08 20 (the pin to v1-0-0 at 100 %, the new revision reaching
+      Provisioned, the traffic table 80 / 20 and the revision list), then infra/split.sh <app url> 100 printing
+      about 80 x 1.0.0 and 20 x 1.1.0. Optional: portal, Revisions and replicas, the two active revisions with weights.
+      Mask: app host name.
+    narration: >
+      Multiple revision mode lets version one point one run next to one point zero. The ingress rule says the latest
+      revision gets everything, so the release script pins one point zero to a hundred percent first, and the new
+      revision starts with nothing. Then we send it twenty percent, and count a hundred answers.
+
+  - id: k8s
+    type: code
+    heading: "Kubernetes: everything written down"
+    lang: yaml
+    code: |
+      resources:
+        requests: { cpu: 250m, memory: 256Mi }
+        limits: { memory: 512Mi }
+      startupProbe:
+        httpGet: { path: /healthz/live, port: http }
+        periodSeconds: 1
+        failureThreshold: 30
+      readinessProbe:
+        httpGet: { path: /healthz/ready, port: http }
+        periodSeconds: 5
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        capabilities: { drop: [ALL] }
+    narration: >
+      On Kubernetes, everything Container Apps decided for us is written down: requests and limits, the same probes,
+      and a locked down security context with a read only root file system. Plus a service, an autoscaler and a
+      disruption budget. More control, more yaml, and the autoscaler keeps at least two pods, because there is no
+      scale to zero here.
+
+  - id: aks_screen
+    type: screen
+    heading: "The same image on AKS"
+    image: screens/aks-pods.jpg
+    bar: "Terminal · infra/deploy-aks.sh"
+    demo: >
+      Terminal, end of infra/deploy-aks.sh rg-mglab-azure-08: the DASv5 quota line, the server-side dry run, the rollout
+      status, then kubectl get nodes,pods,svc,hpa -o wide (1 node, 2 pods Running, service orders-api with an
+      EXTERNAL-IP, hpa 2/5) and the JSON from GET / with platform "kubernetes", a pod name and version 1.0.0.
+      Then, immediately after: infra/teardown.sh rg-mglab-azure-08 --aks-only. Mask: external IP, registry name.
+    narration: >
+      Same image on the smallest A K S we could justify: a Free tier control plane and one four v C P U node, deleted
+      right after this scene. Kubectl shows the node, two pods, the load balancer and its public address, and the
+      same A P I answers, this time from Kubernetes.
+
+  - id: cost
+    type: bullets
+    heading: "What it costs"
+    bullets:
+      - "Container Apps: free grants of 180,000 vCPU-s, 360,000 GiB-s, 2 M requests a month"
+      - "Scaled to zero: no usage charge"
+      - "AKS node, disk, load balancer, 2 IPs: about 0.23 EUR an hour, busy or idle"
+      - "Container Registry Basic: 0.15 EUR a day"
+      - "Whole recording: about 0.60 EUR, then the group is deleted"
+    narration: >
+      Prices come from the Azure retail prices A P I, in euros, queried in November. Container Apps has monthly free
+      grants and no usage charge at zero replicas. The A K S node, its disk, the load balancer and two public I Ps
+      come to about twenty three cents an hour, busy or idle. The registry is fifteen cents a day. The whole
+      recording costs about sixty cents, and then the resource group is deleted.
+
+  - id: gotcha
+    type: code
+    heading: "Gotcha: one node is a lab shortcut"
+    lang: bicep
+    short: gotcha
+    code: |
+      param nodeVmSize string = 'Standard_D4as_v5'
+      sku: { name: 'Base', tier: 'Free' }
+      mode: 'System'
+      count: nodeCount
+      vmSize: nodeVmSize
+      osDiskSizeGB: 64
+    narration: >
+      Here's the gotcha. Learn says system node pools need at least four v C P Us and no B series, and that a
+      production cluster with one system pool must have at least two nodes, three recommended. Our single node is a
+      recording shortcut, not a design. And the Free tier has no financially backed uptime S L A. Use Standard, and
+      more nodes, for anything real.
+
+  - id: tests
+    type: code
+    heading: "What runs without Azure"
+    lang: text
+    code: |
+      dotnet test   Passed: 9    quotes, probes, warm-up, drain on SIGTERM
+      pytest        Passed: 29   Bicep, k8s manifests, real image, load.py, this script
+      # nothing here proves Azure: the portal and kubectl scenes do
+    narration: >
+      Without Azure, nine dot net tests and twenty nine python tests run. They compile both Bicep files, check the
+      Kubernetes manifests, and even build the real container image with the S D K. One honest caveat: none of that
+      proves Azure itself. The portal and kubectl scenes do.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The A P I, both Bicep files, the Kubernetes manifests and the tests are on GitHub, and the complete guide is on
+      devladlog dot com. Next episode: networking and V P N. This was DEVLADLOG Azure, by Momento Galático.

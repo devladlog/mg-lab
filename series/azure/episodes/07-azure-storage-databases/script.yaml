@@ -1,0 +1,277 @@
+# DEVLADLOG Azure — episode 07. Draft script: code scenes are real excerpts from src/, infra/, db/ and tests/
+# (and real output of the local runs); screen scenes are captured by the recorder following demo.md.
+episode: 7
+slug: azure-storage-databases
+series_label: "AZURE"
+series_name: "DEVLADLOG Azure"
+file_prefix: "azure"
+title: "Storage & Databases"
+subtitle: "The right store, no secrets, retries that can't duplicate"
+voice: am_michael
+thumbnail_text: "AZURE SQL\n+ BLOB\nNO KEYS"
+youtube:
+  title: "Azure SQL Free Tier + Blob Storage Without Keys: Retries That Can't Duplicate | DEVLADLOG Azure #7"
+  tags: [Azure SQL Database, Azure SQL free tier, serverless, Blob Storage, lifecycle management, user delegation SAS, Entra ID, EF Core, idempotency, Bicep, .NET 10, Azure]
+sources:
+  - https://www.devladlog.com/articles/azure/2026-01-16-azure-storage-databases-complete-guide-2026/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Your retry just created a second order"
+    sub: "Azure SQL free tier, Blob Storage without keys"
+    short: hook
+    narration: >
+      Your database connection drops right as the commit is acknowledged. Entity Framework retries, the insert runs
+      again, and the customer now has two orders. Today we give contoso's orders a real database, Azure SQL on the
+      free tier, put the invoices in Blob Storage with the keys switched off, and make retries safe. Welcome to
+      DEVLADLOG Azure.
+
+  - id: stores
+    type: bullets
+    heading: "One store per kind of data"
+    bullets:
+      - "Orders: relational, transactional -> Azure SQL Database"
+      - "Invoices: write once, read rarely, keep for years -> Blob"
+      - "No passwords: Entra-only SQL, shared keys disabled"
+      - "Lifecycle: Hot, Cool, Cold, then delete"
+      - "Correct under retries: unique keys, ETags, keyset paging"
+    narration: >
+      Until now, episodes one to five stored orders as blobs. Orders are relational and transactional, and we query
+      them by customer, so they move to Azure SQL Database. Invoices are written once, read rarely and kept for
+      years, so they stay in Blob Storage with a lifecycle policy. And nothing has a password: the SQL server only
+      accepts Microsoft Entra I D, and the storage account has shared keys disabled.
+
+  - id: free_tier
+    type: code
+    heading: "The free tier, in Bicep"
+    lang: bicep
+    code: |
+      resource database 'Microsoft.Sql/servers/databases@2023-08-01' = {
+        parent: sqlServer
+        name: databaseName
+        sku: { name: 'GP_S_Gen5', tier: 'GeneralPurpose', family: 'Gen5', capacity: 2 }
+        properties: {
+          maxSizeBytes: 34359738368                 // 32 GB, the free data allowance
+          requestedBackupStorageRedundancy: 'Local'
+          useFreeLimit: true                        // 100,000 vCore seconds a month
+          freeLimitExhaustionBehavior: 'AutoPause'  // never 'BillOverUsage' in the lab
+        }
+      }
+    narration: >
+      The database is General Purpose serverless with use free limit set to true. Per database you get one hundred
+      thousand v core seconds, thirty-two gigabytes of data and thirty-two of backup every month, and up to ten such
+      databases per subscription. At the limit it pauses until next month. Learn warns that if you switch to paid
+      overages, you can't switch back, so a test pins auto pause.
+
+  - id: entra_only
+    type: code
+    heading: "No SQL login, no password"
+    lang: bicep
+    code: |
+      resource sqlServer 'Microsoft.Sql/servers@2023-08-01' = {
+        properties: {
+          minimalTlsVersion: '1.2'
+          administrators: {
+            administratorType: 'ActiveDirectory'
+            azureADOnlyAuthentication: true   // no administratorLogin, no password parameter
+            login: adminLogin
+            sid: adminObjectId
+            principalType: adminPrincipalType
+            tenantId: tenant().tenantId
+          }
+        }
+      }
+    narration: >
+      The server has Microsoft Entra only authentication. There is no administrator login and no password parameter
+      anywhere in the template. The Entra admin is the signed-in lab user, and the deploy script creates the schema
+      as that user. The firewall opens one address, the laptop's, not a range.
+
+  - id: connection
+    type: code
+    heading: "A connection string with no secret"
+    lang: csharp
+    code: |
+      public static string AzureSqlConnectionString(string server, string database) =>
+          new SqlConnectionStringBuilder
+          {
+              DataSource = $"tcp:{server},1433",
+              InitialCatalog = database,
+              Authentication = SqlAuthenticationMethod.ActiveDirectoryDefault,
+              Encrypt = SqlConnectionEncryptOption.Mandatory,
+              ConnectTimeout = 60,          // a paused serverless database resumes on connect
+          }.ConnectionString;
+
+      b.UseSqlServer(cs, sql => sql.EnableRetryOnFailure(
+          maxRetryCount: 6, maxRetryDelay: TimeSpan.FromSeconds(30), errorNumbersToAdd: null));
+    narration: >
+      The connection string uses Active Directory Default: a managed identity in Azure, your az login on a laptop.
+      The connect timeout is sixty seconds, which is what the SQL client guidance asks for with serverless. And Entity
+      Framework's retrying execution strategy is on, six retries, up to thirty seconds apart.
+
+  - id: deploy_screen
+    type: screen
+    heading: "Deployed: free tier, schema created"
+    image: screens/deploy-free-tier.jpg
+    bar: "Terminal · infra/deploy.sh"
+    demo: >
+      Terminal on the recording laptop, end of infra/deploy.sh rg-mglab-azure-07 westeurope: the free tier check
+      table (GP_S_Gen5, useFreeLimit True, AutoPause, Online) and "Schema created." from dotnet run --create-schema
+      as the Entra admin. Mask subscription ID, object ID and UPN.
+    narration: >
+      Here it is in the lab subscription: the what-if, the deployment, a check that the free limit is really on, and
+      the schema created as the Entra admin, because no SQL password exists.
+
+  - id: idempotency
+    type: code
+    heading: "The database enforces idempotency"
+    lang: csharp
+    short: idempotency
+    code: |
+      o.HasIndex(x => x.IdempotencyKey).IsUnique();   // OrdersDbContext
+
+      db.Orders.Add(order);
+      try
+      {
+          await db.SaveChangesAsync(ct);
+          return new(CreateOutcome.Created, order);
+      }
+      catch (DbUpdateException ex) when (IsUniqueViolation(ex))   // 2601 or 2627
+      {
+          db.ChangeTracker.Clear();
+          var winner = await FindByKeyAsync(idempotencyKey, ct);
+          return AsReplay(winner!, hash);   // same body: replay. Other body: 409
+      }
+    narration: >
+      Here's the fix for the hook. Every order needs an Idempotency-Key header, and the database has a unique index
+      on it. Learn's connection resiliency page explains the risk: if the commit's acknowledgement is lost, the retry
+      runs as if nothing happened, and with generated keys that means a duplicate row. With the unique index, the
+      second insert fails with error twenty-six oh one, and we return the order that did commit. Two racing requests
+      take the same path.
+
+  - id: paging
+    type: code
+    heading: "Keyset paging and ETags"
+    lang: csharp
+    code: |
+      // index: (CustomerId, CreatedUtc DESC, Id DESC)
+      q = q.Where(o => o.CreatedUtc < t || (o.CreatedUtc == t && o.Id < id));
+      var rows = await q.OrderByDescending(o => o.CreatedUtc).ThenByDescending(o => o.Id)
+          .Take(take + 1).ToListAsync(ct);
+
+      // cancel: UPDATE ... WHERE Id = @id AND Version = @expected
+      o.Property(x => x.Version).IsConcurrencyToken();
+      if (order.Version != expectedVersion) return VersionMismatch;   // HTTP 412
+    narration: >
+      Listing a customer's orders uses keyset paging: continue after the last row you saw, on an index in the same
+      order. Unlike offset, the cost doesn't grow with the page number. The I D breaks ties between equal timestamps.
+      And cancelling needs the E tag you last read: a stale one gets four twelve, precondition failed.
+
+  - id: sas
+    type: code
+    heading: "Keys off, links still work"
+    lang: csharp
+    code: |
+      _key = (await service.GetUserDelegationKeyAsync(now - ClockSkew, now + KeyLifetime, ct)).Value;
+
+      var sas = new BlobSasBuilder
+      {
+          BlobContainerName = containerName, BlobName = blob.Name,
+          Resource = "b",                    // this blob only
+          StartsOn = now - ClockSkew, ExpiresOn = now + lifetime,
+          Protocol = SasProtocol.Https,
+      };
+      sas.SetPermissions(BlobSasPermissions.Read);
+      var uri = new BlobUriBuilder(blob.Uri) { Sas = sas.ToSasQueryParameters(key, service.AccountName) }.ToUri();
+    narration: >
+      Invoices are downloaded with a link. With shared keys disabled, service and account SAS tokens are denied, but a
+      user delegation SAS still works, because it's signed with a key that Storage gives to an Entra identity. That
+      key lives at most seven days. Our links are read only, one blob, HTTPS, ten minutes.
+
+  - id: smoke_screen
+    type: screen
+    heading: "The whole flow against Azure"
+    image: screens/smoke.jpg
+    bar: "Terminal · infra/smoke.sh"
+    demo: >
+      Two terminals on the recording laptop: infra/run-api.sh (API on localhost:5199, signed in with az login) and
+      infra/smoke.sh with its full output: 201, replay 200 with Idempotent-Replay, 409, two pages, 412/200/412,
+      SAS fields sp=r sr=b spr=https, download 200, tampered permission 403, "All checks passed."
+    narration: >
+      Now against the real services. Create, replay, conflict. Two pages. A stale E tag refused. Then the invoice
+      link: read only, one blob, HTTPS. The download works, and changing the permission in the link breaks the
+      signature.
+
+  - id: query_screen
+    type: screen
+    heading: "Signed in with Entra, rows in place"
+    image: screens/query-editor.jpg
+    bar: "Azure portal · Query editor"
+    demo: >
+      Azure portal, sqldb-orders, Query editor signed in with Microsoft Entra authentication, db/demo-queries.sql:
+      signed_in_as = the lab admin, service_objective GP_S_Gen5_2, the smoke test's orders (one Cancelled), then
+      the sessions query. Mask the tenant domain and server name.
+    narration: >
+      In the portal's query editor, signed in with Entra I D, the orders are there, one cancelled. The last query
+      lists open sessions. Close the editor when you're done: open sessions keep a serverless database awake and
+      spend your free seconds.
+
+  - id: gotcha_resume
+    type: screen
+    heading: "Gotcha: the first request after a pause"
+    image: screens/resume-40613.jpg
+    bar: "Terminal · paused database, first request"
+    short: gotcha
+    demo: >
+      After 20+ minutes idle: az sql db show ... --query status returns Paused; infra/run-api.sh then
+      curl localhost:5199/healthz. API console shows EF Core "A transient exception occurred during execution. The
+      operation will be retried after ..." with error 40613 "is not currently available", then {"status":"ok"}.
+      Mask server and database names.
+    narration: >
+      Here's the gotcha. The free tier pauses after fifteen minutes without connections, and you can't change that
+      delay. The first connection then fails with error forty-six thirteen while the database resumes, usually in
+      under a minute. Without retries, that's an error page for your first user of the morning. With them, it's a
+      slow first request.
+
+  - id: lifecycle_screen
+    type: screen
+    heading: "Invoices age out on their own"
+    image: screens/lifecycle.jpg
+    bar: "Azure portal · Storage account"
+    demo: >
+      Azure portal, storage account: Lifecycle management rule invoices-age-out (prefix invoices/, Cool after 30,
+      Cold after 90, delete after 3650 days since creation), Configuration showing Allow storage account key access
+      Disabled, and the invoices container with 2026/11/<id>.json blobs. Mask the account name.
+    narration: >
+      The lifecycle rule moves invoices to cool after thirty days, cold after ninety, and deletes them after ten
+      years, which is just an example retention. Mind the minimum stays: thirty days in cool and ninety in cold, or
+      you pay early deletion. A new rule can take up to twenty-four hours to start.
+
+  - id: tests
+    type: code
+    heading: "Forty-seven tests, no Azure"
+    lang: text
+    code: |
+      $ dotnet test
+        OrderServiceTests  replay, conflict, unique index, keyset ties, ETags   13
+        RulesTests         shape, request hash                                   7
+        ApiTests           400 201 200 409 422 428 412, cursor                   7
+        DatabaseSetupTests Entra-only string, retry strategy, schema.sql         5
+        InvoiceStoreTests  Azurite with OAuth: SAS download, tamper 403          7
+        BicepTests         keys off, lifecycle, Entra-only, free tier            8
+      Passed!  - Failed: 0, Passed: 47, Skipped: 0, Total: 47
+
+      # SQLite in the tests is not Azure SQL: T-SQL, Entra and 40613 are checked in Azure
+    narration: >
+      Forty-seven tests run without Azure. The invoice tests start Azurite with OAuth turned on, which checks the user
+      delegation signature for real. One honest caveat: the database tests use SQLite, which is not Azure SQL. It
+      checks the model and the unique index, not T-SQL or Entra sign-in.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The A P I, the Bicep, the SQL scripts and all forty-seven tests are on GitHub, and the complete guide is on
+      devladlog dot com. Next episode: containers, with Container Apps and A K S. This was DEVLADLOG Azure, by
+      Momento Galático.
