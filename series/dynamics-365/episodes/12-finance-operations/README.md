@@ -1,124 +1,156 @@
-# DEVLADLOG Dynamics 365 #12 — Finance & Operations
+# DEVLADLOG Dynamics 365 #12 — Finance & Operations with Business Central
 
-The back-office end of the Contoso story. Contoso Retail, the account that came out of [episode 7](../07-dynamics-365-sales/)'s
-lead and raised cases in [episode 8](../08-dynamics-365-customer-service/), also has to be invoiced, and that happens in
-Dynamics 365 Finance. **fokit**, a small Python tool, reads Finance and Operations over its real OData endpoint and
-checks that the customer there is the same customer as in Dataverse:
+> **Reworked.** The first version of this episode read Dynamics 365 *Finance and Operations* over OData. There is no Finance
+> trial for the lab and Microsoft's self-service Business Central trial is not offered for Portugal (owner's decision, not a
+> Learn claim), so the live demo is now **Business Central in a local developer container** on the Windows recording
+> laptop, built with Microsoft's BcContainerHelper module (sandbox artifacts, CRONUS demo company). Finance and Operations
+> stays in the episode as **one labelled architecture scene**: what it is, and what differs from Business Central. Nothing here
+> was run against Finance and Operations.
 
-- **doctor**: gets a token and makes one small OData call (`CustomersV3?$top=1`), so a failed app registration or a wrong
-  entity name shows up before anything else
-- **customers**: customers over OData with `cross-company=true` (or one legal entity with a `dataAreaId` filter), count
-  per company and the first rows
-- **reconcile**: Finance customers against Dataverse accounts by account number, the same key the dual-write
-  *Customers V3 (accounts)* map uses. R001 organization customer with no Dataverse account (error), R002 Dataverse
-  account with an account number and no Finance customer (warning), R003 names differ (warning), R004 the same
-  CustomerAccount in several companies (warning), R005 people (PartyType Person) left out, they belong to the contacts
-  map (info). Exit 1 on errors
+The back-office end of the Contoso story. **bckit**, a small Python tool, reads Business Central over its **API v2.0** and checks
+that the customer there is the same customer as in Dataverse (the Dynamics 365 Sales trial environment):
 
-Read-only: nothing is written to Finance and Operations or to Dataverse. `customers` and `reconcile` also run offline on
-the saved responses in [`sample/`](sample/) (`--fo-json`, `--dv-json`).
+- **doctor**: one call to the API root and one to `companies`, so a stopped container, a wrong URL or a refused login shows up first
+- **companies / customers**: companies in the container, customers per company (type, currency, blocked)
+- **invoices**: sales invoices with `$filter` on status and customer, `$orderby`, `$top`, and the remaining amount per customer
+- **seed**: creates the fictional demo customers (Contoso Retail, Contoso Logistics Ltd, Contoso Hospitality Group, and one person)
+  in the container; idempotent (skips a display name that already exists), `--dry-run`
+- **reconcile**: Business Central customers against Dataverse accounts by number = `accountnumber`. R001 company customer with no
+  Dataverse account (error), R002 Dataverse account with a number and no Business Central customer (warning), R003 names differ
+  (warning), R004 the same number in several companies (warning), R005 people left out, they are contacts (info), R006 customer
+  blocked in Business Central (info). Exit 1 on errors. `--name-contains` scopes both sides, so CRONUS' own sample customers don't
+  bury the demo
+
+Reads and one write path (`seed`, container only); nothing is written to Dataverse. `customers` and `reconcile` also run offline on the
+saved shapes in [`sample/`](sample/) (`--bc-json`, `--dv-json`).
 
 | Path | What it is |
 |---|---|
-| [`fo.json`](fo.json) | Entity (`CustomersV3`), columns, the PartyType value that means organization, the Dataverse table |
-| [`src/fokit/fo.py`](src/fokit/fo.py) | OData client for Finance and Operations: URL builder (`$select`, `$filter`, `$top`, `cross-company`), `@odata.nextLink` paging, 429 + Retry-After |
-| [`src/fokit/customers.py`](src/fokit/customers.py) | Fetch and normalize Customers V3 rows and Dataverse accounts |
-| [`src/fokit/reconcile.py`](src/fokit/reconcile.py) | Rules R001-R005 and the summary |
-| [`src/fokit/cli.py`](src/fokit/cli.py), [`auth.py`](src/fokit/auth.py), [`dataverse.py`](src/fokit/dataverse.py), [`findings.py`](src/fokit/findings.py) | CLI; MSAL tokens (client credentials or interactive; `AZURE_CLIENT_ID` is required, there is no shared sample id for Finance and Operations); minimal Dataverse reader; finding type |
-| [`sample/`](sample/) | `fo-customers.json` (7 fictional customers in two companies) and `dv-accounts.json` (5 accounts) in the services' response shape |
-| [`tests/`](tests/) | 17 pytest tests; the services are a recording stub (tests only: the demo runs against the real environments) |
+| [`setup/New-LabBusinessCentral.ps1`](setup/New-LabBusinessCentral.ps1) | Checks Docker Desktop (installed, running, Windows-containers mode, with the switch instructions), installs/imports BcContainerHelper, `Get-BcArtifactUrl` for the current sandbox, `New-BcContainer` `mglab-bc` with NavUserPassword, proves the API with a real call, stores the generated admin password DPAPI-encrypted under `E:\MGLab\secrets\`. Idempotent; `-Remove` tears down; `-SetEnv` loads `BC_*` into the session without printing the password |
+| [`bc.json`](bc.json) | API version, default URL, selected columns, the seed customers, the Dataverse table |
+| [`src/bckit/bc.py`](src/bckit/bc.py) | API v2.0 client: URL builder (`companies(id)`, `$select`, `$filter`, `$orderby`, `$top`), `Prefer: odata.maxpagesize`, `@odata.nextLink` paging with a loop guard, 429/503 + Retry-After (a POST is retried on 429 only), readable errors with Learn hints (401, 404, 405, unreachable container) |
+| [`src/bckit/customers.py`](src/bckit/customers.py) | Companies, customers, sales invoices, `seed`, and the Dataverse account reader |
+| [`src/bckit/reconcile.py`](src/bckit/reconcile.py) | Rules R001-R006 and the summary |
+| [`src/bckit/cli.py`](src/bckit/cli.py), [`auth.py`](src/bckit/auth.py), [`dataverse.py`](src/bckit/dataverse.py), [`findings.py`](src/bckit/findings.py) | CLI; MSAL token for Dataverse only (Business Central uses basic auth in the container); minimal Dataverse reader; finding type |
+| [`sample/`](sample/) | `bc-customers.json` (6 fictional customers in two companies) and `dv-accounts.json` (4 accounts) |
+| [`tests/`](tests/) | 36 pytest tests (API client, paging, retries, seed, reconcile, CLI, `script.yaml` checks) and 34 Pester tests for the setup script. The services are stubs/mocks in the tests only; the demo runs against the real container and Dataverse |
 
-## Run and test (no tenant)
+## Run and test (no tenant, no Docker)
 
 ```bash
 cd series/dynamics-365/episodes/12-finance-operations
 python3 -m pip install --user -r requirements.txt
-python3 -m pytest -q tests                                                  # 17 passed
+python3 -m pytest -q tests                                                  # 36 passed
+pwsh -NoProfile -Command "Invoke-Pester -Path tests/New-LabBusinessCentral.Tests.ps1 -Output Normal"   # 33 passed, 1 skipped (DPAPI round trip: Windows only)
 cd src
-python3 -m fokit customers --fo-json ../sample/fo-customers.json --limit 3
-python3 -m fokit reconcile --fo-json ../sample/fo-customers.json --dv-json ../sample/dv-accounts.json   # exit 1
+python3 -m bckit customers --bc-json ../sample/bc-customers.json --limit 3
+python3 -m bckit reconcile --bc-json ../sample/bc-customers.json --dv-json ../sample/dv-accounts.json   # exit 1
 ```
 ```
-finance and operations: 7 customer(s) in 2 company(ies) (dem2, demf); 6 organization(s)
-Dataverse: 5 account(s) with an account number
+Business Central: 6 customer(s) in 2 company(ies) (CRONUS USA, Inc., Contoso Test Co); 5 of type Company
+Dataverse: 4 account(s) with an account number
 
-WARNING R004  C-1001: exists in 2 companies (demf, dem2)
-WARNING R003  C-1004: name differs: F&O 'Contoso Energy', Dataverse 'Contoso Energy Holdings'
-ERROR   R001  C-3001: 'Contoso Marine' (dem2) has no Dataverse account with this account number
-WARNING R002  C-1099: Dataverse account 'Contoso Legacy Store' has no finance and operations customer
-INFO    R005  Person: 1 customer(s) with PartyType Person skipped (contacts map, not accounts)
-1 error(s), 3 warning(s), 1 info
+WARNING R004  10000: exists in 2 companies (CRONUS USA, Inc., Contoso Test Co)
+WARNING R003  20000: name differs: Business Central 'Contoso Logistics Ltd', Dataverse 'Contoso Logistics Holdings'
+ERROR   R001  30000: 'Contoso Hospitality Group' (CRONUS USA, Inc.) has no Dataverse account with this account number
+INFO    R006  40000: 'Contoso Energy' is blocked in Business Central (Invoice)
+WARNING R002  99000: Dataverse account 'Contoso Legacy Store' has no Business Central customer
+INFO    R005  Person: 1 customer(s) of type Person skipped (contacts, not accounts)
+1 error(s), 3 warning(s), 2 info
 ```
+(The numbers and the second company in `sample/` are made up for the sample.) The one tool call that did hit a socket in this
+build was `BC_PASSWORD=x python3 -m bckit --bc-url http://127.0.0.1:9 doctor`: the real "cannot reach ... Is the container running
+(docker ps)" error line, exit 1. The PowerShell script was also started for real on Linux and stops at its first check ("run it on
+the Windows recording laptop").
 
-## Against the services (needs tenant)
+## Against the real container (needs the recording laptop)
 
-Prerequisites (details in [demo.md](demo.md)): a Finance environment (the lab uses a subscription-based trial created in the
-Power Platform admin center), a Microsoft Entra app registered **both** in Entra ID and inside Finance and Operations, a
-Dataverse environment with accounts.
+Details, sizes and the screen list are in [demo.md](demo.md). In short, on the Windows laptop:
 
-```bash
-export FO_URL=https://<environment>.operations.dynamics.com
-export DATAVERSE_URL=https://<org>.crm4.dynamics.com
-export AZURE_TENANT_ID=<tenant id> AZURE_CLIENT_ID=<app id> AZURE_CLIENT_SECRET=<secret>   # secret optional: leave it out for an interactive sign-in
+```powershell
+# elevated Windows PowerShell 5.1, Docker Desktop running
+.\setup\New-LabBusinessCentral.ps1 -AcceptEula         # first run downloads ~15 GB; prints the company names, never the password
+.\setup\New-LabBusinessCentral.ps1 -SetEnv             # BC_BASE_URL, BC_USER, BC_PASSWORD for this session
+$env:DATAVERSE_URL = 'https://<org>.crm4.dynamics.com'  # reconcile only; sign-in is interactive
 cd src
-python3 -m fokit doctor
-python3 -m fokit customers
-python3 -m fokit customers --company usmf
-python3 -m fokit reconcile
+python -m bckit doctor
+python -m bckit seed --company "CRONUS USA, Inc."
+python -m bckit customers --company "CRONUS USA, Inc."
+python -m bckit invoices --company "CRONUS USA, Inc." --status Open
+python -m bckit reconcile --name-contains Contoso
 ```
+
+## Finance and Operations vs Business Central (the architecture scene)
+
+What the first version of the episode established from Learn, kept as context (only the Business Central column was run):
+
+| | Finance and Operations apps | Business Central (this demo) |
+|---|---|---|
+| Endpoint | `<environment URL>/data/<entity>` (OData, e.g. `CustomersV3`) | `<host>:7048/<instance>/api/v2.0/companies(<id>)/<resource>` in a container |
+| Company | default company only, unless `cross-company=true`; `$filter=dataAreaId eq '<id>'` | every resource is under `companies(<id>)` |
+| Page size | server-driven, max 10,000, follow `@odata.nextLink` | default max 20,000 (online: fixed), `Prefer: odata.maxpagesize`, follow `@odata.nextLink` |
+| Throttling | 429 + Retry-After (service protection limits) | 429, and 503 when the queue times out (online limits); on-premises the connection limits default to 0 (unlimited) |
+| Sign-in | Entra app registered in Entra **and** inside the app | Entra OAuth online; basic auth (web service access key) on-premises/containers only |
+| With Dataverse | dual-write (map *Customers V3 (accounts)*: `CustomerAccount` to `accountnumber`), virtual tables | data synchronization (Customer to Account, couplings), virtual tables over the Business Central API |
 
 ## What we learned / gotchas
 
-- **Getting an environment.** Learn (*Unified admin trials*): free subscription-based trials exist for Finance, Supply
-  Chain Management, Project Operations and Commerce; a tenant admin gets the trial license from the Marketplace in the
-  Microsoft 365 admin center, assigns it, then creates the environment in the Power Platform admin center (type *Trial
-  (subscription-based)*, *Enable Dynamics 365 apps*, the Finance template). Deployment can take an hour, and the trial
-  does not support development with Visual Studio. New customers can no longer create Lifecycle Services projects for
-  Finance and similar apps (from February 2026): use the Power Platform admin center.
-- **Two registrations.** Learn (*Service endpoints overview*): register an application in Microsoft Entra ID, then
-  register its client id in Finance and Operations under *System administration > Setup > Microsoft Entra applications*
-  with a user (the sample uses Admin; a dedicated service account is the better practice). The token is requested for the
-  environment URL with no trailing slash. Both authorization code and client credentials (secret or certificate) are supported.
-- **Default company only.** Learn (*OData*): without `cross-company=true` you get only the user's default company; with it,
-  every company the user can access; `$filter=dataAreaId eq '<id>'` with it narrows to one.
-- **OData limits worth knowing** (Learn): only entities marked `IsPublic` are exposed; you must provide all key fields to
-  address one record; `$expand` is first-level only; `has` and `in` are not supported; `$skip` and `$top` exist but server-driven
-  paging has a maximum page size of 10,000, so follow `@odata.nextLink`; batch requests are limited to 5,000 operations.
-- **Customers V3 is the heavy entity.** Learn (*Customers V3 entity*): about 80 fields the other customer entities don't have,
-  performance pattern *single thread only*, "do not use where high performance is required", and *Customer definitions* plus
-  *Customer details V2* usually outperform it. We use Customers V3 because it is the entity the dual-write map uses; the
-  entity name is a setting in `fo.json`.
-- **Throttling.** Learn (*Service protection API limits*, *Throttling prioritization*): resource-based limits apply from
-  version 10.0.19 on; the user-based limits (6,000 requests, 20 minutes of execution time, 52 concurrent requests per five
-  minutes) are not implemented in current versions (disabled by default from 10.0.35, removed from 10.0.36). A throttled
-  request gets 429 and Retry-After; retried requests get no priority over new ones. Throttling applies to OData and custom
-  services only, not to the data management framework, recurring integrations or (with the Power Platform integration
-  enabled) virtual tables. Priorities are set in *System administration > Setup > Throttling priority mapping* (needs System
-  administrator or Integration priority manager). The Lifecycle Services query *Requests throttled* shows what was throttled.
-- **Not for Power BI.** Learn (*Integration between finance and operations apps and third-party services*): don't use OData for
-  Power BI reports, use the entity store.
-- **Dual-write key.** Learn (*Enable table maps for dual-write*, *Dual-write mapping reference*): a table map needs an alternate
-  key in Dataverse that matches the Finance key; for customers, `CustomerAccount` is mapped to `accountnumber`. The *Customers
-  V3 (accounts)* map has the source filter `PartyType == "Organization"` (people go to *Customers V3 (contacts)*). Number
-  sequences in the two systems are not connected, and merging accounts in Dataverse doesn't run while a dual-write map exists
-  (Learn, *Dual-write FAQ*).
-- **Power Platform integration is mandatory.** Learn (*Enable Power Platform integration*): since 1 May 2025 every Finance and
-  Operations environment must have it enabled; unlinked environments get it enabled automatically, linked to a new or an
-  existing Power Platform environment.
-- **Not verified on Learn** (so demo.md step 6 checks them against the real environment and the code is fixed from its
-  output): that `PartyType` comes back in the JSON as the string `Organization` (the code compares the text and treats anything
-  else as a person); the exact property casing `dataAreaId` in the response (Learn shows it in `$filter`); that
-  `$select` accepts all six columns in `fo.json` on this entity; and whether `@odata.nextLink` appears for Customers V3 at the
-  environment's page size. The Learn field table writes the currency column as `SALECURRENCYCODE`; the CDM reference and
-  our `$select` use `SalesCurrencyCode`.
+- **Docker must be in Windows-containers mode.** Learn (*Running a container-based development environment*): Docker Desktop
+  uses Linux containers by default; right-click the Docker icon, *Switch to Windows Containers*. The script reads `docker info
+  --format '{{.OSType}}'` and prints that instruction when it says `linux`.
+- **Size.** Learn: containers use at least 6 GB of memory and artifacts plus images take about 15 GB of disk; the helper's cache is
+  `C:\bcartifacts.cache` and working files go under `C:\ProgramData\BCContainerHelper`. The script sets `-memoryLimit 8G`
+  (the BcContainerHelper source defaults Hyper-V isolation to 8G). `-Isolation hyperv` passes `-isolation hyperv`, Learn's suggestion if creation fails.
+- **PowerShell edition.** Learn: for version 28.0 containers use Windows PowerShell 5.1 for management functions; PowerShell 7 has a
+  known issue loading the Business Central admin modules. The script refuses PowerShell 7 unless `-AllowPowerShell7`.
+- **Artifacts.** `Get-BcArtifactUrl -type Sandbox -country us -select Latest` is Learn's quick start; the source documents `-select`
+  values (`Latest`, `Current`, `NextMajor`, ...) and `-version`. Insider builds need `-accept_insiderEula`; not used.
+- **API switched on.** Learn (*Enabling the APIs*, on-premises): `ODataServicesEnabled` and `ApiServicesEnabled` must be true,
+  otherwise calls return 405. In the BcContainerHelper source `New-BcContainer` adds `--env enableApiServices=Y` for Business Central 12
+  and later, so the script does not touch the server instance: it **proves** the API with a call and prints the Learn hint on 405.
+- **Hosts and SSL.** `-updateHosts` writes the container name to the hosts file (Learn); `Remove-BcContainer` removes that entry
+  again (source). Without `-useSSL` the container speaks plain HTTP, which is why the default URL is `http://mglab-bc:7048/BC`.
+- **Authentication.** Learn (*Web services authentication*, *Endpoints*): on-premises basic authentication is the user name plus the
+  *web service access key* as password; it is deprecated in Business Central online (use OAuth). `bckit` sends the container password;
+  `doctor` and the script print the access-key hint on a 401 (see "Not verified").
+- **Premium plan.** Learn (*Working with development sandboxes and entitlements*): `-assignPremiumPlan` gives the admin user the Premium
+  plan; the script passes it.
+- **Secret handling.** Learn (*ConvertFrom-SecureString*): without a key the Windows Data Protection API encrypts the string; on
+  non-Windows systems a SecureString is not encrypted, so `Save-LabSecret` refuses to run there. The file
+  `E:\MGLab\secrets\mglab-bc.admin.dpapi` is readable only by the same Windows user on the same machine; the password is never printed
+  and never inside the repository.
+- **Company id everywhere.** Learn (*API endpoint structure*, *Tips for working with APIs*): all resources live under a company; the
+  company can be in the path or `?company=`. `bckit` uses the path form.
+- **Customers.** Learn (*customer resource type*): `type` is `Company` or `Person`, `blocked` is `' '`, `Ship`, `Invoice` or `All`. The POST
+  example returns the assigned `number`, so `seed` prints it instead of choosing one. A number is unique per company, not across companies.
+- **Sales invoices.** Learn (*salesInvoice resource type*): status is `' '`, `Draft`, `In Review`, `Open`, `Paid`, `Canceled` or `Corrective`, and the
+  `id` of the API resource can differ from the record's `systemId` for posted invoices.
+- **Paging.** Learn (*Server-driven paging*): default 20,000 per page; `odata.maxpagesize` can't exceed the server setting (on-premises) or
+  20,000 (online); a client that follows `@odata.nextLink` doesn't care.
+- **Throttling locally.** Learn (*Operational limits*): online, too many requests get 429 and a full queue times out with 503; on-premises
+  `ODataMaxConnections` defaults to 0 (no limit). The retry code is for online environments; against the container it will rarely fire.
+- **How Business Central talks to Dataverse.** Learn (*Synchronizing data in Business Central with Dataverse*): the standard mapping couples
+  Customer with Account (Business Central filter: *Blocked* is blank; Dataverse filter: relationship type Customer and active) and
+  Contact with Contact; virtual tables read the Business Central API without copying. Business Central **online** connects only to Dataverse
+  environments of the same Entra tenant (the rule does not apply on-premises). The container here is **not** connected to Dataverse:
+  `reconcile` is a code-level check with our own key (customer number = `accountnumber`, the same key the Finance dual-write map used), not
+  something Learn prescribes for Business Central couplings.
+- **Not verified (checked on the laptop, demo.md steps 3 and 6, then fix the code and tests from the real output).** That the container
+  answers at `http://mglab-bc:7048/BC/api/v2.0` (server instance name `BC`, HTTP, port 7048 are defaults from the source and Learn's
+  examples); that the generated NavUserPassword password is accepted as the basic-auth password (Learn documents the web service access
+  key; if it is refused, create one in the web client and set `BC_PASSWORD` to it); that the US sandbox has more than one company; the
+  numbers Business Central assigns to the seeded customers; that process isolation works on the laptop's Windows build (otherwise run the script with
+  `-Isolation hyperv`, Learn's first suggestion); whether the sales-trial Dataverse accounts already carry account numbers.
 
 ## References
-- [Open Data Protocol (OData)](https://learn.microsoft.com/dynamics365/fin-ops-core/dev-itpro/data-entities/odata) (IsPublic, key fields, query options, paging 10,000, cross-company, batch)
-- [Service endpoints overview](https://learn.microsoft.com/dynamics365/fin-ops-core/dev-itpro/data-entities/services-home-page) (authentication, app registration, Microsoft Entra applications form, resource URL without trailing slash)
-- [Customers V3 entity](https://learn.microsoft.com/dynamics365/fin-ops-core/dev-itpro/data-entities/entity-customers-v3-customerv3) (CustomersV3, required fields, performance) and [Customer definitions entity](https://learn.microsoft.com/dynamics365/fin-ops-core/dev-itpro/data-entities/entity-customer-definitions-customerbase)
-- [Service protection API limits](https://learn.microsoft.com/dynamics365/fin-ops-core/dev-itpro/data-entities/service-protection-api-limits), [Retry operations](https://learn.microsoft.com/dynamics365/fin-ops-core/dev-itpro/data-entities/service-protection-retry-operations), [Throttling prioritization](https://learn.microsoft.com/dynamics365/fin-ops-core/dev-itpro/data-entities/priority-based-throttling), [Maximize API throughput](https://learn.microsoft.com/dynamics365/fin-ops-core/dev-itpro/data-entities/service-protection-maximizing-api-throughput), [Monitor API throttling](https://learn.microsoft.com/dynamics365/fin-ops-core/dev-itpro/data-entities/service-protection-monitoring)
-- [Integration between finance and operations apps and third-party services](https://learn.microsoft.com/dynamics365/fin-ops-core/dev-itpro/data-entities/integration-overview) (OData scenarios, not for Power BI)
-- [Dual-write overview](https://learn.microsoft.com/dynamics365/fin-ops-core/dev-itpro/data-entities/dual-write/dual-write-overview), [Enable table maps](https://learn.microsoft.com/dynamics365/fin-ops-core/dev-itpro/data-entities/dual-write/enable-entity-map), [Mapping reference](https://learn.microsoft.com/dynamics365/fin-ops-core/dev-itpro/data-entities/dual-write/mapping-reference), [Dual-write FAQ](https://learn.microsoft.com/dynamics365/fin-ops-core/dev-itpro/data-entities/dual-write/dual-write-faq)
-- [Unified developer experience for finance and operations apps](https://learn.microsoft.com/power-platform/developer/unified-experience/finance-operations-dev-overview) (dual-write vs virtual tables), [Microsoft Power Platform integration](https://learn.microsoft.com/dynamics365/fin-ops-core/dev-itpro/power-platform/overview), [Enable Power Platform integration](https://learn.microsoft.com/dynamics365/fin-ops-core/dev-itpro/power-platform/enable-power-platform-integration)
-- [Unified admin trials](https://learn.microsoft.com/power-platform/admin/unified-experience/admin-trials) and [About trial environments](https://learn.microsoft.com/power-platform/admin/trial-environments)
+- [Running a container-based development environment](https://learn.microsoft.com/dynamics365/business-central/dev-itpro/developer/devenv-running-container-development) (Docker mode, memory and disk, `Get-BcArtifactUrl`, `New-BcContainer`, `-updateHosts`, PowerShell 5.1 note) and [BcContainerHelper](https://github.com/microsoft/navcontainerhelper) (`New-BcContainer`, `Get-BcArtifactUrl`, `Remove-BcContainer` sources)
+- [Working with development sandboxes and entitlements](https://learn.microsoft.com/dynamics365/business-central/dev-itpro/developer/devenv-work-sandbox-entitlements) (`-assignPremiumPlan`)
+- [Endpoints for the APIs](https://learn.microsoft.com/dynamics365/business-central/dev-itpro/api-reference/v2.0/endpoints-apis-for-dynamics), [API endpoint structure](https://learn.microsoft.com/dynamics365/business-central/dev-itpro/webservices/api-endpoint-structure), [Enabling the APIs (on-premises)](https://learn.microsoft.com/dynamics365/business-central/dev-itpro/api-reference/v2.0/enabling-apis-for-dynamics-nav), [Tips for working with APIs](https://learn.microsoft.com/dynamics365/business-central/dev-itpro/developer/devenv-connect-apps-tips), [Using filters](https://learn.microsoft.com/dynamics365/business-central/dev-itpro/developer/devenv-connect-apps-filtering)
+- Resources: [company](https://learn.microsoft.com/dynamics365/business-central/dev-itpro/api-reference/v2.0/resources/dynamics_company), [customer](https://learn.microsoft.com/dynamics365/business-central/dev-itpro/api-reference/v2.0/resources/dynamics_customer), [create customer](https://learn.microsoft.com/dynamics365/business-central/dev-itpro/api-reference/v2.0/api/dynamics_customer_create), [salesInvoice](https://learn.microsoft.com/dynamics365/business-central/dev-itpro/api-reference/v2.0/resources/dynamics_salesinvoice)
+- [Web services authentication](https://learn.microsoft.com/dynamics365/business-central/dev-itpro/webservices/web-services-authentication) and [Get started developing Connect apps](https://learn.microsoft.com/dynamics365/business-central/dev-itpro/developer/devenv-develop-connect-apps) (basic auth with the web service access key, on-premises only)
+- [Server-driven paging in OData web services](https://learn.microsoft.com/dynamics365/business-central/dev-itpro/webservices/server-driven-paging-in-odata-web-services), [Operational limits for Business Central online](https://learn.microsoft.com/dynamics365/business-central/dev-itpro/administration/operational-limits-online), [Configuring the server (outdated versions): OData settings](https://learn.microsoft.com/dynamics365/business-central/dev-itpro/administration/configure-server-instance-archived)
+- [Synchronizing data in Business Central with Dataverse](https://learn.microsoft.com/dynamics365/business-central/admin-synchronizing-business-central-and-sales), [Integrating Business Central with Dataverse](https://learn.microsoft.com/dynamics365/business-central/dev-itpro/developer/dataverse-integration-overview), [Integrate with Dataverse via data sync](https://learn.microsoft.com/dynamics365/business-central/admin-common-data-service)
+- [Welcome to Business Central](https://learn.microsoft.com/dynamics365/business-central/welcome) (small and mid-sized organizations)
+- [ConvertFrom-SecureString](https://learn.microsoft.com/powershell/module/microsoft.powershell.security/convertfrom-securestring) (DPAPI when no key is given)
+- Finance and Operations context (architecture scene, from the first version): [Open Data Protocol (OData)](https://learn.microsoft.com/dynamics365/fin-ops-core/dev-itpro/data-entities/odata), [Service endpoints overview](https://learn.microsoft.com/dynamics365/fin-ops-core/dev-itpro/data-entities/services-home-page), [Service protection API limits](https://learn.microsoft.com/dynamics365/fin-ops-core/dev-itpro/data-entities/service-protection-api-limits), [Dual-write overview](https://learn.microsoft.com/dynamics365/fin-ops-core/dev-itpro/data-entities/dual-write/dual-write-overview), [Mapping reference](https://learn.microsoft.com/dynamics365/fin-ops-core/dev-itpro/data-entities/dual-write/mapping-reference)
 - Blog: [Dynamics 365 Finance & Operations — Complete Guide](https://www.devladlog.com/articles/dynamics-365/2025-10-16-dynamics-365-finance-operations-complete-guide-2025/)

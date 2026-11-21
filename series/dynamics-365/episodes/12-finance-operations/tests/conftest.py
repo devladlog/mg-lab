@@ -1,5 +1,5 @@
 """Test helpers: a recording stub for requests.Session.request. Only for the automated tests; demo.md runs everything
-against the real finance and operations environment."""
+against the real Business Central container and the real Dataverse environment."""
 import json
 import re
 import sys
@@ -7,15 +7,19 @@ from pathlib import Path
 from urllib.parse import unquote
 
 import pytest
+import requests
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from fokit.dataverse import DataverseApi  # noqa: E402
-from fokit.fo import FoApi  # noqa: E402
+from bckit.bc import BcApi  # noqa: E402
+from bckit.dataverse import DataverseApi  # noqa: E402
 
-FO_ENV = "https://contoso-fo.operations.dynamics.com"
+BC_BASE = "http://mglab-bc:7048/BC"
+ROOT_URL = BC_BASE + "/api/v2.0"
 DV_ENV = "https://contoso-lab.crm4.dynamics.com"
+COMPANY_ID = "00000000-0000-0000-0000-0000000000a1"
+COMPANY_ID2 = "00000000-0000-0000-0000-0000000000a2"
 
 
 class FakeResponse:
@@ -39,13 +43,15 @@ class StubSession:
         self.routes.append((re.compile(pattern), response))
         return self
 
-    def request(self, method, url, json=None, headers=None, **_):
-        req = {"method": method, "url": unquote(url), "headers": headers or {}}
+    def request(self, method, url, json=None, headers=None, timeout=None, **_):
+        req = {"method": method, "url": unquote(url), "headers": headers or {}, "json": json}
         self.requests.append(req)
         for rx, resp in reversed(self.routes):
-            if rx.search(req["url"]):
+            if rx.search(method + " " + req["url"]):
+                if isinstance(resp, Exception):
+                    raise resp
                 return resp(req) if callable(resp) else resp
-        return FakeResponse(404, {"error": {"message": f"stub: no route for {req['url']}"}})
+        return FakeResponse(404, {"error": {"code": "BadRequest_NotFound", "message": f"stub: no route for {req['url']}"}})
 
 
 @pytest.fixture
@@ -54,8 +60,8 @@ def stub():
 
 
 @pytest.fixture
-def fo(stub):
-    return FoApi(FO_ENV, lambda: "test-token", session=stub, sleep=lambda s: None)
+def bc(stub):
+    return BcApi(BC_BASE, "admin", "not-a-real-password", session=stub, sleep=lambda s: None)
 
 
 @pytest.fixture
@@ -65,8 +71,15 @@ def dv(stub):
 
 @pytest.fixture
 def cfg():
-    return json.loads((ROOT / "fo.json").read_text())
+    return json.loads((ROOT / "bc.json").read_text())
 
 
 def sample(name):
-    return json.loads((ROOT / "sample" / name).read_text())["value"]
+    return json.loads((ROOT / "sample" / name).read_text())
+
+
+def two_companies(stub):
+    stub.on(r"GET .*/api/v2\.0/companies$", FakeResponse(200, {"value": [
+        {"id": COMPANY_ID, "name": "CRONUS USA, Inc.", "displayName": "CRONUS USA, Inc."},
+        {"id": COMPANY_ID2, "name": "Contoso Test Co", "displayName": "Contoso Test Co"}]}))
+    return stub

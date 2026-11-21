@@ -1,95 +1,111 @@
-# Demo shot list — DEVLADLOG Dynamics 365 #12: Finance & Operations
+# Demo shot list — DEVLADLOG Dynamics 365 #12: Finance & Operations with Business Central
 
-Already run in the build container: `python3 -m pytest -q tests` (17 passed, services stubbed) and the offline `customers` /
-`reconcile` on the fictional samples. **Nothing has run against Finance and Operations or Dataverse yet: all four `screen`
-scenes need the lab tenant, and a Finance environment that the lab does not have today.** Several response details are
-listed under "Not verified on Learn" in the README and are checked in step 6.
+Already run in the build container (no Docker, no tenant): `python3 -m pytest -q tests` (36 passed) and the Pester tests of the setup
+script (33 passed, 1 skipped, the DPAPI round trip needs Windows), plus the offline `customers`/`reconcile` on the fictional samples.
+**Nothing has run against a real Business Central container or Dataverse yet: all four `screen` scenes need the recording laptop (and the
+Sales trial tenant for the reconcile).** The unverified details are listed in the README ("Not verified") and are checked in steps 3 and 6.
 
 ## Lab environment
 
-**New resource, not in `series/LAB.md` yet** (add it there when provisioned): a Dynamics 365 Finance trial environment.
-Cloud tenant only, no VMs, no Azure resources. The recording machine is the lab Windows desktop (browser plus terminal).
+The Finance trial is gone from the plan (no trial exists for the lab). The live demo is **Business Central in a local developer
+container on the recording laptop**. New resource, not in `series/LAB.md` yet (add it there once provisioned). No Hyper-V lab VM, no
+Azure resource, no licence, no cost.
 
-| Item | Notes | Cost |
-|---|---|---|
-| Dynamics 365 **Finance trial** environment | Learn (*Unified admin trials*): the tenant admin gets the free Finance trial offer from **Marketplace** in the Microsoft 365 admin center (search *Finance*, take the free trial offer), assigns the license to the lab admin, then in the Power Platform admin center: Manage, Environments, **New**, type **Trial (subscription-based)**, region EMEA, security group, **Enable Dynamics 365 apps**, template **Finance** (Learn shows *Finance (Preview)* as the example), Save. Deployment can take about an hour. **The trial length is not stated on the Learn page: read it off the offer and write it in README before recording.** Learn warns the Finance trial doesn't support Visual Studio development: not needed. Do **not** use the older Lifecycle Services preview route: Learn (*Project Operations preview*) says that route needs an Azure subscription billed per environment, and new LCS projects for Finance are frozen since Feb 2026 | none (trial); confirm the offer shows no charge before accepting |
-| Dynamics 365 **Sales trial** environment (ends ~21 Dec 2026) | Provides the Dataverse side: the account *Contoso Retail* from episode 7 (set its account number in step 4). Record **before the trial ends**. Mask the org URL | none (trial) |
-| Microsoft Entra app registration `mglab-fokit` | In the lab tenant, single tenant, one client secret with the shortest useful expiry; the recorder creates it and the secret never goes into any file. Learn lists the delegated permissions for the registration (*Access Dynamics AX Custom Service*, *Access Dynamics AX data*, *Access Dynamics AX online as organization users*, under *Microsoft Dynamics ERP*): add them | none |
-| `labadmin` | Recording account: admin of the Finance environment and System Administrator in the Sales trial environment | none |
-| Recording laptop | Python 3.10+, `pip install --user -r requirements.txt`, dark terminal font 18+, browser with `pipeline/mask.js` | none |
+| Item | Spec |
+|---|---|
+| Machine | The recording laptop (Windows, Core Ultra 9, 24 threads, 191 GB RAM). Host Windows only; the Hyper-V lab VMs (`CON-*`) are not used and keep running |
+| Docker | Docker Desktop for Windows, **in Windows-containers mode** (taskbar icon, *Switch to Windows Containers*). Check: `docker info --format '{{.OSType}}'` prints `windows`. The script checks it and says how to switch. Docker Desktop's licence terms apply (Learn notes a free option "might require a licence"): the owner confirms before installing |
+| PowerShell | Elevated **Windows PowerShell 5.1** (`powershell.exe`, Run as administrator). Learn: version 28.0 containers have a known problem with PowerShell 7 |
+| Module | BcContainerHelper from the PowerShell Gallery (the script installs it; needs internet) |
+| Container | Name `mglab-bc`; sandbox artifacts, latest, country `us` (company **CRONUS USA, Inc.**); `NavUserPassword`; memory limit 8 GB (Learn: a container uses at least 6 GB); `-updateHosts`, `-assignPremiumPlan`, no desktop shortcuts |
+| RAM / CPU | 8 GB limit; the laptop has far more, so no constraint |
+| Disk | About 15 GB for artifacts plus images (Learn). Check the free space on the drive Docker Desktop stores its data on **and** on `C:` (the artifact cache is `C:\bcartifacts.cache`, working files `C:\ProgramData\BCContainerHelper`). The first run is a big download: run it **the day before** recording |
+| Ports | Container defaults (BcContainerHelper source): web client 80, file share 8080, management 7045, client services 7046, SOAP 7047, **OData/API 7048**, developer 7049. Plain HTTP, no `-useSSL`. **Not published** to the laptop's LAN: the laptop reaches the container by name through the hosts entry that `-updateHosts` adds (`http://mglab-bc:7048/BC/api/v2.0`). Nothing is opened in Windows Firewall. If Docker's NAT subnet collides with the Hyper-V lab network `10.50.0.0/24`, `docker network ls` shows it: report it, do not renumber the lab |
+| Secret | The generated admin password is DPAPI-encrypted in `E:\MGLab\secrets\mglab-bc.admin.dpapi` (only the recording Windows user on this laptop can decrypt it). It is never printed, never in the repo, never on screen. `-SetEnv` puts it in `BC_PASSWORD` of the current shell only: close that shell after recording |
+| Dataverse side | **Dynamics 365 Sales trial** environment (until ~21 Dec 2026): record before it ends. `labadmin` is System Administrator there. Interactive sign-in from `bckit` (no secret needed): Learn sample client id, as in episodes 1-11 |
+| Tools | Python 3.10+ and `pip install --user -r requirements.txt` on the laptop; dark terminal font 18+; browser with `pipeline/mask.js` for the Dataverse capture |
 
-**Fallback if the Finance trial can't be provisioned** (offer not visible for this tenant or region, or the environment fails
-to deploy): the series plan already says to make this an architecture-only episode. Then cut the `environment`, `doctor`,
-`reconcile` and `dualwrite` screens and re-script from the Learn pages and Dataverse-side screens only, and tell the owner.
-No stub, mock or local server is ever shown.
+The Business Central container is **not** connected to Dataverse (online Business Central only connects to Dataverse environments of the
+same Entra tenant; the container is a local stand-in for the product, not for the sync). The episode never claims a sync: the reconcile
+is the code-level check.
 
-## Setup (before recording)
+**Fallback if the container cannot be built** (Windows containers feature missing, Docker mode cannot be switched, artifact download
+blocked, creation fails even with `-Isolation hyperv`): cut the `container`, `doctor` and `invoices` screens, keep the architecture and
+code scenes, and tell the owner. No stub, mock or fake server is ever shown.
 
-1. Deploy the Finance trial as above and open it once as `labadmin`. Note the company ids in the company selector
-   (**write the real ids in README**; the `usmf` in the README is only an example).
-2. Register `mglab-fokit` in Entra ID (portal), add the secret, note the application (client) id and tenant id.
-3. In Finance: **System administration > Setup > Microsoft Entra applications**, New: *Client Id* = the application id, *Name*
-   = `mglab-fokit`, *User ID* = a user for the app (Learn's sample uses Admin; a dedicated service user is the better practice:
-   create one if it takes five minutes, otherwise use Admin and say so on screen). Save.
-4. Data, all through the apps (no code writes data in this episode):
-   - Finance, company A, Accounts receivable > All customers > New: **C-1001 Contoso Retail**, **C-1002 Contoso Logistics**,
-     **C-1003 Contoso Hospitality** (type Organization; the required fields per Learn are account, party type, customer group,
-     sales currency and organization name: use existing groups and currency), and one **person** customer **C-2001 Alex Demo**.
-   - Dataverse (Sales trial), Accounts: set **Account Number = C-1001** on *Contoso Retail*; create **Contoso Logistics Ltd**
-     with **C-1002** (so R003 shows a name difference); create **Contoso Legacy Store** with **C-1099** (R002). C-1003 stays
-     only in Finance (R001).
-5. Terminal: `export FO_URL=https://<environment>.operations.dynamics.com`,
-   `export DATAVERSE_URL=https://<sales trial>.crm4.dynamics.com`, `export AZURE_TENANT_ID=... AZURE_CLIENT_ID=...
-   AZURE_CLIENT_SECRET=...` (typed in the shell, not saved anywhere), `cd src`.
-6. `python3 -m fokit doctor`, then `python3 -m fokit customers`. **Verify and note in README** ("Not verified on Learn"): the call
-   succeeds; the columns come back with the casing used in `fo.json` (`CustomerAccount`, `dataAreaId`, ...); `PartyType` is the
-   text `Organization`/`Person`; the person customer is counted as R005. If any name or value differs, fix `fo.json`,
-   `customers.py` and the tests from the real output. If the Dataverse call needs a different token (the app has no
-   application user in the Sales trial environment), either create the application user there, or run `reconcile` with an
-   interactive sign-in by leaving `AZURE_CLIENT_SECRET` unset for that command and note what you did.
-7. `python3 -m fokit reconcile`: expect R001 (C-1003), R002 (C-1099), R003 (C-1002), R005 (person) and no R004 unless a second
-   company has the same account number. Keep whatever it really prints.
-8. Optional, only if it takes a few minutes and works: in Finance, Data management workspace > **Dual-write**, link to a
-   Dataverse environment and apply **Customers V3 (accounts)** (Learn, *Dual-write setup*). **Not planned in the script and
-   not verified in this lab.** The `dualwrite` scene just shows the page as it is.
+## Setup (the day before)
+
+1. Install Docker Desktop if it is not there, start it, switch to Windows containers.
+2. Elevated Windows PowerShell 5.1:
+   `cd <repo>\series\dynamics-365\episodes\12-finance-operations`
+   `.\setup\New-LabBusinessCentral.ps1 -AcceptEula` (you accept the container EULA by passing the switch). It prints the Docker check,
+   the artifact URL, the container creation log (Business Central's own output) and finally
+   `API ok at http://mglab-bc:7048/BC/api/v2.0 : <n> company(ies): ...`. If it stops with the 401 hint, see step 3.
+3. **Verify and note in README ("Not verified")**: the API answers at that URL; the generated password is accepted. If the script reports
+   401: sign in to the web client as `admin` (the log shows the URL and the user name), open the user card and create a *web service access
+   key*, and use that as `BC_PASSWORD` in step 4 (the script itself never changes the password). Note the real company names, whether the US
+   sandbox has more than one company, and fix `README.md` and `bc.json`.
+4. Same shell: `.\setup\New-LabBusinessCentral.ps1 -SetEnv`, then `cd src`, `python -m bckit doctor`, `python -m bckit companies`.
+5. Seed the fictional customers: `python -m bckit seed --company "CRONUS USA, Inc." --dry-run`, then without `--dry-run`. Write down the
+   numbers Business Central assigned to Contoso Retail, Contoso Logistics Ltd and Contoso Hospitality Group (the output shows them).
+6. Dataverse (Sales trial, Sales Hub, Accounts), by hand: on **Contoso Retail** set *Account Number* = its Business Central number
+   (create the account if it does not exist from episode 7); create **Contoso Logistics Holdings** with the number of Contoso Logistics
+   Ltd (so R003 shows a name difference); create **Contoso Legacy Store** with a number Business Central does not have, for example
+   `LEGACY-1` (R002). Contoso Hospitality Group stays only in Business Central (R001); the person Alex Demo gives R005. Then
+   `$env:DATAVERSE_URL = 'https://<sales trial org>.crm4.dynamics.com'` and
+   `python -m bckit reconcile --name-contains Contoso; echo "exit $LASTEXITCODE"`. If the Dataverse call needs another sign-in, use the
+   browser prompt (leave `AZURE_CLIENT_SECRET` unset). **Verify and note in README**: whether the trial's sample accounts already have
+   account numbers (the unscoped run would show them as R002) and what the output really is. Keep whatever it prints.
+7. In the Business Central web client (sign in as `admin`): create one **Sales Invoice** for Contoso Retail with any item from the item
+   list, one line, and **Post** it. Then `python -m bckit invoices --company "CRONUS USA, Inc." --customer <Contoso Retail number>`.
 
 ## Screens to capture (match the `screen` scenes in script.yaml)
 
-### 1. `screens/fo-environment.jpg` — "A real Finance environment" (needs tenant)
-Power Platform admin center → Manage → Environments: the Finance trial next to the Sales trial (type, state, region). Then the
-Finance environment in the browser: Accounts receivable → All customers, company selector visible, the demo customers listed.
-Mask tenant, org URLs, user.
+### 1. `screens/bc-container.jpg` — "A real container on the laptop"
+Elevated PowerShell on the laptop: run `.\setup\New-LabBusinessCentral.ps1 -AcceptEula` a **second time** (idempotent: Docker check line,
+"Container mglab-bc is already running.", the `API ok` line with the company names, the hint for `-SetEnv`). Then `docker ps` with
+`mglab-bc` running (image and status visible) and the Business Central web client open on CRONUS USA, Inc. No password anywhere on
+screen. Mask: nothing secret exists here; keep the host name `mglab-bc`.
 
-### 2. `screens/fokit-customers.jpg` — "The first real call" (needs tenant)
-```bash
-python3 -m fokit doctor
-python3 -m fokit customers
+### 2. `screens/bckit-customers.jpg` — "The first real call"
+```powershell
+python -m bckit doctor
+python -m bckit seed --company "CRONUS USA, Inc."     # shows "exists ..." lines on a second run: that is the idempotency
+python -m bckit customers --company "CRONUS USA, Inc." --limit 12
 ```
-Real output: the URL it calls (blur the host), the ok line with the columns, then the counts per company and the first rows.
+Real output: the URL it calls, the two `ok:` lines with the company names, the seed lines with Business Central's numbers, the counts and
+the first customers. If the first attempt fails, record the real error line and what fixed it (for example the 401 hint).
 
-### 3. `screens/fokit-reconcile.jpg` — "Two systems, one answer" (needs tenant)
-```bash
-python3 -m fokit reconcile; echo "exit $?"
+### 3. `screens/bckit-invoices.jpg` — "The money side"
+Business Central web client: the posted Sales Invoice for Contoso Retail (number and amount visible). Then the terminal:
+```powershell
+python -m bckit invoices --company "CRONUS USA, Inc." --customer <number>
+python -m bckit invoices --company "CRONUS USA, Inc." --status Open --limit 5
 ```
-Then Finance → All customers and the Dataverse Accounts view for one customer (for example *Contoso Retail* with C-1001 on both
-sides), side by side. If the output is cleaner than planned, say so; if you fall back to the sample, label it "sample".
+Keep what it prints (status, due date, remaining amount per customer).
 
-### 4. `screens/fo-dual-write.jpg` — "The map behind it" (needs tenant)
-Finance → Data management workspace → **Dual-write**: the list of table maps; open **Customers V3 (accounts)** and show
-`CustomerAccount` mapped to `accountnumber` and its status. Show whatever the environment really has: running, stopped or not linked.
-If the page says the environment isn't linked yet, keep that on screen and don't re-record the narration around it.
+### 4. `screens/bckit-reconcile.jpg` — "Two systems, one answer"
+```powershell
+python -m bckit reconcile --name-contains Contoso; echo "exit $LASTEXITCODE"
+python -m bckit reconcile; echo "exit $LASTEXITCODE"      # unscoped: CRONUS' own customers show up as R001, that is the point
+```
+Expect R001 (Contoso Hospitality Group), R002 (Contoso Legacy Store), R003 (Contoso Logistics), R005 (Alex Demo) and exit 1 in the scoped
+run. Then side by side: the Business Central customer card for Contoso Retail and the Dataverse Account with the same number. If the output
+is cleaner than planned, say so; if you fall back to the offline sample, label it "sample". Mask the Dataverse URL, tenant and user.
 
 ## Masking checklist
-- Org URLs for both environments, tenant name, user principal names, avatars, client id and tenant id (they are real
-  identifiers), the client secret (never visible: typed into the shell before recording starts).
-- Only fictional customers (Contoso Retail, Contoso Logistics, Contoso Hospitality, Alex Demo) and lab users on screen.
+- Dataverse org URL, tenant name, user principal names, avatars. The Business Central host name `mglab-bc` is fine.
+- The container password and any web service access key: never visible (typed into nothing; `BC_PASSWORD` is set silently by the script).
+  If a web service access key was created, do not open the user card on camera.
+- Only fictional customers (Contoso ..., Alex Demo), CRONUS demo data, and lab users on screen.
 
 ## Tear-down
-1. Delete the three Finance customers and the person customer if Finance allows it (customers without transactions); otherwise
-   they disappear with the trial environment.
-2. Dataverse: clear the account number on *Contoso Retail*, delete *Contoso Logistics Ltd* and *Contoso Legacy Store* (leave
-   Contoso Retail and its cases for other episodes).
-3. Finance: remove the `mglab-fokit` row in Microsoft Entra applications. Entra ID: delete the secret and the app registration.
-4. If dual-write was linked (step 8): unlink it and delete the maps' data in Dataverse before deleting anything else.
-5. Power Platform admin center: delete the Finance trial environment; Microsoft 365 admin center: remove the Finance trial
-   license/subscription so nothing renews.
+1. Terminal: close the PowerShell windows that had `BC_PASSWORD` set (or `Remove-Item Env:BC_PASSWORD, Env:BC_USER, Env:BC_BASE_URL`).
+2. `.\setup\New-LabBusinessCentral.ps1 -Remove` in the elevated prompt: removes the container, its hosts entry and shortcuts
+   (`Remove-BcContainer`), and the encrypted password file. Business Central data inside the container goes with it (the seeded
+   customers and the posted invoice are not kept anywhere else).
+3. Disk (optional, only when the episode is finished for good): delete `C:\bcartifacts.cache`; remove the Business Central images
+   that `docker images` lists as created for `mglab-bc` with `docker rmi <image id>` (those only; do not prune other images).
+4. Dataverse: clear the account number on *Contoso Retail*; delete *Contoso Logistics Holdings* and *Contoso Legacy Store*; leave
+   Contoso Retail and its cases for other episodes.
+5. Docker Desktop: switch back to Linux containers if other episodes need them.

@@ -1,16 +1,17 @@
-# DEVLADLOG Dynamics 365 — episode 12. Draft: screen scenes need the lab-tenant capture described in demo.md.
+# DEVLADLOG Dynamics 365 — episode 12 (reworked). The live demo is Business Central in a local developer container; screen
+# scenes need the recording laptop described in demo.md. Finance and Operations appears only in the one labelled architecture scene.
 episode: 12
 slug: finance-operations
 series_label: "DYNAMICS 365"
 series_name: "DEVLADLOG Dynamics 365"
 file_prefix: "dynamics-365"
-title: "Finance & Operations"
-subtitle: "OData, dual-write, and a check that the customer is the same on both sides"
+title: "Finance & Operations with Business Central"
+subtitle: "A real container, the API, and a customer check against Dataverse"
 voice: am_michael
-thumbnail_text: "DYNAMICS 365\nFINANCE & OPERATIONS\nODATA + DUAL-WRITE"
+thumbnail_text: "DYNAMICS 365\nFINANCE & OPERATIONS\nWITH BUSINESS CENTRAL"
 youtube:
-  title: "Dynamics 365 Finance and Operations: OData, Throttling, Dual-write and a Customer Reconciliation | DEVLADLOG Dynamics 365 #12"
-  tags: [Dynamics 365, Dynamics 365 Finance, finance and operations, OData, data entities, dual-write, Dataverse, throttling, Customers V3, Python]
+  title: "Finance & Operations with Business Central: API v2.0 and Dataverse | DEVLADLOG Dynamics 365 #12"
+  tags: [Dynamics 365, Business Central, Dynamics 365 Finance, finance and operations, BcContainerHelper, Docker, API v2.0, OData, Dataverse, Python]
 sources:
   - https://www.devladlog.com/articles/dynamics-365/2025-10-16-dynamics-365-finance-operations-complete-guide-2025/
 
@@ -18,106 +19,126 @@ scenes:
   - id: hook
     type: title
     heading: "Same customer, two systems"
-    sub: "Finance and Operations meets Dataverse"
+    sub: "Business Central meets Dataverse"
     short: hook
     narration: >
-      Contoso Retail is a customer in our sales and service apps. Finance has them too, with an invoice account in
-      Dynamics 365 Finance. Are those the same customer, or two rows that happen to share a name? In this episode
-      we read Finance and Operations over the real O Data endpoint, handle its throttling, and check
+      Finance is the back end of the Contoso story: customers, invoices, who owes what. One thing first, honestly. We have
+      no Dynamics 365 Finance trial, and Microsoft's self service Business Central trial is not available to us in
+      Portugal. So this episode runs the real Business Central, in a developer container on this laptop, and checks its
       customers against Dataverse with code.
 
-  - id: ways
+  - id: architecture
     type: bullets
-    heading: "Four ways to connect"
+    heading: "Architecture: Finance and Operations vs Business Central"
     bullets:
-      - "OData: synchronous reads and writes on data entities"
-      - "Data management: bulk import and export"
-      - "Dual-write: near real time, both directions, with Dataverse"
-      - "Virtual tables: Dataverse looks at the data, no copy"
+      - "Finance and Operations: OData on data entities, app registered in Entra and in the app"
+      - "It needs cross-company=true, pages up to 10,000, 429 throttling"
+      - "Business Central: API v2.0, everything under companies(id), pages up to 20,000"
+      - "This demo runs Business Central, not Finance and Operations"
     narration: >
-      Learn lists several integration tools. O Data on data entities for synchronous reads and writes. The data
-      management framework for bulk import and export. Dual write, which keeps Finance and Dataverse in near real time
-      sync in both directions. And virtual tables, where Dataverse queries Finance and Operations without copying the
-      data. This episode is the first and the third.
+      A quick architecture note, so nobody is misled. Finance and Operations apps expose data entities over O Data. The
+      Entra app is registered inside the app too, you add cross company equals true to leave your default company,
+      pages come in chunks of up to ten thousand rows, and throttling answers four twenty nine. Business Central is a
+      different product, for small and mid sized organizations. Its A P I version two puts every resource under a company
+      i d, with pages of up to twenty thousand rows. Same idea, different calls. What we run today is Business Central.
 
-  - id: environment
-    type: screen
-    heading: "A real Finance environment"
-    image: screens/fo-environment.jpg
-    bar: "Power Platform admin center · Environments · Finance trial"
-    demo: >
-      Power Platform admin center, Manage, Environments: the Finance trial environment (type Trial, subscription-based,
-      with the Finance template) next to the Sales trial environment. Then the Finance environment in the browser: Accounts
-      receivable, All customers, with the company selector visible. Mask tenant, org URLs and user.
+  - id: setup-code
+    type: code
+    heading: "One script builds the container"
+    lang: powershell
+    code: |
+      $p = @{ type = 'Sandbox'; country = $Country; select = 'Latest' }
+      if ($Version) { $p.version = $Version }
+      $url = Get-BcArtifactUrl @p
+      # ... generate the password, encrypt it with DPAPI ...
+      Save-LabSecret -Path $SecretPath -Secret $secure
+      New-BcContainer -accept_eula -containerName $Name -artifactUrl $artifactUrl `
+          -auth NavUserPassword -Credential $credential `
+          -memoryLimit $Memory -updateHosts -assignPremiumPlan -shortcuts None @extra | Out-Null
     narration: >
-      Finance and Operations apps can now be tried from the Power Platform admin center, as a subscription based trial
-      with the Finance template. That's what we use here: a real Finance environment, not a mock. It has companies,
-      called legal entities, and customers inside each of them.
+      The container comes from Microsoft's Bc Container Helper module. We ask it for the latest sandbox artifact of the
+      U S version, which has the Cronus demonstration company. The script generates the admin password, encrypts it with
+      the Windows data protection A P I, and only then creates the container, with user name and password
+      authentication and an eight gigabyte limit. The module switches the A P I services on, and the script proves it
+      with a real call.
+
+  - id: container
+    type: screen
+    heading: "A real container on the laptop"
+    image: screens/bc-container.jpg
+    bar: "PowerShell (admin) · New-LabBusinessCentral.ps1 · docker ps · Business Central web client"
+    demo: >
+      Elevated Windows PowerShell on the recording laptop: the script's Docker check line (Windows containers mode), then its
+      final lines (the API ok line with the company names; the password is never shown), then docker ps with mglab-bc
+      running, then the Business Central web client open on the Cronus company. The first run (about 15 GB download) is
+      recorded beforehand; show the idempotent second run. Mask nothing secret: no password appears.
+    narration: >
+      On the recording laptop, Docker Desktop is in Windows containers mode. The script checks that first, and says how to
+      switch if it is not. The first run downloads about fifteen gigabytes, so we start from a finished container. Docker
+      p s shows it running, the script's second run changes nothing, and the web client opens on Cronus.
 
   - id: auth
     type: bullets
-    heading: "Two registrations, not one"
+    heading: "Basic authentication: the container only"
     bullets:
-      - "Register an app in Microsoft Entra ID"
-      - "Register its client id in Finance and Operations"
-      - "Give it a service user, ideally a dedicated one"
-      - "Token resource: the environment URL, no trailing slash"
+      - "User admin, password generated, stored DPAPI-encrypted"
+      - "Learn: on-premises basic auth takes the web service access key"
+      - "Basic auth with access keys is deprecated in Business Central online"
+      - "Online: OAuth"
     narration: >
-      Authentication takes two registrations. An application in Microsoft Entra ID, and then that same client id
-      registered inside Finance and Operations, under system administration, setup, Microsoft Entra applications, with
-      a service user. Learn suggests a dedicated service account instead of the admin. The token is requested for the
-      environment URL, without a trailing slash.
+      Authentication is basic here: the admin user, and the password the script generated. Learn says that on premises,
+      basic authentication takes the web service access key as the password, so if the password is ever refused, the
+      doctor command tells you what to do. And access keys are deprecated in Business Central online, where you use OAuth.
+      So this login is for the container only.
 
-  - id: odata-code
+  - id: api-code
     type: code
-    heading: "Read customers over OData"
+    heading: "Companies first, then follow the next link"
     lang: python
     code: |
-      def fo_url(api, cfg, company=None, top=None) -> str:
-          flt = f"dataAreaId eq {odata_string(company)}" if company else None
-          return api.url(cfg["entity"], select=cfg["select"], filter=flt, top=top, cross_company=True)
-
-      def get_all(self, url):
-          nxt = url
-          while nxt:
-              page = self.request(nxt)
-              yield from page.get("value", [])
-              nxt = page.get("@odata.nextLink")
+      return f"{self.root}/companies({company_id})/{entity}" + ("?" + "&".join(parts) if parts else "")
+      # ...
+      if page_size:
+          headers["Prefer"] = f"odata.maxpagesize={page_size}"
+      retry_on = {429, 503} if method == "GET" else {429}
+      # ...
+      page = self.request("GET", nxt, page_size=page_size) or {}
+      yield from page.get("value", [])
+      nxt = page.get("@odata.nextLink")
     narration: >
-      The endpoint is the environment URL plus slash data, and the customers entity is Customers V3. By default O Data
-      returns only your default company. Add cross company equals true to see every company you can access, or
-      filter one with data area id. Results come in server driven pages, up to ten thousand rows, so we follow the next
-      link until it's gone.
-
-  - id: throttle-code
-    type: code
-    heading: "When the server says slow down"
-    lang: python
-    code: |
-      for attempt in range(self.max_retries + 1):
-          r = self.session.request("GET", url, headers=...)
-          if r.status_code != 429 or attempt == self.max_retries:
-              break
-          self._sleep(float(r.headers.get("Retry-After") or 2 ** attempt))
-    narration: >
-      Finance and Operations protects itself with throttling. A throttled request gets a four twenty nine and a
-      Retry After value in seconds, and Learn says a retry gets no priority over new requests. So the client waits as
-      told and tries again. And if you have several integrations, an admin can give each one a priority in the throttling
-      priority mapping.
+      Every resource lives under a company, so the first call lists companies, and every other call carries the company
+      i d. We ask for pages with the prefer header and follow the next link until it is gone. Four twenty nine and five
+      oh three are the throttling answers: we wait and try again. But a post is never retried on a five oh three, so a
+      customer is never created twice.
 
   - id: doctor
     type: screen
     heading: "The first real call"
-    image: screens/fokit-customers.jpg
-    bar: "Terminal · fokit doctor · customers"
+    image: screens/bckit-customers.jpg
+    bar: "Terminal · bckit doctor · companies · customers"
     demo: >
-      Terminal against the Finance trial environment: fokit doctor (the URL it calls without the host, then the ok line
-      with the columns), then fokit customers (count by company and the first rows). If the first run fails, show the
-      real error and what fixed it. Blur org URL, keep company ids and customer names.
+      Terminal after New-LabBusinessCentral.ps1 -SetEnv: python -m bckit doctor (the root URL it calls, the ok lines with
+      the company names), then python -m bckit seed --company "CRONUS USA, Inc." (created or exists lines with the numbers
+      Business Central assigned), then python -m bckit customers --company "CRONUS USA, Inc." --limit 12. If the first run
+      fails, show the real error line and what fixed it. The password is never on screen.
     narration: >
-      First call, with a real token. The doctor command makes one small request and says whether the app registration,
-      the endpoint and the entity are all reachable. Then the customers command, with counts per company. If the
-      authentication isn't set up, you see the real error here, before anything else can go wrong.
+      First real call. The doctor command reads the A P I root and the companies list, and says whether the container,
+      the endpoint and the login all work. Then we create three fictional Contoso customers and one person in the Cronus
+      company, and list the customers. A failed login shows as an error line with the Learn hint, not a stack trace.
+
+  - id: invoices
+    type: screen
+    heading: "The money side"
+    image: screens/bckit-invoices.jpg
+    bar: "Business Central web client · Sales Invoice · Terminal · bckit invoices"
+    demo: >
+      Business Central web client: create a sales invoice for Contoso Retail with any item from the item list, post it. Then in
+      the terminal python -m bckit invoices --company "CRONUS USA, Inc." --customer <the number of Contoso Retail> and the
+      same with --status Open. Keep whatever it really prints.
+    narration: >
+      Now the money side. We post one sales invoice for Contoso Retail in the web client, and read it back through the
+      A P I. The invoices command filters by status and customer, and adds up what is still remaining. The status column
+      tells draft from open and paid.
 
   - id: reconcile-code
     type: code
@@ -129,90 +150,79 @@ scenes:
 
       match = dv_by_number.get(number)
       if not match:
-          out.append(Finding("error", "R001", number, ...))      # in Finance, not in Dataverse
-      elif all(norm(a.name) != norm(first.name) for a in match):
-          out.append(Finding("warning", "R003", number, ...))    # same number, different name
+          out.append(Finding("error", "R001", number, f"{first.name!r} ({where}) has no Dataverse account with this "
+                             "account number"))
+          continue
+      if all(norm(a.name) != norm(first.name) for a in match):
+          out.append(Finding("warning", "R003", number, f"name differs: Business Central {first.name!r}, "
     narration: >
-      Dual write maps the customer account in Finance to the account number in Dataverse, and the key has to match on
-      both sides. So that's what we compare. A customer organization in Finance with no Dataverse account carrying the
-      same account number is an error. Same number but a different name is a warning. Also flagged: an account number in
-      more than one company, and people, which belong to the contacts map and not to accounts.
+      The key is the customer number in Business Central, against the account number in Dataverse. A company customer with
+      no Dataverse account carrying that number is an error. Same number but another name is a warning. We also flag a
+      number that exists in several companies, a Dataverse account Business Central doesn't know, and people, which are
+      contacts, not accounts.
 
   - id: reconcile
     type: screen
     heading: "Two systems, one answer"
-    image: screens/fokit-reconcile.jpg
-    bar: "Terminal · fokit reconcile · Finance customer · Dataverse account"
+    image: screens/bckit-reconcile.jpg
+    bar: "Terminal · bckit reconcile · Business Central customer · Dataverse account"
     demo: >
-      Terminal: fokit reconcile against the Finance trial environment and the Dataverse environment chosen in demo.md,
-      with its summary and findings and the exit code. Then the Finance All customers page and the Dataverse Accounts view
-      for one customer, side by side. Keep what it really prints; if all is clean, say so and show the offline sample
-      labelled as the sample. Mask URLs and ids.
+      Terminal: python -m bckit reconcile --name-contains Contoso against the container and the Dataverse environment chosen in
+      demo.md, with its summary, findings and exit code (echo the exit code), then the unscoped run. Then the Business Central
+      customer card and the Dataverse Account for Contoso Retail side by side, the number on both. Keep what it really prints;
+      mask the Dataverse URL.
     narration: >
-      The result for our lab, from the real services. Counts on both sides, then a finding per mismatch, and a failing
-      exit code when something is missing. Run it before the first initial sync to see what would collide, and later as
-      a drift check.
+      The result for our lab, from the real services. Counts on both sides, a finding per mismatch, and a failing exit code
+      when something is missing. Scoped to Contoso, so the Cronus sample customers don't bury it. Run it before you couple
+      anything, and later as a drift check.
     short: reconcile
 
-  - id: dualwrite
-    type: screen
-    heading: "The map behind it"
-    image: screens/fo-dual-write.jpg
-    bar: "Finance · Data management · Dual-write · Customers V3 (accounts)"
-    demo: >
-      Finance, Data management workspace, Dual-write: the table maps list, opening Customers V3 (accounts) to show
-      CustomerAccount mapped to accountnumber and its status. Show whatever the environment really has, running or not.
-      Mask tenant and user.
+  - id: sync
+    type: bullets
+    heading: "How it connects in real life"
+    bullets:
+      - "Business Central: Dataverse data sync, Customer to Account, coupled records"
+      - "Business Central: virtual tables read the API, no copy"
+      - "Finance and Operations: dual-write"
+      - "None of them is set up in this lab"
     narration: >
-      And this is the dual write map in Finance. Customer account on one side, account number on the other. Whether
-      it's running in this environment is exactly what the reconcile command tells you.
+      How would this connect for real? Business Central has its own synchronization with Dataverse: customers map to
+      accounts, you couple the records, and blocked customers are filtered out. It also has virtual tables, which read
+      Business Central through its A P I without copying. Finance and Operations has dual write. We did not set up any of
+      them here. The reconcile command is the check before you do, and the drift check after.
 
   - id: gotcha
     type: bullets
-    heading: "Gotchas Learn documents"
+    heading: "Gotchas"
     bullets:
-      - "Default company only, unless cross-company=true"
-      - "Customers V3 is slow: it is not for high volume"
-      - "Server pages up to 10,000 rows: follow nextLink"
-      - "429: honour Retry-After. Not for Power BI reports"
-      - "Dual-write needs a matching key on both sides"
+      - "Docker must be in Windows containers mode"
+      - "At least 6 GB of memory, about 15 GB of disk"
+      - "Version 28 containers: use Windows PowerShell 5.1"
+      - "No company id, no data: everything is under companies(id)"
+      - "A customer number is only unique inside one company"
     short: gotcha
     narration: >
-      The gotchas, all from Learn. O Data returns only your default company unless you ask for cross company. Customers
-      V3 covers every customer scenario, about eighty extra fields, and Learn says that costs performance, so don't use it for high volume.
-      Pages come back in chunks of up to ten thousand rows. Throttled requests answer four twenty nine with a retry
-      value. Don't use O Data for Power BI reports, use the entity store. And dual write needs a matching alternate
-      key on both sides.
-
-  - id: decision
-    type: bullets
-    heading: "Which way in?"
-    bullets:
-      - "A few records, now: OData"
-      - "Many records, scheduled: data management"
-      - "Customers shared with Sales or Service: dual-write"
-      - "Look, don't copy: virtual tables"
-    narration: >
-      So which way in? A few records right now, O Data. Many records on a schedule, data management. Customers and
-      products shared with the sales and service apps, dual write. And when you want to look at Finance data from
-      Power Platform without copying it, virtual tables.
+      The gotchas. Docker must be in Windows containers mode, and Learn says a container needs at least six gigabytes of
+      memory and about fifteen of disk. For version twenty eight containers, Learn says to use Windows PowerShell five
+      point one, because seven has a known problem loading the admin modules. No company i d, no data. And a customer
+      number is only unique inside one company.
 
   - id: recap
     type: bullets
     heading: "Four rules"
     bullets:
-      - "Say which company: cross-company or a filter"
+      - "Say which company: the id is in every URL"
       - "Follow nextLink, honour Retry-After"
-      - "Match keys before you switch dual-write on"
+      - "Keep the password out of the repo"
       - "Check drift with code, not by eye"
     narration: >
-      Four rules. Say which company you mean. Follow the next link and honour retry after. Match the keys on both
-      sides before you switch dual write on. And check for drift with code, not by eye.
+      Four rules. Say which company: the i d is in every U R L. Follow the next link and honour retry after. Keep the
+      password out of the repository. And check for drift with code, not by eye.
 
   - id: outro
     type: outro
     heading: "Code on GitHub, guides on devladlog.com"
     sub: "github.com/devladlog/mg-lab"
     narration: >
-      The tool, the sample data and all seventeen tests are on GitHub, and the complete guide to Finance and Operations
-      is on devladlog dot com. Thanks for following the series.
+      The setup script, the tool, the sample data and all the tests are on GitHub, and the complete guide to Finance and
+      Operations is on devladlog dot com. Thanks for following the series.
