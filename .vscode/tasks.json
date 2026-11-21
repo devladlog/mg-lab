@@ -5,17 +5,52 @@
       "label": "MG 1: toolchain report",
       "type": "process",
       "command": "powershell.exe",
-      "args": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "${workspaceFolder}\\series\\tools\\Get-WindowsToolchain.ps1"],
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}\\series\\tools\\Get-WindowsToolchain.ps1"
+      ],
       "problemMatcher": [],
-      "presentation": { "reveal": "always", "panel": "dedicated" }
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      }
     },
     {
       "label": "MG 2: verify all episodes on Windows (.NET + Pester)",
       "type": "process",
-      "command": "powershell.exe",
-      "args": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "${workspaceFolder}\\series\\tools\\Invoke-WindowsVerification.ps1"],
+      "command": "pwsh.exe",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-Command",
+        "New-Item -ItemType Directory -Force '${workspaceFolder}\\verify-results' | Out-Null; Start-Transcript -Path '${workspaceFolder}\\verify-results\\transcript.txt' -Force | Out-Null; try { & '${workspaceFolder}\\series\\tools\\Invoke-WindowsVerification.ps1' } catch { $_ | Out-String | Write-Host -ForegroundColor Red; exit 1 } finally { Stop-Transcript | Out-Null }"
+      ],
       "problemMatcher": [],
-      "presentation": { "reveal": "always", "panel": "dedicated" }
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      }
+    },
+    {
+      "label": "MG 3: rerun only the failed episodes",
+      "type": "process",
+      "command": "pwsh.exe",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-Command",
+        "New-Item -ItemType Directory -Force '${workspaceFolder}\\verify-results-rerun' | Out-Null; Start-Transcript -Path '${workspaceFolder}\\verify-results-rerun\\transcript.txt' -Force | Out-Null; try { & '${workspaceFolder}\\series\\tools\\Invoke-WindowsVerification.ps1' -RerunFailed } catch { $_ | Out-String | Write-Host -ForegroundColor Red; exit 1 } finally { Stop-Transcript | Out-Null }"
+      ],
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      }
     }
   ]
 }

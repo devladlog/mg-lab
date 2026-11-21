@@ -20,14 +20,28 @@ param(
     [int]$TimeoutMinutes = 15,
     [switch]$AlsoWindowsPowerShell,
     [switch]$IncludePython,
-    [switch]$IncludeNode
+    [switch]$IncludeNode,
+    [switch]$RerunFailed,          # only the episodes that did not pass in verify-results\results.json
+    [string]$OutName = 'verify-results'
 )
 $ErrorActionPreference = 'Stop'
-$out = Join-Path $Root 'verify-results'
+$out = Join-Path $Root $OutName
+$previous = @()
+if ($RerunFailed) {
+    $prevFile = Join-Path $Root 'verify-results\results.json'
+    if (Test-Path $prevFile) { $previous = @((Get-Content $prevFile -Raw | ConvertFrom-Json) | Where-Object status -ne 'pass' | ForEach-Object episode | Sort-Object -Unique) }
+    if (-not $OutName -or $OutName -eq 'verify-results') { $out = Join-Path $Root 'verify-results-rerun' }
+}
 New-Item -ItemType Directory -Force -Path $out, (Join-Path $out 'logs') | Out-Null
 $results = [System.Collections.Generic.List[object]]::new()
 
 function Get-Tool([string]$name) { (Get-Command $name -ErrorAction SilentlyContinue | Select-Object -First 1).Source }
+# Bicep: many template tests call `bicep`. Use a PATH copy, else the Azure CLI's managed copy (install it if missing).
+if (-not (Get-Tool bicep)) {
+    $azBicepDir = Join-Path $env:USERPROFILE '.azure\bin'
+    if (-not (Test-Path (Join-Path $azBicepDir 'bicep.exe')) -and (Get-Tool az)) { & az bicep install 2>&1 | Out-Host }
+    if (Test-Path (Join-Path $azBicepDir 'bicep.exe')) { $env:PATH = "$azBicepDir;$env:PATH"; Write-Host "Using Bicep from $azBicepDir" -ForegroundColor Yellow }
+}
 $dotnet = Get-Tool dotnet; $pwsh = Get-Tool pwsh; $winps = Get-Tool powershell; $python = Get-Tool python; $npm = Get-Tool npm
 
 function Invoke-Suite {
@@ -75,6 +89,7 @@ $skip = '\\(bin|obj|node_modules|\.venv|venv|\.git|reference|naive|legacy)\\'
 $episodes = Get-ChildItem (Join-Path $Root 'series\*\episodes\*') -Directory |
     Where-Object { Test-Path (Join-Path $_.FullName 'script.yaml') } |
     Where-Object { -not $Series -or ($Series -contains $_.Parent.Parent.Name) } |
+    Where-Object { -not $RerunFailed -or ($previous -contains "$($_.Parent.Parent.Name)/$($_.Name)") } |
     Sort-Object FullName
 
 foreach ($ep in $episodes) {
