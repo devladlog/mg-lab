@@ -1,0 +1,80 @@
+episode: 14
+series: "DEVLADLOG Power BI"
+status: draft-hold-for-review
+ai_label: true
+youtube_url: "{YOUTUBE_URL}"
+linkedin_company:
+  text: |
+    It works on my laptop. The refresh fails. The data is in a SQL Server on a private network, and the Power BI service cannot see it.
+
+    Episode 14 of DEVLADLOG Power BI puts an on-premises data gateway in between, on fictional Contoso Bikes data, and checks the three places where it usually goes wrong:
+    - a read-only SQL login for the gateway, with the password typed on the day and never kept in a file
+    - where the gateway can live: not Server Core, not a domain controller, not a laptop that sleeps
+    - a network check before installing, because the gateway only makes outbound connections and has to reach both the service and the SQL Server
+    - the data source created in the portal and through the Create Datasource API, with credentials encrypted for the gateway
+    - a check that reads the query and the gateway data sources and says whether the names match
+
+    The mistake everyone makes once: server and database names must match exactly, and matching is case sensitive.
+
+    Watch: {YOUTUBE_URL}
+    Code: {REPO_URL}
+    Guide: {BLOG_URL}
+
+    Narration uses an AI voice.
+    #PowerBI #DataGateway #SQLServer #PowerShell #PowerPlatform
+linkedin_personal:
+  text: |
+    The link between a Power BI model and a gateway data source is the server name and the database name. Nothing else.
+
+    Microsoft Learn says they must match exactly, and matching is case sensitive. If Desktop uses the IP address, the gateway data source must use the IP address. If the query says the server name and the gateway has the address, the gateway never shows up for the refresh.
+
+    So I wrote a small check that reads the query and the gateway data sources and says exactly which case it is. Cheaper than finding out from a failed refresh.
+
+    Episode 14: {YOUTUBE_URL}
+
+    #PowerBI #DataGateway #SQLServer
+
+    Narration uses an AI voice.
+facebook:
+  text: |
+    Why does a Power BI refresh fail when the report works on your laptop? Because the service lives in the cloud and your SQL Server does not. This episode installs an on-premises data gateway, creates the data source, and checks the names that must match exactly. We also cover the certificate and republishing traps. Fictional Contoso Bikes data.
+
+    Watch: {YOUTUBE_URL}
+
+    #PowerBI #DataGateway #SQLServer
+
+    Narration uses an AI voice.
+shorts:
+  - id: hook
+    youtube_short_title: "It works on my laptop. The Power BI refresh fails. #Shorts"
+    instagram_reel:
+      caption: |
+        Back in episode nine we said the lab had no gateway yet, so the data had to live in SharePoint. Now the sales data is in a SQL Server on the lab network, and the Power BI service cannot see it. This episode puts a gateway in between, and checks the three places where it usually goes wrong.
+        Full episode: link in bio.
+        Narration uses an AI voice.
+        #PowerBI #DataGateway #SQLServer
+      cover_text: "Works on my laptop"
+    tiktok:
+      caption: "Report works on your laptop, scheduled refresh fails? The service cannot reach your SQL Server. Add a gateway. #PowerBI #DataGateway"
+  - id: match
+    youtube_short_title: "Power BI gateway: the names must match exactly #Shorts"
+    instagram_reel:
+      caption: |
+        Here is the mistake everyone makes once. Learn says the link between model and gateway is the server name and the database name, they must match exactly, and matching is case sensitive. If Desktop says the IP address, the gateway must say the IP address. Otherwise the gateway never shows up for the refresh.
+        Full episode: link in bio.
+        Narration uses an AI voice.
+        #PowerBI #DataGateway #SQLServer #PowerPlatform
+      cover_text: "Do the names match?"
+    tiktok:
+      caption: "Power BI gateway data source: server and database name must match the query exactly, case sensitive. #PowerBI #DataGateway #SQLServer"
+  - id: gotcha
+    youtube_short_title: "Power BI gateway: the certificate you never created #Shorts"
+    instagram_reel:
+      caption: |
+        A SQL Server with its own self-signed certificate can make the refresh fail with a certificate chain that is not trusted. Learn says to list the server in the gateway's SQL trusted servers setting, and to back up the configuration file first. Two more traps: republishing the model removes the link to the gateway, and the person who binds has to be a user of the data source.
+        Full episode: link in bio.
+        Narration uses an AI voice.
+        #PowerBI #DataGateway #SQLServer
+      cover_text: "The certificate gotcha"
+    tiktok:
+      caption: "Gateway refresh fails with certificate chain not trusted? Use SQL trusted servers, back up the config first. #PowerBI #DataGateway"

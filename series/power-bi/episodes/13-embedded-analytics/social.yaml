@@ -1,0 +1,79 @@
+episode: 13
+series: "DEVLADLOG Power BI"
+status: draft-hold-for-review
+ai_label: true
+youtube_url: "{YOUTUBE_URL}"
+linkedin_company:
+  text: |
+    Store partners should see their own sales inside your portal, without a Power BI account and without ever seeing Power BI. The report and the row-level security already exist. The question is who decides who is looking.
+
+    Episode 13 of DEVLADLOG Power BI embeds the report for your customers, on fictional Contoso Bikes data:
+    - a service principal with workspace access, and the four tenant-side setup steps, including two tenant settings that are a click, not code
+    - a small Node server in TypeScript that signs in as the service principal and calls Generate Token (v2)
+    - an identity built on the server from its own role table: the browser sends an alias and nothing else, and a test checks that an extra roles parameter is ignored
+    - a page that embeds the report with the Power BI client library and replaces the token before it expires
+
+    The gotcha: with a service principal, a token request without a username and role is refused. With a master user it succeeds and nothing is filtered.
+
+    Watch: {YOUTUBE_URL}
+    Code: {REPO_URL}
+    Guide: {BLOG_URL}
+
+    Narration uses an AI voice.
+    #PowerBI #PowerBIEmbedded #TypeScript #RowLevelSecurity #PowerPlatform
+linkedin_personal:
+  text: |
+    In an embedded Power BI app, the browser must never tell the server which roles it has.
+
+    My server takes one thing from the browser: an alias. It looks the person up in its own table, builds the effective identity with the user principal name and the roles, and only then asks for an embed token. A test sends an extra roles=Head Office parameter and checks that it is ignored.
+
+    Why it matters: Learn says that with an embed token, who is a member of a role in the service does not count. Only the identity in the token does.
+
+    Episode 13: {YOUTUBE_URL}
+
+    #PowerBI #PowerBIEmbedded #TypeScript
+
+    Narration uses an AI voice.
+facebook:
+  text: |
+    Put a Power BI report inside your own app, with row-level security per user and no Power BI licence for the people using it. This episode builds a small TypeScript server that asks Power BI for an embed token and lets the server, not the browser, decide who is looking. Fictional Contoso Bikes data.
+
+    Watch: {YOUTUBE_URL}
+
+    #PowerBI #PowerBIEmbedded #TypeScript
+
+    Narration uses an AI voice.
+shorts:
+  - id: hook
+    youtube_short_title: "Your app. Their data. No Power BI licence. #Shorts"
+    instagram_reel:
+      caption: |
+        Contoso Bikes wants its store partners to see their own sales inside the partner portal, without a Power BI account and without ever seeing Power BI. The report and the row-level security already exist. In this episode we put them in an app, and we let the server, not the browser, decide who is looking.
+        Full episode: link in bio.
+        Narration uses an AI voice.
+        #PowerBI #PowerBIEmbedded #RowLevelSecurity
+      cover_text: "Your app. Their data."
+    tiktok:
+      caption: "Embed Power BI in your app for users with no Power BI licence, with RLS decided by the server. #PowerBI #PowerBIEmbedded #RLS"
+  - id: token
+    youtube_short_title: "Power BI Generate Token with an RLS identity #Shorts"
+    instagram_reel:
+      caption: |
+        The call is Generate Token, the version 2 API. It takes the report, the semantic model, and a list of identities with a username, the roles, and the models they apply to. The lifetime can only shorten the token's life, never extend it. The service principal's own Entra token is only used for this call. The browser gets the embed token.
+        Full episode: link in bio.
+        Narration uses an AI voice.
+        #PowerBI #PowerBIEmbedded #EntraID #RESTAPI
+      cover_text: "Generate Token with RLS"
+    tiktok:
+      caption: "Power BI Generate Token v2: report, model, identity with username and roles. The browser only gets the embed token. #PowerBIEmbedded"
+  - id: gotcha
+    youtube_short_title: "Embedded Power BI: no identity, no token #Shorts"
+    instagram_reel:
+      caption: |
+        Row-level security only protects the people you tell the service about. Learn says that with a service principal, a token request without a username and a role is refused. With a master user account it succeeds, and the report shows every row. Also: a free trial token is for development only. In production you need a capacity.
+        Full episode: link in bio.
+        Narration uses an AI voice.
+        #PowerBI #PowerBIEmbedded #RowLevelSecurity
+      cover_text: "No identity, no token"
+    tiktok:
+      caption: "Power BI embedded: a master user token without identity shows every row. Service principal refuses it. #PowerBIEmbedded #RLS"

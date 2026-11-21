@@ -1,0 +1,79 @@
+episode: 15
+series: "DEVLADLOG Power BI"
+status: draft-hold-for-review
+ai_label: true
+youtube_url: "{YOUTUBE_URL}"
+linkedin_company:
+  text: |
+    Every Monday someone should be able to answer three questions about the Power BI tenant. Did a setting change? Is there a workspace nobody owns? What happened yesterday?
+
+    Episode 15 of DEVLADLOG Power BI answers them with a PowerShell module that only reads, has 59 tests that run without a tenant, and never prints an email address:
+    - tenant settings compared with a baseline you keep in source control, as a comparison of on or off and the security groups, not a text diff
+    - the metadata scanner in three calls (ask, poll, collect), with nine rules and a severity each
+    - orphaned workspaces, found with the admin APIs
+    - the activity log with continuation tokens, within Learn's one-UTC-day-per-request limit
+
+    The gotcha: tenant settings can take up to 15 minutes to apply and activity events can arrive 30 to 60 minutes late, so a check that runs right after a change reports nothing. That is not good news.
+
+    Watch: {YOUTUBE_URL}
+    Code: {REPO_URL}
+    Guide: {BLOG_URL}
+
+    Narration uses an AI voice.
+    #PowerBI #Governance #PowerShell #MicrosoftFabric #PowerPlatform
+linkedin_personal:
+  text: |
+    My first test run found a governance bug: a workspace with no users at all has an empty users list, and PowerShell turns an empty list into nothing. So the orphaned-workspace rule never fired for the worst case.
+
+    The fix checks that the property exists. And when a scan runs without artifact users, the rule stays silent and the report says "not run", because silence is not the same as all clear.
+
+    That is the design rule for the whole Monday check: a section that was not run says not run. It never says all clear.
+
+    Episode 15: {YOUTUBE_URL}
+
+    #PowerBI #Governance #PowerShell
+
+    Narration uses an AI voice.
+facebook:
+  text: |
+    Who changed a Power BI tenant setting, and does every workspace have an owner? This episode builds a read-only Monday check in PowerShell: settings drift against a baseline, orphaned workspaces, scanner findings and yesterday's activity. It has tests, and a section that was not run says so instead of "all clear". Fictional data only.
+
+    Watch: {YOUTUBE_URL}
+
+    #PowerBI #Governance #PowerShell
+
+    Narration uses an AI voice.
+shorts:
+  - id: hook
+    youtube_short_title: "Power BI governance: who changed what, who owns it? #Shorts"
+    instagram_reel:
+      caption: |
+        Every Monday someone should be able to answer three questions about the Power BI tenant. Did a setting change? Is there a workspace nobody owns? And what happened yesterday? In this episode we answer them with a PowerShell module that only reads, that has tests, and that never prints an email address.
+        Full episode: link in bio.
+        Narration uses an AI voice.
+        #PowerBI #Governance #PowerShell
+      cover_text: "Who changed what?"
+    tiktok:
+      caption: "Three Monday questions for your Power BI tenant: setting drift, orphaned workspaces, yesterday's activity. #PowerBI #Governance #PowerShell"
+  - id: orphan
+    youtube_short_title: "A PowerShell bug that hid orphaned Power BI workspaces #Shorts"
+    instagram_reel:
+      caption: |
+        A bug the first test run found. A workspace with no users at all has an empty users list, and PowerShell turns an empty list into nothing. So the orphaned workspace rule never fired for the worst case. The fix checks that the property exists. And when the scan was run without artifact users, the rule stays silent, because silence is not the same as all clear.
+        Full episode: link in bio.
+        Narration uses an AI voice.
+        #PowerBI #PowerShell #Governance
+      cover_text: "An empty list is an answer"
+    tiktok:
+      caption: "PowerShell turns an empty list into nothing, so the orphan rule never fired. Check the property exists. #PowerShell #PowerBI #Governance"
+  - id: gotcha
+    youtube_short_title: "Power BI admin data is late. So is your check #Shorts"
+    instagram_reel:
+      caption: |
+        Learn says a tenant setting can take up to fifteen minutes to apply, and activity events can arrive thirty to sixty minutes late. So a governance check that runs right after a change reports nothing, and that is not good news. Run it on a schedule, a good while after the working day, and read yesterday, not now.
+        Full episode: link in bio.
+        Narration uses an AI voice.
+        #PowerBI #Governance #MicrosoftFabric
+      cover_text: "The data is late"
+    tiktok:
+      caption: "Power BI activity events can be 30 to 60 minutes late. Check yesterday, not now. #PowerBI #Governance #MicrosoftFabric"

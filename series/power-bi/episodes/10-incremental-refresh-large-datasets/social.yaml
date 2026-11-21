@@ -1,0 +1,79 @@
+episode: 10
+series: "DEVLADLOG Power BI"
+status: draft-hold-for-review
+ai_label: true
+youtube_url: "{YOUTUBE_URL}"
+linkedin_company:
+  text: |
+    Reloading two million rows every night to pick up ten days of changes is a waste. Incremental refresh keeps the old years as they are and reloads only the recent days.
+
+    Episode 10 of DEVLADLOG Power BI builds it on a fictional Contoso Bikes order table in a free Azure SQL database:
+    - the reserved RangeStart and RangeEnd parameters (case sensitive, DateTime), with a filter that uses greater-or-equal on one side and strictly less on the other so a boundary row lands in exactly one partition
+    - a policy in TMDL: keep three years, refresh ten days, detect data changes on a modified date
+    - a partition calculator that reproduces the worked example on Microsoft Learn
+    - an enhanced refresh REST call for a single partition, and a lint with eleven kinds of finding
+
+    The gotcha: publish the same model from Desktop a second time and it removes the partitions and the data.
+
+    Watch: {YOUTUBE_URL}
+    Code: {REPO_URL}
+    Guide: {BLOG_URL}
+
+    Narration uses an AI voice.
+    #PowerBI #IncrementalRefresh #AzureSQL #PowerShell #PowerPlatform
+linkedin_personal:
+  text: |
+    The nastiest incremental refresh detail is not in the setup. It is what happens after.
+
+    Microsoft Learn: once you have published a model with a refresh policy, publishing the same model from Desktop again removes the partitions and the data, and you cannot download the file back. Later schema changes go through a metadata-only deployment, ALM Toolkit for example.
+
+    Two smaller ones from the episode. The service decides the current day in UTC unless you configure a time zone. And the filter must use >= on one side and < on the other, or a boundary row is loaded twice or never.
+
+    Episode 10: {YOUTUBE_URL}
+
+    #PowerBI #IncrementalRefresh
+
+    Narration uses an AI voice.
+facebook:
+  text: |
+    Two million rows, ten days of changes. In this episode we set up incremental refresh in Power BI so only the recent days reload, calculate which partitions the policy should create, and refresh a single partition through the REST API. We also cover the gotcha: publishing the same model twice from Desktop removes the partitions. Fictional Contoso Bikes data.
+
+    Watch: {YOUTUBE_URL}
+
+    #PowerBI #IncrementalRefresh #AzureSQL
+
+    Narration uses an AI voice.
+shorts:
+  - id: hook
+    youtube_short_title: "Two million rows. Ten days of refresh. Power BI #Shorts"
+    instagram_reel:
+      caption: |
+        The Contoso Bikes order lines have grown again, and this time the table lives in a database. Reloading two million rows every night to pick up ten days of changes is a waste. Incremental refresh keeps the old years as they are and reloads only the recent days. We build it, then look at what the service really created.
+        Full episode: link in bio.
+        Narration uses an AI voice.
+        #PowerBI #IncrementalRefresh #AzureSQL
+      cover_text: "2M rows, 10 days refresh"
+    tiktok:
+      caption: "Do not reload 2 million rows to pick up 10 days. Incremental refresh in Power BI. #PowerBI #IncrementalRefresh #AzureSQL"
+  - id: partitions
+    youtube_short_title: "Which partitions will Power BI incremental refresh create? #Shorts"
+    instagram_reel:
+      caption: |
+        Learn describes the rule. The refresh period is the last periods up to today. Everything older is covered by whole periods, the biggest that fit: years, then quarters, months, and days. Learn's example, the second of February 2021, gives years 2018 to 2020, January, the first of February and today. A small calculator reproduces it.
+        Full episode: link in bio.
+        Narration uses an AI voice.
+        #PowerBI #IncrementalRefresh #SQLServer
+      cover_text: "Calculate the partitions"
+    tiktok:
+      caption: "Power BI incremental refresh partitions: years, then quarters, months, days. Calculate them before you publish. #PowerBI #IncrementalRefresh"
+  - id: gotcha
+    youtube_short_title: "Publish twice and Power BI deletes your partitions #Shorts"
+    instagram_reel:
+      caption: |
+        After the first publish, publishing the same model from Desktop again removes the partitions and the data, and you cannot download the file back. Later schema changes go through a metadata-only deployment, with ALM Toolkit for example. And the current day is decided in UTC, unless you configure a time zone.
+        Full episode: link in bio.
+        Narration uses an AI voice.
+        #PowerBI #IncrementalRefresh #ALM
+      cover_text: "Publish once, never again"
+    tiktok:
+      caption: "Republishing an incremental refresh model from Desktop removes partitions and data. Use ALM Toolkit. #PowerBI #IncrementalRefresh #ALM"

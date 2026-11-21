@@ -1,0 +1,79 @@
+episode: 11
+series: "DEVLADLOG Power BI"
+status: draft-hold-for-review
+ai_label: true
+youtube_url: "{YOUTUBE_URL}"
+linkedin_company:
+  text: |
+    The fact table has two million rows and nobody wants to wait for a refresh. So the big table stays in SQL Server, a small summary table sits in the model, and the engine decides, query by query, who answers.
+
+    Episode 11 of DEVLADLOG Power BI builds a composite model on fictional Contoso Bikes data:
+    - the sales table in DirectQuery, the dimensions in Dual mode so relationships stay regular
+    - a hidden Import aggregation table at the grain of date, product and store, with each column mapped to its detail column
+    - a check on SQL Server itself: clear the plan cache, run a query, and see which statements still arrive
+    - a Tabular Object Model check that flags limited relationships and unhidden aggregations and predicts which measures will hit
+
+    The gotcha: a distinct count of order numbers has no column in the aggregation, so every visual with that measure goes to SQL Server.
+
+    Watch: {YOUTUBE_URL}
+    Code: {REPO_URL}
+    Guide: {BLOG_URL}
+
+    Narration uses an AI voice.
+    #PowerBI #CompositeModels #DirectQuery #SQLServer #PowerPlatform
+linkedin_personal:
+  text: |
+    A distinct count of order numbers looks harmless. In a composite model it is an aggregation killer.
+
+    The aggregation table has no column for it, so every visual that includes that measure goes to SQL Server, whatever else is on it. Adding a group by order number to the aggregation would make it as big as the detail table. So it stays a miss, and the point of the episode is deciding that with open eyes.
+
+    How I check hits and misses: clear the plan cache, run the query, and look at what SQL Server received. If the aggregation answered, nothing arrives.
+
+    Episode 11: {YOUTUBE_URL}
+
+    #PowerBI #CompositeModels #SQLServer
+
+    Narration uses an AI voice.
+facebook:
+  text: |
+    Who answers the query: the model or the database? In this episode the big sales table stays in SQL Server, a small aggregation table sits in the Power BI model, and we look at SQL Server itself to see which queries still reach it. We also explain why one distinct count measure can break the aggregation hit. Fictional Contoso Bikes data.
+
+    Watch: {YOUTUBE_URL}
+
+    #PowerBI #DirectQuery #SQLServer
+
+    Narration uses an AI voice.
+shorts:
+  - id: hook
+    youtube_short_title: "Power BI composite models: who answers the query? #Shorts"
+    instagram_reel:
+      caption: |
+        Until now every Contoso Bikes model imported its data. That works until the fact table has two million rows and nobody wants to wait for a refresh. This time the big table stays in SQL Server. A small summary table sits in the model, and the engine decides, query by query, who answers.
+        Full episode: link in bio.
+        Narration uses an AI voice.
+        #PowerBI #CompositeModels #DirectQuery #SQLServer
+      cover_text: "Who answers the query?"
+    tiktok:
+      caption: "Big table in SQL Server, small aggregation in the Power BI model. The engine picks who answers. #PowerBI #DirectQuery #SQLServer"
+  - id: aggregation
+    youtube_short_title: "Power BI aggregations: how the engine reads the mapping #Shorts"
+    instagram_reel:
+      caption: |
+        The aggregation is a hidden Import table at the grain of date, product and store. Each column says what it is an alternate of. Units is the sum of the quantity. The order lines column is a count of the rows of the sales table. The engine reads these mappings, and a query that only needs them never leaves the model.
+        Full episode: link in bio.
+        Narration uses an AI voice.
+        #PowerBI #Aggregations #CompositeModels #DataModeling
+      cover_text: "Mapping the aggregation"
+    tiktok:
+      caption: "A hidden Import table mapped to the DirectQuery detail table answers most queries without leaving the model. #PowerBI #Aggregations"
+  - id: gotcha
+    youtube_short_title: "One DAX measure breaks the aggregation hit #Shorts"
+    instagram_reel:
+      caption: |
+        The honest gotcha. A distinct count of order numbers looks harmless, but the aggregation has no column for it. Every visual with that measure goes to SQL Server, whatever else is on it. Adding a group by order number to the aggregation would make it as big as the table. So it stays a miss, and we decide that with open eyes.
+        Full episode: link in bio.
+        Narration uses an AI voice.
+        #PowerBI #Aggregations #DirectQuery #DAX
+      cover_text: "One measure breaks the hit"
+    tiktok:
+      caption: "A distinct count with no aggregation column sends the whole visual to SQL Server. #PowerBI #Aggregations #DirectQuery"
