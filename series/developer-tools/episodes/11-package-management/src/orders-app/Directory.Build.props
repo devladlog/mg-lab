@@ -1,0 +1,33 @@
+<Project>
+  <!-- Applies to every project in the repo. -->
+  <PropertyGroup>
+    <!-- Episode 5: packages.lock.json per project, restored in locked mode in CI. -->
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+
+    <!-- Episode 6: code quality on every build, on every machine. -->
+    <!-- The "recommended" rule set of .NET 10, locked: a newer SDK fixes bugs in these rules but doesn't add
+         new warnings until we change this value on purpose. -->
+    <AnalysisLevel>10.0-recommended</AnalysisLevel>
+    <!-- IDE (code style) rules are off in command-line builds unless this is set; .editorconfig picks them. -->
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <!-- IDE0005 (unnecessary using) only runs on build with XML documentation enabled (Microsoft Learn).
+         We don't ship XML docs for an API, so the "missing XML comment" warning is switched off. -->
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+  </PropertyGroup>
+
+  <!-- Episode 11: dependencies. Versions live in Directory.Packages.props, sources in nuget.config. -->
+  <PropertyGroup>
+    <!-- Audit direct AND transitive packages (the default for net10.0, written down so it survives a downgrade). -->
+    <NuGetAudit>true</NuGetAudit>
+    <NuGetAuditMode>all</NuGetAuditMode>
+    <NuGetAuditLevel>low</NuGetAuditLevel>
+    <!-- TreatWarningsAsErrors (above) would turn "a new advisory was published today" into a broken build for
+         everybody. Audit warnings stay warnings on laptops and in the normal build, and become errors only in
+         the dedicated audit job: dotnet restore -p:AuditPipeline=true (pattern from Microsoft Learn). -->
+    <NuGetAuditCodes>NU1900;NU1901;NU1902;NU1903;NU1904;NU1905</NuGetAuditCodes>
+    <WarningsAsErrors Condition="'$(AuditPipeline)' == 'true'">$(WarningsAsErrors);$(NuGetAuditCodes)</WarningsAsErrors>
+    <WarningsNotAsErrors Condition="'$(AuditPipeline)' != 'true'">$(WarningsNotAsErrors);$(NuGetAuditCodes)</WarningsNotAsErrors>
+  </PropertyGroup>
+</Project>

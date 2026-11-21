@@ -1,0 +1,259 @@
+# DEVLADLOG Dev Tools - episode 12. Code excerpts and tool output are real (src/orders-app, tests/, run on the build machine on
+# 21 Nov 2026; long output lines are shortened and marked with "..."). The four `screen` scenes are recorded later in Visual
+# Studio 2026 on the Windows recording laptop. See demo.md.
+episode: 12
+slug: visual-studio-tips-tricks
+series_label: "DEV TOOLS"
+series_name: "DEVLADLOG Dev Tools"
+file_prefix: "developer-tools"
+title: "Visual Studio tips that live in the repository"
+subtitle: ".vsconfig, solution filters, snippets, run settings and launch profiles"
+voice: am_michael
+thumbnail_text: "FILES,\nNOT\nSHORTCUTS"
+youtube:
+  title: "Visual Studio Tips: .vsconfig, Solution Filters, Snippets, Run Settings | DEVLADLOG Dev Tools #12"
+  tags: [Visual Studio, Visual Studio 2026, vsconfig, solution filter, slnf, code snippets, runsettings, Test Explorer, Hot Reload, launch profiles, .NET 10, DevTools]
+sources:
+  - https://www.devladlog.com/articles/developer-tools/2025-11-21-visual-studio-tips-tricks-complete-guide-2025/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Tips that live in the repository"
+    sub: "Visual Studio, set up once, for everyone"
+    short: hook
+    narration: >
+      Most Visual Studio tips are shortcuts you forget by Friday. The ones that last are files you commit: which
+      components to install, which projects to open, which snippets and test settings everybody gets. Today we take
+      the orders A P I from the last episodes and teach it Visual Studio. Welcome to DEVLADLOG Dev Tools.
+
+  - id: plan
+    type: bullets
+    heading: "Five files, a few keystrokes"
+    bullets:
+      - "vsconfig: the components the repository needs"
+      - "Solution filters: load and build less"
+      - "Snippets: your pattern in one word"
+      - "runsettings: one set of test settings"
+      - "Launch profiles and Hot Reload"
+    narration: >
+      Five files and a few keystrokes between them. The install list, a filter that loads part of the solution,
+      snippets, test settings, and launch profiles with Hot Reload. The files were checked with the dot net command
+      line on a Linux build machine. What only exists inside the I D E is recorded on Windows.
+
+  - id: vsconfig
+    type: code
+    heading: "The install list goes in the repo"
+    lang: json
+    code: |
+      // .vsconfig, next to OrdersApp.slnx
+      {
+        "version": "1.0",
+        "components": [
+          "Microsoft.VisualStudio.Workload.NetWeb",
+          "Microsoft.NetCore.Component.SDK",
+          "Microsoft.VisualStudio.Component.Git",
+          "Microsoft.VisualStudio.Component.DiagnosticTools",
+          "Microsoft.VisualStudio.Component.IntelliCode"
+        ]
+      }
+    narration: >
+      First, the install list. A vs config file next to the solution names the workload and components the repository
+      needs, and when you open the solution Visual Studio offers to install what is missing. We checked every I D
+      against Microsoft's published list, which covers Visual Studio twenty twenty two. Dot net ten needs Visual
+      Studio twenty twenty six, so that is what we record on.
+
+  - id: slnf
+    type: code
+    heading: "Open less, build less"
+    lang: text
+    code: |
+      // OrdersApp.Api.slnf
+      "path": "OrdersApp.slnx",
+      "src\\Contoso.Orders.Api\\Contoso.Orders.Api.csproj"
+
+      $ dotnet build OrdersApp.Api.slnf
+        Contoso.Orders.Api -> ./src/Contoso.Orders.Api/bin/Debug/net10.0/Contoso.Orders.Api.dll
+      $ dotnet build
+        Contoso.Orders.Api -> ./src/Contoso.Orders.Api/bin/Debug/net10.0/Contoso.Orders.Api.dll
+        Contoso.Orders.Api.Tests -> ./tests/Contoso.Orders.Api.Tests/bin/Debug/net10.0/Contoso.Orders.Api.Tests.dll
+    narration: >
+      Second, open less. A solution filter names the projects to load, and dot net build accepts it too. The A P I
+      filter builds the A P I and leaves the tests alone. The tests filter builds the tests and the project they
+      reference. And plain dot net build, with no name, takes the s l n x and builds everything.
+
+  - id: vsopen
+    type: screen
+    heading: "A filter, and a prompt for missing components"
+    image: screens/vsopen.jpg
+    bar: "Visual Studio 2026 · Windows"
+    demo: >
+      Windows recording laptop (see demo.md). Double-click OrdersApp.Api.slnf: Solution Explorer shows the funnel glyph and
+      one loaded project. Close, then open OrdersApp.slnx with .NET profiling tools and IntelliCode removed beforehand: the bar
+      about missing components appears. Capture both, with the Windows user name masked.
+    narration: >
+      In Visual Studio, opening the filter shows a funnel and one loaded project. Open the full solution, and a bar
+      offers the two components we removed on purpose. One click, and the machine matches the repository.
+
+  - id: nav
+    type: screen
+    heading: "Keystrokes from the official lists"
+    image: screens/nav.jpg
+    bar: "Visual Studio 2026 · Windows"
+    demo: >
+      Orders.cs open. Ctrl+T (Go To All) typing Paging, F12 on Normalize, Alt+F12 (Peek Definition) on Clamp, Ctrl+. (Quick
+      Actions) in Program.cs, Shift+Alt+. adding the next matching caret. Capture the results list, the peek window and the
+      carets. See demo.md, shot 2.
+    narration: >
+      Now the keystrokes, only ones from Microsoft's lists. Control T finds anything. F twelve goes to a definition,
+      Alt F twelve peeks at it without leaving your place. Control period opens Quick Actions. Shift Alt period adds
+      the next match as another caret, so one edit lands in many places. For renames, use the refactoring, not find and
+      replace.
+
+  - id: snippet
+    type: code
+    heading: "A snippet for the test you keep writing"
+    lang: text
+    short: snippet
+    code: |
+      <Shortcut>ordtest</Shortcut>
+      public async Task $name$()
+      var response = await _client.GetAsync("$path$");
+      Assert.Equal(HttpStatusCode.$status$, response.StatusCode);
+
+      $ python tools/vs_files.py expand snippets/ordtest.snippet --set name=Unknown_order_answers_404 --set path=/orders/99999 --set status=NotFound
+      # expands to:
+      var response = await _client.GetAsync("/orders/99999");
+      Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    narration: >
+      Snippets turn the pattern your team repeats into one word. Type ordtest and press Tab twice: an A P I test with
+      three fields, a name, a path and an expected status, and Tab moves between them. The expansion is plain text, so
+      we expanded it, compiled it into the test project, and the generated tests passed. A surround with snippet wraps
+      your selection the same way.
+
+  - id: runsettings
+    type: code
+    heading: "One runsettings file, wired by a property"
+    lang: xml
+    code: |
+      <!-- .runsettings -->
+      <MaxCpuCount>1</MaxCpuCount>
+      <TestSessionTimeout>300000</TestSessionTimeout>
+      <TreatNoTestsAsError>true</TreatNoTestsAsError>
+      <CONTOSO_REGION>lab-west</CONTOSO_REGION>
+
+      <!-- Directory.Build.props -->
+      <RunSettingsFilePath>$(MSBuildThisFileDirectory).runsettings</RunSettingsFilePath>
+    narration: >
+      Test settings. One runsettings file holds the environment variable the tests need, a five minute session timeout
+      so one hung test cannot hold Test Explorer forever, and a rule that a filter matching nothing is a failure, not
+      a green run. One line in Directory dot Build dot props points every runner at the file.
+
+  - id: gotcha
+    type: code
+    heading: "Gotcha: dotnet test ignores the root file"
+    lang: text
+    short: gotcha
+    code: |
+      # .runsettings sits in the solution root, where Visual Studio can auto-detect it
+      $ dotnet test OrdersApp.Tests.slnf --no-build -p:RunSettingsFilePath= --filter "FullyQualifiedName~RunSettingsTests"
+        Failed Contoso.Orders.Api.Tests.RunSettingsTests.The_repository_runsettings_reached_the_test_host [3 ms]
+         CONTOSO_REGION is '(not set)': the .runsettings file did not reach the test host. ...
+      Failed!  - Failed:     1, Passed:     0, Skipped:     0, Total:     1, Duration: 23 ms - Contoso.Orders.Api.Tests.dll (net10.0)
+
+      $ dotnet test OrdersApp.Tests.slnf --no-build -p:RunSettingsFilePath= --settings .runsettings --filter "FullyQualifiedName~RunSettingsTests"
+      Passed!  - Failed:     0, Passed:     1, Skipped:     0, Total:     1, Duration: 11 ms - Contoso.Orders.Api.Tests.dll (net10.0)
+    narration: >
+      The gotcha. Visual Studio can auto detect a runsettings file in the solution root, if you switch that option on.
+      Dot net test never does. We removed the property, and the test that reads the environment variable failed, with
+      its reason in the message. The settings option fixes one command, the property fixes every runner. How Test
+      Explorer behaves we only check on Windows.
+
+  - id: testexplorer
+    type: screen
+    heading: "Test Explorer: playlist and run settings"
+    image: screens/testexplorer.jpg
+    bar: "Visual Studio 2026 · Windows"
+    demo: >
+      Ctrl+E, T opens Test Explorer. Open tests/Contoso.Orders.Api.Tests/Smoke.playlist: four tests. Ctrl+R, T runs them. Then
+      Test > Configure Run Settings: show the Auto Detect runsettings Files switch and the passing settings test. See demo.md, shot 3.
+    narration: >
+      In Test Explorer, open the playlist: four smoke tests, selected by a trait instead of a hand picked list. Run
+      them, then open the run settings menu and see which file is active. The timeout is real too: with eight seconds
+      set, a test that sleeps for five minutes aborted the run.
+
+  - id: profile
+    type: code
+    heading: "A launch profile that sets the environment"
+    lang: json
+    code: |
+      // Properties/launchSettings.json
+      "Orders API (20 orders, OpenAPI)": {
+        "launchUrl": "openapi/v1.json",
+        "applicationUrl": "http://localhost:8081",
+        "hotReloadEnabled": true,
+        "Orders__SeedCount": "20",
+        "App__Version": "vs-profile"
+
+      $ dotnet run --launch-profile "Orders API (20 orders, OpenAPI)"
+      # GET /healthz  ->  "version":"vs-profile"      GET /orders  ->  "total":20
+      $ dotnet run --no-launch-profile
+      # GET /healthz  ->  "version":"dev"             GET /orders  ->  "total":237
+    narration: >
+      Launch profiles. Their names fill the toolbar drop down. This one sets two environment variables, an address
+      and a launch U R L, and keeps Hot Reload on. Started through dot net run, the version says vs profile and the
+      database holds twenty orders. Without the profile, the version says dev and there are two hundred thirty seven.
+
+  - id: hotreload
+    type: screen
+    heading: "Hot Reload: what it applies, what it does not"
+    image: screens/hotreload.jpg
+    bar: "Visual Studio 2026 · Windows"
+    demo: >
+      Choose the profile Orders API (20 orders, OpenAPI), Ctrl+F5. In Orders.cs change 1 to 2 inside Math.Clamp, click Hot
+      Reload, refresh /orders?pageSize=1 and see pageSize 2. Then change the string "ok" in Program.cs and show what Visual
+      Studio says. See demo.md, shot 4.
+    narration: >
+      Hot Reload. We changed the minimum page size inside a method, and dot net watch applied it to the running
+      process with no restart. A change in the top level statements of Program dot cs needed a restart. That is the
+      command line. In Visual Studio we show what it says on the day, and we will not guess.
+
+  - id: guard
+    type: code
+    heading: "A check for the files nobody reads"
+    lang: text
+    code: |
+      $ python tools/vs_files.py check . --known-ids learn-component-ids.txt
+      all Visual Studio files are consistent
+
+      # a misspelled setting, a project missing from a filter, an undeclared placeholder:
+      .runsettings: MaxCPUCount is ignored; the element is MaxCpuCount (case sensitive)
+      OrdersApp.Api.slnf: src\B\B.csproj is not a project of OrdersApp.slnx
+      snippets/ordtest.snippet: $missing$ is used in the code but not declared
+    narration: >
+      The last file is a script. These files fail quietly: a misspelled setting, a project missing from a filter, a
+      snippet placeholder nobody declared. One small Python check reads them all and fails the pipeline, and its tests
+      make each of those mistakes on purpose.
+
+  - id: recap
+    type: bullets
+    heading: "Five habits"
+    bullets:
+      - "Components in vsconfig, next to the solution"
+      - "Filters for big solutions, named explicitly"
+      - "Snippets for patterns you repeat"
+      - "One runsettings file, wired by a property"
+      - "Trust Hot Reload after you saw it work"
+    narration: >
+      Five habits. Components in a vs config. Filters, named explicitly. Snippets for the patterns you repeat. One
+      runsettings file, wired by a property. And Hot Reload trusted only after you watched it work. Almost fifty tests cover
+      the files and the command line side, and the rest is on camera.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The files, the checker and the tests are on GitHub, and the complete guide is on devladlog dot com. That closes
+      the first twelve episodes of the series. Subscribe so you don't miss what comes next. This was DEVLADLOG Dev
+      Tools, by Momento Galático.

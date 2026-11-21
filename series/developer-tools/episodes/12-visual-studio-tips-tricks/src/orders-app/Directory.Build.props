@@ -1,0 +1,17 @@
+<Project>
+  <!-- Applies to every project in the repo. -->
+  <PropertyGroup>
+    <!-- packages.lock.json next to each project: the exact package graph is committed. CI restores in locked
+         mode (RestoreLockedMode, see the workflow) and fails instead of silently resolving something new.
+         The lock files are also the cache key for actions/setup-dotnet (cache: true). -->
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <!-- One test settings file for every way of running tests. Visual Studio only auto-detects a file named
+         .runsettings in the solution root when "Auto detect runsettings files" is on (an IDE option); `dotnet test`
+         and the pipeline never auto-detect it. Pointing the project property at the file works for all of them
+         (Learn: "Set a build property"). -->
+    <RunSettingsFilePath>$(MSBuildThisFileDirectory).runsettings</RunSettingsFilePath>
+  </PropertyGroup>
+</Project>

@@ -1,0 +1,104 @@
+# Builds and tests the orders solution, audits its packages, and publishes Contoso.Orders.Contracts to the
+# Azure Artifacts feed "contoso-packages" in the same project. Runs on a Microsoft-hosted agent.
+name: $(Date:yyyyMMdd)$(Rev:.r)
+
+trigger:
+  branches:
+    include: [main]
+  paths:
+    include: [src/*, tests/*, Directory.*, nuget.config, global.json, azure-pipelines.yml]
+
+# Pull requests: in Azure Repos Git a pull request build comes from a branch policy (Build validation) on main,
+# not from a `pr:` section (that one is for GitHub and Bitbucket).
+
+# The weekly audit catches advisories published after the last commit (always: true runs it without changes).
+schedules:
+  - cron: "0 6 * * 1"
+    displayName: Weekly package audit
+    branches:
+      include: [main]
+    always: true
+
+pool:
+  vmImage: ubuntu-latest
+
+variables:
+  feedName: contoso-packages
+
+jobs:
+  - job: build
+    displayName: Build, test, pack, publish
+    steps:
+      - task: UseDotNet@2
+        displayName: Install the SDK from global.json
+        inputs:
+          packageType: sdk
+          useGlobalJson: true
+
+      - script: dotnet restore --locked-mode
+        displayName: Restore (locked)
+
+      - script: dotnet build --no-restore -c Release
+        displayName: Build
+
+      - script: dotnet test --no-build -c Release
+        displayName: Test
+
+      # Reports every known vulnerability (direct and transitive) as a warning on the run; only "critical" fails
+      # this job. The audit job below is the strict one.
+      - script: python3 tools/pkg_audit.py --format azure --min-severity critical
+        displayName: Package audit
+
+      # Stable version (VersionPrefix in the project) from main only; every other branch gets a pre-release
+      # such as 1.0.0-ci.57, so a pull request can never take the number of a release.
+      - bash: |
+          set -euo pipefail
+          suffix=""
+          if [ "$BUILD_SOURCEBRANCH" != "refs/heads/main" ]; then suffix="ci.$BUILD_BUILDID"; fi
+          dotnet pack src/Contoso.Orders.Contracts -c Release --no-restore \
+            -o "$BUILD_ARTIFACTSTAGINGDIRECTORY/nupkg" -p:VersionSuffix="$suffix"
+        displayName: Pack Contoso.Orders.Contracts
+
+      - publish: $(Build.ArtifactStagingDirectory)/nupkg
+        artifact: nupkg
+        displayName: Keep the package with the run
+
+      # Azure Artifacts: the credential provider is installed and given the build's identity by this task.
+      - task: NuGetAuthenticate@1
+        displayName: Authenticate to Azure Artifacts
+        condition: and(succeeded(), ne(variables['Build.Reason'], 'PullRequest'))
+
+      # Org and project come from the run itself, so the file works in any project. The api key is required by
+      # the client but ignored by Azure Artifacts. A version can be published once (immutable), so a re-run
+      # of the same commit skips it instead of failing.
+      - bash: |
+          set -euo pipefail
+          org="${SYSTEM_COLLECTIONURI#https://dev.azure.com/}"; org="${org%/}"
+          feed="https://pkgs.dev.azure.com/${org}/${SYSTEM_TEAMPROJECT}/_packaging/${FEED_NAME}/nuget/v3/index.json"
+          dotnet nuget push "$BUILD_ARTIFACTSTAGINGDIRECTORY"/nupkg/*.nupkg --source "$feed" --api-key az --skip-duplicate
+        displayName: Push to the feed
+        condition: and(succeeded(), ne(variables['Build.Reason'], 'PullRequest'))
+        env:
+          FEED_NAME: $(feedName)
+
+  # NuGet audit warnings are errors only here (Directory.Build.props: AuditPipeline), so a new advisory fails
+  # this job and the weekly run, not every developer's build.
+  - job: audit
+    displayName: NuGet audit (warnings are errors)
+    dependsOn: []
+    steps:
+      - task: UseDotNet@2
+        displayName: Install the SDK from global.json
+        inputs:
+          packageType: sdk
+          useGlobalJson: true
+      - script: dotnet restore -p:AuditPipeline=true
+        displayName: Restore with audit as errors
+      # The Python tools: installed only if every file matches the hash in requirements.txt, then audited.
+      - bash: |
+          set -euo pipefail
+          python3 -m venv .venv
+          .venv/bin/python -m pip install --require-hashes -r tools/requirements.txt
+          .venv/bin/python -m pip install pip-audit==2.10.1
+          .venv/bin/pip-audit -r tools/requirements.txt --no-deps --disable-pip
+        displayName: Python packages (hashes required, then audited)

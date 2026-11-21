@@ -1,0 +1,258 @@
+# DEVLADLOG Dev Tools - episode 11. Code excerpts and tool output are real (src/orders-app, src/consumer, tests/, run on the
+# build machine on 21 Nov 2026; long output lines are shortened and marked). The four `screen` scenes are recorded later:
+# Azure DevOps (organization with the free hosted grant, Azure Artifacts feed) in the browser, VS Code and Windows Terminal
+# on the recording laptop. See demo.md.
+episode: 11
+slug: package-management
+series_label: "DEV TOOLS"
+series_name: "DEVLADLOG Dev Tools"
+file_prefix: "developer-tools"
+title: "Package management: versions, sources and vulnerabilities under control"
+subtitle: "NuGet central versions, source mapping, NuGet Audit and an Azure Artifacts feed"
+voice: am_michael
+thumbnail_text: "WHO DECIDES\nWHAT YOU\nINSTALL?"
+youtube:
+  title: "NuGet Central Versions, Source Mapping, Audit and Azure Artifacts | DEVLADLOG Dev Tools #11"
+  tags: [NuGet, package management, Central Package Management, package source mapping, NuGet Audit, Azure Artifacts, Azure DevOps, supply chain security, .NET 10, DevTools]
+sources:
+  - https://www.devladlog.com/articles/developer-tools/2025-12-31-package-management-complete-guide-2025/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Who decides what you install?"
+    sub: "Versions, sources and vulnerabilities, in files"
+    short: hook
+    narration: >
+      Every package you add is code you didn't write, running with your permissions. Most teams can't say who chose
+      each version, where each package comes from, or what happens when a new advisory lands on a Friday. Today we
+      put those three answers into files, on the orders A P I from the last episodes. Welcome to DEVLADLOG Dev Tools.
+
+  - id: plan
+    type: bullets
+    heading: "Three decisions, written down"
+    bullets:
+      - "Versions: one file for the repository"
+      - "Sources: which feed may serve which package"
+      - "Vulnerabilities: reported, then failed in one job"
+      - "Our own packages: an Azure Artifacts feed"
+      - "Python tools: hashes, not trust"
+    narration: >
+      Three decisions, written down. Which version of each package, once for the whole repository. Which source may
+      serve which package. And what counts as a vulnerability worth failing a build. Then we publish our own shared
+      library to a private feed, and pin the Python tools the same way.
+
+  - id: cpm
+    type: code
+    heading: "One file decides every version"
+    lang: xml
+    code: |
+      <!-- Directory.Packages.props -->
+      <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+      <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
+      <CentralPackageVersionOverrideEnabled>false</CentralPackageVersionOverrideEnabled>
+      <PackageVersion Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.15" />
+      <PackageVersion Include="xunit" Version="2.9.3" />
+
+      <!-- the project files -->
+      <PackageReference Include="xunit" />
+    narration: >
+      Central package management. The versions live in Directory dot Packages dot props, and the projects only name
+      the package. Overrides are switched off, so nobody quietly takes a different version in one project. Transitive
+      pinning is on, and you will see why in a minute. Lock files from episode five still apply, and they must change
+      in the same commit as this file.
+
+  - id: audit-props
+    type: code
+    heading: "Audit warnings: errors in one job only"
+    lang: xml
+    code: |
+      <NuGetAuditMode>all</NuGetAuditMode>
+      <NuGetAuditLevel>low</NuGetAuditLevel>
+      <NuGetAuditCodes>NU1900;NU1901;NU1902;NU1903;NU1904;NU1905</NuGetAuditCodes>
+      <WarningsAsErrors Condition="'$(AuditPipeline)' == 'true'">$(WarningsAsErrors);$(NuGetAuditCodes)</WarningsAsErrors>
+      <WarningsNotAsErrors Condition="'$(AuditPipeline)' != 'true'">$(WarningsNotAsErrors);$(NuGetAuditCodes)</WarningsNotAsErrors>
+    narration: >
+      NuGet Audit checks every restore against known advisories, direct and transitive. We turned warnings into errors
+      in episode six, so a new advisory published today would break everyone's build. This is the pattern from
+      Microsoft Learn. The audit codes stay warnings on laptops, and become errors only when the pipeline restores
+      with the audit pipeline property.
+
+  - id: audit
+    type: screen
+    heading: "A pull request adds an old client library"
+    image: screens/audit.jpg
+    bar: "VS Code · Windows Terminal"
+    demo: >
+      Repo orders-app on the recording laptop (see demo.md). Branch feat/legacy-client: dotnet new console, then
+      dotnet package add Microsoft.AspNet.WebApi.Client --version 5.2.9. Capture dotnet restore showing warning NU1903 for
+      Newtonsoft.Json 10.0.1 (nobody referenced it), then dotnet restore -p:AuditPipeline=true failing with error
+      NU1903, then dotnet nuget why showing the path through Microsoft.AspNet.WebApi.Client.
+    narration: >
+      Here is a pull request that adds an old web client library. Restore warns about Newtonsoft Json ten point zero
+      point one, a high severity advisory, and nobody on the pull request ever asked for that package. With the audit
+      flag the same restore fails. And dot net nuget why shows the path that brought it in.
+
+  - id: fix
+    type: code
+    heading: "Report it, then pin it centrally"
+    lang: text
+    code: |
+      $ python3 tools/pkg_audit.py                             (shortened)
+      1 known vulnerabilities (1 at high or above):
+        HIGH  Newtonsoft.Json 10.0.1 in Contoso.Orders.LegacyClient
+              transitive  https://github.com/advisories/GHSA-5crp-9r3c-p9vr
+
+      <!-- Directory.Packages.props: no project changes -->
+      <ItemGroup Label="Pinned transitive packages">
+        <PackageVersion Include="Newtonsoft.Json" Version="13.0.4" />
+      </ItemGroup>
+
+      $ python3 tools/pkg_audit.py
+      No known vulnerabilities in the packages NuGet resolved.
+    short: fix
+    narration: >
+      Our small tool reads the report that dot net package list produces, and marks the package as transitive. The
+      fix is one line in the central file. With transitive pinning, Newtonsoft Json goes to a fixed version for every
+      project, and no project file changes. The dot net package update vulnerable command also works, but it adds a
+      direct reference to the project instead.
+
+  - id: auditjob
+    type: screen
+    heading: "The audit job fails, the build does not"
+    image: screens/auditjob.jpg
+    bar: "Browser · Azure DevOps · Pipelines"
+    demo: >
+      Azure DevOps project, pipeline orders-contracts. Run the branch with the vulnerable client: the build job is green with a
+      warning (pkg_audit annotation visible: the high finding is only a warning there), the audit job is red with error NU1903 in the Restore step.
+      Then the run after the pin: both jobs green. Mask the organization name in the URL and the account menu.
+    narration: >
+      In Azure Pipelines the build job still passes, with the finding as a warning on the summary page. The separate audit job
+      fails with the error, and the same job runs every Monday morning, so a new advisory reaches the team without
+      blocking anyone's bug fix.
+
+  - id: mapping
+    type: code
+    heading: "Which source may serve which package"
+    lang: xml
+    code: |
+      <add key="nuget.org" value="https://api.nuget.org/v3/index.json" />
+      <add key="contoso-packages" value="https://pkgs.dev.azure.com/ORGANIZATION/PROJECT/_packaging/contoso-packages/nuget/v3/index.json" />
+      <packageSource key="contoso-packages">
+        <package pattern="Contoso.*" />
+      </packageSource>
+      <packageSource key="nuget.org">
+        <package pattern="*" />
+      </packageSource>
+    short: mapping
+    narration: >
+      Source mapping. The consumer repository has two sources, nuget dot org and our private feed. Anything called
+      Contoso dot star comes only from our feed, everything else from nuget dot org. Without this, NuGet asks every
+      source, and a package with the same name on a public source can win. Both top level and transitive packages must
+      match a pattern.
+
+  - id: consume
+    type: screen
+    heading: "The consumer restores from the feed"
+    image: screens/consume.jpg
+    bar: "VS Code · Windows Terminal"
+    demo: >
+      Repo orders-report (src/consumer, with ORGANIZATION and PROJECT replaced). dotnet restore --interactive, then dotnet run
+      with sample-orders.csv: lines 3 and 4 are rejected by the same rules as the API. Show the restore log line that installs
+      Contoso.Orders.Contracts from contoso-packages. Then edit nuget.config so Contoso.* becomes Fabrikam.* and
+      restore again: error NU1101 "Unable to find package Contoso.Orders.Contracts. No packages exist with this id in source(s): nuget.org". Revert.
+    narration: >
+      The consumer restores the contracts package from the feed and uses the same validation rules as the A P I. Break
+      the mapping and restore fails on the spot, with an error that names the only source it looked in. That is
+      better than quietly taking the wrong copy.
+
+  - id: pipeline
+    type: code
+    heading: "The pipeline publishes the package"
+    lang: yaml
+    code: |
+      - task: NuGetAuthenticate@1
+        displayName: Authenticate to Azure Artifacts
+      - bash: |
+          org="${SYSTEM_COLLECTIONURI#https://dev.azure.com/}"; org="${org%/}"
+          feed="https://pkgs.dev.azure.com/${org}/${SYSTEM_TEAMPROJECT}/_packaging/${FEED_NAME}/nuget/v3/index.json"
+          dotnet nuget push "$BUILD_ARTIFACTSTAGINGDIRECTORY"/nupkg/*.nupkg --source "$feed" --api-key az --skip-duplicate
+    narration: >
+      Publishing. The authenticate task gives the build's identity to the credential provider, and dot net nuget push
+      does the rest. The api key is required by the client, but Azure Artifacts ignores its value. Versions in a feed
+      are immutable, so skip duplicate lets a re-run pass. On main the package is one point zero point zero, on any other
+      branch it gets a C I suffix, so a pull request can never take a release number.
+
+  - id: publish
+    type: screen
+    heading: "One package, two versions, one feed"
+    image: screens/publish.jpg
+    bar: "Browser · Azure DevOps · Artifacts"
+    demo: >
+      Pipeline run on main: Authenticate and Push steps green. Artifacts, feed contoso-packages: Contoso.Orders.Contracts 1.0.0.
+      Then a run from branch feat/csv-export: version 1.0.0-ci.<build id> next to it. Re-run the main run: the push step
+      shows the 409 conflict turned into a warning. Mask the organization name.
+    narration: >
+      On main, the feed shows version one point zero point zero. A run from a branch adds a pre-release next to it. Run
+      main again and the push answers with a conflict, which skip duplicate turns into a warning. Two gibibytes of
+      storage per organization are free, and that is plenty for a library like this.
+
+  - id: gotcha
+    type: code
+    heading: "Gotcha: a cached package ignores the mapping"
+    lang: text
+    code: |
+      # wrong mapping once let a same-named copy in; the mapping is fixed now
+      $ dotnet run --project OrdersReport -- sample-orders.csv
+      0 invalid                      # still the lookalike: it is in the global packages folder
+
+      $ dotnet nuget locals global-packages --clear
+      $ dotnet restore
+      error NU1403: Package content hash validation failed for Contoso.Orders.Contracts.1.0.0.
+      The package is different than the last restore.
+    narration: >
+      A gotcha. Learn says source mapping is not applied when the package is already in the global packages folder. In
+      our test, a wrong mapping let a lookalike copy in, and fixing the mapping changed nothing until we cleared the
+      folder. Then the lock file noticed the content was different and stopped the restore. That is why the repository
+      has its own packages folder, and why the lock file stays on.
+
+  - id: pip
+    type: code
+    heading: "Python tools: hashes, not trust"
+    lang: text
+    code: |
+      $ pip-compile --generate-hashes tools/requirements.in -o tools/requirements.txt
+      $ pip install --require-hashes -r tools/requirements.txt
+      Would install PyYAML-6.0.4 Pygments-2.21.0 iniconfig-2.3.1 packaging-26.3 pluggy-1.7.0 pytest-9.2.0 ruff-0.16.9
+
+      # one wrong hash:
+      ERROR: THESE PACKAGES DO NOT MATCH THE HASHES FROM THE REQUIREMENTS FILE.
+          ruff==0.16.9 ... Expected sha256 0000...  Got a21713e629d3...
+    narration: >
+      The Python tools get the same treatment. Pip compile writes every version with its hashes, and pip refuses to
+      install anything that doesn't match. We changed one hash on purpose, and the install stopped. The audit job then
+      runs pip audit on the same file.
+
+  - id: recap
+    type: bullets
+    heading: "Five habits"
+    bullets:
+      - "Versions in one file, lock file in the same commit"
+      - "Audit warnings are errors in one job only"
+      - "Map every source, transitive packages included"
+      - "Publish with the build identity, never a person's token"
+      - "Hashes for tools"
+    narration: >
+      Five habits. Versions in one file, with the lock file in the same commit. Audit findings as errors in one job
+      only. Every source mapped, transitive packages included. Publish with the build's identity, not a person's token.
+      And hashes for the tools. More than sixty tests check this against real restores, a real vulnerable package, and real
+      Python installs.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The config, the audit tool, the pipeline and the tests are on GitHub, and the complete guide is on devladlog dot
+      com. Next time we look at Visual Studio itself, with the tips that save the most time. Subscribe so you don't
+      miss it. This was DEVLADLOG Dev Tools, by Momento Galático.

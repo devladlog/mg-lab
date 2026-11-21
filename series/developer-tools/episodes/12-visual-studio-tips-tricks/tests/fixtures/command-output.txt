@@ -1,0 +1,46 @@
+$ dotnet test OrdersApp.Tests.slnf --no-build -p:RunSettingsFilePath= --filter "FullyQualifiedName~RunSettingsTests"
+Test run for ./tests/Contoso.Orders.Api.Tests/bin/Debug/net10.0/Contoso.Orders.Api.Tests.dll (.NETCoreApp,Version=v10.0)
+VSTest version 18.0.2 (x64)
+Starting test execution, please wait...
+A total of 1 test files matched the specified pattern.
+[xUnit.net 00:00:00.30]     Contoso.Orders.Api.Tests.RunSettingsTests.The_repository_runsettings_reached_the_test_host [FAIL]
+  Failed Contoso.Orders.Api.Tests.RunSettingsTests.The_repository_runsettings_reached_the_test_host [3 ms]
+  Error Message:
+   CONTOSO_REGION is '(not set)': the .runsettings file did not reach the test host. Run through the solution or project (RunSettingsFilePath), or pass --settings .runsettings.
+Failed!  - Failed:     1, Passed:     0, Skipped:     0, Total:     1, Duration: 23 ms - Contoso.Orders.Api.Tests.dll (net10.0)
+$ dotnet test OrdersApp.Tests.slnf --no-build -p:RunSettingsFilePath= --settings .runsettings --filter "FullyQualifiedName~RunSettingsTests"
+Test run for ./tests/Contoso.Orders.Api.Tests/bin/Debug/net10.0/Contoso.Orders.Api.Tests.dll (.NETCoreApp,Version=v10.0)
+VSTest version 18.0.2 (x64)
+Starting test execution, please wait...
+A total of 1 test files matched the specified pattern.
+Passed!  - Failed:     0, Passed:     1, Skipped:     0, Total:     1, Duration: 11 ms - Contoso.Orders.Api.Tests.dll (net10.0)
+$ dotnet test OrdersApp.Tests.slnf
+Test run for ./tests/Contoso.Orders.Api.Tests/bin/Debug/net10.0/Contoso.Orders.Api.Tests.dll (.NETCoreApp,Version=v10.0)
+VSTest version 18.0.2 (x64)
+Starting test execution, please wait...
+A total of 1 test files matched the specified pattern.
+[xUnit.net 00:00:00.30]     Contoso.Orders.Api.Tests.SqlServerIntegrationTests.Schema_is_created_and_seeded [SKIP]
+[xUnit.net 00:00:00.30]     Contoso.Orders.Api.Tests.SqlServerIntegrationTests.Decimal_and_date_round_trip_through_sql_server [SKIP]
+[xUnit.net 00:00:00.30]     Contoso.Orders.Api.Tests.SqlServerIntegrationTests.Healthz_reports_sql_server [SKIP]
+[xUnit.net 00:00:00.32]     Contoso.Orders.Api.Tests.SqlServerIntegrationTests.Customer_longer_than_the_column_is_rejected_before_sql_server [SKIP]
+Passed!  - Failed:     0, Passed:    36, Skipped:     4, Total:    40, Duration: 2 s - Contoso.Orders.Api.Tests.dll (net10.0)
+$ dotnet build OrdersApp.Api.slnf
+  Contoso.Orders.Api -> ./src/Contoso.Orders.Api/bin/Debug/net10.0/Contoso.Orders.Api.dll
+$ dotnet build
+  Contoso.Orders.Api -> ./src/Contoso.Orders.Api/bin/Debug/net10.0/Contoso.Orders.Api.dll
+  Contoso.Orders.Api.Tests -> ./tests/Contoso.Orders.Api.Tests/bin/Debug/net10.0/Contoso.Orders.Api.Tests.dll
+$ dotnet sln OrdersApp.Api.slnf list
+Project(s)
+----------
+src/Contoso.Orders.Api/Contoso.Orders.Api.csproj
+$ python tools/vs_files.py check . --known-ids learn-component-ids.txt
+all Visual Studio files are consistent
+$ python tools/vs_files.py expand snippets/ordtest.snippet --set path=/orders/99999 --set status=NotFound
+[Fact]
+    public async Task Orders_list_answers_200()
+    {
+        var response = await _client.GetAsync("/orders/99999");
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        
+    }

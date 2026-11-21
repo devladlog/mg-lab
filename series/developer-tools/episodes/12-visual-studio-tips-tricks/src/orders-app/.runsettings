@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- File name extension must be .runsettings. Directory.Build.props points RunSettingsFilePath at this file, so Test
+     Explorer in Visual Studio, `dotnet test` and the pipeline all read the same settings. -->
+<RunSettings>
+  <RunConfiguration>
+    <!-- Test projects (assemblies) running at the same time. 1 = one at a time; 0 = one per logical processor.
+         The name is case sensitive: MaxCpuCount, not MaxCPUCount. -->
+    <MaxCpuCount>1</MaxCpuCount>
+    <!-- Stop the whole run after 5 minutes (milliseconds), so one hung test cannot hold Test Explorer or a build agent forever. -->
+    <TestSessionTimeout>300000</TestSessionTimeout>
+    <!-- A filter that matches nothing is a failed run, not a green one. -->
+    <TreatNoTestsAsError>true</TreatNoTestsAsError>
+    <!-- Set on the test host process before the tests start. -->
+    <EnvironmentVariables>
+      <CONTOSO_REGION>lab-west</CONTOSO_REGION>
+    </EnvironmentVariables>
+  </RunConfiguration>
+</RunSettings>

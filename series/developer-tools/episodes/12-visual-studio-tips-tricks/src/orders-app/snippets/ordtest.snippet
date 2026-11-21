@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<CodeSnippets xmlns="http://schemas.microsoft.com/VisualStudio/2005/CodeSnippet">
+  <CodeSnippet Format="1.0.0">
+    <Header>
+      <Title>Orders API test</Title>
+      <Author>Contoso Orders team</Author>
+      <Description>An xUnit test that calls an Orders API endpoint through the test class's _client and checks the status code.</Description>
+      <Shortcut>ordtest</Shortcut>
+      <SnippetTypes>
+        <SnippetType>Expansion</SnippetType>
+      </SnippetTypes>
+    </Header>
+    <Snippet>
+      <Declarations>
+        <Literal>
+          <ID>name</ID>
+          <ToolTip>Test name: what is true, in words (Orders_list_answers_200)</ToolTip>
+          <Default>Orders_list_answers_200</Default>
+        </Literal>
+        <Literal>
+          <ID>path</ID>
+          <ToolTip>Request path and query</ToolTip>
+          <Default>/orders</Default>
+        </Literal>
+        <Literal>
+          <ID>status</ID>
+          <ToolTip>Expected HttpStatusCode member</ToolTip>
+          <Default>OK</Default>
+        </Literal>
+      </Declarations>
+      <Code Language="CSharp"><![CDATA[[Fact]
+    public async Task $name$()
+    {
+        var response = await _client.GetAsync("$path$");
+
+        Assert.Equal(HttpStatusCode.$status$, response.StatusCode);
+        $end$
+    }]]></Code>
+    </Snippet>
+  </CodeSnippet>
+</CodeSnippets>
