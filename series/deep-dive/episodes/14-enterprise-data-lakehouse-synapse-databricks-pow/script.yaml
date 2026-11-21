@@ -1,0 +1,236 @@
+# DEVLADLOG Deep Dive: episode 14. Code and test scenes are real (from this folder); screen scenes need the lab
+# recording described in demo.md.
+episode: 14
+slug: enterprise-data-lakehouse-synapse-databricks-pow
+series_label: "DEEP DIVE"
+series_name: "DEVLADLOG Deep Dive"
+file_prefix: "deep-dive"
+title: "Enterprise Data Lakehouse"
+subtitle: "Databricks, Synapse and Power BI on one Delta lake"
+voice: am_michael
+thumbnail_text: "DATA LAKEHOUSE\nDELTA ON\nSYNAPSE + POWER BI"
+youtube:
+  title: "Enterprise Data Lakehouse: Databricks, Synapse, Power BI | DEVLADLOG Deep Dive #14"
+  tags: [data lakehouse, Azure Databricks, Delta Lake, Azure Synapse, serverless SQL, Power BI, TMDL, medallion architecture, PySpark, Unity Catalog, Bicep]
+sources:
+  - https://www.devladlog.com/articles/deep-dive/2026-03-16-enterprise-data-lakehouse-azure-synapse-databricks-power-bi-purview/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "One lake, four tools, one contract"
+    sub: "Databricks, Synapse, Power BI, and what retired"
+    short: hook
+    narration: >
+      Contoso orders arrive as a change feed. Finance wants dashboards, engineers want Spark, and nobody wants three copies
+      of the truth. In this episode we build a small lakehouse that really runs, and we find what the original guide missed:
+      a storage rule that breaks the tables, a reader that returns deleted rows, and a governance service you can no longer
+      create. This is the DEVLADLOG Deep Dive.
+  - id: architecture
+    type: diagram
+    heading: "From change feed to dashboard"
+    nodes: ["Landing", "Databricks", "Delta lake", "Synapse + Power BI"]
+    labels: ["JSON change feed", "Bronze, Silver, Gold", "One contract file", "Views and a model"]
+    narration: >
+      JSON files land in storage. Spark turns them into bronze, silver and gold Delta tables. A single contract file lists
+      the gold columns, and the Synapse views and the Power BI model are tested against it. Synapse serverless only reads.
+      Spark does all the writing.
+  - id: changed
+    type: bullets
+    heading: "What changed since the blog guide"
+    bullets:
+      - "Purview classic: no new accounts, retiring 2027"
+      - "Synapse: Fabric is the strategic platform"
+      - "input_file_name is gone on Databricks 17.3"
+      - "Synapse serverless reads Delta reader v1 only"
+      - "So: no Purview in the Bicep, one contract in code"
+    narration: >
+      First, the platform. Microsoft Learn says classic Purview data governance can no longer create new accounts, and stays
+      in maintenance mode until November twelfth, twenty twenty seven, so this episode leaves it out of the deployment.
+      Microsoft calls Fabric its strategic platform but has announced no retirement for Synapse. The old file name function
+      is unsupported from Databricks runtime seventeen point three, and Synapse serverless reads only version one of the
+      Delta protocol.
+  - id: bronze
+    type: code
+    heading: "Bronze: keep everything, name the file"
+    lang: python
+    code: |
+      raw = (spark.read.schema(BRONZE_SCHEMA)
+             .option("mode", "PERMISSIVE")
+             .option("columnNameOfCorruptRecord", "_corrupt_record")
+             .json(source)
+             .select("*", F.col("_metadata.file_name").alias("source_file")))  # not input_file_name()
+    narration: >
+      Bronze appends raw lines exactly as they arrive. A truncated line is kept in a corrupt record column, not dropped. The
+      source file comes from the metadata column, because the old input file name function is deprecated and unreliable.
+  - id: quality
+    type: code
+    heading: "Silver: every rejection has a reason"
+    lang: python
+    code: |
+      reason = (F.when(F.col("_corrupt_record").isNotNull(), "unparseable_record")
+                .when(F.col("order_id").isNull() | (F.trim("order_id") == ""), "missing_order_id")
+                .when(~F.col("op").isin(*OPS) | F.col("op").isNull(), "bad_op")
+                .when(F.col("seq").isNull(), "missing_seq")
+                .when(live & ~F.col("currency").isin(*CURRENCIES), "bad_currency")
+                .when(live & (F.col("amount").isNull() | (F.col("amount") < 0)), "bad_amount")
+                .when(live & parsed_ts.isNull(), "bad_timestamp"))
+    narration: >
+      The first failing rule names the reason, and rejected rows go to a quarantine table, not the bin. Deletes only need a
+      key, so they skip the amount and currency checks. Email addresses are hashed on the way to silver, so personal data
+      stays in bronze.
+  - id: merge
+    type: code
+    heading: "One merge: insert, update, delete"
+    lang: python
+    short: merge
+    code: |
+      (DeltaTable.forPath(spark, path).alias("t")
+          .merge(changes.alias("s"), "t.order_id = s.order_id")
+          .whenMatchedDelete(condition="s.op = 'D' AND s.seq > t.seq")
+          .whenMatchedUpdate(condition="s.op <> 'D' AND s.seq > t.seq",   # replayed or late rows lose
+                             set={c: f"s.{c}" for c in cols})
+          .whenNotMatchedInsert(condition="s.op <> 'D'", values={c: f"s.{c}" for c in cols})
+          .execute())
+    narration: >
+      The change feed becomes one merge. A newer delete removes the row, a newer update replaces it, and an unknown order is
+      inserted. The sequence number is the guard, so a replayed batch or a late update loses. Run the same batch twice and
+      silver does not change. Tests prove both.
+  - id: reader
+    type: code
+    heading: "The trap: a reader that ignores deletes"
+    lang: python
+    code: |
+      (spark.range(0, 100).selectExpr("id", "cast(id as string) as name").repartition(1)
+       .write.format("delta").option("delta.enableDeletionVectors", "true").save(path))
+      spark.sql(f"ALTER TABLE delta.`{path}` SET TBLPROPERTIES ('delta.enableDeletionVectors' = 'true')")
+      spark.sql(f"DELETE FROM delta.`{path}` WHERE id = 7")
+      delta_count = spark.read.format("delta").load(path).filter("id = 7").count()
+      v1, dvs = delta_state(spark, path)
+      assert delta_count == 0 and dvs >= 1
+      assert v1.filter("id = 7").count() == 1
+    narration: >
+      Here is the failure, reproduced in a test. With deletion vectors on, Delta marks row seven as deleted without
+      rewriting the file. A Delta reader version one, which is what Synapse serverless is, ignores that mark and still
+      returns the row. Learn says the results are possibly wrong. So our tables are written with deletion vectors off, and a
+      second test proves it.
+  - id: serving
+    type: code
+    heading: "Serving: a view with an explicit schema"
+    lang: sql
+    code: |
+      CREATE OR ALTER VIEW gold.daily_sales AS
+      SELECT r.order_date, r.region, r.currency, r.orders, r.revenue
+      FROM OPENROWSET(BULK 'gold/daily_sales', DATA_SOURCE = 'lake', FORMAT = 'DELTA')
+      WITH (
+          order_date date,
+          region     varchar(16) COLLATE Latin1_General_100_BIN2_UTF8,
+          currency   varchar(3)  COLLATE Latin1_General_100_BIN2_UTF8,
+          orders     bigint,
+          revenue    decimal(22,2)
+      ) AS r;
+    narration: >
+      In Synapse the gold table becomes a view. It points at the root Delta folder, with no wildcards, and lists every
+      column with a type. String columns carry the UTF eight collation, because Delta text is UTF eight. A test checks this
+      list against the contract, so a renamed column fails in the build, not in a report.
+  - id: tests
+    type: code
+    heading: "23 tests, no cloud"
+    lang: text
+    code: |
+      test_merge_insert_update_delete_and_dedupe ........ passed
+      test_late_and_replayed_rows_lose .................. passed
+      test_no_email_outside_bronze ...................... passed
+      test_synapse_reader_v1_sees_same_rows_... ......... passed
+      test_deletion_vectors_make_reader_v1_return_... ... passed
+      test_serving_view_matches_gold_contract[...] ...... passed
+      test_dax_measures_reference_real_columns[...] ..... passed
+      test_lifecycle_policy_never_touches_delta_tables .. passed
+      23 passed   (pytest, PySpark 4.0.1, Delta Lake 4.0.1, local)
+    narration: >
+      Twenty three tests run on a laptop with open source Spark and Delta, no cloud. Nine cover the pipeline, including the
+      deletion vector failure. Fourteen check that the Synapse views, the Power BI model, the Bicep and the notebook agree
+      with the contract. What they cannot prove is the real services, so now the lab.
+  - id: portal-screen
+    type: screen
+    heading: "One resource group, three services"
+    image: screens/portal.jpg
+    bar: "Azure portal · rg-mglab-deep-dive-14"
+    demo: >
+      Azure portal, real capture, resource group rg-mglab-deep-dive-14 after the Bicep deployment: the storage account with
+      hierarchical namespace, the Databricks workspace, its access connector and the Synapse workspace. Open the storage
+      lifecycle rule to show it covers only lake slash landing. Mask the subscription id.
+    narration: >
+      This is what the Bicep deploys: a data lake storage account with shared keys off, a Databricks workspace with its
+      access connector, and a Synapse workspace with Microsoft Entra only sign in. The lifecycle rule touches only the
+      landing folder, never the Delta tables.
+  - id: databricks-screen
+    type: screen
+    heading: "The medallion job on Databricks"
+    image: screens/databricks.jpg
+    bar: "Azure Databricks · notebook run"
+    demo: >
+      Azure Databricks workspace, real capture: the notebook medallion_job running with a batch id, the output line with
+      ingested, rejected and applied counts, then Catalog Explorer on lakehouse.gold.daily_sales. Mask the workspace URL and
+      any user email.
+    narration: >
+      On Databricks the same functions run from a notebook with a batch id. The output shows how many rows came in, how many
+      were rejected, and how many changed silver. The gold tables appear in the catalog.
+  - id: synapse-screen
+    type: screen
+    heading: "Synapse serverless reads the same files"
+    image: screens/synapse.jpg
+    bar: "Synapse Studio · serverless SQL"
+    demo: >
+      Synapse Studio, real capture: the script serving.sql run against a user database, then select top ten from
+      gold.daily_sales and the row count compared with Databricks. Mask the storage account name.
+    narration: >
+      In Synapse Studio we run the serving script and query the view. The row count matches Databricks, because the tables
+      were written without deletion vectors. Synapse never wrote a byte.
+  - id: powerbi-screen
+    type: screen
+    heading: "A semantic model from text files"
+    image: screens/powerbi.jpg
+    bar: "Power BI Desktop · TMDL view"
+    demo: >
+      Power BI Desktop, real capture: the TMDL files from src slash powerbi opened, the model connected to the Synapse
+      serverless endpoint in import mode, a card for Orders and a table of revenue by region, with the currency slicer
+      showing one currency selected. Mask the server name.
+    narration: >
+      The Power BI model is plain text, a table file per gold table. Revenue shows only when one currency is selected,
+      because the lake has no exchange rates and adding euros to dollars would be wrong.
+  - id: gotcha
+    type: bullets
+    heading: "What to watch"
+    short: gotcha
+    bullets:
+      - "Never archive a Delta table or its _delta_log"
+      - "Deletion vectors off for Synapse readers"
+      - "Unity Catalog filters do not run in Synapse"
+      - "Never add revenue across currencies"
+      - "Delete before insert can resurrect a row"
+    narration: >
+      The gotchas. The blog archived bronze after ninety days, but archived blobs cannot be read, and an archived
+      transaction log breaks the table. Keep deletion vectors off for Synapse. Unity Catalog row filters protect Databricks
+      queries, and I expect them not to apply when Synapse reads the files directly, which I have not verified. Do not add
+      currencies. And a delete that arrives before its insert is ignored, so the insert wins.
+  - id: recap
+    type: bullets
+    heading: "What to take away"
+    bullets:
+      - "Bronze keeps everything, silver quarantines"
+      - "One merge, guarded by a sequence number"
+      - "Test what the other engine will see"
+      - "One contract for views and model"
+      - "Check retirements before you deploy"
+    narration: >
+      To recap. Keep bronze raw and quarantine bad rows. Apply changes with one guarded merge. Test what the other engine
+      will see, not only what Spark sees. Drive the views and the model from one contract. And check the retirement notices
+      before you deploy.
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The pipeline, the views, the model and the Bicep are on GitHub, and the full guide is on devladlog dot com. Thanks for
+      watching, and see you in the next Deep Dive.

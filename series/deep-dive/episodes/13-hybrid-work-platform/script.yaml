@@ -1,0 +1,269 @@
+# DEVLADLOG Deep Dive: episode 13. Code and test scenes are real (from this folder); screen scenes need the lab
+# recording described in demo.md. Narration ~840 words.
+episode: 13
+slug: hybrid-work-platform
+series_label: "DEEP DIVE"
+series_name: "DEVLADLOG Deep Dive"
+file_prefix: "deep-dive"
+title: "Hybrid Work Platform"
+subtitle: "Teams meetings that a guest can join from your own page"
+voice: am_michael
+thumbnail_text: "HYBRID WORK\nGUEST JOINS\nTEAMS MEETING"
+youtube:
+  title: "Hybrid Work Platform: Guests Join Teams Meetings via ACS | DEVLADLOG Deep Dive #13"
+  tags: [hybrid work, Microsoft Teams, Azure Communication Services, Teams interoperability, Microsoft Graph, online meetings, lobby, Azure Functions, managed identity, Bicep, solution architecture]
+sources:
+  - https://www.devladlog.com/articles/deep-dive/2025-09-08-hybrid-work-platform-teams-sharepoint-viva-azure-communication-services/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "A guest, no licence, no Teams"
+    sub: "joins your meeting from your own page"
+    short: hook
+    narration: >
+      Half of Contoso is in the office, half is at home, and a partner is on the other side of the world. The partner has
+      no Teams licence and no account, and nobody wants to email a raw meeting link around. In this episode we build the
+      path that lets that guest join a real Teams meeting from a Contoso web page, and we keep it safe. This is the
+      DEVLADLOG Deep Dive.
+
+  - id: architecture
+    type: diagram
+    heading: "Host, broker, guest, meeting"
+    nodes: ["Host", "Broker", "Guest page", "Teams"]
+    labels: ["Graph meeting", "Azure Function", "ACS Calling SDK", "Lobby"]
+    narration: >
+      The host creates the meeting with Microsoft Graph. A small broker, an Azure Function, turns the meeting link into a
+      one time invitation. The guest opens the invitation, the broker issues a Communication Services token, and the
+      browser joins the Teams meeting as an external user. The Teams lobby decides who gets in.
+
+  - id: changed
+    type: bullets
+    heading: "What changed since the blog guide"
+    bullets:
+      - "ACS retirement guide: services end 30 Sep 2028"
+      - "Calling keeps working, supported with Teams"
+      - "Chat, SMS, email and Rooms are being retired"
+      - "So we build only the Teams interop path"
+      - "No custom phone-style calling"
+    narration: >
+      First, honesty about the platform. Microsoft's retirement guide for Communication Services says several services,
+      including chat, S M S, email and Rooms, end on the thirtieth of September twenty twenty eight. Calling keeps
+      working until then, and to stay supported it has to be used with Teams. So we build only that path: guests joining
+      Teams meetings. The custom calling from the original guide is left out.
+
+  - id: meeting
+    type: code
+    heading: "The meeting: lobby closed by default"
+    lang: powershell
+    code: |
+      [ordered]@{
+          subject              = $Subject
+          startDateTime        = $startUtc.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'")
+          endDateTime          = $startUtc.AddMinutes($DurationMinutes).ToString("yyyy-MM-dd'T'HH:mm:ss'Z'")
+          lobbyBypassSettings  = [ordered]@{ scope = $m.lobbyBypassScope; isDialInBypassEnabled = [bool]$m.isDialInBypassEnabled }
+          allowedPresenters    = $m.allowedPresenters
+          allowMeetingChat     = $m.allowMeetingChat
+          isEntryExitAnnounced = [bool]$m.isEntryExitAnnounced
+      }
+    narration: >
+      The host side is one Graph call, post me online meetings, with the delegated online meetings read write
+      permission. The body comes from a contract file. The lobby scope is organizer, so only the host walks in, everyone
+      else waits. Only the organizer presents, and entry and exit are announced.
+
+  - id: invite
+    type: code
+    heading: "One-time invitations, hash only"
+    lang: typescript
+    short: invite
+    code: |
+      const code = random(LIMITS.invite.codeBytes).toString("base64url");
+      const expiresOn = new Date(now.getTime() + validMinutes * 60_000).toISOString();
+      await store.create({
+        codeHash: hashCode(code), // only the hash is stored
+        meetingLink,
+        expiresOn,
+        maxUses,
+        uses: 0,
+        createdOn: now.toISOString(),
+      });
+      return { code, expiresOn, maxUses };
+    narration: >
+      Guests have no account, so the invitation is the credential. The broker makes thirty two random bytes, stores only
+      their hash with the meeting link, an expiry and a use limit, and hands the code to the host. A leaked table gives
+      nobody a working link. And the link must be a real Teams meeting address on the Teams host, or it is refused.
+
+  - id: redeem
+    type: code
+    heading: "Redeem: every refusal looks the same"
+    lang: typescript
+    code: |
+      try {
+        const invite = await redeemInvite(store, body["code"], now);
+        const token = await issueGuestToken(identity);
+        const payload: RedeemResponse = { ...token, meetingLink: invite.meetingLink, displayName };
+        return { status: 200, body: payload, headers: NO_STORE };
+      } catch (e) {
+        if (e instanceof InviteError) {
+          log(`invite refused: ${e.reason}`);
+          return { status: 403, body: { error: "This invitation is not valid." }, headers: NO_STORE };
+        }
+        throw e;
+      }
+    narration: >
+      Redeeming counts a use with an optimistic concurrency check, so ten guests racing for a three use invitation get
+      exactly three. Unknown, expired and used up all return the same four oh three, so the endpoint can't be probed.
+      The reason goes to the log, never to the guest.
+
+  - id: token
+    type: code
+    heading: "The token: voip only, one hour"
+    lang: typescript
+    code: |
+      export async function issueGuestToken(client: IdentityClientLike): Promise<GuestToken> {
+        const result = await client.createUserAndToken([...LIMITS.token.scopes], {
+          tokenExpiresInMinutes: LIMITS.token.expiresInMinutes,
+        });
+        return {
+          userId: result.user.communicationUserId,
+          token: result.token,
+          expiresOn: result.expiresOn.toISOString(),
+        };
+      }
+    narration: >
+      The Communication Services identity client authenticates with the function's managed identity. There is no key, and
+      key authentication is switched off on the resource. Each guest gets a new identity, the voip scope only, and a
+      token that lasts sixty minutes. The default would have been twenty four hours.
+
+  - id: join
+    type: code
+    heading: "The page: audio only, link from the broker"
+    lang: typescript
+    code: |
+      const callClient = new CallClient();
+      const credential = new AzureCommunicationTokenCredential(grant.token);
+      const callAgent = await callClient.createCallAgent(credential, { displayName: grant.displayName });
+
+      // Audio only: ask for the microphone, not the camera.
+      const deviceManager = await callClient.getDeviceManager();
+      const access = await deviceManager.askDevicePermission({ audio: true, video: false });
+      if (!access.audio) throw new Error("The microphone is blocked. Allow it in the browser and reload the page.");
+
+      // The meeting link comes from the broker, never from the page URL.
+      const call: Call = callAgent.join({ meetingLink: grant.meetingLink }, { audioOptions: { muted: false } });
+    narration: >
+      In the browser it is the Calling S D K. Create the agent from the token, ask for the microphone only, and join with
+      the meeting link the broker returned. The invitation code travels in the U R L fragment, which the browser never
+      sends to a server, and the page removes it from the address bar as soon as it has read it.
+
+  - id: tests
+    type: code
+    heading: "Tests: including a real table emulator"
+    lang: text
+    code: |
+      ok 10 - redeem: unknown, expired and exhausted invites are the same 403 ...
+      ok 22 - concurrency: ten parallel guests on a 3-use invite: exactly 3 succeed
+      ok 30 - meeting link refused: lookalike host
+      ok 32 - meeting link refused: personal Teams (not supported for interop)
+      ok 41 - azurite: ten guests race for a 3-use invite: exactly 3 get in, 7 are refused
+      # tests 41   # pass 41   # fail 0           (API, node:test, Azurite table emulator)
+      # tests 7    # pass 7                        (join page) + bundle ok
+      Tests Passed: 25, Failed: 0                 (Pester: Graph body, invite call, readiness)
+    narration: >
+      Forty one A P I tests, seven for the page and twenty five in Pester. The race is also run against Azurite, the
+      open source storage emulator, so the concurrency check meets a real table service. Lookalike hosts and personal
+      Teams links are refused. What the tests can't prove is Teams itself, so now the real thing.
+
+  - id: meeting-screen
+    type: screen
+    heading: "Meeting and invitation, from PowerShell"
+    image: screens/meeting.jpg
+    bar: "PowerShell 7 · lab laptop"
+    demo: >
+      Windows Terminal (PowerShell 7) on the lab laptop, real capture. After Connect-MgGraph -Scopes OnlineMeetings.ReadWrite
+      as labadmin, run scripts/Invoke-HybridInvite.ps1 -WhatIf (shows the Graph call), then without -WhatIf: the output shows
+      the meeting subject, LobbyScope organizer, the host join link and the guest link (https://func-hyb-xxxx.azurewebsites.net/join#i=...).
+      Mask the function host name, the tenant id inside the Teams link and all but the first four characters of the invite code.
+      Never show the function key.
+    narration: >
+      Signed in as the lab admin, one script creates the Teams meeting and asks the broker for an invitation. The meeting
+      reports lobby scope organizer, and the guest link has the code in the fragment. Everything here is masked, and the
+      function key never appears.
+
+  - id: lobby-screen
+    type: screen
+    heading: "The guest waits in the lobby"
+    image: screens/lobby.jpg
+    bar: "Edge InPrivate (guest) · Teams on the web (host)"
+    demo: >
+      Split screen on the lab laptop, real capture. Left: Edge InPrivate window on the guest link, name field "Riley Guest",
+      Join clicked, the page shows "Waiting in the lobby. The host will let you in." Right: Teams on the web as labadmin,
+      in the same meeting, with the lobby notification naming "Riley Guest". Do not admit yet.
+    narration: >
+      The guest opens the link in a private window, types a name and joins. The page says waiting in the lobby. On the
+      host side, Teams shows the guest. Learn says a guest is not admitted until a Teams user is in the meeting, and then
+      waits until someone lets them in.
+
+  - id: connected-screen
+    type: screen
+    heading: "In the meeting, as an external user"
+    image: screens/connected.jpg
+    bar: "Teams on the web · participant list"
+    demo: >
+      Teams on the web as labadmin: click Admit for "Riley Guest". Show the guest page changing to "You are in the meeting."
+      with Mute enabled, then the Teams participants list where the guest is labelled external. The guest unmutes and says one
+      sentence (the audio is captured); then Leave on the guest page and the guest disappears from the participant list.
+    narration: >
+      The host admits the guest. The page switches to in the meeting, and in Teams the guest is listed as external. Audio
+      works both ways, and leaving on the page removes them. No Teams licence, no account.
+
+  - id: readiness-screen
+    type: screen
+    heading: "What the tenant must allow"
+    image: screens/readiness.jpg
+    bar: "PowerShell 7 · MicrosoftTeams module"
+    demo: >
+      Windows Terminal, real capture. After Connect-MicrosoftTeams as labadmin, run scripts/Test-GuestJoinReadiness.ps1: a table of
+      three checks (tenant anonymous join, organizer policy, lobby) all Passed. Then briefly show the Teams admin center >
+      Meetings > Meeting policies > Global > Meeting join and lobby, with the matching settings. Mask the tenant name.
+    narration: >
+      Guests only work if the tenant allows anonymous join, for the organizer's policy and in the lobby settings. This
+      check reads the live settings and fails if anonymous join is off, or if everyone would skip the lobby.
+
+  - id: gotcha
+    type: bullets
+    heading: "What to watch"
+    short: gotcha
+    bullets:
+      - "No Teams user present: the guest is not admitted"
+      - "Token default is 24 hours: ask for 60 minutes"
+      - "Invite code in the fragment, never the query"
+      - "Graph joinWebUrl: Learn says do not parse it"
+      - "Anonymous join: a tenant and an organizer setting"
+    narration: >
+      The gotchas. A guest can't enter until a Teams user is in the meeting. The token lifetime defaults to twenty four
+      hours, so we ask for the shortest, sixty minutes. The invitation code stays in the fragment, so it never reaches
+      logs. Graph says not to rely on the structure of the join U R L, so we only check the host and the path prefix, and
+      that is a risk we accept. And anonymous join is both a tenant setting and an organizer policy.
+
+  - id: recap
+    type: bullets
+    heading: "What to take away"
+    bullets:
+      - "Build the Teams interop path, not custom calling"
+      - "Invitation as the guest credential: hash, expiry, uses"
+      - "Managed identity, no keys, shortest token"
+      - "Lobby closed by default, tenant settings checked"
+      - "Test the race against a real table"
+    narration: >
+      To recap. Build the Teams interoperability path, because that is where Communication Services calling is going.
+      Make the invitation the guest's credential, with a hash, an expiry and a use limit. Use a managed identity and the
+      shortest token. Keep the lobby closed. And test the race against a real table.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The broker, the page, the PowerShell and the Bicep are on GitHub, and the full guide is on devladlog dot com. Next
+      time: an enterprise data lakehouse with Databricks, Synapse, Power BI and Purview. See you there.

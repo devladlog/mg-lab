@@ -1,0 +1,45 @@
+table daily_sales
+
+	measure 'Orders' = SUM(daily_sales[orders])
+		formatString: #,0
+
+	measure 'Revenue (one currency)' = IF(HASONEVALUE(daily_sales[currency]), SUM(daily_sales[revenue]), BLANK())
+		formatString: #,0.00
+		description: Blank unless exactly one currency is in context. The lake has no exchange rates, so mixed currencies are never added.
+
+	measure 'Average order value' = DIVIDE([Revenue (one currency)], [Orders])
+		formatString: #,0.00
+
+	column order_date
+		dataType: dateTime
+		sourceColumn: order_date
+		summarizeBy: none
+
+	column region
+		dataType: string
+		sourceColumn: region
+		summarizeBy: none
+
+	column currency
+		dataType: string
+		sourceColumn: currency
+		summarizeBy: none
+
+	column orders
+		dataType: int64
+		sourceColumn: orders
+		summarizeBy: none
+
+	column revenue
+		dataType: decimal
+		sourceColumn: revenue
+		summarizeBy: none
+
+	partition daily_sales = m
+		mode: import
+		source =
+				let
+				    Source = Sql.Database("contoso-ws-ondemand.sql.azuresynapse.net", "lakehouse"),
+				    Rows = Source{[Schema = "gold", Item = "daily_sales"]}[Data]
+				in
+				    Rows

@@ -1,0 +1,38 @@
+table customer_summary
+
+	measure 'Customers' = DISTINCTCOUNT(customer_summary[customer_key])
+		formatString: #,0
+
+	column customer_key
+		dataType: string
+		sourceColumn: customer_key
+		summarizeBy: none
+
+	column orders
+		dataType: int64
+		sourceColumn: orders
+		summarizeBy: none
+
+	column revenue
+		dataType: decimal
+		sourceColumn: revenue
+		summarizeBy: none
+
+	column first_order_date
+		dataType: dateTime
+		sourceColumn: first_order_date
+		summarizeBy: none
+
+	column last_order_date
+		dataType: dateTime
+		sourceColumn: last_order_date
+		summarizeBy: none
+
+	partition customer_summary = m
+		mode: import
+		source =
+				let
+				    Source = Sql.Database("contoso-ws-ondemand.sql.azuresynapse.net", "lakehouse"),
+				    Rows = Source{[Schema = "gold", Item = "customer_summary"]}[Data]
+				in
+				    Rows
