@@ -1,0 +1,247 @@
+episode: 7
+slug: dataflows-shared-datasets
+series_label: "POWER BI"
+series_name: "DEVLADLOG Power BI"
+file_prefix: "power-bi"
+title: "Dataflows & Shared Datasets"
+subtitle: "Prepare the data once, build one shared model, connect thin reports live"
+voice: am_michael
+thumbnail_text: "PREPARE\nONCE\nSHARE THE MODEL"
+youtube:
+  title: "Power BI Dataflows and Shared Semantic Models: One Model, Thin Reports, RLS | DEVLADLOG Power BI #7"
+  tags: [Power BI, dataflows, Dataflow Gen2, shared semantic model, thin report, live connection, RLS, Fabric, Power Query, TMDL]
+sources:
+  - https://www.devladlog.com/articles/power-bi/2025-05-06-dataflows-shared-datasets-complete-guide-2025/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Stop preparing the same data in every report."
+    sub: "A dataflow, one shared model, thin reports"
+    short: hook
+    narration: >
+      Every report in this series carried its own copy of the data preparation. The same combine, the same clean up,
+      the same security, rebuilt in every file. This time we prepare the data once in a dataflow, build one shared
+      semantic model on top of it, and let every report connect live.
+
+  - id: plan
+    type: bullets
+    heading: "What we're building"
+    bullets:
+      - "Dataflow Gen2: the exports, prepared once"
+      - "A contract: the columns every model can rely on"
+      - "One shared model, with the R L S from episode 5"
+      - "Thin reports on a live connection"
+      - "An audit of who uses what"
+    narration: >
+      We take the Contoso Bikes project from episode six and move the preparation out of the file. A dataflow reads
+      the monthly exports from SharePoint, so no gateway is needed. A written contract says which columns it
+      publishes. One shared model reads the dataflow, and thin reports connect to that model live.
+
+  - id: architecture
+    type: code
+    heading: "Three layers, two workspaces"
+    lang: text
+    code: |
+      SharePoint site ContosoBikesData   exports/ (24 CSV)   security/store_access.csv
+            |
+      Dataflow Gen2 "Contoso Bikes Prep"           workspace: Contoso Data (Lab)
+            Parameters  ExportSite
+            Staging     fnReadExport  fnDimension  SalesExport
+            Output      Product Customer Store Date Sales StoreAccess   <- the contract
+            |
+      Semantic model ContosoSales  (measures, relationships, RLS roles)   same workspace
+            |  live connection
+      Thin reports  StoreManagers ...             workspace: Contoso Sales (Lab)
+    narration: >
+      Three layers, two workspaces. Microsoft now calls dataflow Gen one legacy, so we use Gen two. The data
+      workspace holds the dataflow and the one model. The reporting workspace holds reports that own no data. Learn
+      recommends separate workspaces: creators can publish reports, but they only get read and build access to the
+      model, so row level security still applies to viewers.
+
+  - id: queries
+    type: code
+    heading: "Same queries, new source"
+    lang: text
+    code: |
+      let
+          Files = SharePoint.Files(ExportSite, [ApiVersion = 15]),
+          InFolder = Table.SelectRows(Files, each Text.EndsWith([Folder Path], "/exports/")),
+          CsvOnly = Table.SelectRows(InFolder, each Text.Lower([Extension]) = ".csv"),
+          Read = Table.AddColumn(CsvOnly, "Data",
+              (file) => Table.AddColumn(fnReadExport(file[Content]), "SourceFile", each file[Name], type text)),
+          Combined = Table.Combine(Read[Data]),
+          // newest file wins for the re-exported lines
+          Newest = Table.Sort(Combined, {{"SourceFile", Order.Descending}}),
+          Buffered = Table.Buffer(Newest),
+          Deduped = Table.Distinct(Buffered, {"OrderNumber", "LineNumber"}),
+          Result = Table.RemoveColumns(Deduped, {"SourceFile"})
+      in
+          Result
+    narration: >
+      The queries are the ones from episode three, with one change: the source. Folder files becomes SharePoint
+      files, a cloud source the service can reach. The site comes back as one flat list, so we filter by folder and
+      by extension, then keep the newest copy of every order line.
+
+  - id: contract
+    type: code
+    heading: "The contract: a file you can check"
+    lang: json
+    code: |
+      "Date": [
+        {"name": "Date",            "type": "date"},
+        {"name": "Year",            "type": "int64"},
+        {"name": "Quarter",         "type": "text"},
+        {"name": "MonthNumber",     "type": "int64", "from": "Month Number"},
+        {"name": "Month",           "type": "text"},
+        {"name": "YearMonth",       "type": "text",  "from": "Year Month"},
+        {"name": "YearMonthNumber", "type": "int64", "from": "Year Month Number"},
+        {"name": "DayOfWeekNumber", "type": "int64", "from": "Day of Week Number"},
+        {"name": "DayOfWeek",       "type": "text",  "from": "Day of Week"}
+      ]
+    narration: >
+      The contract is a Jason file: every entity, every column, every type. The dataflow publishes plain names, and
+      the model puts the friendly names with spaces on top. If someone renames a column in the dataflow, every model
+      that reads it breaks at refresh. So we check that before it happens.
+
+  - id: dataflowscreen
+    type: screen
+    heading: "The dataflow in the service"
+    image: screens/df-editor.jpg
+    bar: "Microsoft Fabric · Contoso Data (Lab) · Dataflow Gen2 · Contoso Bikes Prep"
+    demo: "Browser on the lab tenant (SharePoint URL masked). Workspace 'Contoso Data (Lab)' > dataflow 'Contoso Bikes Prep' > Edit. Queries pane with the groups Parameters, Staging and Output and the six output queries; select Sales and open Diagram view. Back in the workspace list: the finished Refresh with its time."
+    narration: >
+      Here it is in the Fabric workspace: the same queries, grouped as parameters, staging and output. We set the
+      SharePoint connection once, publish, and refresh. Everyone downstream now reads this result instead of the raw
+      files.
+
+  - id: modelcode
+    type: code
+    heading: "The shared model reads the dataflow"
+    lang: text
+    code: |
+      expression WorkspaceId = "00000000-0000-0000-0000-000000000000" meta [IsParameterQuery=true, ...]
+      expression DataflowId  = "00000000-0000-0000-0000-000000000000" meta [IsParameterQuery=true, ...]
+
+      partition Product = m
+          mode: import
+          source =
+              let
+                  Source = PowerPlatform.Dataflows(null),
+                  Workspaces = Source{[Id = "Workspaces"]}[Data],
+                  Workspace = Workspaces{[workspaceId = WorkspaceId]}[Data],
+                  Dataflow = Workspace{[dataflowId = DataflowId]}[Data],
+                  Product = Dataflow{[entity = "Product", version = ""]}[Data]
+              in
+                  Product
+    narration: >
+      The shared model is the episode five model, with one change: its partitions read the dataflow through the
+      Dataflows connector. The workspace and dataflow I Ds are parameters, because they are different in every
+      workspace, and Learn documents a R E S T call to update them. Measures, relationships and the R L S roles
+      are untouched.
+
+  - id: contractcheck
+    type: code
+    heading: "Check the model against the contract"
+    lang: text
+    code: |
+      $ python3 tools/check_contract.py --model ContosoSales.SemanticModel/definition
+        INFO     DC005  Store Access: entity column 'UserAlias' isn't loaded by the model
+      6 entities, 6 model tables: 0 error(s), 1 info
+
+      # someone renames Product.Category to ProductCategory in the dataflow
+        ERROR    DC003  Product[Category]: sourceColumn 'Category' isn't a column of entity 'Product'
+      6 entities, 6 model tables: 1 error(s), 2 info                              exit code 1
+    narration: >
+      The contract check reads the T M D L and compares every source column with the contract. Today it passes. If
+      someone renames the category column in the dataflow, it fails with the table and the column named, in a
+      pipeline, before the nightly refresh does. The tests also load the model with the Tabular Object Model, the same
+      parser Desktop uses.
+
+  - id: modelscreen
+    type: screen
+    heading: "Refresh, publish, promote"
+    image: screens/df-model.jpg
+    bar: "Power BI Desktop · ContosoSales.pbip · then Power BI service · Contoso Data (Lab)"
+    demo: "Desktop with ContosoSales.pbip: Transform data, query Product with the Applied steps Source, Workspaces, Workspace, Dataflow, Product; Edit parameters with the IDs masked. Back in the report after Refresh: page Sales overview, Year slicer cleared: Sales amount 1,862,401.98 and Orders 2,440. Home > Publish > Contoso Data (Lab). Then in the service: model Settings > Parameters (IDs masked), Endorsement > Promoted with a description."
+    narration: >
+      In Desktop we set the two I Ds and refresh. The numbers match episode three: a sales amount of one million, eight
+      hundred sixty two thousand, four hundred one, and ninety eight cents. Then publish to the data workspace, and
+      promote the model so people can find it.
+
+  - id: thinscreen
+    type: screen
+    heading: "A thin report: live connection"
+    image: screens/df-thin.jpg
+    bar: "Power BI Desktop · Get data > Power BI semantic models · Lineage view"
+    demo: "New Desktop window. Get data > Power BI semantic models: the catalog with ContosoSales (Promoted, workspace Contoso Data (Lab)); Connect. Data pane with all tables and measures, status bar showing the live connection. One page: cards Sales amount, Orders, Visible stores and a table of stores. Save as StoreManagers.pbip, Publish > Contoso Sales (Lab). In the service: Lineage view showing the dataflow, the model and the reports in both workspaces."
+    narration: >
+      Now the thin report. Get data, Power BI semantic models, pick ContosoSales. It's a live connection: you get the
+      tables, the measures and the roles, and you can't change the model. Publish to the reporting workspace, and the
+      lineage view shows the whole chain, from the dataflow to the reports.
+
+  - id: gotcha
+    type: code
+    heading: "Gotcha: two refreshes, no cascade"
+    lang: text
+    code: |
+      Dataflow refresh    -> new data in the dataflow
+      Semantic model      -> still the old data
+                             Import mode: "requires the semantic model to be refreshed
+                             independently of the dataflow"  (Learn)
+
+      Fix   schedule both, the model after the dataflow
+            or Power Automate: "When a dataflow refresh completes"
+                               -> refresh the semantic model
+    short: gotcha
+    narration: >
+      Here's the gotcha. Refreshing the dataflow doesn't refresh the model. An import model has to be refreshed
+      independently of the dataflow, so a report can sit one run behind without any error. Schedule the model after the
+      dataflow, or use the Power Automate trigger that fires when a dataflow refresh completes.
+
+  - id: auditscreen
+    type: screen
+    heading: "Audit the shared model"
+    image: screens/df-audit.jpg
+    bar: "PowerShell 7 · Invoke-SharedModelCheck.ps1 · lab tenant"
+    demo: "Windows Terminal, PowerShell 7, already signed in with Connect-PowerBIServiceAccount (not recorded). Command ./Invoke-SharedModelCheck.ps1 -DataWorkspaceId $dataWs -ReportWorkspaceId $salesWs (variables set off camera). The two counts lines, then the findings: SM001 for ContosoSales in both workspaces, SM002 for the thin report. Record exactly what SM003 and the others report and keep the narration in line with it."
+    narration: >
+      The audit reads both workspaces with the R E S T A P I, by name, never by I D. And look: two semantic models
+      called ContosoSales, one in each workspace. Episode six's copy is still there, with its own data. The rules name
+      it, and they list the thin report that depends on the shared one. Learn says you can't delete a model while reports
+      in other workspaces use it.
+
+  - id: rlsscreen
+    type: screen
+    heading: "Same roles, every report"
+    image: screens/df-rls.jpg
+    bar: "Power BI service · InPrivate · sam.demo · StoreManagers"
+    short: rls
+    demo: "Model ContosoSales in Contoso Data (Lab) > Security: alex.demo, sam.demo, riley.demo and taylor.demo in Store Managers. Manage permissions with Build for the same users (record the dialog wording). Then an InPrivate window signed in as sam.demo opens the thin report: Signed in as Sam Demo, Visible stores 1, table with Contoso Madrid only, Sales amount 366,058.87, Orders 484."
+    narration: >
+      Finally, Sam opens the thin report. The roles live in the shared model, so the report needs none: Sam sees
+      Contoso Madrid only, three hundred sixty six thousand and fifty nine in sales. Every future report on this model
+      gets the same answer, without anyone copying a rule.
+
+  - id: recap
+    type: bullets
+    heading: "Five rules for sharing"
+    bullets:
+      - "Prepare once in a dataflow, publish a contract"
+      - "One shared model: measures and R L S in one place"
+      - "Thin reports own no data"
+      - "Separate workspaces, Build permission, promote the model"
+      - "Two refreshes: order them"
+    narration: >
+      Five rules. Prepare once in a dataflow and publish a contract. Keep measures and security in one shared model.
+      Let thin reports own no data. Separate the workspaces, grant build permission, and promote the model. And
+      remember there are two refreshes, so order them.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The dataflow, the contract check and the audit are on GitHub, and the complete guide to dataflows and shared
+      semantic models is on dev lad log dot com. Links in the description. Next time: performance tuning. This was
+      DEVLADLOG Power BI, by Momento Galático.

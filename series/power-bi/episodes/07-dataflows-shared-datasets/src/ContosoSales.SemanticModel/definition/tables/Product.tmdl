@@ -1,0 +1,58 @@
+/// Product dimension. Category and subcategory are flattened into this table (no snowflake).
+table Product
+
+	column ProductKey
+		dataType: int64
+		isHidden
+		isKey
+		formatString: 0
+		summarizeBy: none
+		sourceColumn: ProductKey
+
+	column 'Product Code'
+		dataType: string
+		summarizeBy: none
+		sourceColumn: ProductCode
+
+	column Product
+		dataType: string
+		summarizeBy: none
+		sourceColumn: Product
+
+	column Subcategory
+		dataType: string
+		summarizeBy: none
+		sourceColumn: Subcategory
+
+	column Category
+		dataType: string
+		summarizeBy: none
+		sourceColumn: Category
+
+	column Color
+		dataType: string
+		summarizeBy: none
+		sourceColumn: Color
+
+	hierarchy 'Product Hierarchy'
+
+		level Category
+			column: Category
+
+		level Subcategory
+			column: Subcategory
+
+		level Product
+			column: Product
+
+	partition Product = m
+		mode: import
+		source =
+				let
+				    Source = PowerPlatform.Dataflows(null),
+				    Workspaces = Source{[Id = "Workspaces"]}[Data],
+				    Workspace = Workspaces{[workspaceId = WorkspaceId]}[Data],
+				    Dataflow = Workspace{[dataflowId = DataflowId]}[Data],
+				    Product = Dataflow{[entity = "Product", version = ""]}[Data]
+				in
+				    Product

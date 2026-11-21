@@ -1,0 +1,14 @@
+// NEEDS POWER BI DESKTOP (DAX query view). Not run in the build container.
+// Run it on the AFTER model. Compares the two ways of writing Online Sales for each store. The grand total agrees,
+// the store rows don't: FILTER('Store', ...) replaces the filter the row puts on Store (every row shows the online
+// shop's sales), KEEPFILTERS keeps it (only the online shop's row has a value). A rewrite is not always equivalent.
+DEFINE
+    MEASURE Sales[Online Sales Filter] =
+        CALCULATE([Sales Amount], FILTER('Store', 'Store'[Channel] = "Online"))
+EVALUATE
+    SUMMARIZECOLUMNS(
+        'Store'[Store],
+        "Filter version", [Online Sales Filter],
+        "KeepFilters version", [Online Sales]
+    )
+    ORDER BY 'Store'[Store]

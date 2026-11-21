@@ -1,0 +1,119 @@
+/// Fact table, one row per order line.
+table Sales
+
+	/// Sum of the line amount column (a DAX calculated column in the before model, a Power Query column in the after model).
+	measure 'Sales Amount' = SUM(Sales[Line Amount])
+		formatString: #,0.00
+		displayFolder: Base
+
+	measure 'Total Cost' = SUMX(Sales, Sales[Quantity] * Sales[Unit Cost])
+		formatString: #,0.00
+		displayFolder: Base
+
+	measure Margin = [Sales Amount] - [Total Cost]
+		formatString: #,0.00
+		displayFolder: Base
+
+	measure 'Margin %' = DIVIDE([Margin], [Sales Amount])
+		formatString: 0.0%
+		displayFolder: Base
+
+	measure Units = SUM(Sales[Quantity])
+		formatString: #,0
+		displayFolder: Base
+
+	measure Orders = DISTINCTCOUNT(Sales[Order Number])
+		formatString: #,0
+		displayFolder: Base
+
+	measure 'Sales PY' = CALCULATE([Sales Amount], SAMEPERIODLASTYEAR('Date'[Date]))
+		formatString: #,0.00
+		displayFolder: Time intelligence
+
+	measure 'Sales YoY %' =
+			VAR PriorSales = CALCULATE([Sales Amount], SAMEPERIODLASTYEAR('Date'[Date]))
+			RETURN
+			    DIVIDE([Sales Amount] - PriorSales, PriorSales)
+		formatString: 0.0%
+		displayFolder: Time intelligence
+
+	measure 'Online Sales' = CALCULATE([Sales Amount], KEEPFILTERS('Store'[Channel] = "Online"))
+		formatString: #,0.00
+		displayFolder: Channels
+
+	column 'Order Number'
+		dataType: int64
+		formatString: 0
+		summarizeBy: none
+		sourceColumn: OrderNumber
+
+	column 'Order Date'
+		dataType: dateTime
+		isHidden
+		formatString: yyyy-mm-dd
+		summarizeBy: none
+		sourceColumn: OrderDate
+
+	column 'Ship Date'
+		dataType: dateTime
+		isHidden
+		formatString: yyyy-mm-dd
+		summarizeBy: none
+		sourceColumn: ShipDate
+
+	column CustomerKey
+		dataType: int64
+		isHidden
+		formatString: 0
+		summarizeBy: none
+		sourceColumn: CustomerKey
+
+	column ProductKey
+		dataType: int64
+		isHidden
+		formatString: 0
+		summarizeBy: none
+		sourceColumn: ProductKey
+
+	column StoreKey
+		dataType: int64
+		isHidden
+		formatString: 0
+		summarizeBy: none
+		sourceColumn: StoreKey
+
+	column Quantity
+		dataType: int64
+		isHidden
+		formatString: #,0
+		summarizeBy: none
+		sourceColumn: Quantity
+
+	column 'Unit Cost'
+		dataType: decimal
+		isHidden
+		formatString: #,0.00
+		summarizeBy: none
+		sourceColumn: UnitCost
+
+	column 'Line Amount'
+		dataType: decimal
+		isHidden
+		formatString: #,0.00
+		summarizeBy: none
+		sourceColumn: LineAmount
+
+	partition Sales = m
+		mode: import
+		source =
+				let
+				    Source = Csv.Document(File.Contents(DataFolder & "\sales_detail.csv"), [Delimiter = ",", Encoding = 65001, QuoteStyle = QuoteStyle.Csv]),
+				    Promoted = Table.PromoteHeaders(Source, [PromoteAllScalars = true]),
+				    Columns = Table.SelectColumns(Promoted, {"OrderNumber", "OrderTimestamp", "ShipDate", "CustomerKey", "ProductKey", "StoreKey", "Quantity", "UnitPrice", "UnitCost"}),
+				    Typed = Table.TransformColumnTypes(Columns, {{"OrderTimestamp", type datetime}, {"ShipDate", type date}, {"CustomerKey", Int64.Type}, {"ProductKey", Int64.Type}, {"StoreKey", Int64.Type}, {"Quantity", Int64.Type}, {"UnitPrice", Currency.Type}, {"UnitCost", Currency.Type}}, "en-US"),
+				    OrderDate = Table.AddColumn(Typed, "OrderDate", each DateTime.Date([OrderTimestamp]), type date),
+				    OrderNumber = Table.TransformColumns(OrderDate, {{"OrderNumber", each Number.FromText(Text.AfterDelimiter(_, "-")), Int64.Type}}),
+				    LineAmount = Table.AddColumn(OrderNumber, "LineAmount", each [Quantity] * [UnitPrice], Currency.Type),
+				    Result = Table.RemoveColumns(LineAmount, {"OrderTimestamp", "UnitPrice"})
+				in
+				    Result

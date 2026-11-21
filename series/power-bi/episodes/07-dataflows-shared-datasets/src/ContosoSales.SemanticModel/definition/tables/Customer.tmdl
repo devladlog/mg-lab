@@ -1,0 +1,42 @@
+/// Customer dimension. Key -1 is the explicit "Unknown customer" row for guest orders.
+table Customer
+
+	column CustomerKey
+		dataType: int64
+		isHidden
+		isKey
+		formatString: 0
+		summarizeBy: none
+		sourceColumn: CustomerKey
+
+	column 'Customer Code'
+		dataType: string
+		summarizeBy: none
+		sourceColumn: CustomerCode
+
+	column Customer
+		dataType: string
+		summarizeBy: none
+		sourceColumn: Customer
+
+	column City
+		dataType: string
+		summarizeBy: none
+		sourceColumn: City
+
+	column Country
+		dataType: string
+		summarizeBy: none
+		sourceColumn: Country
+
+	partition Customer = m
+		mode: import
+		source =
+				let
+				    Source = PowerPlatform.Dataflows(null),
+				    Workspaces = Source{[Id = "Workspaces"]}[Data],
+				    Workspace = Workspaces{[workspaceId = WorkspaceId]}[Data],
+				    Dataflow = Workspace{[dataflowId = DataflowId]}[Data],
+				    Customer = Dataflow{[entity = "Customer", version = ""]}[Data]
+				in
+				    Customer

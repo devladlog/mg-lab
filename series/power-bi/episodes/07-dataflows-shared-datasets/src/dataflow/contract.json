@@ -1,0 +1,56 @@
+{
+  "dataflow": "Contoso Bikes Prep",
+  "description": "The tables the Contoso Bikes Prep dataflow publishes: name, order and type of every column. Semantic models read these and nothing else. Names use letters and digits only.",
+  "parameters": ["ExportSite"],
+  "staging": ["SalesExport", "fnReadExport", "fnDimension"],
+  "entities": {
+    "Product": [
+      {"name": "ProductKey", "type": "int64"},
+      {"name": "ProductCode", "type": "text"},
+      {"name": "Product", "type": "text"},
+      {"name": "Subcategory", "type": "text"},
+      {"name": "Category", "type": "text"},
+      {"name": "Color", "type": "text"}
+    ],
+    "Customer": [
+      {"name": "CustomerKey", "type": "int64"},
+      {"name": "CustomerCode", "type": "text"},
+      {"name": "Customer", "type": "text"},
+      {"name": "City", "type": "text"},
+      {"name": "Country", "type": "text"}
+    ],
+    "Store": [
+      {"name": "StoreKey", "type": "int64"},
+      {"name": "Store", "type": "text"},
+      {"name": "Country", "type": "text"},
+      {"name": "Channel", "type": "text"}
+    ],
+    "Date": [
+      {"name": "Date", "type": "date"},
+      {"name": "Year", "type": "int64"},
+      {"name": "Quarter", "type": "text"},
+      {"name": "MonthNumber", "type": "int64", "from": "Month Number"},
+      {"name": "Month", "type": "text"},
+      {"name": "YearMonth", "type": "text", "from": "Year Month"},
+      {"name": "YearMonthNumber", "type": "int64", "from": "Year Month Number"},
+      {"name": "DayOfWeekNumber", "type": "int64", "from": "Day of Week Number"},
+      {"name": "DayOfWeek", "type": "text", "from": "Day of Week"}
+    ],
+    "Sales": [
+      {"name": "OrderNumber", "type": "text"},
+      {"name": "LineNumber", "type": "int64"},
+      {"name": "OrderDate", "type": "date"},
+      {"name": "ShipDate", "type": "date"},
+      {"name": "CustomerKey", "type": "int64"},
+      {"name": "ProductKey", "type": "int64"},
+      {"name": "StoreKey", "type": "int64"},
+      {"name": "Quantity", "type": "int64"},
+      {"name": "UnitPrice", "type": "currency"},
+      {"name": "UnitCost", "type": "currency"}
+    ],
+    "StoreAccess": [
+      {"name": "UserAlias", "type": "text"},
+      {"name": "StoreKey", "type": "int64"}
+    ]
+  }
+}

@@ -1,0 +1,16 @@
+// NEEDS POWER BI DESKTOP (DAX query view). Not run in the build container.
+// Run it on the AFTER model. Same growth number, written with and without a variable. Compare the two results, then
+// compare the time of each EVALUATE in Performance Analyzer or the status bar.
+DEFINE
+    MEASURE Sales[YoY Twice] =
+        DIVIDE(
+            [Sales Amount] - CALCULATE([Sales Amount], SAMEPERIODLASTYEAR('Date'[Date])),
+            CALCULATE([Sales Amount], SAMEPERIODLASTYEAR('Date'[Date]))
+        )
+EVALUATE
+    SUMMARIZECOLUMNS(
+        'Date'[Year Month],
+        "Twice", [YoY Twice],
+        "With VAR", [Sales YoY %]
+    )
+    ORDER BY 'Date'[Year Month]

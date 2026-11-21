@@ -1,0 +1,240 @@
+episode: 8
+slug: performance-tuning-optimization
+series_label: "POWER BI"
+series_name: "DEVLADLOG Power BI"
+file_prefix: "power-bi"
+title: "Performance Tuning & Optimization"
+subtitle: "Measure first, then shrink the model, then fix the DAX"
+voice: am_michael
+thumbnail_text: "MEASURE\nTHEN\nTUNE"
+youtube:
+  title: "Power BI Performance Tuning: Model Size, DAX and Performance Analyzer | DEVLADLOG Power BI #8"
+  tags: [Power BI, performance tuning, Performance Analyzer, VertiPaq, DAX, DAX query view, data reduction, Power Query, semantic model, optimization]
+sources:
+  - https://www.devladlog.com/articles/power-bi/2025-07-09-performance-tuning-complete-guide-2025/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Don't guess why the report is slow."
+    sub: "Measure, shrink the model, fix the DAX"
+    short: hook
+    narration: >
+      The Contoso Bikes order lines have outgrown the executive page, and everyone has a theory about why it is slow.
+      Bidirectional filters. The big table. That one measure. Theories are cheap. This time we measure first, then
+      change one thing at a time, and check that the numbers on the report don't move.
+
+  - id: plan
+    type: bullets
+    heading: "The plan"
+    bullets:
+      - "Generate two million order lines"
+      - "Record Performance Analyzer on the slow page"
+      - "Find the biggest columns in memory"
+      - "Lint the model, shrink the data, fix the D A X"
+      - "Record again and compare"
+    narration: >
+      We generate two million order lines, open the slow report, and record Performance Analyzer. Nothing is tuned yet. Then we look at which
+      columns take the memory, lint the model for the usual suspects, shrink the data in Power Query, rewrite three
+      measures, and record again.
+
+  - id: generate
+    type: code
+    heading: "A fictional export, two million lines"
+    lang: text
+    code: |
+      $ python3 data/gen_sales.py --rows 2000000 --out C:\ContosoBikesPerf
+      wrote 2,000,000 order lines + 4 dimensions to C:\ContosoBikesPerf (176.5 MB)
+
+      sales_detail.csv
+        OrderNumber    SO-0000001
+        OrderTimestamp 2024-07-24T16:08:52
+        ...
+        LineRef        b19231146644
+        Note           Customer asked for invoice 653618
+    narration: >
+      The export is generated, fictional, and the same every time. Look at the columns. An order number with a text
+      prefix. A timestamp to the second. A reference that is different on every line. And a free text note. Each of
+      them will matter, and the data is fictional, so nothing here is a customer's.
+
+  - id: pabefore
+    type: screen
+    heading: "Measure first"
+    image: screens/perf-before.jpg
+    bar: "Power BI Desktop · ContosoPerf.Before.pbip · Performance Analyzer"
+    demo: "Desktop with ContosoPerf.Before.pbip after a refresh. Optimize ribbon > Performance Analyzer > Start recording > Refresh visuals. Expand the visuals: the slowest ones with their DAX query and visual display times. Name of the slowest visual and its duration in view. Export is not needed on camera."
+    narration: >
+      Performance Analyzer shows how long every visual takes, split into the D A X query and the display. It's the
+      starting point. Learn warns that the durations include time spent queued behind other visuals, so we record every
+      run the same way, with the same filters.
+
+  - id: sizescreen
+    type: screen
+    heading: "What takes the memory?"
+    image: screens/perf-sizes.jpg
+    bar: "Power BI Desktop · DAX query view · INFO.STORAGETABLECOLUMNS"
+    demo: "Same Desktop file, DAX query view. Run queries/01-column-sizes.dax. Result grid sorted by DICTIONARY_SIZE descending: the Sales columns LineRef, OrderTimestamp, Note and OrderNumber at the top."
+    narration: >
+      DAX query view can ask the model itself. This query lists the dictionary size of every column, biggest first.
+      The unique line reference is at the top, then the timestamp, the note, and the order number. A dictionary maps
+      every distinct value, so the more different values, the bigger it gets.
+
+  - id: lint
+    type: code
+    heading: "Lint the model"
+    lang: text
+    code: |
+      $ python3 tools/perf_lint.py --model ContosoPerf.Before.SemanticModel/definition ... --brief
+        WARNING PF001  LocalDateTable_OrderDate: auto date/time table
+        WARNING PF006  Sales[Order Number]: text that is a prefix plus digits
+        WARNING PF004  Sales[Order Timestamp]: date/time with a time part
+        WARNING PF005  Sales[Line Ref]: 200,000 distinct values in a table of 200,000 rows
+        WARNING PF011  Sales[Note]: hidden and unused
+        WARNING PF003  Sales[Line Amount]: DAX calculated column on a table Power Query loads
+        WARNING PF008  Sales[Margin %]: IFERROR/ISERROR hides every error and costs time
+        WARNING PF009  Sales[Sales YoY %]: the same CALCULATE appears more than once
+        WARNING PF007  Sales[Online Sales]: FILTER over a whole table as a CALCULATE filter
+        WARNING PF002  Sales to Product: bi-directional filtering costs query time ...
+        WARNING PF010  ContosoPerf.Before.Report/executive: 13 visuals on the page
+        12 warning(s), 0 info
+    narration: >
+      The lint reads the T M D L files and the report folder. Every rule is a recommendation from Microsoft Learn: auto
+      date time, bidirectional relationships, calculated columns, high cardinality columns, text that should be a
+      number, filter over a table, if error, repeated expressions, and too many visuals on a page. It's advice about
+      where to look, not a stopwatch, and a rule that fires isn't proof that the column is the problem.
+
+  - id: reduction
+    type: code
+    heading: "Shrink the data, keep the answers"
+    lang: text
+    code: |
+      $ python3 tools/reduce_demo.py <200,000-line export>
+      BEFORE: 200,000 rows, 13 columns, 136 bits per row in total
+        OrderTimestamp    80,006 distinct  17 bits
+        LineRef          200,000 distinct  18 bits
+        Note              24,135 distinct  15 bits
+      AFTER: 200,000 rows, 9 columns, 79 bits per row in total
+        OrderDate          1,096 distinct  11 bits
+        LineAmount           371 distinct   9 bits
+      totals identical before and after
+    short: reduction
+    narration: >
+      Here is the data reduction, measured on the real file. Drop the columns nothing uses. Keep the date, not the
+      timestamp. Strip the prefix from the order number. Compute the line amount in Power Query. The columns go from
+      thirteen to nine, and the bits per row drop by more than forty percent. And the totals, and every month and store total, are
+      identical. This counts distinct values; the real memory comes later.
+
+  - id: mquery
+    type: code
+    heading: "The same steps in Power Query"
+    lang: text
+    code: |
+      Columns = Table.SelectColumns(Promoted, {"OrderNumber", "OrderTimestamp", "ShipDate",
+          "CustomerKey", "ProductKey", "StoreKey", "Quantity", "UnitPrice", "UnitCost"}),
+      ...
+      OrderDate = Table.AddColumn(Typed, "OrderDate",
+          each DateTime.Date([OrderTimestamp]), type date),
+      OrderNumber = Table.TransformColumns(OrderDate,
+          {{"OrderNumber", each Number.FromText(Text.AfterDelimiter(_, "-")), Int64.Type}}),
+      LineAmount = Table.AddColumn(OrderNumber, "LineAmount",
+          each [Quantity] * [UnitPrice], Currency.Type),
+      Result = Table.RemoveColumns(LineAmount, {"OrderTimestamp", "UnitPrice"})
+    narration: >
+      In the model, the same steps are a Power Query partition. Learn prefers custom columns in Power Query over
+      calculated columns, because they compress better and don't wait for the whole load. The partition is parsed by
+      Microsoft's Power Query parser in the tests, and the model loads with the Tabular Object Model.
+
+  - id: daxfix
+    type: code
+    heading: "Three measures, rewritten"
+    lang: text
+    code: |
+      Margin %     IFERROR([Margin] / [Sales Amount], 0)
+              ->   DIVIDE([Margin], [Sales Amount])
+
+      Sales YoY %  DIVIDE([Sales Amount] - CALCULATE(...), CALCULATE(...))
+              ->   VAR PriorSales = CALCULATE([Sales Amount], SAMEPERIODLASTYEAR('Date'[Date]))
+                   RETURN DIVIDE([Sales Amount] - PriorSales, PriorSales)
+
+      Online Sales CALCULATE([Sales Amount], FILTER('Store', 'Store'[Channel] = "Online"))
+              ->   CALCULATE([Sales Amount], KEEPFILTERS('Store'[Channel] = "Online"))
+    narration: >
+      Three measures. Divide handles the zero denominator, so no if error. A variable evaluates the prior year once,
+      and Learn reports about half the query time for that pattern. And a Boolean filter replaces a filter over the
+      whole Store table. Learn says Import tables are column stores, built to filter columns that way.
+
+  - id: rules
+    type: bullets
+    heading: "Model changes"
+    bullets:
+      - "Auto date/time off, one Date table"
+      - "Product relationship: one direction"
+      - "No calculated column on the fact table"
+      - "Report: 7 visuals, order lines on their own page"
+    narration: >
+      Beyond data and D A X, the model changes are small. Turn auto date time off and use the date table. Make the
+      product relationship single direction. Keep calculated columns off the fact table. And on the report, seven visuals
+      on the executive page, with the order lines on a page of their own, because every visual sends its own query,
+      and the table of every line is the most expensive one.
+
+  - id: afterscreen
+    type: screen
+    heading: "Record again"
+    image: screens/perf-after.jpg
+    bar: "Power BI Desktop · ContosoPerf.After.pbip · Performance Analyzer"
+    demo: "Desktop with ContosoPerf.After.pbip after a refresh. Same recording: Start recording > Refresh visuals on the Executive page. Then DAX query view: queries/01-column-sizes.dax again, the biggest dictionaries now much smaller and LineRef, Note and OrderTimestamp gone."
+    narration: >
+      Same recording on the tuned model. Same slicers, same refresh. The big dictionaries are gone from the size query,
+      and the executive page no longer carries the table of every order line.
+
+  - id: comparescreen
+    type: screen
+    heading: "Numbers side by side"
+    image: screens/perf-compare.jpg
+    bar: "Windows Terminal · perf_compare.py"
+    demo: "Terminal in the src folder: python tools/perf_compare.py results/performance-analyzer.csv with the numbers typed from the two Performance Analyzer recordings (page, visual, before ms, after ms). The table with the speed-up per visual and the total. Also the card values of both reports side by side: identical."
+    narration: >
+      The numbers from the two recordings go into a small file, and the script puts them side by side, with the speed up
+      per visual. It also fails if a visual got slower. And we compare the card values of both reports: same sales
+      amount, same orders, same margin.
+
+  - id: gotcha
+    type: code
+    heading: "Gotcha: a faster rewrite can change the answer"
+    lang: text
+    code: |
+      Online Sales, per store row:
+        FILTER('Store', 'Store'[Channel] = "Online")
+            -> replaces the filter the row puts on Store:
+               every store row shows the online shop's sales
+        KEEPFILTERS('Store'[Channel] = "Online")
+            -> keeps it: only the online shop's row has a value
+
+      Same grand total. Different rows.   Compare before you ship.
+    short: gotcha
+    narration: >
+      Here's the gotcha. The rewrite is faster, but it isn't the same measure. A filter over the Store table replaces
+      the filter on Store. Keep filters keeps it. The grand total agrees, and the store rows don't. So compare results
+      under filters, not just the total, before you replace a measure. And one more: the bidirectional filter on
+      customers is there for row level security. Don't remove it blindly.
+
+  - id: recap
+    type: bullets
+    heading: "Five rules for performance"
+    bullets:
+      - "Measure first, change one thing, measure again"
+      - "Fewer columns, fewer distinct values"
+      - "Calculations in Power Query, not calculated columns"
+      - "Boolean filters, DIVIDE and VAR"
+      - "Fewer visuals per page"
+    narration: >
+      Five rules. Measure first, change one thing, measure again. Fewer columns and fewer distinct values. Calculations
+      in Power Query, not calculated columns. Boolean filters, divide, and variables. And fewer visuals per page.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The generator, the lint and the comparison are on GitHub, and the complete guide to performance tuning is on dev
+      lad log dot com. Links in the description. This was DEVLADLOG Power BI, by Momento Galático.

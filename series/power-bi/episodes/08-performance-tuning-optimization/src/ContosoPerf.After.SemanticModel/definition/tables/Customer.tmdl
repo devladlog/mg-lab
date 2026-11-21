@@ -1,0 +1,40 @@
+/// Customer dimension: 5,000 fictional customers.
+table Customer
+
+	column CustomerKey
+		dataType: int64
+		isHidden
+		isKey
+		formatString: 0
+		summarizeBy: none
+		sourceColumn: CustomerKey
+
+	column 'Customer Code'
+		dataType: string
+		summarizeBy: none
+		sourceColumn: CustomerCode
+
+	column Customer
+		dataType: string
+		summarizeBy: none
+		sourceColumn: Customer
+
+	column City
+		dataType: string
+		summarizeBy: none
+		sourceColumn: City
+
+	column Country
+		dataType: string
+		summarizeBy: none
+		sourceColumn: Country
+
+	partition Customer = m
+		mode: import
+		source =
+				let
+				    Source = Csv.Document(File.Contents(DataFolder & "\customer.csv"), [Delimiter = ",", Encoding = 65001, QuoteStyle = QuoteStyle.Csv]),
+				    Promoted = Table.PromoteHeaders(Source, [PromoteAllScalars = true]),
+				    Typed = Table.TransformColumnTypes(Promoted, {{"CustomerKey", Int64.Type}}, "en-US")
+				in
+				    Typed

@@ -1,0 +1,86 @@
+/// Date dimension: one row per day, full calendar years, marked as the date table. Filters Sales by order date.
+table Date
+	dataCategory: Time
+
+	column Date
+		dataType: dateTime
+		isKey
+		formatString: yyyy-mm-dd
+		summarizeBy: none
+		sourceColumn: Date
+
+	column Year
+		dataType: int64
+		formatString: 0
+		summarizeBy: none
+		sourceColumn: Year
+
+	column Quarter
+		dataType: string
+		summarizeBy: none
+		sourceColumn: Quarter
+
+	column 'Month Number'
+		dataType: int64
+		isHidden
+		formatString: 0
+		summarizeBy: none
+		sourceColumn: MonthNumber
+
+	column Month
+		dataType: string
+		summarizeBy: none
+		sourceColumn: Month
+		sortByColumn: 'Month Number'
+
+	column 'Year Month Number'
+		dataType: int64
+		isHidden
+		formatString: 0
+		summarizeBy: none
+		sourceColumn: YearMonthNumber
+
+	column 'Year Month'
+		dataType: string
+		summarizeBy: none
+		sourceColumn: YearMonth
+		sortByColumn: 'Year Month Number'
+
+	column 'Day of Week Number'
+		dataType: int64
+		isHidden
+		formatString: 0
+		summarizeBy: none
+		sourceColumn: DayOfWeekNumber
+
+	column 'Day of Week'
+		dataType: string
+		summarizeBy: none
+		sourceColumn: DayOfWeek
+		sortByColumn: 'Day of Week Number'
+
+	hierarchy Calendar
+
+		level Year
+			column: Year
+
+		level Quarter
+			column: Quarter
+
+		level Month
+			column: Month
+
+		level Date
+			column: Date
+
+	partition Date = m
+		mode: import
+		source =
+				let
+				    Source = PowerPlatform.Dataflows(null),
+				    Workspaces = Source{[Id = "Workspaces"]}[Data],
+				    Workspace = Workspaces{[workspaceId = WorkspaceId]}[Data],
+				    Dataflow = Workspace{[dataflowId = DataflowId]}[Data],
+				    Date = Dataflow{[entity = "Date", version = ""]}[Data]
+				in
+				    Date
