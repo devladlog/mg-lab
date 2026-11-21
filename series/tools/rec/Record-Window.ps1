@@ -17,9 +17,7 @@ $out = if ([IO.Path]::IsPathRooted($cfg.out)) { $cfg.out } else { Join-Path $Roo
 New-Item -ItemType Directory -Force -Path (Split-Path $out) | Out-Null
 
 # find the full title of the first visible window whose title contains the text
-$win = Get-Process | Where-Object { $_.MainWindowHandle -ne 0 -and $_.MainWindowTitle -like "*$($cfg.title)*" } | Select-Object -First 1
-if (-not $win) { throw "No window with '$($cfg.title)' in its title" }
-$title = $win.MainWindowTitle
+$title = (Wait-WindowByTitle -Title $cfg.title -TimeoutSeconds 10).Title
 Write-Host "Recording window: $title -> $out" -ForegroundColor Cyan
 New-Item -ItemType File -Force -Path (Join-Path $dir 'recording') | Out-Null
 $rec = Start-WindowCapture -Ffmpeg (Get-FfmpegPath) -Title $title -OutFile $out

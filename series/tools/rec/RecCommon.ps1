@@ -28,30 +28,47 @@ function Invoke-HostStatements {
     } finally { Pop-Location }
 }
 
-if (-not ('MgRec.Win' -as [type])) {
-    Add-Type -Namespace MgRec -Name Win -MemberDefinition @'
-[DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern IntPtr FindWindow(string cls, string title);
+if (-not ('MgRec.Win2' -as [type])) {
+    Add-Type -Namespace MgRec -Name Win2 -MemberDefinition @'
+public delegate bool EnumProc(IntPtr h, IntPtr l);
+[DllImport("user32.dll")] public static extern bool EnumWindows(EnumProc cb, IntPtr l);
+[DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern int GetWindowText(IntPtr h, System.Text.StringBuilder s, int n);
+[DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr h);
 [DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr h, IntPtr after, int x, int y, int cx, int cy, uint flags);
 [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h);
 [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr h, int cmd);
+public static System.Collections.Generic.List<IntPtr> found = new System.Collections.Generic.List<IntPtr>();
+public static IntPtr FindContaining(string part) {
+    IntPtr hit = IntPtr.Zero;
+    EnumWindows(delegate (IntPtr h, IntPtr l) {
+        if (!IsWindowVisible(h)) return true;
+        var sb = new System.Text.StringBuilder(512);
+        GetWindowText(h, sb, 512);
+        if (sb.ToString().Contains(part)) { hit = h; return false; }
+        return true;
+    }, IntPtr.Zero);
+    return hit;
+}
+public static string Title(IntPtr h) { var sb = new System.Text.StringBuilder(512); GetWindowText(h, sb, 512); return sb.ToString(); }
 '@
 }
 
 function Wait-WindowByTitle([string]$Title, [int]$TimeoutSeconds = 20) {
+    # matches part of the title: an elevated console is titled "Administrator: <title>"
     $end = (Get-Date).AddSeconds($TimeoutSeconds)
     do {
-        $h = [MgRec.Win]::FindWindow($null, $Title)
-        if ($h -ne [IntPtr]::Zero) { return $h }
+        $h = [MgRec.Win2]::FindContaining($Title)
+        if ($h -ne [IntPtr]::Zero) { return [pscustomobject]@{ Handle = $h; Title = [MgRec.Win2]::Title($h) } }
         Start-Sleep -Milliseconds 200
     } while ((Get-Date) -lt $end)
-    throw "Window '$Title' did not appear"
+    throw "No window with '$Title' in its title appeared"
 }
 
 function Set-RecordingWindow([IntPtr]$Handle, [int]$Width = 1600, [int]$Height = 900) {
     # top-most, fixed size, on the primary screen, so nothing covers it while it is captured
-    [void][MgRec.Win]::ShowWindow($Handle, 1)
-    [void][MgRec.Win]::SetWindowPos($Handle, [IntPtr]::new(-1), 40, 40, $Width, $Height, 0x0040)
-    [void][MgRec.Win]::SetForegroundWindow($Handle)
+    [void][MgRec.Win2]::ShowWindow($Handle, 1)
+    [void][MgRec.Win2]::SetWindowPos($Handle, [IntPtr]::new(-1), 40, 40, $Width, $Height, 0x0040)
+    [void][MgRec.Win2]::SetForegroundWindow($Handle)
 }
 
 function Start-WindowCapture([string]$Ffmpeg, [string]$Title, [string]$OutFile) {

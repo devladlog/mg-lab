@@ -44,11 +44,12 @@ $jpg = Join-Path $screens "$Screen.jpg"
 # 1. the window to record (classic console host, so the font and size are ours)
 $live = Join-Path $PSScriptRoot 'Invoke-LiveScene.ps1'
 $p = Start-Process conhost.exe -ArgumentList "`"$pwsh`" -NoProfile -NoLogo -File `"$live`" -SceneFile `"$sceneJson`"" -PassThru
-$hwnd = Wait-WindowByTitle -Title 'MG-REC' -TimeoutSeconds 20
-Set-RecordingWindow -Handle $hwnd -Width $(if ($s.width) { $s.width } else { 1600 }) -Height $(if ($s.height) { $s.height } else { 900 })
+$win = Wait-WindowByTitle -Title 'MG-REC' -TimeoutSeconds 30
+Start-Sleep -Milliseconds 500
+Set-RecordingWindow -Handle $win.Handle -Width $(if ($s.width) { $s.width } else { 1600 }) -Height $(if ($s.height) { $s.height } else { 900 })
 
 # 2. capture it
-$rec = Start-WindowCapture -Ffmpeg $ffmpeg -Title 'MG-REC' -OutFile $mp4
+$rec = Start-WindowCapture -Ffmpeg $ffmpeg -Title $win.Title -OutFile $mp4
 Write-Host "Recording $Screen -> $mp4" -ForegroundColor Cyan
 
 # 3. wait for the scene to finish, stop the capture, then let the window close
