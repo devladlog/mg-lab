@@ -1,0 +1,97 @@
+episode: 1
+series: "DEVLADLOG Dynamics 365"
+status: draft-hold-for-review
+ai_label: true
+youtube_url: "{YOUTUBE_URL}"
+linkedin_company:
+  text: |
+    Most Dataverse imports work on day one. On day two someone runs them again and every record exists twice.
+
+    Episode 1 of DEVLADLOG Dynamics 365 builds a Project Request table as code and loads it with an import that is safe to run again:
+    - table, columns, a lookup to Account and an alternate key, all as JSON payloads created inside a solution
+    - upsert by alternate key, in batches where one bad row does not block the rest
+    - paged reads that follow the next link exactly as returned
+    - a client that waits for Retry-After when the service protection limits answer with HTTP 429
+
+    One detail catches people out: creating an alternate key returns at once, but the key is not usable until a background job has built its index. Poll the status before you upsert, and again after every deployment.
+
+    The code runs locally against an in-memory stand-in with tests, so it also runs in CI.
+
+    Watch the episode: {YOUTUBE_URL}
+    Code: {REPO_URL}
+    Written guide: {BLOG_URL}
+
+    Narration uses an AI voice.
+
+    #Dataverse #Dynamics365 #PowerPlatform #DataverseWebAPI
+linkedin_personal:
+  text: |
+    A Dataverse import that works once is easy. One you can run a hundred times is the real test, and the difference is an alternate key.
+
+    The part that catches people out: creating the key returns immediately, but the index is built by a background job. Until the status says Active, upserting by that key is not safe. So my provisioning script polls it, and I check it again after every solution deployment.
+
+    Episode 1 of my Dynamics 365 series covers that, batches, paging and 429 handling, with the code on GitHub: {YOUTUBE_URL}
+
+    Narration uses an AI voice.
+
+    #Dataverse #Dynamics365 #PowerPlatform
+facebook:
+  text: |
+    Ever run a data import twice and ended up with every record duplicated?
+
+    In this episode we define a Dataverse table as code, put an alternate key on it, and write an import that upserts by that key. We also cover batches, paging, and what to do when the service answers HTTP 429. The surprise: the key does not work the moment it is created.
+
+    Watch it here: {YOUTUBE_URL}
+
+    Narration uses an AI voice.
+
+    #Dataverse #Dynamics365
+shorts:
+  - id: hook
+    youtube_short_title: "Run your Dataverse import twice. Every record exists twice. #Shorts"
+    instagram_reel:
+      caption: |
+        Most Dataverse imports work on day one. On day two someone runs them again, and now every record exists twice.
+
+        The fix is an alternate key on the business code from the source system, and an upsert that names the record by that key. Run it a hundred times, same result.
+
+        This episode builds the table as code, loads it in batches, and handles the limits the platform puts on every API user.
+
+        Full episode: link in bio.
+
+        #Dataverse #Dynamics365 #PowerPlatform
+      cover_text: "Import twice, duplicates?"
+    tiktok:
+      caption: "Dataverse imports break on day two, when someone runs them again and every record doubles. An alternate key plus upsert fixes it. #Dataverse #Dynamics365 #PowerPlatform"
+  - id: gotcha
+    youtube_short_title: "Dataverse alternate key: it exists before it works #Shorts"
+    instagram_reel:
+      caption: |
+        Creating a Dataverse alternate key returns immediately. The key is not ready.
+
+        Dataverse builds a database index in the background, and the status goes Pending, In Progress, then Active. Or Failed, if existing rows already break the uniqueness.
+
+        So poll the status before you upsert, and again after every deployment. If it failed, fix the duplicates and reactivate the key.
+
+        Full episode: link in bio.
+
+        #Dataverse #Dynamics365 #PowerPlatform
+      cover_text: "The key isn't ready yet"
+    tiktok:
+      caption: "Dataverse alternate key: creating it returns at once, but the index builds in the background. Wait for Active before you upsert. #Dataverse #Dynamics365 #PowerPlatform"
+  - id: limits
+    youtube_short_title: "Dataverse 429: wait for Retry-After, then send it again #Shorts"
+    instagram_reel:
+      caption: |
+        Every Dataverse API user has service protection limits. By default: 6,000 requests in a 5-minute sliding window, 20 minutes of combined execution time, and 52 or more concurrent requests.
+
+        Go over and you get HTTP 429 with a Retry-After header in seconds. Do not show that to users, and do not give up. Wait exactly that long and retry.
+
+        Batching does not dodge the limits. It moves you to the execution time limit.
+
+        Full episode: link in bio.
+
+        #Dataverse #Dynamics365 #PowerPlatform
+      cover_text: "Handling Dataverse 429"
+    tiktok:
+      caption: "Dataverse API limits: 6,000 requests per 5 minutes per user. On HTTP 429, wait Retry-After seconds and retry. Batching moves the limit, it does not remove it. #Dataverse #Dynamics365"

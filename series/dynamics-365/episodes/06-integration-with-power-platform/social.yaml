@@ -1,0 +1,96 @@
+episode: 6
+series: "DEVLADLOG Dynamics 365"
+status: draft-hold-for-review
+ai_label: true
+youtube_url: "{YOUTUBE_URL}"
+linkedin_company:
+  text: |
+    A project request becomes high risk, and the finance team should hear about it in Teams without anyone writing integration code.
+
+    Episode 6 of DEVLADLOG Dynamics 365 connects the pieces through Dataverse:
+    - a Power Automate flow that triggers on one column, the risk score, and only for rows at 70 or more
+    - the flow calls the custom API from episode 5 and posts to a Teams channel
+    - environment variables whose definitions ship in the solution while the values stay per environment
+    - a tool that pulls the flow's JSON, lints it like code, and reads its run history from Dataverse
+    - a deployment settings file checked for empty values before a pipeline sees it
+
+    The gotcha: a trigger with Select columns runs whenever a listed column is part of the update, even if the value did not change. That is why the plugin from episode 5 writes the score only when it moves. Otherwise finance gets the same message again and again.
+
+    Watch the episode: {YOUTUBE_URL}
+    Code: {REPO_URL}
+    Written guide: {BLOG_URL}
+
+    Narration uses an AI voice.
+
+    #PowerAutomate #Dataverse #Dynamics365 #PowerPlatform
+linkedin_personal:
+  text: |
+    A Dataverse flow trigger with Select columns does not check whether the value changed. Per Microsoft Learn, it runs when any listed column is part of the update, even with the same value.
+
+    If something rewrites that column on every save, your Teams channel gets the same message every time. In my case the fix lives in the plugin: compare with the post image and write the score only when it moves. Also, lookup columns in Select columns never trigger, and never list the primary key.
+
+    Episode 6 of my Dynamics 365 series builds the flow and lints it like code: {YOUTUBE_URL}
+
+    Narration uses an AI voice.
+
+    #PowerAutomate #Dataverse #Dynamics365
+facebook:
+  text: |
+    A project request becomes high risk and the finance team hears about it in Teams, with no integration code.
+
+    This episode builds a Power Automate flow that listens to Dataverse, calls our custom API and posts to a channel. Then we pull the flow into source control, lint it, and read its run history. One trap: a column trigger can fire even when nothing changed.
+
+    Watch here: {YOUTUBE_URL}
+
+    Narration uses an AI voice.
+
+    #PowerAutomate #Dynamics365
+shorts:
+  - id: hook
+    youtube_short_title: "One Dataverse table, a flow, a custom API and a Teams alert #Shorts"
+    instagram_reel:
+      caption: |
+        A project request becomes high risk, and the finance team should hear about it in Teams, without anyone writing a line of integration code.
+
+        In this episode a Power Automate flow listens to Dataverse, calls the custom API from the previous episode, and posts to a channel.
+
+        Then we pull the flow into source control, lint it, and read its run history from Dataverse.
+
+        Full episode: link in bio.
+
+        #PowerAutomate #Dataverse #Dynamics365
+      cover_text: "One table, whole platform"
+    tiktok:
+      caption: "A Power Automate flow listens to Dataverse, calls a custom API and posts to Teams. Then we pull the flow into source control and lint it like code. #PowerAutomate #Dataverse #Dynamics365"
+  - id: gotcha
+    youtube_short_title: "Dataverse flow trigger: Select columns fires on no change #Shorts"
+    instagram_reel:
+      caption: |
+        Learn says a Dataverse flow with Select columns runs when any selected column is in the update, even if its value did not change.
+
+        So if a plugin rewrites the same score on every save, finance gets the same message again and again. The plugin compares with the post image first.
+
+        Two more: lookup columns in Select columns never trigger, and never list the primary key, because every update contains it.
+
+        Full episode: link in bio.
+
+        #PowerAutomate #Dataverse #Dynamics365
+      cover_text: "Select columns fires anyway"
+    tiktok:
+      caption: "Dataverse flow trigger with Select columns runs even when the value didn't change. Lookup columns never trigger it. Don't list the primary key. #PowerAutomate #Dataverse"
+  - id: alm
+    youtube_short_title: "Move a Power Platform solution with a deployment settings file #Shorts"
+    instagram_reel:
+      caption: |
+        To move a solution to test without anyone clicking through prompts, the import takes a deployment settings file: environment variable values, and a connection for every connection reference.
+
+        The Power Platform CLI can generate it. Our check refuses to hand a file with empty values to the pipeline.
+
+        Definitions ship in the solution. Values belong to each environment.
+
+        Full episode: link in bio.
+
+        #PowerPlatform #PowerAutomate #Dynamics365
+      cover_text: "ALM: deployment settings"
+    tiktok:
+      caption: "Move a solution to test without prompts: a deployment settings file with env var values and connections. PAC can generate it, a check rejects empty values. #PowerPlatform #PowerAutomate"
