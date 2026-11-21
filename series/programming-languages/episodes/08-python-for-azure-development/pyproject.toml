@@ -1,0 +1,42 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "contoso-azure"
+version = "1.0.0"
+description = "Contoso project requests on Azure Blob Storage (DEVLADLOG Code #8)"
+requires-python = ">=3.12"
+dependencies = [
+    "azure-identity>=1.19",
+    "azure-storage-blob>=12.24",
+    "aiohttp>=3.9",          # needed by the azure.storage.blob.aio and azure.identity.aio clients
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "mypy>=1.10", "ruff>=0.6"]
+
+[project.scripts]
+contoso-azure = "contoso_azure.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+markers = ["integration: needs the Azurite blob emulator (npm install azurite) and skips without it"]
+
+[tool.mypy]
+strict = true
+mypy_path = "src"
+
+[tool.ruff]
+line-length = 120
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM", "RUF", "S", "ASYNC"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S101", "S603", "S607"]

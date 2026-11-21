@@ -1,0 +1,313 @@
+# DEVLADLOG Code — episode 07 (draft; screens are recorded on the Windows laptop, see demo.md)
+episode: 7
+slug: powershell-automation
+series_label: "CODE"
+series_name: "DEVLADLOG Code"
+file_prefix: "programming-languages"
+title: "PowerShell automation, the safe way"
+subtitle: "A module, objects in the pipeline, what-if, and two gates"
+voice: am_michael
+thumbnail_text: "POWERSHELL\nAUTOMATION\nTHAT SAYS WHAT IF"
+youtube:
+  title: "PowerShell Automation Done Right: Modules, -WhatIf, Pester and PSScriptAnalyzer | DEVLADLOG Code #7"
+  tags: [PowerShell, PowerShell 7, automation, Pester, PSScriptAnalyzer, WhatIf, ShouldProcess, advanced functions, error handling, ErrorAction, ConvertTo-Json, PowerShell module, scripting best practices]
+sources:
+  - https://www.devladlog.com/articles/programming-languages/2025-06-17-powershell-automation-complete-guide-2025/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "PowerShell automation, the safe way"
+    sub: "Objects, what-if, and two gates before anything runs"
+    short: hook
+    narration: >
+      Every company has a PowerShell script nobody dares to touch. Copied between servers, no tests, and it fails
+      silently. Today we take the Contoso project requests from the earlier episodes and automate their approvals the
+      way you would write it now: a module, objects in the pipeline, safe by default with what if, and checked by two
+      gates before anything runs. Welcome to DEVLADLOG Code.
+
+  - id: plan
+    type: bullets
+    heading: "The plan"
+    bullets:
+      - "Run the analyzer on the legacy script"
+      - "A small module: validated parameters, typed objects"
+      - "Bad rows become errors, not crashes"
+      - "-WhatIf before anything touches the disk"
+      - "Prove it with Pester: 29 tests"
+    narration: >
+      The plan. Run the script analyzer on the legacy script. Build a small module that returns objects, not text.
+      Turn bad rows into errors that don't stop the batch. Support what if. And prove it with Pester, twenty-nine
+      tests. We target PowerShell seven point six, the current long term release. Seven point four left support on
+      the tenth of November.
+
+  - id: legacy
+    type: code
+    heading: "The legacy script"
+    lang: powershell
+    code: |
+      param($Folder, $User, $Password)
+
+      function Create-Packs($rows) {
+          foreach ($r in $rows) {
+              Write-Host "Creating pack for $($r.Code)"
+              $secure = ConvertTo-SecureString $Password -AsPlainText -Force
+              try {
+                  Invoke-Expression "New-Item -ItemType Directory -Force $Folder\$($r.Department)"
+              } catch { }
+          }
+      }
+
+      $rows = Import-Csv .\requests.csv | ? { $_.budget -gt 0 }
+      Create-Packs $rows
+      gci $Folder -Recurse | % { $_.FullName }
+    narration: >
+      Here is the legacy script. A password parameter as plain text. Write host for output. Invoke expression to
+      build a command out of a string. An empty catch block that hides every failure. And aliases, which are
+      shorthand for the console, not for scripts. None of it is a syntax error. All of it is a problem.
+
+  - id: analyzer
+    type: screen
+    heading: "Gate one: PSScriptAnalyzer"
+    image: screens/analyzer.jpg
+    bar: "PowerShell 7 · Invoke-ScriptAnalyzer"
+    demo: >
+      Windows Terminal (dark, font 18 pt or larger, ~150 columns), PowerShell 7.6, in the episode folder:
+      Invoke-ScriptAnalyzer .\demo\bad-script.ps1 -Settings .\PSScriptAnalyzerSettings.psd1 | Sort-Object Line |
+      Format-Table RuleName, Severity, Line -AutoSize. Visible: 13 rows, the single Error
+      "PSAvoidUsingConvertToSecureStringWithPlainText" on line 7, PSAvoidUsingWriteHost, PSAvoidUsingInvokeExpression,
+      PSAvoidUsingEmptyCatchBlock, PSAvoidUsingCmdletAliases, PSUseApprovedVerbs. Then
+      (Invoke-ScriptAnalyzer .\src -Recurse -Settings .\PSScriptAnalyzerSettings.psd1).Count showing 0.
+    narration: >
+      The analyzer reads the script without running it. Thirteen findings, and one of them is an error: turning a
+      plain text password into a secure string. Run the same analyzer on the module we are about to write: zero. That
+      is gate one.
+
+  - id: import
+    type: code
+    heading: "Parameters that check themselves"
+    lang: powershell
+    code: |
+      [CmdletBinding()]
+      [OutputType('Contoso.Request')]
+      param(
+          [Parameter(Mandatory, Position = 0, ValueFromPipeline, ValueFromPipelineByPropertyName)]
+          [Alias('PSPath', 'FullName')]
+          [ValidateScript({ Test-Path -LiteralPath $_ -PathType Leaf },
+              ErrorMessage = 'Cannot find the CSV file "{0}".')]
+          [string[]] $Path
+      )
+      # ... for each CSV row: ConvertTo-ContosoRequest returns an object or a problem
+      if ($result.PSObject.TypeNames -contains 'Contoso.RecordProblem') {
+          # ... build $errorRecord: stable id, category InvalidData, the row as target
+          $PSCmdlet.WriteError($errorRecord)
+          continue
+      }
+      $result
+    narration: >
+      Now the module. Import Contoso Request is an advanced function. The path is validated before any work starts, and
+      files can come down the pipeline. Each row becomes a typed object with its priority already worked out, same
+      rule as episode six: exactly fifty thousand is high. A bad row is not a reason to stop. The function writes a
+      non-terminating error with a stable error id, keeps the row as the target, and moves on to the next one.
+
+  - id: pipeline
+    type: screen
+    heading: "Objects in, errors on the side"
+    image: screens/pipeline.jpg
+    bar: "PowerShell 7 · Import-ContosoRequest"
+    demo: >
+      Same terminal. Import-Module .\src\ContosoRequests\ContosoRequests.psd1 -Force, then
+      $requests = Import-ContosoRequest .\samples\requests.csv -ErrorVariable rejected -ErrorAction SilentlyContinue,
+      then "$($requests.Count) valid, $($rejected.Count) rejected", then
+      $requests | Format-Table Code, Title, Department, Budget, Priority, then
+      $rejected | ForEach-Object { $_.FullyQualifiedErrorId.Split(',')[0] + '  ' + $_.ErrorDetails.Message }.
+      Visible: "9 valid, 4 rejected", the table with PR-2026-0303 High at 50000.00 and PR-2026-0304 Board, and four
+      error lines with "row 9", "row 10", "row 11", "row 13".
+    narration: >
+      Nine valid requests, four rejected, and each rejection says which row and why. Nobody parsed text with regular
+      expressions afterwards. These are objects, with a budget that is really a decimal and a date that is really a
+      date.
+
+  - id: route
+    type: code
+    heading: "One bad row, or one bad file?"
+    lang: powershell
+    code: |
+      begin {
+          # A broken approvers file stops everything: it is not one row's problem
+          $directory = Get-Content -LiteralPath $ApproverPath -Raw | ConvertFrom-Json -ErrorAction Stop
+      }
+      process {
+          $entry = $directory.departments.PSObject.Properties[$Request.Department]
+          if (-not $entry) {
+              # ... build $errorRecord 'ContosoRequest.UnknownDepartment'
+              $PSCmdlet.WriteError($errorRecord)
+              return                       # this request only
+          }
+          $approvers = [System.Collections.Generic.List[object]]::new()
+          $approvers.Add([pscustomobject]@{ Role = 'Manager'; Name = $entry.Value.manager })
+          # ... High adds Finance, Board adds the board
+      }
+    narration: >
+      Get Contoso Approval Route adds the approvers: the manager, then finance, then the board. A department that is
+      missing from the approvers file is an error for that one request. A broken approvers file is different. It stops
+      the whole command, because that is not one row's problem. Deciding which is which is most of error handling.
+
+  - id: export
+    type: code
+    heading: "Changing the disk, politely"
+    lang: powershell
+    code: |
+      [CmdletBinding(SupportsShouldProcess)]
+      # ...
+      if ((Test-Path -LiteralPath $file) -and -not $Force) {
+          # ... error 'ContosoPack.AlreadyExists'
+          $PSCmdlet.WriteError($errorRecord)
+          return
+      }
+
+      if ($PSCmdlet.ShouldProcess($file, 'Write approval pack')) {
+          $null = New-Item -ItemType Directory -Path $folder -Force
+          # Default depth is 2: it would flatten the approver objects into text
+          $pack | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $file -Encoding utf8NoBOM
+      }
+    narration: >
+      Export Contoso Approval Pack changes the disk, so it declares supports should process. That adds what if and
+      confirm to the command, and one if statement decides whether the change happens. It also refuses to overwrite an
+      existing pack unless you pass force, so running it twice is safe.
+
+  - id: whatif
+    type: screen
+    heading: "What if, then for real"
+    image: screens/whatif.jpg
+    bar: "PowerShell 7 · Export-ContosoApprovalPack -WhatIf"
+    short: whatif
+    demo: >
+      Same terminal, after the previous screen. $routes = $requests | Get-ContosoApprovalRoute -ApproverPath
+      .\samples\approvers.json -ErrorVariable unrouted -ErrorAction SilentlyContinue, then
+      $routes | Export-ContosoApprovalPack -Destination .\out -WhatIf (eight "What if: Performing the operation
+      "Write approval pack" on target ".\out\IT\PR-2026-0301.json"." lines), then Test-Path .\out (False), then
+      $routes | Export-ContosoApprovalPack -Destination .\out -PassThru | Format-Table Code, Priority, Approvers, then
+      Get-Content .\out\IT\PR-2026-0304.json (Board request, three approvers), then the same export again showing
+      eight "ContosoPack.AlreadyExists" errors. Cut the middle if it runs long; the whatif lines and the first table
+      are the short.
+    narration: >
+      What if lists the eight files it would write, and afterwards the folder does not exist. Now for real: eight packs,
+      one per request, grouped by department, with the approvers the priority calls for. The Legal request has no
+      approver in the file, so it is reported, not written. Run it again, and eight errors tell you the packs already
+      exist.
+
+  - id: trycatch
+    type: code
+    heading: "Gotcha: try and catch sees nothing"
+    lang: powershell
+    code: |
+      try { $all = @(Import-ContosoRequest $csv -ErrorAction SilentlyContinue) } catch { $caught = $true }
+      # default          : caught=False  requests=9
+
+      try { $all = @(Import-ContosoRequest $csv -ErrorAction Stop) } catch { $caught = $true }
+      # -ErrorAction Stop: caught=True (ContosoRequest.InvalidBudget)  requests=0
+    narration: >
+      Now three gotchas, all real. One. You wrap the import in try and catch, and nothing is ever caught, because a
+      non-terminating error does not trigger catch. Add error action stop and it does, at the first bad row. And the
+      seven good rows before that row are thrown away with it. Both behaviors are fine. Choose one on purpose.
+
+  - id: output
+    type: code
+    heading: "Gotcha: output you did not ask for"
+    short: output
+    lang: powershell
+    code: |
+      function Get-CodeListWrong {
+          $list = [System.Collections.ArrayList]::new()
+          foreach ($code in 'PR-1', 'PR-2') { $list.Add($code) }      # Add returns the new index
+          $list
+      }
+      # wrong : 0 | 1 | PR-1 | PR-2
+
+      function Get-CodeListRight {
+          # ...
+          foreach ($code in 'PR-1', 'PR-2') { $null = $list.Add($code) }
+          $list
+      }
+      # right : PR-1 | PR-2
+    narration: >
+      Two. Array list dot Add returns the index it just added. Inside a function, every value that is not captured
+      goes into the output, so the caller gets zero, one, and then the real codes. Assign it to null and the
+      function says only what you meant.
+
+  - id: gotchas
+    type: screen
+    heading: "Three gotchas, running"
+    image: screens/gotchas.jpg
+    bar: "PowerShell 7 · demo\\gotchas.ps1"
+    demo: >
+      Same terminal, cleared. pwsh -NoProfile -File .\demo\gotchas.ps1. Visible: the three headings, "caught=False
+      requests=9" then "caught=True ... requests=0", "wrong : 0 | 1 | PR-1 | PR-2" and "right : PR-1 | PR-2", and the
+      JSON lines: the default shows "System.Collections.Specialized.OrderedDictionary" twice, the warning says
+      "Resulting JSON is truncated as serialization has exceeded the set depth of 2.", and -Depth 5 shows the real
+      approvers.
+    narration: >
+      Here they run. And the third: convert to json stops at depth two. Our approvers sit three levels down, so the
+      default turns them into the text ordered dictionary, with nothing but a warning.
+      The module sets depth to five, and a test reads every approver back.
+
+  - id: tests
+    type: code
+    heading: "Gate two: Pester"
+    lang: powershell
+    code: |
+      It 'reports exactly the 4 bad rows, in order, with a stable error id and row number' {
+          $rejected.Count | Should -Be 4
+          $rejected.FullyQualifiedErrorId -replace ',.*$' | Should -Be @(
+              'ContosoRequest.InvalidBudget', 'ContosoRequest.InvalidBudget',
+              'ContosoRequest.InvalidCode', 'ContosoRequest.InvalidDate')
+          $rejected[0].ErrorDetails.Message | Should -BeLike 'requests.csv row 9: PR-2026-0308*'
+      }
+
+      It 'stops at the first bad row with -ErrorAction Stop' {
+          { Import-ContosoRequest -Path $csv -ErrorAction Stop } |
+              Should -Throw -ErrorId 'ContosoRequest.InvalidBudget*'
+      }
+    narration: >
+      Gate two: Pester. Twenty-seven tests on the module, plus two that run the analyzer itself. They check the
+      error ids and row numbers, the boundaries at fifty thousand and two hundred and fifty thousand, a German decimal
+      comma on the machine, that what if writes nothing, and that every approver survives in the json. Windows
+      PowerShell five point one ships Pester three point four, so install a current Pester first.
+
+  - id: build
+    type: screen
+    heading: "One command, two gates"
+    image: screens/build.jpg
+    bar: "PowerShell 7 · ./build.ps1"
+    demo: >
+      Same terminal, cleared. pwsh -NoProfile -File .\build.ps1. Visible: "== PSScriptAnalyzer", "findings: 0",
+      "== Pester", the two test files (2 tests and 27 tests) and the last line
+      "Tests Passed: 29, Failed: 0, Skipped: 0, Inconclusive: 0, NotRun: 0". Pester prints full paths: run from a
+      neutral folder such as C:\lab\mg-lab.
+    narration: >
+      One command runs both gates. The analyzer finds nothing in the module. Pester passes twenty-nine tests. Break
+      either one, and the script exits with code one, so a pipeline stops before anything reaches a server.
+
+  - id: recap
+    type: bullets
+    heading: "Five rules"
+    bullets:
+      - "Return objects; format only at the end"
+      - "One bad row is an error, a bad config stops the command"
+      - "Anything that changes something supports -WhatIf"
+      - "Set -Depth, encoding and culture yourself"
+      - "Gate it: analyzer plus Pester, exit code one"
+    narration: >
+      Five rules. Return objects, and format only at the end. One bad row is an error, a bad configuration stops the
+      command. Anything that changes something supports what if. Set depth, encoding and culture yourself, because the
+      defaults differ between versions and machines. And gate it with the analyzer and Pester.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The module, the legacy script, the tests and the build script are on GitHub, and the full guide is on devladlog
+      dot com. Links are in the description. Next time: Python for Azure development. Subscribe so you don't miss it.
+      This was DEVLADLOG Code, by Momento Galático.

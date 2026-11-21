@@ -1,0 +1,66 @@
+LOCAL RUN AGAINST THE AZURITE EMULATOR (not Azure). Captured 2026-11-21. The tenant screens are NOT captured here: they need tenant.
+
+$ pytest -q   (46 tests, 12 of them integration tests against Azurite)
+..............................................                           [100%]
+46 passed in 2.06s
+
+$ ruff check . ; mypy src
+All checks passed!
+Success: no issues found in 11 source files
+
+$ contoso-azure --emulator seed samples/requests.csv
+uploaded requests.csv as requests/requests-2026-11.csv
+
+$ contoso-azure --emulator process
+9 valid, 4 rejected, 1 without a route
+  rejected row 9: invalid_budget: PR-2026-0308 budget 'abc' is not a positive number.
+  rejected row 10: invalid_budget: PR-2026-0309 budget '-500' is not a positive number.
+  rejected row 11: invalid_code: Code 'REQ-77' does not look like PR-2026-0042.
+  rejected row 13: invalid_date: PR-2026-0312 submitted '2026-13-01' is not a yyyy-MM-dd date.
+  no route: PR-2026-0311
+packs: 8 written, 0 already existed
+
+$ contoso-azure --emulator process   (second run)
+9 valid, 4 rejected, 1 without a route
+  rejected row 9: invalid_budget: PR-2026-0308 budget 'abc' is not a positive number.
+  rejected row 10: invalid_budget: PR-2026-0309 budget '-500' is not a positive number.
+  rejected row 11: invalid_code: Code 'REQ-77' does not look like PR-2026-0042.
+  rejected row 13: invalid_date: PR-2026-0312 submitted '2026-13-01' is not a yyyy-MM-dd date.
+  no route: PR-2026-0311
+packs: 0 written, 8 already existed
+
+$ contoso-azure --emulator process --use-async --concurrency 4 --overwrite
+9 valid, 4 rejected, 1 without a route
+  rejected row 9: invalid_budget: PR-2026-0308 budget 'abc' is not a positive number.
+  rejected row 10: invalid_budget: PR-2026-0309 budget '-500' is not a positive number.
+  rejected row 11: invalid_code: Code 'REQ-77' does not look like PR-2026-0042.
+  rejected row 13: invalid_date: PR-2026-0312 submitted '2026-13-01' is not a yyyy-MM-dd date.
+  no route: PR-2026-0311
+packs: 8 written, 0 already existed
+
+$ contoso-azure --emulator list
+packs/HR/PR-2026-0305.json
+packs/IT/PR-2026-0301.json
+packs/IT/PR-2026-0304.json
+packs/IT/PR-2026-0306.json
+packs/Marketing/PR-2026-0303.json
+packs/Marketing/PR-2026-0313.json
+packs/Operations/PR-2026-0302.json
+packs/Operations/PR-2026-0307.json
+
+$ contoso-azure --emulator --input-container Bad_Name list
+configuration error: 'Bad_Name' is not a valid container name: 3-63 lowercase letters, numbers and single hyphens.
+exit=2
+
+$ python demo/gotchas.py   (pure Python, no Azure)
+1. byte order mark
+   decoded as utf-8     : 0 valid rows
+   decoded as utf-8-sig : 1 valid rows
+2. Decimal and JSON
+   json.dumps(Decimal)  : Object of type Decimal is not JSON serializable
+   as a string          : {"budget": "49999.99"}
+   float 0.1 + 0.2      : 0.30000000000000004 | Decimal: 0.3
+3. TaskGroup
+   except ConnectionError: NOT reached
+   ExceptionGroup        : ['PR-2 failed']
+   except* ConnectionError: caught 1 error

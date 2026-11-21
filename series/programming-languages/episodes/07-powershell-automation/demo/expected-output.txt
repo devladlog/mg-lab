@@ -1,0 +1,131 @@
+# Real output captured 2026-11-21 in the build container (PowerShell 7.6.0, Pester 6.2.0, PSScriptAnalyzer 1.25.0, Ubuntu 24.04).
+# Paths shortened to <episode>. On the Windows laptop separators are backslashes and Pester timings differ.
+
+$ pwsh -NoProfile -File ./build.ps1
+== PSScriptAnalyzer (Warning and Error fail the build)
+   findings: 0
+== Pester
+
+Running tests from 2 files.
+[+] <episode>/tests/Analyzer.Tests.ps1 (2 tests)
+[+] <episode>/tests/ContosoRequests.Tests.ps1 (27 tests)
+Tests completed
+Tests Passed: 29, Failed: 0, Skipped: 0, Inconclusive: 0, NotRun: 0
+
+$ pwsh -NoProfile -File ./demo/run-demo.ps1
+### Screen 1: the legacy script against the analyzer
+
+RuleName                                       Severity Line
+--------                                       -------- ----
+PSAvoidUsingPlainTextForPassword                Warning    2
+PSReviewUnusedParameter                         Warning    2
+PSReviewUnusedParameter                         Warning    2
+PSUseApprovedVerbs                              Warning    4
+PSUseSingularNouns                              Warning    4
+PSAvoidUsingWriteHost                           Warning    6
+PSUseDeclaredVarsMoreThanAssignments            Warning    7
+PSAvoidUsingConvertToSecureStringWithPlainText    Error    7
+PSAvoidUsingInvokeExpression                    Warning    9
+PSAvoidUsingEmptyCatchBlock                     Warning   10
+PSAvoidUsingCmdletAliases                       Warning   14
+PSAvoidUsingCmdletAliases                       Warning   16
+PSAvoidUsingCmdletAliases                       Warning   16
+
+
+src (the module): 0 findings
+
+### Screen 2: objects in the pipeline, bad rows as errors
+9 valid, 4 rejected
+
+Code         Title                 Department    Budget Priority
+----         -----                 ----------    ------ --------
+PR-2026-0301 Laptop refresh        IT          12000.00 Normal
+PR-2026-0302 Warehouse scanners    Operations  49999.99 Normal
+PR-2026-0303 Campaign analytics    Marketing   50000.00 High
+PR-2026-0304 Data platform         IT         300000.00 Board
+PR-2026-0305 Onboarding portal     HR           8500.00 Normal
+PR-2026-0306 Service desk licences it          75000.00 High
+PR-2026-0307 Fleet telematics      Operations 180000.00 High
+PR-2026-0311 Translation budget    Legal        9000.00 Normal
+PR-2026-0313 Brand refresh         Marketing    8500.00 Normal
+
+
+ContosoRequest.InvalidBudget   requests.csv row 9: PR-2026-0308 budget 'abc' is not a positive number.
+ContosoRequest.InvalidBudget   requests.csv row 10: PR-2026-0309 budget '-500' is not a positive number.
+ContosoRequest.InvalidCode     requests.csv row 11: Code 'REQ-77' does not look like PR-2026-0042.
+ContosoRequest.InvalidDate     requests.csv row 13: PR-2026-0312 submitted '2026-13-01' is not a yyyy-MM-dd date.
+
+### Screen 3: -WhatIf, then for real, then again
+no route: PR-2026-0311: department 'Legal' is not in the approvers file.
+What if: Performing the operation "Write approval pack" on target "./out/IT/PR-2026-0301.json".
+What if: Performing the operation "Write approval pack" on target "./out/Operations/PR-2026-0302.json".
+What if: Performing the operation "Write approval pack" on target "./out/Marketing/PR-2026-0303.json".
+What if: Performing the operation "Write approval pack" on target "./out/IT/PR-2026-0304.json".
+What if: Performing the operation "Write approval pack" on target "./out/HR/PR-2026-0305.json".
+What if: Performing the operation "Write approval pack" on target "./out/IT/PR-2026-0306.json".
+What if: Performing the operation "Write approval pack" on target "./out/Operations/PR-2026-0307.json".
+What if: Performing the operation "Write approval pack" on target "./out/Marketing/PR-2026-0313.json".
+exists after -WhatIf: False
+
+Code         Priority Approvers
+----         -------- ---------
+PR-2026-0301 Normal   Alex Demo
+PR-2026-0302 Normal   Jordan Demo
+PR-2026-0303 High     Riley Demo, Sam Demo
+PR-2026-0304 Board    Alex Demo, Sam Demo, Taylor Demo
+PR-2026-0305 Normal   Riley Demo
+PR-2026-0306 High     Alex Demo, Sam Demo
+PR-2026-0307 High     Jordan Demo, Sam Demo
+PR-2026-0313 Normal   Riley Demo
+
+
+./out/HR/PR-2026-0305.json
+./out/IT/PR-2026-0301.json
+./out/IT/PR-2026-0304.json
+./out/IT/PR-2026-0306.json
+./out/Marketing/PR-2026-0303.json
+./out/Marketing/PR-2026-0313.json
+./out/Operations/PR-2026-0302.json
+./out/Operations/PR-2026-0307.json
+{
+  "request": {
+    "code": "PR-2026-0304",
+    "title": "Data platform",
+    "department": "IT",
+    "budget": 300000.0,
+    "submitted": "2026-11-04"
+  },
+  "route": {
+    "priority": "Board",
+    "approvers": [
+      {
+        "role": "Manager",
+        "name": "Alex Demo"
+      },
+      {
+        "role": "Finance",
+        "name": "Sam Demo"
+      },
+      {
+        "role": "Board",
+        "name": "Taylor Demo"
+      }
+    ]
+  }
+}
+
+second run: 8 errors, first: ContosoPack.AlreadyExists
+
+$ pwsh -NoProfile -File ./demo/gotchas.ps1
+--- 1. try/catch does not see non-terminating errors
+default          : caught=False  requests=9
+-ErrorAction Stop: caught=True (ContosoRequest.InvalidBudget,Import-ContosoRequest)  requests=0
+
+--- 2. Output you did not ask for
+wrong : 0 | 1 | PR-1 | PR-2
+right : PR-1 | PR-2
+
+--- 3. ConvertTo-Json stops at depth 2
+default : {"route":{"approvers":["System.Collections.Specialized.OrderedDictionary","System.Collections.Specialized.OrderedDictionary"]}}
+warning : Resulting JSON is truncated as serialization has exceeded the set depth of 2.
+-Depth 5: {"route":{"approvers":[{"role":"Manager","name":"Riley Demo"},{"role":"Finance","name":"Sam Demo"}]}}

@@ -1,0 +1,231 @@
+# DEVLADLOG Code - episode 08 (draft; the Azure screens are recorded in the lab subscription, see demo.md)
+episode: 8
+slug: python-for-azure-development
+series_label: "CODE"
+series_name: "DEVLADLOG Code"
+file_prefix: "programming-languages"
+title: "Python for Azure, without a single key"
+subtitle: "Entra ID, Blob Storage, idempotent writes and asyncio"
+voice: am_michael
+thumbnail_text: "PYTHON FOR AZURE\nNO KEYS\nNO SECRETS"
+youtube:
+  title: "Python for Azure Development: Blob Storage, Managed Identity, RBAC and asyncio | DEVLADLOG Code #8"
+  tags: [Python, Azure, Azure SDK for Python, Blob Storage, azure-identity, DefaultAzureCredential, managed identity, Azure RBAC, asyncio, TaskGroup, pytest, Azurite, Bicep, passwordless]
+sources:
+  - https://www.devladlog.com/articles/programming-languages/2025-06-10-python-for-azure-development-complete-guide-2025/
+
+scenes:
+  - id: hook
+    type: title
+    heading: "Python for Azure, without a single key"
+    sub: "Entra ID, Blob Storage, idempotent writes"
+    short: hook
+    narration: >
+      Most Python Azure tutorials start by pasting a connection string. That string is a key to the whole storage
+      account, and sooner or later it ends up in git. Today we take the Contoso approval packs and write them to Azure
+      Blob Storage the keyless way: Entra ID, one role, and code that is safe to run twice. Welcome to DEVLADLOG Code.
+
+  - id: plan
+    type: bullets
+    heading: "The plan"
+    bullets:
+      - "A storage account with shared keys switched off"
+      - "One credential for development, another for Azure"
+      - "Pure rules first, Azure only at the edge"
+      - "Writes that are safe to repeat"
+      - "Async uploads, and the error they hide"
+    narration: >
+      The plan. A storage account with shared key access switched off, so a key cannot even work. One credential for
+      development and a different one in Azure. The Contoso rules stay pure Python, and Azure is only at the edge.
+      Writes that are safe to repeat. And async uploads, with the error they hide. We build it in Python three twelve or
+      newer, and every step you see is real, either in the tests or in the lab subscription.
+
+  - id: auth
+    type: code
+    heading: "Two credentials, on purpose"
+    lang: python
+    code: |
+      def build_credential(mode: str, managed_identity_client_id: str | None = None):
+          if mode == "dev":
+              return DefaultAzureCredential(exclude_managed_identity_credential=True)
+          if mode == "azure":
+              return ManagedIdentityCredential(client_id=managed_identity_client_id)
+          raise ValueError(f"Unknown auth mode '{mode}': use 'dev' or 'azure'.")
+
+      # development: your az login. Azure: the managed identity. No secret in either.
+    narration: >
+      Authentication is one small function. In development we use the default Azure credential, which finds the Azure
+      CLI sign in you already have. In Azure we use exactly the managed identity. Microsoft's own guidance is to replace
+      the default credential with a specific one once you deploy, because a chain that tries many sources is hard to
+      debug and its behavior changes with environment variables.
+
+  - id: denied
+    type: screen
+    heading: "Signed in, and still denied"
+    image: screens/denied.jpg
+    bar: "Terminal · contoso-azure seed · real Azure"
+    short: denied
+    demo: >
+      Lab subscription, resource group rg-mglab-code-08, after az login and BEFORE the role assignment. Run
+      contoso-azure seed samples/requests.csv. Visible: the friendly message "403 AuthorizationPermissionMismatch:
+      you are signed in, but your identity has no data-plane role. Assign Storage Blob Data Contributor on the storage
+      account (Owner or Contributor is not enough)". Account name masked. Needs tenant.
+    narration: >
+      I am signed in, I own the subscription, and the upload is refused with a four oh three. Owner, contributor and
+      storage account contributor manage the account, they do not let you read or write the data through Entra ID.
+      That needs a data role. Our code turns the raw error into a sentence that names the role.
+
+  - id: run
+    type: screen
+    heading: "One role, and it works"
+    image: screens/run.jpg
+    bar: "Terminal · seed, process, list · real Azure"
+    demo: >
+      Same terminal, after az role assignment create for Storage Blob Data Contributor on the storage account and a few
+      minutes of waiting. Run contoso-azure seed samples/requests.csv, then contoso-azure process, then
+      contoso-azure list. Visible: "9 valid, 4 rejected, 1 without a route", the four rejected rows with their error
+      ids, "packs: 8 written, 0 already existed", and eight blob names under packs. Then the same eight blobs in the
+      Azure portal storage browser, account name masked. Needs tenant.
+    narration: >
+      Assign storage blob data contributor on the account, wait a few minutes, and run again. Nine valid rows, four
+      rejected with the row number and a reason, one without an approver, and eight packs written. Microsoft documents
+      role changes as taking up to ten minutes to apply, so the first retry is not a bug.
+
+  - id: client
+    type: code
+    heading: "Retries and timeouts, set once"
+    lang: python
+    code: |
+      POLICY = {
+          "retry_total": 3,
+          "retry_backoff_factor": 0.8,
+          "connection_timeout": 10,
+          "read_timeout": 30,
+      }
+
+      def service_client(settings, credential):
+          return BlobServiceClient(settings.account_url, credential=credential, **POLICY)
+    narration: >
+      The client gets its retry and timeout policy in one place. Three retries with backoff, ten seconds to connect,
+      thirty to read. A script that hangs forever on a bad network is worse than one that fails with a clear message. And because these are plain settings, a test can read them and a reviewer can argue about them.
+
+  - id: idempotent
+    type: code
+    heading: "Safe to run twice"
+    short: idempotent
+    lang: python
+    code: |
+      def write_pack(self, department, code, document, *, overwrite=False) -> PackStatus:
+          blob = self._service.get_blob_client(
+              self._settings.output_container, pack_blob_name(department, code))
+          try:
+              blob.upload_blob(render(document), overwrite=overwrite, content_settings=_JSON)
+          except ResourceExistsError:
+              return PackStatus.EXISTS
+          return PackStatus.WRITTEN
+    narration: >
+      Idempotent writes. Upload blob refuses to replace an existing blob unless you pass overwrite true. We turn that
+      refusal into a status, exists, instead of a crash. Run the job twice and the second run changes nothing, and tells
+      you so. Overwriting is an explicit flag.
+
+  - id: rerun
+    type: screen
+    heading: "The second run changes nothing"
+    image: screens/rerun.jpg
+    bar: "Terminal · contoso-azure process · real Azure"
+    demo: >
+      Same terminal, same account. Run contoso-azure process a second time. Visible: "packs: 0 written, 8 already
+      existed". Then contoso-azure process --use-async --concurrency 4 --overwrite, which prints "packs: 8 written,
+      0 already existed". Then in the portal open IT/PR-2026-0304.json and show the three approvers. Account name
+      masked. Needs tenant.
+    narration: >
+      The second run: zero written, eight already existed. With the overwrite flag and the async client, eight written
+      again. Same result from two code paths, and the tests check that they agree.
+
+  - id: asyncio
+    type: code
+    heading: "Async uploads with a limit"
+    lang: python
+    code: |
+      gate = asyncio.Semaphore(concurrency)
+
+      async def one(department, code, document):
+          async with gate:
+              return await self.write_pack(department, code, document, overwrite=overwrite)
+
+      async with asyncio.TaskGroup() as group:
+          tasks = [group.create_task(one(*pack)) for pack in packs]
+      return [task.result() for task in tasks]
+    narration: >
+      For many blobs we use the async client. A semaphore limits how many requests are in flight, and a task group
+      owns the tasks. If one upload fails, the others are cancelled and nothing is left running behind your back.
+
+  - id: taskgroup
+    type: code
+    heading: "Gotcha: the error arrives in a group"
+    lang: python
+    code: |
+      try:
+          async with asyncio.TaskGroup() as group:
+              group.create_task(upload("PR-2"))      # raises ConnectionError
+      except ConnectionError:
+          ...                                        # never reached
+      except* ConnectionError as grouped:
+          ...                                        # reached: grouped.exceptions
+    narration: >
+      Gotcha one. A task group always wraps failures in an exception group, even a single one. So a plain except for
+      the error you expect never runs. Use except star, which matches inside the group. Our test proves it with a real
+      missing container.
+
+  - id: gotchas
+    type: screen
+    heading: "Three gotchas, running"
+    image: screens/gotchas.jpg
+    bar: "Terminal · demo/gotchas.py"
+    demo: >
+      Terminal in the episode folder, cleared. python demo/gotchas.py. Visible: the byte order mark case (0 valid rows
+      as utf-8, 1 as utf-8-sig), "Object of type Decimal is not JSON serializable" and 0.30000000000000004 against
+      Decimal 0.3, and the task group case with "NOT reached" and "except* ... caught 1 error". Pure Python, no Azure.
+    narration: >
+      Here are the three running. Excel's UTF eight CSV starts with a byte order mark, and read as plain UTF eight the
+      first column is called something else and every row fails, so we decode with utf eight sig. Money is Decimal,
+      which JSON refuses to serialize, so the pack stores it as a string. And the task group error from before.
+
+  - id: tests
+    type: bullets
+    heading: "Tested locally, proven in Azure"
+    bullets:
+      - "46 tests, ruff and mypy strict clean"
+      - "Blob tests run against the Azurite emulator"
+      - "Azurite is for automated tests only"
+      - "Blob names are case-sensitive"
+      - "The demo uses the real account"
+    narration: >
+      How it is tested. Forty-six tests, with ruff and strict type checking clean. The storage tests run against the
+      Azurite emulator, which Microsoft describes as a free local environment for testing, so they are fast and need no
+      sign in. But an emulator is not Azure. It cannot show you a role problem, so the demo you saw used a real account.
+      One more detail: blob names are case sensitive, so IT and it are two different folders.
+
+  - id: recap
+    type: bullets
+    heading: "Five rules"
+    bullets:
+      - "No keys: Entra ID, and shared key access off"
+      - "Specific credential in Azure, default only in development"
+      - "Management roles are not data roles"
+      - "Make writes idempotent; overwrite is a flag"
+      - "Expect ExceptionGroup from TaskGroup"
+    narration: >
+      Five rules. No keys, Entra ID, and shared key access switched off. A specific credential in Azure. Management
+      roles are not data roles. Make writes idempotent, and make overwrite a flag. And expect an exception group from a
+      task group. None of this needs a secret, which means there is nothing to rotate, nothing to leak, and nothing to
+      explain to the security team.
+
+  - id: outro
+    type: outro
+    heading: "Code on GitHub, guides on devladlog.com"
+    sub: "github.com/devladlog/mg-lab"
+    narration: >
+      The package, the tests and the Bicep file are on GitHub, and the full guide is on devladlog dot com. Links are in
+      the description. Next time: more from the Code series. Subscribe so you don't miss it. This was DEVLADLOG
+      Code, by Momento Galático.
