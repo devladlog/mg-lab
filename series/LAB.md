@@ -62,3 +62,22 @@ Internal NAT network `10.50.0.0/24`, host = `10.50.0.1`, domain `lab.contoso.com
 - An episode that records a destructive or "from zero" step (e.g. promoting a new forest) uses a throwaway VM, never
   the shared ones, and says so in demo.md.
 - Credentials are never written in any file in the repo; demo.md says "lab Administrator" and the recorder signs in.
+
+## Recording laptop toolchain (checked on the laptop, 21 Nov 2026)
+
+`series/tools/Get-WindowsToolchain.ps1` writes the full list to `verify-results/toolchain.txt`. What episodes can rely on:
+
+| Tool | On the laptop | Notes for episodes |
+|---|---|---|
+| .NET SDK | 10.0.301 / 10.0.303, runtime 10 only | **No .NET 8 runtime** (.NET 8 support ended 10 Nov 2026). All projects target net10.0 except `net/10-net-8-9-features`, which needs the .NET 8 runtime installed for that recording only. No MAUI workload (`net/12` needs `dotnet workload install maui`). The newer SDK enforces IDE0005 (unused `using`) at build. |
+| PowerShell | Windows PowerShell 5.1 (Pester 3.4 only) and PowerShell 7.6 | Tests need Pester 5+: the verification run loads a repo-local copy from `.tools\Modules` (not installed system-wide). Same for PSScriptAnalyzer. |
+| Bicep | not on PATH; Azure CLI 2.87 has its managed copy in `%USERPROFILE%\.azure\bin` | Add that folder to PATH (or `winget install Microsoft.Bicep`) before running template tests by hand. |
+| Python / Node | Python 3.10.11 (`python`, not `python3`: that name is the Microsoft Store stub), Node 24.16, npm 11 | Scripts must not assume `python3` on Windows. |
+| Git | 2.54, with Git Bash (`C:\Program Files\Git\bin\bash.exe`) | `bash` on PATH is the WSL launcher; use Git Bash for shell checks. No `openssl` on PATH. |
+| Power Platform CLI | pac 2.15.1 | |
+| Docker | **not installed** | Business Central container (`dynamics-365/12`) and any `docker compose` demo need Docker Desktop (Windows containers for BC). |
+| Visual Studio | Visual Studio Professional **2022** | `developer-tools/12` is written for VS 2026; `copilot-ai/16` needs VS 2026 or 2022 17.14.17+. |
+| VS Code | with C# Dev Kit, PowerShell, Python, Bicep, Docker, Power Platform, Claude Code and Continue extensions | |
+| AI locally | Ollama 0.40, LM Studio CLI, NVIDIA RTX 5090 Laptop GPU (24 GB) | `copilot-ai/23` |
+
+Windows verification of every episode's .NET and Pester suites: `series/tools/Invoke-WindowsVerification.ps1` (VS Code task "MG 2"). Results in `verify-results/summary.md`; a `verify-results/rerun-failed.flag` file makes the next run repeat only the failed (or listed) episodes.
