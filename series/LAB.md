@@ -25,6 +25,9 @@ All demos are recorded for real. Use these shared resources before asking for ne
   and estimated cost for the recording window, and deletes the resource group in tear-down. Prefer free tiers. A €30/month budget
   ("mglab-monthly") emails alerts at 50%, 80%, 100% and forecast 100%.
 
+- AI credits: AI Builder trials are discontinued and seeded credits ended 1 Nov 2026. Running AI prompts in an app
+  or flow needs Copilot Credits via a pay-as-you-go plan (not set; needs the owner, and a production/sandbox
+  environment, not a Developer one). Testing inside the prompt builder is free.
 - Teams: the Workflows app is already allowed for everyone (Teams admin center, checked 21 Nov 2026).
 
 ## Dev services
