@@ -17,10 +17,11 @@
       "workdir": "D:\\momento_galatico_kit\\mg-lab-series\\series\\microsoft-365\\episodes\\01-tenant-administration-monitoring\\src",
       "prompt": "PS> ",
       "commands": [
-        "./Invoke-TenantHealthCheck.ps1 -FromSnapshot ../tests/fixtures/snapshot.json -Now 2026-11-20T09:30:00Z -OutFile ../sample/report.md -FailOnHigh",
+        "#raw ./Invoke-TenantHealthCheck.ps1 -FromSnapshot ../tests/fixtures/snapshot.json -Now 2026-11-20T09:30:00Z -OutFile ../sample/report.md -FailOnHigh",
         "$LASTEXITCODE",
         "#pause 4"
-      ]
+      ],
+      "note": "Offline: -FromSnapshot reads tests/fixtures/snapshot.json (fictional contoso), no sign-in and no Graph call; the episode prepare (Connect-MgGraph) is NOT needed for this screen. '#raw' is not typed: the kit's normal path (Invoke-Expression ... 2>&1 | Out-Host) drops the script's Write-Error line from the picture (take 1, 2026-11-22: the line was in the .log but never on screen), raw shows it as a real console does. The run rewrites sample/report.md with CRLF line endings (same text)."
     },
     {
       "name": "live-run",

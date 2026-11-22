@@ -63,7 +63,9 @@
         "[IO.File]::WriteAllText('C:\\work\\bin\\python3', \"#!/bin/sh`nexec python `\"`$@`\"`n\")",
         "if ($env:PATH -notlike '*C:\\work\\bin*') { $env:PATH = 'C:\\work\\bin;C:\\Program Files\\Git\\bin;' + $env:PATH + ';C:\\Program Files\\Git\\usr\\bin' }",
         "$env:PYTHON = 'python'",
+        "$env:PYTHONIOENCODING = 'utf-8'   # the recorder pipes the script's output; Python 3.10 on Windows then encodes it as cp1252 and tools/junit_gate.py dies on its ballot-X line (UnicodeEncodeError). A real console does not have this problem",
         "[IO.File]::WriteAllText('C:\\work\\bin\\dotnet-tree', ((@('#!/bin/bash', '# DOTNET for scripts/run-api-tests.sh on Windows: Git Bash''s kill ends only \"dotnet run\", not the API it started (which then keeps bin locked for the next run); this ends the whole process tree', 'dotnet \"$@\" &', 'child=$!', 'trap ''w=$(cat /proc/$child/winpid 2>/dev/null); [ -n \"$w\" ] && taskkill //F //T //PID \"$w\" >/dev/null 2>&1; kill \"$child\" 2>/dev/null; exit 143'' TERM INT HUP', 'wait \"$child\"') -join \"`n\") + \"`n\")); $env:DOTNET = 'dotnet-tree'",
+        "if (-not (Test-Path C:\\tmp)) { New-Item -ItemType Directory C:\\tmp | Out-Null; Set-Content C:\\tmp\\.mglab-created 'made for developer-tools/08 scripts/run-api-tests.sh; teardown_local removes the folder' }   # Windows: Git Bash hands the API its SQLite path as /tmp/orders-apitests-*.db (an environment variable is not converted the way an argument is) and Windows reads that as C:\\tmp\\...; without the folder the API stops at start-up ('unable to open database file')",
         "Set-Location C:\\work\\orders-app-api-tests",
         "git checkout -- . 2>$null"
       ],
@@ -78,7 +80,7 @@
         "git checkout -- src/Contoso.Orders.Api/Orders.cs",
         "git status --short"
       ],
-      "note": "First run: both Newman tables green, gate lines 'junit-main.xml: 31 passed' and 'junit-data.xml: 24 passed', exit code 0. Second run: exactly one failure 'cap: asking for 500 returns at most 100', gate line with the failed assertion, exit code 1. The script picks a free port, so the container on 8080 does not conflict."
+      "note": "First run: both Newman tables green, gate lines 'junit-main.xml: 31 passed' and 'junit-data.xml: 24 passed', exit code 0. Second run: exactly one failure 'cap: asking for 500 returns at most 100', gate line with the failed assertion, exit code 1. The script picks a free port, so the container on 8080 does not conflict. Recorded 2026-11-22 with prepare-local / teardown-local (no Docker): 56.7 s; green gates at 11.6 s, edit and 'git diff --stat' (Orders.cs | 2 +-) at 18.6-26.4 s, red run output from 37.7 s, Newman's failure table (AssertionError, 'expected 500 to deeply equal 100') on screen only about 38.6-40.2 s, then the gate lines '30 passed, 1 failed' / 'failed: cap: asking for 500 returns at most 100' and 'exit code: 1' from 41.5 s, undo and empty 'git status --short' at 50-52 s. The recorder pipes the output, so Newman prints without colours (only the failure table header is red) and with its Windows symbols; Node's DEP0176 deprecation warning (stderr) is in the .log but not in the picture."
     },
     {
       "name": "ci",
@@ -125,6 +127,7 @@
     "if ($env:PATH -notlike '*C:\\work\\bin*') { $env:PATH = 'C:\\work\\bin;C:\\Program Files\\Git\\bin;' + $env:PATH + ';C:\\Program Files\\Git\\usr\\bin' }",
     "$env:PYTHON = 'python'",
     "[IO.File]::WriteAllText('C:\\work\\bin\\dotnet-tree', ((@('#!/bin/bash', '# DOTNET for scripts/run-api-tests.sh on Windows: Git Bash''s kill ends only \"dotnet run\", not the API it started (which then keeps bin locked for the next run); this ends the whole process tree', 'dotnet \"$@\" &', 'child=$!', 'trap ''w=$(cat /proc/$child/winpid 2>/dev/null); [ -n \"$w\" ] && taskkill //F //T //PID \"$w\" >/dev/null 2>&1; kill \"$child\" 2>/dev/null; exit 143'' TERM INT HUP', 'wait \"$child\"') -join \"`n\") + \"`n\")); $env:DOTNET = 'dotnet-tree'",
+    "if (-not (Test-Path C:\\tmp)) { New-Item -ItemType Directory C:\\tmp | Out-Null; Set-Content C:\\tmp\\.mglab-created 'made for developer-tools/08 scripts/run-api-tests.sh; teardown_local removes the folder' }   # Windows: Git Bash hands the API its SQLite path as /tmp/orders-apitests-*.db (an environment variable is not converted the way an argument is) and Windows reads that as C:\\tmp\\...; without the folder the API stops at start-up ('unable to open database file')",
     "Get-CimInstance Win32_Process | Where-Object { $_.Name -eq 'Contoso.Orders.Api.exe' -or ($_.Name -eq 'dotnet.exe' -and $_.CommandLine -like '*Contoso.Orders.Api*') } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }   # no orders API left running (it would lock bin)",
     "New-Item -ItemType Directory -Force C:\\work | Out-Null; Remove-Item C:\\work\\orders-app-api-tests -Recurse -Force -ErrorAction SilentlyContinue",
     "Copy-Item -Recurse \"$ep\\src\\orders-app\" C:\\work\\orders-app-api-tests",
@@ -138,7 +141,9 @@
     "Get-CimInstance Win32_Process | Where-Object { $_.Name -eq 'Contoso.Orders.Api.exe' -or ($_.Name -eq 'dotnet.exe' -and $_.CommandLine -like '*Contoso.Orders.Api*') } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }   # no orders API left running (it would lock bin)"
   ],
   "teardown_local": [
-    "Get-CimInstance Win32_Process | Where-Object { $_.Name -eq 'Contoso.Orders.Api.exe' -or ($_.Name -eq 'dotnet.exe' -and $_.CommandLine -like '*Contoso.Orders.Api*') } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }   # no orders API left running (it would lock bin)"
+    "Get-CimInstance Win32_Process | Where-Object { $_.Name -eq 'Contoso.Orders.Api.exe' -or ($_.Name -eq 'dotnet.exe' -and $_.CommandLine -like '*Contoso.Orders.Api*') } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }   # no orders API left running (it would lock bin)",
+    "Start-Sleep -Seconds 1; Remove-Item C:\\tmp\\orders-apitests-*.db* -Force -ErrorAction SilentlyContinue; if ((Test-Path C:\\tmp\\.mglab-created) -and -not (Get-ChildItem C:\\tmp -Force | Where-Object Name -ne '.mglab-created')) { Remove-Item C:\\tmp -Recurse -Force }   # the test databases the API made in C:\\tmp (the script's own rm looks in Git Bash's /tmp), and the folder itself when prepare made it",
+    "Remove-Item Env:PYTHONIOENCODING, Env:DOTNET, Env:PYTHON -ErrorAction SilentlyContinue   # set by prepare_local and the regression screen: keep them out of later recordings of the same recorder session (the PATH entries C:\\work\\bin and Git\\bin stay)"
   ],
   "needs": [
     "docker",
