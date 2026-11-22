@@ -192,7 +192,6 @@ AUTO_DATE = """/// The hidden table Power BI Desktop adds for every date column 
 /// Desktop writes it itself). It is a calculated table built with CALENDAR.
 table LocalDateTable_OrderDate
 	isHidden
-	showAsVariationsOnly
 
 	column Date
 		dataType: dateTime
