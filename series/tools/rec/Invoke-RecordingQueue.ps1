@@ -22,7 +22,9 @@ $wanted = if (Test-Path $queueFile) { @(Get-Content $queueFile | ForEach-Object 
 # screens that are performed live while Record-Window.ps1 (MG R4) records; nothing is recorded by these lines.
 # "screen-prepare: <episode>/<screen>" / "screen-teardown: <episode>/<screen>" run one screen's own "prepare" /
 # "teardown" lists (e.g. open VS Code at a line, or a Windows Terminal layout for an app screen; close it again).
-$actionRe = '^(prepare|teardown|screen-prepare|screen-teardown):\s*(.+)$'
+# "screen-play: <episode>/<screen>" runs the screen's "play" list just before a take: it starts a helper that waits for
+# the take and then acts by itself (Invoke-PointerScript.ps1 -Start: pointer moves and left clicks inside the window).
+$actionRe = '^(prepare|teardown|screen-prepare|screen-teardown|screen-play):\s*(.+)$'
 function Resolve-QueueAction([string] $Line) {
     # -> what to run for one action line: the episode folder, a label and the statements (may be empty)
     if ($Line -notmatch $actionRe) { throw "unknown action: $Line" }

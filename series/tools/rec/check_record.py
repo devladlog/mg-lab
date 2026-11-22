@@ -48,6 +48,21 @@ def check_helpers(s: dict) -> list[str]:
                 m.append("every vscode task needs label and command")
         if "Open-VsCodeScene.ps1" not in prep:
             m.append("vscode without Open-VsCodeScene.ps1 in the screen prepare")
+    ptr = s.get("pointer")
+    if ptr is not None:
+        if not isinstance(ptr, list) or not ptr:
+            m.append("pointer must be a non-empty list of steps")
+        else:
+            for st in ptr:
+                keys = [k for k in st if k != "glide"] if isinstance(st, dict) else []
+                if len(keys) != 1 or keys[0] not in ("wait", "move", "click"):
+                    m.append(f"pointer step must be exactly one of wait, move, click: {st}")
+                elif keys[0] != "wait" and not (isinstance(st[keys[0]], list) and len(st[keys[0]]) == 2):
+                    m.append(f"pointer {keys[0]} needs [x, y]: {st}")
+        if not any("Invoke-PointerScript.ps1" in x and "-Start" in x for x in s.get("play") or []):
+            m.append("pointer without 'Invoke-PointerScript.ps1 ... -Start' in the screen play list")
+        if not s.get("window"):
+            m.append("pointer needs a window block (title)")
     w = s.get("window")
     if w is not None:
         for k in ("title", "out"):

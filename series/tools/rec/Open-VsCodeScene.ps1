@@ -13,7 +13,8 @@
       "goto": "demo/unsafe.ts:31:26",                // file:line[:column], relative to folder
       "settings": { "typescript.tsdk": "..." },      // optional, added to (and overriding) the recording settings
       "tasks": [ { "label": "...", "command": "..." } ],   // optional: shell tasks, run in pwsh -NoProfile
-      "zoom": 1                                      // optional window.zoomLevel (default 1)
+      "zoom": 1,                                     // optional window.zoomLevel (default 1)
+      "extensions": "none"                           // optional: "none", or a list of extension ids to keep enabled
     }
   The window title becomes "<file> - <folder name> - VS Code"; window.json "title" for Record-Window.ps1 is
   "- <folder name> - VS Code" (printed at the end). Run from the episode folder (screen prepare statements do):
@@ -57,6 +58,7 @@ $settings = [ordered]@{
     'workbench.startupEditor'              = 'none'
     'workbench.tips.enabled'               = $false
     'workbench.layoutControl.enabled'      = $false
+    'workbench.secondarySideBar.defaultVisibility' = 'hidden'
     'chat.commandCenter.enabled'           = $false
     'chat.disableAIFeatures'               = $true
     'editor.minimap.enabled'               = $false
@@ -67,7 +69,8 @@ $settings = [ordered]@{
     'editor.occurrencesHighlight'          = 'off'
     'editor.lightbulb.enabled'             = 'off'
     'explorer.openEditors.visible'         = 0
-    'files.exclude'                        = [ordered]@{ '.vscode' = $true; 'node_modules' = $true; '**/bin' = $true; '**/obj' = $true; '.venv' = $true }
+    # build output, and the episode's production files (the working copy is the whole episode folder)
+    'files.exclude'                        = [ordered]@{ '.vscode' = $true; 'node_modules' = $true; '**/bin' = $true; '**/obj' = $true; '.venv' = $true; 'record.json' = $true; 'script.yaml' = $true; 'social.yaml' = $true; 'demo.md' = $true; 'screens' = $true }
     'task.autoDetect'                      = 'off'
     'npm.autoDetect'                       = 'off'
     'task.quickOpen.history'               = 0
@@ -109,7 +112,19 @@ New-Item -ItemType Directory -Force -Path $dot | Out-Null
 Set-Content -LiteralPath (Join-Path $dot 'settings.json') -Value $settingsJson -Encoding utf8
 if ($tasksJson) { Set-Content -LiteralPath (Join-Path $dot 'tasks.json') -Value $tasksJson -Encoding utf8 }
 
-& $code.Source -n $vs.folder -g "$($target):$($line):$($col)"
+# "extensions": "none" opens the window with every installed extension disabled (built-in language features stay);
+# a list of ids keeps only those. Nothing is uninstalled or changed: the flags apply to this window only.
+$extArgs = @()
+if ($vs.extensions) {
+    if ("$($vs.extensions)" -eq 'none') { $extArgs = @('--disable-extensions') }
+    else {
+        $keep = @($vs.extensions | ForEach-Object { "$_".ToLowerInvariant() })
+        $installed = @(& $code.Source --list-extensions 2>$null | Where-Object { $_ -match '^[\w-]+\.[\w.-]+$' })
+        foreach ($id in $installed) { if ($keep -notcontains $id.ToLowerInvariant()) { $extArgs += '--disable-extension', $id } }
+        Write-Host "  extensions kept: $($keep -join ', ') ($($installed.Count) installed)" -ForegroundColor DarkGray
+    }
+}
+& $code.Source -n @extArgs $vs.folder -g "$($target):$($line):$($col)"
 . (Join-Path $PSScriptRoot 'RecCommon.ps1')
 try { $win = Wait-WindowByTitle -Title $title -TimeoutSeconds 60 }
 catch { throw "VS Code did not show a window titled '*$title*' within 60 s (a Workspace Trust dialog may be waiting: click 'Yes, I trust the authors', then run this screen's prepare again)" }

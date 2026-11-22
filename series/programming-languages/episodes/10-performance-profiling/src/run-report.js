@@ -1,4 +1,4 @@
-// Plain script for `node --cpu-prof`: node --cpu-prof --cpu-prof-dir=profiles src/run-report.js slow 3000
+// Plain script for `node --cpu-prof`: node --cpu-prof --cpu-prof-dir=cpuprof src/run-report.js slow 3000
 import { generateRequests } from "#src/data.js";
 import { buildReportFast, buildReportSlow } from "#src/report.js";
 
