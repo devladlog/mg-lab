@@ -113,7 +113,8 @@ scenes:
     narration: >
       TODO
 """
-    (ep / "script.yaml").write_text(stub, encoding="utf-8")
+    if not (ep / "script.yaml").exists():   # never overwrite a written episode with the stub
+        (ep / "script.yaml").write_text(stub, encoding="utf-8")
     index_rows.append(f"| [{s['name']}]({slug}/) | [{s['category']}]({BASE}/articles/{slug}/) | {len(topics)} | {ep1['name']} | {first_video[slug]:%d %b} | {spotlight[slug]:%d %b} |")
 
 index = f"""# DEVLADLOG category series
