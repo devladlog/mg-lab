@@ -12,7 +12,7 @@
     "Copy-Item .\\dist\\*.pbiviz C:\\MGLab\\power-bi\\ -Force",
     "Pop-Location",
     "New-Item -ItemType Directory -Force C:\\MGLab\\tools\\deneb | Out-Null",
-    "if (-not (Get-ChildItem C:\\MGLab\\tools\\deneb\\*.pbiviz -ErrorAction SilentlyContinue)) { $assets = (Invoke-RestMethod https://api.github.com/repos/deneb-viz/deneb/releases/tags/2.0.0).assets | Where-Object name -like '*.pbiviz'; $a = @($assets | Where-Object name -like '*standalone*') + @($assets) | Select-Object -First 1; Invoke-WebRequest $a.browser_download_url -OutFile (Join-Path C:\\MGLab\\tools\\deneb $a.name) }",
+    "if (-not (Get-ChildItem C:\\MGLab\\tools\\deneb\\*.pbiviz -ErrorAction SilentlyContinue)) { $assets = (Invoke-RestMethod https://api.github.com/repos/deneb-viz/deneb/releases/tags/2.0.0.0).assets | Where-Object name -like '*.pbiviz'; $a = @($assets | Where-Object name -like '*standalone*') + @($assets) | Select-Object -First 1; Invoke-WebRequest $a.browser_download_url -OutFile (Join-Path C:\\MGLab\\tools\\deneb $a.name) }",
     "Push-Location C:\\MGLab\\power-bi\\ep04\\src\\deneb",
     "npm ci --no-audit --no-fund",
     "node check-spec.mjs target-bullet.vl.json",
