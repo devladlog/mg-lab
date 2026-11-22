@@ -56,7 +56,11 @@ catch {
     throw
 }
 Start-Sleep -Milliseconds 500
-Set-RecordingWindow -Handle $win.Handle -Width $(if ($s.width) { $s.width } else { 1600 }) -Height $(if ($s.height) { $s.height } else { 900 })
+# place: 40,40 on the first display, or where the recorder lane says (MGREC_X / MGREC_Y, set by Invoke-RecordingQueue -Lane)
+$winX = 40; $winY = 40
+if ($env:MGREC_X -match '^-?\d+$') { $winX = [int]$env:MGREC_X }
+if ($env:MGREC_Y -match '^-?\d+$') { $winY = [int]$env:MGREC_Y }
+Set-RecordingWindow -Handle $win.Handle -Width $(if ($s.width) { $s.width } else { 1600 }) -Height $(if ($s.height) { $s.height } else { 900 }) -X $winX -Y $winY
 
 # 2. capture it
 $rec = Start-WindowCapture -Ffmpeg $ffmpeg -Title $win.Title -OutFile $mp4
@@ -75,16 +79,19 @@ if (-not $p.WaitForExit(20000)) { try { $p.Kill($true) } catch {} }
 # keep the text of what ran on camera next to the clip, so the narration can be checked against the real output
 $log = Join-Path $markers 'scene.log'
 if (Test-Path $log) { Copy-Item $log ([IO.Path]::ChangeExtension($mp4, '.log')) -Force }
-# confidentiality gate: the on-camera text must not show the owner's Windows user name or profile path
+# confidentiality gate: the on-camera text must not show the owner's Windows user name, profile path or machine name,
+# nor the signed-in cloud account (e-mail, display name, subscription, tenant and object ids: Get-ForbiddenText)
 if (Test-Path $log) {
     $body = (Get-Content $log -Raw) -split '\*{22}' | Select-Object -Skip 2 | Out-String
     $short = if ($env:USERNAME.Length -gt 6) { $env:USERNAME.Substring(0, 6) + '~' } else { $env:USERNAME }
-    $hit = @($env:USERNAME, $env:USERPROFILE, $short) | Where-Object { $_ -and $body -match [regex]::Escape($_) }
-    if ($hit) {
+    $local = @($env:USERNAME, $env:USERPROFILE, $short, $env:COMPUTERNAME) | Where-Object { $_ -and $body -match [regex]::Escape($_) }
+    $cloud = @(Get-ForbiddenText) | Where-Object { $_ -and $body -match [regex]::Escape($_) }
+    if ($local -or $cloud) {
         $leakDir = Join-Path (Split-Path $mp4) '_leak'; New-Item -ItemType Directory -Force $leakDir | Out-Null
         Move-Item $mp4, $jpg -Destination $leakDir -Force
         Add-Content (Join-Path $Root 'recordings\leaks.txt') "$(Get-Date -Format s) $mp4"
-        throw "Scene shows the Windows user name or profile path; moved to $leakDir. Fix the scene and record it again."
+        $what = @(if ($local) { 'the Windows user name, profile path or machine name' }; if ($cloud) { 'the signed-in account (e-mail, name, subscription, tenant or object id)' }) -join ' and '
+        throw "Scene shows $what; moved to $leakDir. Fix the scene and record it again."
     }
 }
 Write-Host "Saved $mp4 and poster $jpg" -ForegroundColor Green

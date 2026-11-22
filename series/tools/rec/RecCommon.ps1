@@ -177,6 +177,33 @@ function Stop-WindowCapture([Diagnostics.Process]$Process) {
 }
 
 function Add-RecordingLog([string]$Root, $Entry) {
+    # several recorder lanes write this file: a write that meets another one is tried again, and never fails a take
     $log = Join-Path $Root 'recordings-log.jsonl'
-    ($Entry | ConvertTo-Json -Compress) | Add-Content -LiteralPath $log -Encoding utf8
+    $line = ($Entry | ConvertTo-Json -Compress)
+    for ($i = 0; $i -lt 10; $i++) {
+        try { Add-Content -LiteralPath $log -Value $line -Encoding utf8 -ErrorAction Stop; return } catch { Start-Sleep -Milliseconds 200 }
+    }
+    Write-Host "recordings-log.jsonl was busy; not logged: $line" -ForegroundColor Yellow
+}
+
+function Get-ForbiddenText {
+    # Text of the signed-in cloud account that must never be on camera: the account e-mail (and its part before the @),
+    # the display name, and the subscription, tenant and object ids. Read once per recorder process from the Azure CLI
+    # session and kept in memory only (MGREC_FORBIDDEN); nothing when the Azure CLI is missing or signed out.
+    if (-not $env:MGREC_FORBIDDEN) {
+        $ErrorActionPreference = 'Continue'   # here only: a warning on the Azure CLI's stderr must not empty the list
+        $vals = @()
+        try {
+            if (Get-Command az -ErrorAction SilentlyContinue) {
+                $a = @(az account show --query '[id, tenantId, user.name]' -o tsv 2>$null)
+                if ($LASTEXITCODE -eq 0) { $vals += $a | ForEach-Object { "$_" -split "`t" } }
+                $u = @(az ad signed-in-user show --query '[displayName, userPrincipalName, id]' -o tsv 2>$null)
+                if ($LASTEXITCODE -eq 0) { $vals += $u | ForEach-Object { "$_" -split "`t" } }
+            }
+        } catch {}
+        $vals += @($vals | Where-Object { "$_" -match '^([^@\s]+)@' } | ForEach-Object { ("$_" -split '@')[0] })
+        $keep = @($vals | ForEach-Object { "$_".Trim() } | Where-Object { $_.Length -ge 6 } | Select-Object -Unique)
+        $env:MGREC_FORBIDDEN = if ($keep) { $keep -join '|' } else { '-' }
+    }
+    @($env:MGREC_FORBIDDEN -split '\|' | Where-Object { $_.Length -ge 6 })
 }

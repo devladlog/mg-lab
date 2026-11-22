@@ -10,8 +10,12 @@
   owner can be recorded even when the episode's own prepare signs in somewhere. Consecutive screen lines of the same
   episode share one prepare_local/teardown_local. Screen lines run first, in queue order; episode lines after them.
   A failure in one line (prepare, recording or teardown) is logged in the failed list and the queue goes on.
+  -Lane <name> starts one more recorder loop next to the main one (Start-RecordingLane.ps1 does it): it takes the same
+  action lines from recordings\lane-<name>\action.txt, records terminal screens only, and puts their window at -X/-Y
+  (physical pixels), so lanes whose windows do not overlap can record at the same time.
 #>
-param([string] $Root = (Resolve-Path (Join-Path $PSScriptRoot '..\..\..')).Path, [switch] $Redo)
+param([string] $Root = (Resolve-Path (Join-Path $PSScriptRoot '..\..\..')).Path, [switch] $Redo,
+      [ValidatePattern('^[a-z0-9]*$')] [string] $Lane = '', [int] $X = 40, [int] $Y = 40)
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'RecCommon.ps1')
 
@@ -60,11 +64,20 @@ function Invoke-QueueAction($Act) {
 # "window-recorder" keeps running and records one window per trigger: write recordings\window.json, then create
 # recordings\window.go to start; create recordings\stop to end that take; create recordings\window-recorder.quit to exit.
 # This lets app and browser scenes be performed in the app itself, with no trip back to VS Code between takes.
-if ($wanted -contains 'window-recorder') {
-    $rd = Join-Path $Root 'recordings'
+if ($Lane -or ($wanted -contains 'window-recorder')) {
+    $rd = if ($Lane) { Join-Path $Root "recordings\lane-$Lane" } else { Join-Path $Root 'recordings' }
     $state = Join-Path $rd 'window-recorder.state'
-    Remove-Item (Join-Path $rd 'window.go'), (Join-Path $rd 'window-recorder.quit') -ErrorAction SilentlyContinue
-    Write-Host "Window recorder ready. Waiting for recordings\window.go ..." -ForegroundColor Cyan
+    if ($Lane) {
+        # a lane: its own trigger folder, terminal screens only (window takes stay with the main loop), own window place
+        New-Item -ItemType Directory -Force -Path $rd | Out-Null
+        Set-Content (Join-Path $rd 'lane.pid') $PID
+        $env:MGREC_LANE = $Lane; $env:MGREC_X = "$X"; $env:MGREC_Y = "$Y"
+        Remove-Item (Join-Path $rd 'window-recorder.quit') -ErrorAction SilentlyContinue
+        Write-Host "Lane $Lane ready (terminal screens at $X,$Y). Waiting for recordings\lane-$Lane\action.txt ..." -ForegroundColor Cyan
+    } else {
+        Remove-Item (Join-Path $rd 'window.go'), (Join-Path $rd 'window-recorder.quit') -ErrorAction SilentlyContinue
+        Write-Host "Window recorder ready. Waiting for recordings\window.go ..." -ForegroundColor Cyan
+    }
     while (-not (Test-Path (Join-Path $rd 'window-recorder.quit'))) {
         Set-Content $state 'idle'
         # recordings\action.txt with "prepare: <episode>" or "teardown: <episode>" runs that step (for the next app episode)
@@ -83,7 +96,7 @@ if ($wanted -contains 'window-recorder') {
             } catch { Write-Host $_ -ForegroundColor Red; Set-Content (Join-Path $rd 'action.last') "error: $($_.Exception.Message)" }
             continue
         }
-        if (Test-Path (Join-Path $rd 'window.go')) {
+        if (-not $Lane -and (Test-Path (Join-Path $rd 'window.go'))) {
             Remove-Item (Join-Path $rd 'window.go')
             Set-Content $state 'recording'
             try { & (Join-Path $PSScriptRoot 'Record-Window.ps1') -Root $Root; Set-Content (Join-Path $rd 'window-recorder.last') 'ok' }
