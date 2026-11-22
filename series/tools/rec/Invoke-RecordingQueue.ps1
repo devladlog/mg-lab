@@ -27,7 +27,9 @@ $wanted = if (Test-Path $queueFile) { @(Get-Content $queueFile | ForEach-Object 
 # "screen-record: <episode>/<screen>" records one terminal screen with Record-Scene.ps1 (again, if it exists): the
 # running window recorder can retake a terminal screen without being restarted with another queue. The episode
 # "prepare:" action comes first when the screen needs the working copy.
-$actionRe = '^(prepare|teardown|screen-prepare|screen-teardown|screen-play|screen-record):\s*(.+)$'
+# "prepare-local: <episode>" / "teardown-local: <episode>" run the episode's prepare_local / teardown_local lists (local steps
+# only: no sign-in, prompt, Docker or VM), for screens that need nothing from the owner.
+$actionRe = '^(prepare|teardown|prepare-local|teardown-local|screen-prepare|screen-teardown|screen-play|screen-record):\s*(.+)$'
 function Resolve-QueueAction([string] $Line) {
     # -> what to run for one action line: the episode folder, a label and the statements (may be empty)
     if ($Line -notmatch $actionRe) { throw "unknown action: $Line" }
@@ -48,7 +50,8 @@ function Resolve-QueueAction([string] $Line) {
     }
     $epDir = Join-Path $Root $spec.Replace('/', '\')
     $def = Get-Content (Join-Path $epDir 'record.json') -Raw | ConvertFrom-Json
-    [pscustomobject]@{ What = $what; EpisodeDir = $epDir; Screen = $null; Statements = @($def.$what | Where-Object { $_ }) }
+    $key = $what.Replace('-', '_')
+    [pscustomobject]@{ What = $what; EpisodeDir = $epDir; Screen = $null; Statements = @($def.$key | Where-Object { $_ }) }
 }
 function Invoke-QueueAction($Act) {
     if ($Act.What -eq 'screen-record') { & (Join-Path $PSScriptRoot 'Record-Scene.ps1') -Episode $Act.EpisodeDir -Screen $Act.Screen -Root $Root }
