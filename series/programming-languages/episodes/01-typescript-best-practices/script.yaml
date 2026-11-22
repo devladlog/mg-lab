@@ -73,12 +73,14 @@ scenes:
     short: flags
     demo: >
       Terminal (dark theme, font 18 pt or larger) in the episode folder running npm run demo:errors. Visible: the
-      seven error lines for demo/unsafe.ts with TS1484, TS2532, TS2375, TS7006 (items), TS2345 (never), TS2322
-      (Euros) and TS1294 (enum). Reference: demo/expected-output.txt.
+      nine "error TS" lines for demo/unsafe.ts, which are seven distinct problems: TS1484, TS2532, TS2375, TS7006
+      three times (items, sum, i), TS2345 (never), TS2322 (Euros) and TS1294 (enum). Reference:
+      demo/expected-output.txt.
     narration: >
-      Here's a file that would run fine as JavaScript. The compiler finds seven bugs. A lookup that may be undefined.
-      An optional field set to undefined on purpose. An implicit any. A missing case in a switch. A raw number used as
-      a budget. And an enum, which Node can't strip. Plain JavaScript would show you each of these at runtime, if at all.
+      Here's a file that would run fine as JavaScript. The compiler finds seven bugs. A type imported as a value.
+      A lookup that may be undefined. An optional field set to undefined on purpose. An implicit any, reported three
+      times. A missing case in a switch. A raw number used as a budget. And an enum, which Node can't strip. Plain
+      JavaScript would show you each of these at runtime, if at all.
 
   - id: result
     type: code
@@ -164,9 +166,10 @@ scenes:
 
   - id: editor
     type: screen
-    heading: "Add a state, find every switch"
+    heading: "A forgotten case, found in the editor"
     image: screens/editor-never.jpg
     video: screens/editor-never.mp4
+    crop: [59, 44, 1846, 980]   # title bar and activity bar (account picture) cropped out
     bar: "VS Code · demo/unsafe.ts"
     demo: >
       VS Code, dark theme, demo/unsafe.ts open at the badge function (lines 22 to 33). Red squiggle under
@@ -174,8 +177,8 @@ scenes:
       ... }' is not assignable to parameter of type 'never'. Problems panel open showing the other errors.
     narration: >
       This is what it looks like in the editor. The badge function forgot rejected. The error doesn't say something
-      went wrong. It says exactly which case: rejected is not assignable to never. Add the case and the squiggle goes
-      away. That's a refactoring tool you get for free.
+      went wrong. It says exactly which case: rejected is not assignable to never. Add the missing case, and the
+      squiggle would go away. That's a refactoring tool you get for free.
 
   - id: satisfies
     type: code

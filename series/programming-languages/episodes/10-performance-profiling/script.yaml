@@ -21,7 +21,7 @@ scenes:
     sub: "One slow report, three guesses, one profiler"
     short: hook
     narration: >
-      Here is a report that takes a noticeable fraction of a second to build, for just three thousand rows. Ask five developers why, and you get
+      Here is a report that takes about a tenth of a second to build, for just three thousand rows. Ask five developers why, and you get
       five answers. Probably the sorting. Probably the clone. Maybe garbage collection. Today we stop guessing. We
       measure with a proper benchmark, a CPU profile, the event loop delay and the heap, and the profiler names the
       guilty lines. Welcome to DEVLADLOG Code.
@@ -39,7 +39,7 @@ scenes:
       The subject is the Contoso approval report. It takes project requests, finds duplicate codes, formats the
       budgets and totals them by department. There is a slow version and a fast version, and a test proves they
       produce exactly the same report. Around them we build the tools: a benchmark, a profile reader, an event loop
-      monitor and a memory check. Plain Node twenty two, no packages.
+      monitor and a memory check. Plain Node, twenty two or newer, no packages.
 
   - id: onerun
     type: screen
@@ -53,8 +53,9 @@ scenes:
       comparing the first run with the median. Reference: demo/expected-output.txt (the exact numbers will differ).
     narration: >
       First rule: one timing proves nothing. This is the fast version, same code, same data, twelve runs in a row.
-      The first run is slow, because the engine is still warming up. Some later runs jump up again, from garbage
-      collection or other work on the machine. The first number you see is not the speed of the code.
+      The first run takes more than twice the median, because the engine is still warming up. Even once it has
+      settled, the runs still differ by about a fifth, from garbage collection or other work on the machine. The
+      first number you see is not the speed of the code.
 
   - id: harness
     type: code
@@ -83,11 +84,16 @@ scenes:
     video: screens/profile.mp4
     bar: "Terminal · node src/cli.js profile slow"
     short: hotline
+    short_crop: [0, 0, 820, 414]   # Short: left 820 px of the 18 text rows, so both tables fill the phone width (the line 30 row is whole, the line 36 row runs to toLocaleString)
     demo: >
       Terminal running node src/cli.js profile slow --rows 3000. Visible: the function table with buildReportSlow
       at the top by self time, then the hot-lines table: report.js line 36 (toLocaleString) first, report.js line 30
-      (seen.some) second, JSON.parse line third and small. Reference: demo/expected-output.txt (percentages will differ a
-      little; check the top two lines are the same before recording the narration).
+      (seen.some) second. Recorded take (laptop, Windows, Node v24.16.0): total sampled time 92 ms; functions:
+      buildReportSlow report.js:25 85.6 % self, (anonymous) cli.js:46 6.8 %, (anonymous) report.js:30 5.2 %; lines:
+      report.js:36 67.5 %, report.js:30 10.2 %, report.js:25 9.9 %, cli.js:46 6.8 %. The JSON.parse line
+      (report.js:35) is not among the four lines listed. demo/expected-output.txt is the container run (lines 36 and
+      30 at 46.1 % and 44.6 % there). On a retake, check the top two lines are the same and that "two thirds" and
+      "about a tenth" in the narration still match the screen.
     narration: >
       Now the CPU profile. This runs the slow report under the V8 profiler and prints two tables. The function view
       says almost everything happens inside the report function itself. Not helpful. The line view is. Two thirds of the time is one line: the budget formatting with to locale string. The duplicate check with some is about a tenth. The JSON clone everybody suspected? It doesn't even make the list.
@@ -97,7 +103,10 @@ scenes:
     heading: "Open the .cpuprofile in VS Code"
     image: screens/vscode-profile.jpg
     video: screens/vscode-profile.mp4
-    bar: "VS Code · slow.cpuprofile"
+    video_full: true            # dense app window: the take gets the whole frame, so the table and the task terminal stay readable
+    autocrop: false             # whole window kept: the Terminal menu (title bar) and the Explorer are part of the demo
+    mask: [[10, 882, 48, 44]]   # privacy: account picture in the activity bar painted over (box ends before the side bar border)
+    bar: "VS Code · the .cpuprofile written by node --cpu-prof"
     demo: >
       VS Code, dark theme. Terminal > Run Task runs node --cpu-prof --cpu-prof-dir=cpuprof src/run-report.js slow 3000
       (no code of ours), the file CPU.<date>.<time>.<pid>.0.001.cpuprofile appears in the Explorer under cpuprof, and a
@@ -105,9 +114,13 @@ scenes:
       runs node src/cli.js top on the same file (our tool, the line view). Clicks only. Needs the recording laptop (VS
       Code is not available in the build container).
     narration: >
-      You do not need our tool to get a profile. Node writes one if you start it with dash dash cpu dash prof. The
-      file is a dot cpuprofile, and VS Code opens it directly and lists the functions with their time. Chrome developer tools opens
-      the same file. Our tool reads the same format, which is how we get the line view.
+      You do not need our tool to get a profile. Node writes one if you start it with dash dash cpu dash prof. Here a
+      task runs the slow report that way: a hundred and thirteen milliseconds this time. A new folder appears, and in
+      it one dot CPU profile file. VS Code opens it directly, as a table of functions with self time and total time.
+      Build report slow is at the top, with ninety seven milliseconds of self time. Chrome developer tools opens the
+      same file. And so does our tool: it reads the same format and prints the line view. This profile covers the
+      whole process, start up included, so the percentages differ from the last run. The order does not: line thirty
+      six first, then line thirty.
 
   - id: slowcode
     type: code
@@ -137,8 +150,8 @@ scenes:
     short: gotcha
     lang: javascript
     code: |
-      // function view:  (anonymous)  report.js:30      13 %
-      //                 buildReportSlow  report.js:25   82 %   <- the callback's time lands here
+      // function view:  (anonymous)  report.js:30       5 %
+      //                 buildReportSlow  report.js:25   86 %   <- the callback's time lands here
       // V8 inlines small callbacks into their caller. Use the line ticks instead:
       for (const node of nodes) {
         const ticks = node.positionTicks ?? [];      // [{ line, ticks }, ...]
@@ -150,7 +163,7 @@ scenes:
     narration: >
       The gotcha. I expected the some callback to show up as its own hot function. It mostly does not. The compiler
       inlines small callbacks into the function that calls them, and built in calls like to locale string have no
-      frame at all, so their time lands on the caller. Eighty percent in one function tells you nothing. Every
+      frame at all, so their time lands on the caller. Eighty six percent in one function tells you nothing. Every
       profile node also carries position ticks, a count of samples per line. Read those, and the guilty line appears.
 
   - id: fix
@@ -184,10 +197,13 @@ scenes:
     video: screens/after.mp4
     bar: "Terminal · bench and lag"
     demo: >
-      Terminal running, one after another: node src/cli.js bench --rows 2000 --runs 7 (slow median in the hundreds
-      of milliseconds, fast median about a millisecond or two); node src/cli.js lag slow --rows 3000 and
-      node src/cli.js lag fast --rows 3000 (event loop delay max in the hundreds of milliseconds for slow, tens at most
-      for fast). Reference: demo/expected-output.txt.
+      Terminal running, one after another: node src/cli.js bench --rows 2000 --runs 7; node src/cli.js lag slow
+      --rows 3000 and node src/cli.js lag fast --rows 3000. Recorded take (laptop, Windows, Node v24.16.0): bench
+      slow median 48.1 ms (min 46.5, p95 48.8), fast median 0.8 ms (min 0.7, p95 0.9); lag slow: built in 74 ms,
+      event loop delay max 91 ms, p99 91 ms, mean 27 ms; lag fast: built in 3 ms, max 25 ms, p99 25 ms, mean 17 ms.
+      The narration quotes forty eight, under one, ninety one and twenty five from this take: on a retake, change it
+      to the numbers on screen. demo/expected-output.txt is the container run (slow median 425.3 ms, loop delay max
+      680 ms there).
     narration: >
       Now the numbers. The benchmark says the median went from forty eight milliseconds to under one. But
       speed is not the only thing a Node service cares about. The event loop delay monitor shows what the slow version

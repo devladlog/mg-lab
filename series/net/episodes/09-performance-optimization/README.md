@@ -69,15 +69,43 @@ removing `summary.InvalidateAsync(...)` fails the HybridCache one; removing `Add
 |---|---|---|
 | SQL commands for 20 rows | **41** (1 + 2 x 20) | **2** (`COUNT` + one `SELECT` with the JOINs); **0** on a cache hit |
 | Allocated per 200-row listing (BenchmarkDotNet) | 6,010 KB (N+1, tracked) | 175 KB (projection), 578 KB (Include, tracked), 400 KB (Include, no-tracking) |
-| Mean per 200-row listing (ShortRun, error bars are wide) | ~53 ms | ~6 ms (Include tracked ~7.5 ms, no-tracking ~9.5 ms: **no-tracking was not faster than tracking here**, see below) |
+| Mean per 200-row listing (ShortRun, error bars are wide) | ~53 ms | ~6 ms (Include tracked ~7.5 ms, no-tracking ~9.5 ms: a difference inside the error bars; the laptop run below has no-tracking faster) |
 | Sum of 20,000 budgets | load everything: ~473 ms, 24 MB | `SUM` in SQLite: ~41 ms, 3 MB |
 | Load test, 8 workers, 8 s (`/slow` take=100 vs `/api/requests` pageSize=100) | **49 req/s**, p50 150 ms, p99 424 ms | **849 req/s**, p50 8 ms, p99 30 ms; with the output cache on **32,789 req/s**, p50 0.2 ms |
 | Response size, `pageSize=100` | 17,890 bytes | 2,638 gzip, 3,327 Brotli (default levels, measured with `curl`) |
 | JSON, 100 DTOs | reflection 35.4 KB allocated | source-generated 35.0 KB as a `string`, **17.6 KB as UTF-8 bytes** |
 
 Full output: [`deploy/loadtest-container.txt`](deploy/loadtest-container.txt),
-[`deploy/benchmark-results.container.txt`](deploy/benchmark-results.container.txt). Re-record on the laptop: the
-orders of magnitude and the allocation columns are the stable part, the absolute times are not.
+[`deploy/benchmark-results.container.txt`](deploy/benchmark-results.container.txt). The recording laptop's run is
+below: the orders of magnitude and the allocation columns are the stable part, the absolute times are not.
+
+## The same measurements on the recording laptop (the run in the video)
+
+`dotnet run -c Release --project src/ProjectRequests.Perf.Benchmarks -- --filter "*QueryBenchmarks*"`, default job.
+BenchmarkDotNet v0.15.8, Windows 11, Intel Core Ultra 9 275HX (24 cores), .NET SDK 10.0.303, runtime .NET 10.0.15,
+X64 RyuJIT x86-64-v3. This is the table the video shows, from the report the run writes to
+`BenchmarkDotNet.Artifacts/results/` (`QueryBenchmarks` hides StdDev, Median, RatioSD, Gen1 and Gen2 with
+`[HideColumns]` so the table fits on one screen; remove the attribute to see them):
+
+| Method                  | Categories | Rows | Mean        | Error       | Ratio | Gen0      | Allocated   | Alloc Ratio |
+|------------------------ |----------- |----- |------------:|------------:|------:|----------:|------------:|------------:|
+| List_NPlusOne_Tracked   | list       | 200  | 10,303.7 μs |   159.25 μs |  1.00 |  312.5000 |  6011.59 KB |        1.00 |
+| List_Include_Tracked    | list       | 200  |  1,218.4 μs |    23.99 μs |  0.12 |   31.2500 |    579.9 KB |        0.10 |
+| List_Include_NoTracking | list       | 200  |    914.6 μs |     6.74 μs |  0.09 |   21.4844 |   401.93 KB |        0.07 |
+| List_Projection         | list       | 200  |    460.5 μs |     8.87 μs |  0.04 |    8.7891 |   177.81 KB |        0.03 |
+|                         |            |      |             |             |       |           |             |             |
+| Sum_LoadEverything      | sum        | 200  | 77,879.5 μs | 1,500.24 μs |  1.00 | 1600.0000 | 24260.33 KB |        1.00 |
+| Sum_InDatabase          | sum        | 200  |  3,857.1 μs |    76.50 μs |  0.05 |  171.8750 |  3173.23 KB |        0.13 |
+
+- Removing the N+1 (`Include`, tracked): about 8.5x less time and 10x less memory than the N+1 version.
+- `AsNoTracking` on top of that: 0.75 of the tracking time (25% less) and 31% less memory.
+- The projection: half the no-tracking time again and 178 KB, 22x faster and 34x lighter than the N+1 version.
+- Summing in the database: 3.9 ms and 3 MB against 77.9 ms and 24 MB for loading every entity.
+- Load test on the same laptop (`deploy/Measure-Endpoints.ps1`, 8 workers, 8 s each): **22.7 req/s**, p99 450 ms
+  (N+1) -> **1,419.7 req/s**, p99 19.6 ms (projection, output cache off) -> **83,348.7 req/s**, p99 0.3 ms (output
+  cache on).
+
+One laptop, one run: read the ratios, not the milliseconds.
 
 ## What we learned / gotchas
 
@@ -109,14 +137,16 @@ orders of magnitude and the allocation columns are the stable part, the absolute
   real wins: no reflection at run time (startup, trimming, Native AOT), and writing **UTF-8 bytes** halves the
   allocation. The switch that makes it safe is `JsonSerializerIsReflectionEnabledByDefault=false`: a type missing from
   `AppJsonContext` then throws `NotSupportedException` (a test proves it) instead of quietly using reflection.
-- **No-tracking is not automatically faster.** Learn's benchmark shows no-tracking at 0.71 of the tracking time for
-  10 blogs x 20 posts, and its Razor Pages tutorial notes that in some cases a tracking query is more efficient. Here
-  `Include` + `AsNoTracking` (9.5 ms) did not beat `Include` tracked (7.5 ms) for 200 rows (ShortRun, wide error bars);
-  what it did save is memory (400 KB vs 578 KB). The big steps were removing the N+1 (10x less memory, ~7x less time)
-  and projecting only the needed columns (175 KB). Measure, don't assume.
+- **No-tracking looked slower in a noisy run and was faster in a quiet one.** Learn's benchmark shows no-tracking at
+  0.71 of the tracking time for 10 blogs x 20 posts, and its Razor Pages tutorial notes that in some cases a tracking
+  query is more efficient. In the build container (ShortRun, shared CPU, wide error bars) `Include` + `AsNoTracking`
+  (9.5 ms) did not beat `Include` tracked (7.5 ms) for 200 rows. On the recording laptop (default job) it did: 914.6 μs
+  against 1,218.4 μs, 0.75 of the tracking time, with 31% less memory (402 KB vs 580 KB). The big steps were still
+  removing the N+1 (10x less memory, 8.5x less time on the laptop) and projecting only the needed columns (178 KB,
+  half the no-tracking time again). Measure on a quiet machine, don't assume.
 - **"In the database" isn't free on SQLite.** `SUM` of a `decimal` shows up in the SQL log as
-  `COALESCE(ef_sum("r"."Budget"), '0.0')` because SQLite stores decimals as text; it was still ~10x faster and 8x
-  lighter than loading 20,000 entities.
+  `COALESCE(ef_sum("r"."Budget"), '0.0')` because SQLite stores decimals as text; it was still ~10x faster (20x on the
+  recording laptop) and 8x lighter than loading 20,000 entities.
 - **EF Core could not translate `GroupBy(...).Select(new DepartmentSummary(...)).OrderBy(s => s.Code)`**; ordering
   the groups first (`GroupBy(...).OrderBy(g => g.Key).Select(...)`) translates. The error message lists the whole
   expression, which is how we saw what to change.

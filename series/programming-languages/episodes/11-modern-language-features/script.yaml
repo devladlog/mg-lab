@@ -9,7 +9,7 @@ subtitle: "One job, four languages: TypeScript, C#, Python, PowerShell"
 voice: am_michael
 thumbnail_text: "SAME JOB\n4 LANGUAGES\nSAME OUTPUT"
 youtube:
-  title: "Modern Language Features in TypeScript, C# 14, Python 3.13 and PowerShell 7.6 (Real Demo) | DEVLADLOG Code #11"
+  title: "Modern Language Features: TypeScript, C# 14, Python 3.13, PowerShell 7.6 | DEVLADLOG Code #11"
   tags: [TypeScript, Node.js, type stripping, C# 14, .NET 10, file-based apps, Python 3.13, PEP 695, PowerShell 7.6, pattern matching, modern language features, Pester, pytest, xUnit]
 sources:
   - https://www.devladlog.com/articles/programming-languages/2025-07-09-modern-language-features-complete-guide-2025/
@@ -63,7 +63,7 @@ scenes:
         .take(3)
         .toArray();
     narration: >
-      TypeScript first. Node twenty two runs dot t s files directly: it strips the types and runs what is left. No
+      TypeScript first. Node runs dot t s files directly: it strips the types and runs what is left. No
       build step. The collection code is plain modern JavaScript: Map group by, iterator helpers like map and take,
       and to sorted, which returns a new array instead of mutating the old one. Type checking is a separate step,
       with the TypeScript compiler, and the compiler options only allow syntax that can be erased, so what Node
@@ -74,15 +74,24 @@ scenes:
     heading: "No build step"
     image: screens/node-ts.jpg
     video: screens/node-ts.mp4
+    mask: [[10, 882, 48, 44]]   # account picture in the activity bar painted over (the menu bar is used, so the title bar stays)
+    crop: [0, 0, 1906, 1024]    # the whole window: the Terminal menu at the top is part of the demo
+    video_compact: true
+    video_full: true
     bar: "VS Code · node src/ts/main.ts"
     demo: >
-      VS Code, dark theme, font 18 pt or larger. Editor on src/ts/digest.ts at the Map.groupBy block; terminal
-      panel beside it. Terminal > Run Task runs "node src/ts/main.ts samples/requests.json", then
-      "npx tsc -p tsconfig.json; $LASTEXITCODE" (nothing from the compiler, then 0). The terminal must show the
-      digest (Contoso request digest ... review batches of 4). Clicks only; neutral title and folder (C:\lab\pl11).
+      VS Code, dark theme, editor font 16. The editor area is split in two groups: src/ts/digest.ts at the
+      Map.groupBy line (80) on the left; the task terminal opens as a tab in the second editor group, beside the
+      code (no terminal panel). Terminal > Run Task runs "node src/ts/main.ts samples/requests.json", then
+      "npx tsc -p tsconfig.json; $LASTEXITCODE" (nothing from the compiler, then 0) in the same terminal. The
+      terminal must show the digest (Contoso request digest ... review batches of 4) without wrapping. Clicks
+      only; neutral title and folder (C:\lab\pl11).
     narration: >
-      Here it is in VS Code. Node runs the file, the digest prints. And the compiler, with erasable syntax only,
-      checks the types and says nothing, which is what you want. Node documents this type stripping as experimental, so pin your Node version.
+      Here it is in VS Code. Terminal, Run Task: Node runs the file, and the digest prints. This is Node twenty
+      four, where type stripping has been stable since twenty four point twelve. Then the compiler, with erasable
+      syntax only: it checks the types and says nothing, which is what you want. The zero is its exit code. On Node
+      twenty two, type stripping runs without a flag from twenty two point eighteen, but is still marked release
+      candidate, so check your version.
 
   - id: cs-code
     type: code

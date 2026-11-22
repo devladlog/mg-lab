@@ -14,7 +14,7 @@ linkedin_company:
     - Switch to source-generated JSON with reflection turned off
     - Watch our own counters live with dotnet-counters
 
-    Some results are honest surprises: no-tracking was not faster than tracking in our run, and a client no-cache header did not bypass the output cache.
+    Some results are honest surprises: with reflection off, the first HybridCache call threw until we registered a serializer, and a client no-cache header did not bypass the output cache.
 
     Watch the episode: {YOUTUBE_URL}
     Code: {REPO_URL}
@@ -25,9 +25,9 @@ linkedin_company:
     #DotNet #Performance #EFCore #BenchmarkDotNet #ASPNETCore
 linkedin_personal:
   text: |
-    I expected AsNoTracking to make our EF Core list query faster. In episode 9 of DEVLADLOG .NET it did not: Include with no-tracking (9.5 ms) did not beat Include tracked (7.5 ms) for 200 rows. It only used less memory. The big wins were removing the N+1 and projecting just the columns we needed.
+    I expected AsNoTracking to make our EF Core list query faster. In episode 9 of DEVLADLOG .NET it did, but it was not the big win: for 200 rows, Include with no-tracking took 0.9 ms against 1.2 ms tracked, about 25% less time and 31% less memory. The big wins were removing the N+1 (10.3 ms down to 1.2 ms) and projecting just the columns we needed (0.5 ms).
 
-    The benchmark ran on a shared CPU with wide error bars, so treat the numbers as directional. The lesson holds: measure, don't assume.
+    Those are one laptop's numbers, so read the ratios, not the milliseconds. The lesson holds: measure, don't assume.
 
     {YOUTUBE_URL}
 
@@ -64,25 +64,25 @@ shorts:
       caption: |
         For a computed value, the dashboard summary, we use HybridCache. When thirty requests arrive on a cold cache, only one runs the factory and the others wait for it.
 
-        Our test proves it with a counter: thirty callers, one computation. A plain memory cache ran the factory more than once in the same experiment. Tags let a write invalidate everything about requests in one call.
+        Our test proves it with a counter: thirty callers, one computation. In another test, a plain memory cache ran the factory more than once for concurrent callers. Tags let a write invalidate everything about requests in one call.
 
         Full episode: link in bio
 
         #DotNet #HybridCache #ASPNETCore #CSharp
       cover_text: "30 callers, 1 computation"
     tiktok:
-      caption: "30 requests hit a cold cache. HybridCache runs the factory once; a plain MemoryCache ran it more than once. Tags invalidate on write. #DotNet #HybridCache #CSharp"
+      caption: "30 requests hit a cold cache. HybridCache runs the factory once. In another test, a plain MemoryCache ran it more than once for concurrent callers. Tags invalidate on write. #DotNet #HybridCache #CSharp"
   - id: gotcha
     youtube_short_title: "Four honest performance findings in ASP.NET Core #Shorts"
     instagram_reel:
       caption: |
         Four honest findings. With reflection off, the first HybridCache call threw, because it serializes what it stores, so we registered a serializer.
 
-        Source-generated JSON allocated the same as reflection for a string, and half as much for UTF-8 bytes. No-tracking wasn't faster than tracking in our run, only lighter. And a client's no-cache header did not bypass the output cache, so evict by tag.
+        Source-generated JSON allocated the same as reflection for a string, and half as much for UTF-8 bytes. No-tracking took about 25% less time and 31% less memory than tracking in our run, and the projection roughly halved both again. And a client's no-cache header did not bypass the output cache, so evict by tag.
 
         Full episode: link in bio
 
         #DotNet #Performance #EFCore #ASPNETCore
       cover_text: "Honest results"
     tiktok:
-      caption: "Our results: HybridCache serializes even in memory, no-tracking wasn't faster here, and a client no-cache header didn't bypass the output cache. #DotNet #Performance #EFCore"
+      caption: "Our results: HybridCache serializes even in memory, no-tracking took about 25% less time but the projection halved that again, and a client no-cache header didn't bypass the output cache. #DotNet #Performance #EFCore"

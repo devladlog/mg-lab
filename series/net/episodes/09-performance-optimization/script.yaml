@@ -44,7 +44,8 @@ scenes:
     heading: "Count the queries"
     image: screens/sql-log.jpg
     video: screens/sql-log.mp4
-    bar: "Terminal · dotnet run (Development), EF Core command log"
+    video_rate: 1.33   # first log stays until "One plus two N", second log arrives as "one select with the joins" ends
+    bar: "Terminal · curl.exe, then the API's EF Core command log (Development)"
     demo: >
       Windows Terminal, two panes. Left: dotnet run for the Perf.Api project in Development, EF Core command log
       visible. Right: curl.exe "http://localhost:5209/api/slow/requests?take=2" then
@@ -99,6 +100,8 @@ scenes:
     heading: "Prove it: BenchmarkDotNet"
     image: screens/benchmarks.jpg
     video: screens/benchmarks.mp4
+    crop: [0, 0, 1240, 400]   # top left of the terminal: the typed command, the run, then the whole table (no host banner in these parts)
+    video_cuts: [[0, 0.4], [4.6, 170.2], [172.45, 184.2]]   # the command is typed, two seconds of the run, then the table printed from the report (held 12 s)
     bar: "Terminal · dotnet run -c Release, QueryBenchmarks"
     demo: >
       Windows Terminal. Run: dotnet run -c Release --project src\ProjectRequests.Perf.Benchmarks -- --filter "*QueryBenchmarks*".
@@ -119,10 +122,14 @@ scenes:
     code: |
       cache.GetOrCreateAsync("summary:all", async token =>
           {
-              metrics.SummaryComputed();             // counts real computations
+              metrics.SummaryComputed();   // counts real computations
               return await ComputeAsync(token);
           },
-          new HybridCacheEntryOptions { Expiration = TimeSpan.FromMinutes(1), LocalCacheExpiration = TimeSpan.FromMinutes(1) },
+          new HybridCacheEntryOptions
+          {
+              Expiration = TimeSpan.FromMinutes(1),
+              LocalCacheExpiration = TimeSpan.FromMinutes(1)
+          },
           Tags, ct);
 
       public ValueTask InvalidateAsync(CancellationToken ct = default) =>
@@ -131,8 +138,8 @@ scenes:
     narration: >
       For a computed value, the dashboard summary, we use HybridCache. When thirty requests arrive on a cold cache,
       only one runs the factory and the others wait for it. Our test proves it with a counter: thirty callers, one
-      computation. A plain memory cache ran the factory several times in the same experiment. And tags let a write
-      invalidate everything about requests in one call.
+      computation. In another test, a plain memory cache ran the factory more than once for concurrent callers. And
+      tags let a write invalidate everything about requests in one call.
 
   - id: outputcache
     type: code
@@ -162,6 +169,7 @@ scenes:
     heading: "Before, after, cached"
     image: screens/loadtest.jpg
     video: screens/loadtest.mp4
+    video_cuts: [[2.6, 8.9], [12.3, 19.6], [25.9, 29.7], [37.3, 44.6], [46.4, 53.0], [54.6, 58]]   # waiting: API start, most of each 8 s measurement, shutdown
     bar: "PowerShell · deploy\\Measure-Endpoints.ps1"
     demo: >
       Windows Terminal, PowerShell 7. Run: pwsh .\deploy\Measure-Endpoints.ps1 (8 seconds per phase, 8 workers).
@@ -200,20 +208,23 @@ scenes:
     bullets:
       - "HybridCache serialises values, even in memory only"
       - "Source generated JSON: same allocation as a string, half as UTF-8 bytes"
-      - "No-tracking was not faster than tracking here"
+      - "No-tracking: 25% less time, 31% less memory; projection halved both again"
       - "Output cache ignored the client's no-cache header"
     short: gotcha
     narration: >
       Four honest findings. With reflection off, the first HybridCache call threw, because it serializes what it
       stores. We registered a serializer on the source generated context. Source generated JSON allocated the same
-      as reflection for a string, and half as much as U T F eight bytes. No tracking wasn't faster than tracking in
-      our run, only lighter. And a client's no cache header did not bypass the output cache, so evict by tag.
+      as reflection for a string, and half as much as U T F eight bytes. No tracking took about twenty five percent
+      less time and thirty one percent less memory than tracking in our run, and the projection roughly halved both
+      again. And a client's no cache header did not bypass the output cache, so evict by tag.
 
   - id: counters
     type: screen
     heading: "Watch your own counters"
     image: screens/counters.jpg
     video: screens/counters.mp4
+    crop: [0, 41, 1906, 738]   # tab strip cropped out; empty lower part of the panes trimmed so the text is larger
+    video_rate: 2.0   # each event lands with its sentence (video_compact would cut the typing of this take)
     bar: "Terminal · dotnet-counters monitor"
     demo: >
       Two panes. Left: dotnet-counters monitor -n ProjectRequests.Perf.Api --counters ProjectRequests.Perf, showing the

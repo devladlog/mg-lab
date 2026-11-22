@@ -31,15 +31,18 @@ function prompt { '> ' }                      # short prompt in BOTH panes (hide
 
 ## Screens (match the `screen` scenes in script.yaml)
 
+The timings quoted in the frames below are the ones in the recorded takes; they vary by a few milliseconds per run
+(the container's reference run is in `demo/expected-output.txt`).
+
 1. **`screens/sequential.jpg`** — *Baseline: one request at a time* (scene `sequential`)
    - Right: `dotnet run --no-build --project src\Contoso.Approvals.Cli -- sequential`
-   - Frame: left pane with API lines `budget CC-100 start (in flight 1)` / `done 300 ms`; right pane ending with
-     `sequential: 12 requests in 3.7 s, 9 within budget, 3 over budget` and `api saw: ... MaxInFlight = 2 ...`.
+   - Frame: left pane with API lines `budget CC-300 start (in flight 1)` / `done 305 ms`; right pane ending with
+     `sequential: 12 requests in 3.79 s, 9 within budget, 3 over budget` and `api saw: ... MaxInFlight = 2 ...`.
 
 2. **`screens/bounded.jpg`** — *Fast, and fair to the API* (scene `bounded`)
    - Right: `... -- unbounded` then `... -- bounded`.
-   - Frame: `all at once (Task.WhenEach): 12 requests in 0.33 s` + `MaxInFlight = 24`, then
-     `bounded, 4 at a time: 12 requests in 1.0 s` + `MaxInFlight = 8`. Left pane: a line with `(in flight 24)`.
+   - Frame: `all at once (Task.WhenEach): 12 requests in 0.36 s` + `MaxInFlight = 24`, then
+     `bounded, 4 at a time: 12 requests in 1.03 s` + `MaxInFlight = 8`. Left pane: a line with `(in flight 24)`.
      If both runs don't fit, capture two frames and cut between them.
 
 3. **`screens/cancel.jpg`** — *Proof from the server side* (scene `cancel`)
@@ -47,20 +50,21 @@ function prompt { '> ' }                      # short prompt in BOTH panes (hide
      below. The Ctrl+C is **sent, not pressed**: the client runs as
      `Send-CtrlC -AfterMs 3000 { dotnet run --no-build --project src\Contoso.Approvals.Cli -- sequential }`, typed on
      screen as is; `series/tools/rec/Send-CtrlC.ps1` generates a real CTRL_C_EVENT on that console 3 s after the start
-     (about 1 s into the batch) and the client's own `Console.CancelKeyPress` handler runs. The screen prepare rehearses
-     it once off camera and stops if the Ctrl+C would miss the batch.
-   - `cls` the left pane first so only these lines show.
-   - Right: `... -- timeout --timeout-ms 150`, then `... -- waitasync --timeout-ms 150`, then `... -- sequential` and
-     press **Ctrl+C** after about 1.5 s.
-   - Frame: right pane `TimeoutException after ~158 ms: Gave up after 150 ms.` (Aborted = 1),
-     `TimeoutException ... The operation has timed out.` (Aborted = 0), `Ctrl+C: cancelling...`, `Cancelled after ...`.
-     Left pane: `ABORTED by the client after 150 ms`, then `start` + `done 300 ms` (the WaitAsync call kept running),
-     then two `ABORTED by the client` lines (the Ctrl+C).
+     (1.87 s into the batch in the take) and the client's own `Console.CancelKeyPress` handler runs. The screen prepare
+     rehearses it once off camera and stops if the Ctrl+C would miss the batch.
+   - The left pane starts the API on camera, so its first lines are the ASP.NET startup messages.
+   - Right: `... -- timeout --timeout-ms 150`, then `... -- waitasync --timeout-ms 150`, then
+     `Send-CtrlC -AfterMs 3000 { ... -- sequential }` (the Ctrl+C is sent, nobody presses a key).
+   - Frame: right pane `TimeoutException after 172 ms: Gave up after 150 ms.` (Aborted = 1),
+     `TimeoutException after 164 ms: The operation has timed out.` (Aborted = 0), `Ctrl+C: cancelling...`,
+     `Cancelled after 1.87 s.` (Calls = 14, Aborted = 2).
+     Left pane: `ABORTED by the client after 148 ms`, then `start` + `done 302 ms` (the WaitAsync call kept running),
+     then two `ABORTED by the client after 1 ms` lines (the Ctrl+C).
 
 4. **`screens/deadlock.jpg`** — *The deadlock, on demand* (scene `deadlock`), API not needed
    - `dotnet build demo\Analyzers -m:1 --no-incremental -v q` → the three `error CS4014 / CA2016 / CA1849` lines.
    - `dotnet run --no-build --project src\Contoso.Approvals.Cli -- deadlock` →
-     `1. .Wait() on async code -> DEADLOCK (2008 ms, the work needed 100)`, `2. ... completed`, `3. ... completed`.
+     `1. .Wait() on async code -> DEADLOCK (2013 ms, the work needed 100)`, `2. ... completed`, `3. ... completed`.
    - (Git Bash/WSL alternative: `./demo/expect-errors.sh` prints all of it, plus the `ok` checks.)
 
 The `gotcha`, `timeout` and `retry` scenes are code slides; their proof is screen 3 and the tests

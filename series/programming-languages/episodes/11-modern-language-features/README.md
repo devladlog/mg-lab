@@ -28,7 +28,7 @@ bites when you move between languages.
 | `demo/conformance.ps1` | Runs the four implementations and compares each with `expected/digest.txt` |
 | `demo/gotchas.ps1` + `demo/ts`, `demo/cs`, `demo/py` | The three gotchas below, each as a runnable file |
 | `demo/expected-output.txt` | Real captured output of the scripts and test runs |
-| `script.yaml`, `demo.md` | Video script (14 scenes, ~800 narration words) and shot list |
+| `script.yaml`, `demo.md` | Video script (14 scenes, ~890 narration words) and shot list |
 
 ## Run it
 Needs Node 22.18+ (type stripping unflagged), .NET SDK 10, Python 3.13, PowerShell 7.4+ (tested on 7.6). Nothing here
@@ -56,8 +56,10 @@ are normalised in every comparison, `.gitattributes` pins the golden files to LF
 the laptop.
 
 ## What we learned / gotchas
-- **Node 22 runs `.ts` files, but only the erasable subset.** `node src/ts/main.ts` works from Node 22.18 without a
-  flag (the release notes for 22.18.0 say type stripping is enabled by default but still call it experimental). An
+- **Node runs `.ts` files, but only the erasable subset.** `node src/ts/main.ts` works without a flag from Node
+  22.18 (the release notes for 22.18.0 turn type stripping on by default and still call it experimental; the 22.x
+  docs now mark it "Stability: 1.2 - Release candidate"). It is stable from Node 24.12.0 and 25.2.0, and the video
+  was recorded on Node 24.16.0, where it prints no warning. An
   `enum` fails with `ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX`; the same file under `erasableSyntaxOnly` fails the compiler
   with TS1294. Use a `const` object plus a union type. Imports must name the real file (`./digest.ts`), which needs
   `allowImportingTsExtensions`. Node does no type checking, `tsc --noEmit` stays in CI.
@@ -96,7 +98,9 @@ the laptop.
   we did not test that.
 
 ## References
-- [Node.js 22.18.0 release notes (type stripping on by default)](https://nodejs.org/en/blog/release/v22.18.0)
+- [Node.js 22.18.0 release notes (type stripping on by default)](https://nodejs.org/en/blog/release/v22.18.0),
+  [24.12.0 release notes (type stripping marked stable)](https://nodejs.org/en/blog/release/v24.12.0) and the
+  [Modules: TypeScript documentation (stability index and history)](https://nodejs.org/api/typescript.html)
 - [TypeScript `erasableSyntaxOnly`](https://www.typescriptlang.org/tsconfig/#erasableSyntaxOnly)
 - [File-based apps (directives, native AOT default, `dotnet run file.cs`)](https://learn.microsoft.com/dotnet/core/sdk/file-based-apps)
 - [Tutorial: Build file-based C# programs](https://learn.microsoft.com/dotnet/csharp/fundamentals/tutorials/file-based-programs)

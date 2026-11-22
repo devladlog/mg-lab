@@ -36,7 +36,7 @@ clear
      TS2345 (31), TS2322 (39), TS1294 (41). It's expected to end with a non-zero exit code; don't show `npm ERR`
      noise (the script runs with `-s` in the test, use `npm run -s demo:errors` for a clean capture).
 
-2. **`screens/editor-never.jpg`** — *Add a state, find every switch* (scene `editor`)
+2. **`screens/editor-never.jpg`** — *A forgotten case, found in the editor* (scene `editor`)
    - `code .` → open `demo/unsafe.ts`, scroll to `badge` (lines 22–33).
    - Hover `state` in `assertNever(state)` on line 31 so the tooltip shows *Argument of type '{ readonly kind: "rejected"; … }'
      is not assignable to parameter of type 'never'*. Problems panel open (click the error count in the status bar) with the other errors.
@@ -45,7 +45,9 @@ clear
      has no `tsserver.js`; the real 6.0.3 is `node_modules/@typescript/old`, so `typescript.tsdk` must point at
      `node_modules/@typescript/old/lib`. The error text is the same in both.
    - Recording kit: `record.json` opens this exactly (`Open-VsCodeScene.ps1`); the take is clicks and hovers only.
-   - Mask: the window title bar if it shows the full path with a user name.
+   - Mask: the window title bar if it shows the full path with a user name, and the round account picture at the
+     bottom of the activity bar. The recorded take shows that picture, so the scene is cropped with
+     `crop: [59, 44, 1846, 980]` in script.yaml (title bar and activity bar removed).
 
 3. **`screens/lint.jpg`** — *Type-correct, still wrong: the linter* (scene `lint`)
    - `npm run -s demo:lint`

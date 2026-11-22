@@ -51,8 +51,8 @@ non-invariant culture (all four use invariant formatting, so a mismatch is a rea
    - `npx tsc -p tsconfig.json` - no output (exit 0). Optionally `$LASTEXITCODE` to show `0`.
    - Capture with both the code and the digest visible.
    - Recording kit (`record.json`, `Open-VsCodeScene.ps1`): the take is clicks only, so both commands are VS Code
-     tasks (Terminal > Run Task...; the task terminal echoes each command) and the terminal panel sits on the right
-     of the editor so `Map.groupBy` and the digest are visible together.
+     tasks (Terminal > Run Task...; the task terminal echoes each command) and the task terminal opens as a tab in
+     a second editor group, on the right of the code, so `Map.groupBy` and the digest are visible together.
 
 2. **`screens/csharp-file-app.jpg`** - *dotnet run digest.cs* (scene `cs-run`)
    - `dotnet --version`, then `dotnet run src/cs/digest.cs -- samples/requests.json`.

@@ -99,15 +99,16 @@
         "(take starts: window.json + window.go)",
         "Click the menu Terminal > Run Task..., then click 'node --cpu-prof' in the list: the terminal panel shows 'Executing task: node --cpu-prof --cpu-prof-dir=cpuprof src/run-report.js slow 3000' and 'slow: 2930 lines, 70 duplicates, N ms'",
         "In the Explorer click the new folder 'cpuprof', then click the file CPU.<date>.<time>.<pid>.0.001.cpuprofile: VS Code opens it in its built-in profile table; hold about 5 seconds on the table (hover the buildReportSlow row)",
-        "Click Terminal > Run Task..., then 'our tool reads it: cli.js top': the panel prints the function table and the line table from the same file",
+        "Click Terminal > Run Task..., then 'our tool reads it: cli.js top': cli.js top prints the function table and the line table from the same file, but the task panel is six rows high, so the output scrolls at once: only the four line rows stay visible (the report.js:36 row wraps over two rows) and the function table scrolls off",
         "Move the pointer off the window; create recordings\\stop",
         "After the take: click the window's close button (X)"
       ],
-      "expected": "The profile table lists the functions with self and total time, buildReportSlow (report.js) at or near the top. cli.js top prints 'buildReportSlow  report.js:25' first and the lines report.js:36 (toLocaleString) and report.js:30 (seen.some). If VS Code does not open the .cpuprofile in a table, stop and report it (demo.md: drop the screen).",
+      "expected": "The profile table lists the functions with self and total time, buildReportSlow (report.js) at or near the top. The task panel is six rows high, so of the cli.js top output only the four line rows stay visible: report.js:36 (toLocaleString) first, report.js:30 (seen.some) second. The function table, with 'buildReportSlow  report.js:25' first, scrolls off and is not on screen. If VS Code does not open the .cpuprofile in a table, stop and report it (demo.md: drop the screen).",
       "mask": [
-        "none expected: window title '... - pl10 - VS Code', folder under C:\\lab, Accounts entry hidden; the task terminal shows only the command"
+        "the round account picture at the bottom of the activity bar (about x 16-47, y 888-919 of the 1906x1024 take): the scene sets mask [[10, 882, 48, 44]] in script.yaml (the whole window stays in the picture because the Terminal menu and the Explorer are part of the demo, so the bar cannot be cropped away). The box covers x 10-57 and stops there on purpose: it must not paint the one-pixel line at x=58 between the activity bar and the side bar",
+        "otherwise none expected: window title '... - pl10 - VS Code', folder under C:\\lab, Accounts entry hidden; the task terminal shows only the command"
       ],
-      "note": "Click-tier take: the terminal commands run as VS Code tasks (Terminal > Run Task..., left-clicks only) instead of typed commands; the Explorer shows the file that node --cpu-prof wrote, so no 'dir cpuprof'."
+      "note": "Click-tier take: the terminal commands run as VS Code tasks (Terminal > Run Task..., left-clicks only) instead of typed commands; the Explorer shows the file that node --cpu-prof wrote, so no 'dir cpuprof'. The task terminal pins the 'Executing task' line and scrolls longer output at once: the panel is six rows high and cli.js top prints 14 lines, so only the four line rows stay on screen and the function table is never visible in the take."
     },
     {
       "name": "after",

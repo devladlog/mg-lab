@@ -9,7 +9,7 @@ linkedin_company:
 
     Episode 10 of DEVLADLOG Code stops guessing and measures a Node.js report over the Contoso project requests, with no packages:
     - a benchmark that warms up, repeats and reports the median and p95, because one timing proves nothing
-    - a V8 CPU profile read by line: about half the time was one toLocaleString line, about a third the duplicate check, the JSON copy a few percent
+    - a V8 CPU profile read by line: about two thirds of the time was one toLocaleString line, about a tenth the duplicate check, and the JSON copy did not make the top four
     - a Set, one shared formatter and an object spread as the fix, with a test that both versions produce identical output
     - event loop delay: the slow version made a 10 ms timer fire up to 91 ms late
     - a cache that never forgets, against a small LRU, measured on the heap
@@ -24,9 +24,9 @@ linkedin_company:
     #NodeJS #Profiling #Performance #DevTools
 linkedin_personal:
   text: |
-    I profiled a slow Node report and expected the hot callback to show up as its own function. It mostly did not. V8 inlines small callbacks into the caller, and built-ins like toLocaleString have no frame of their own, so about 80 percent of the time landed on one function. That tells you nothing.
+    I profiled a slow Node report and expected the hot callback to show up as its own function. It mostly did not. V8 inlines small callbacks into the caller, and built-ins like toLocaleString have no frame of their own, so 86 percent of the time landed on one function. That tells you nothing.
 
-    The answer was in the position ticks on every profile node, a sample count per line. Read by line, one toLocaleString call was about half the time. The JSON clone everyone suspected was a few percent.
+    The answer was in the position ticks on every profile node, a sample count per line. Read by line, one toLocaleString call was about two thirds of the time. The JSON clone everyone suspected did not even make the list.
 
     Episode 10, measure, don't guess: {YOUTUBE_URL}
 
@@ -47,7 +47,7 @@ shorts:
     youtube_short_title: "Slow Node.js report? Stop guessing, profile it #Shorts"
     instagram_reel:
       caption: |
-        A report that takes a noticeable fraction of a second for just three thousand rows. Ask five developers why, and you get five answers. Probably the sorting. Probably the clone. Maybe garbage collection. Today we stop guessing and measure with a benchmark, a CPU profile, event loop delay and the heap, and the profiler names the guilty lines.
+        A report that takes about a tenth of a second to build, for just three thousand rows. Ask five developers why, and you get five answers. Probably the sorting. Probably the clone. Maybe garbage collection. Today we stop guessing and measure with a benchmark, a CPU profile, event loop delay and the heap, and the profiler names the guilty lines.
         Full episode: link in bio.
         Narration uses an AI voice.
         #NodeJS #Profiling #Performance
@@ -75,4 +75,4 @@ shorts:
         #NodeJS #Profiling #Performance
       cover_text: "Where did my callback go?"
     tiktok:
-      caption: "80% in one function tells you nothing. V8 inlines small callbacks, built-ins have no frame. Read the position ticks per line. #NodeJS #Profiling"
+      caption: "86% in one function tells you nothing. V8 inlines small callbacks, built-ins have no frame. Read the position ticks per line. #NodeJS #Profiling"

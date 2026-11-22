@@ -162,6 +162,9 @@ scenes:
     heading: "Control C reaches the server"
     image: screens/ctrlc.jpg
     video: screens/ctrlc.mp4
+    video_compact: true   # only the waits between the steps are shortened; typing and the run itself stay
+    crop: [0, 41, 1906, 500]   # tab strip cut (rows 0-40). Height 500, not 983: both panes are empty below row 200, and on the full height video_compact takes the typing for idle time and cuts the run
+    short_crop: [0, 41, 1176, 588]   # Shorts: the service pane and the client's result lines (stopped, 130)
     bar: "Terminal · Ctrl+C during a run"
     short: ctrlc
     demo: >
@@ -171,7 +174,7 @@ scenes:
       $LASTEXITCODE). Visible on the left: five lines "ABORTED by the client". Reference: end of demo/expected-output.txt.
     narration: >
       Now the proof. The service is slow, five lookups are running, and Control C arrives half a second in. The client
-      stops with exit code one thirty. And on the server side, five lines: aborted by the client. The requests were
+      stops with exit code one-thirty. And on the server side, five lines: aborted by the client. The requests were
       really cancelled, the server stopped waiting, nothing is left running. That is what passing the signal down buys
       you.
 

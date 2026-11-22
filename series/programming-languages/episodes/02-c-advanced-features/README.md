@@ -55,7 +55,7 @@ resources, no packages besides xUnit and the test SDK.
 - **A "closed" record hierarchy isn't closed for the compiler.** `RequestState` has a private constructor and only
   nested sealed records, and a switch over all four still gets CS8509. You need a `_ =>` arm (we throw
   `UnreachableException`), which also means adding a fifth state is **not** a compile error. TypeScript's unions
-  (episode 1) catch that; C# doesn't.
+  (episode 1) catch that; C# 14 doesn't.
 - **`field` changes the meaning of existing code.** A class with a member called `field` and an accessor that uses
   `field` now binds to a new synthesized backing field (CS9258). Learn: use `@field` or `this.field`, or rename.
 - **Primary constructor parameters are parameters.** `time = TimeProvider.System;` inside a method compiles without

@@ -139,16 +139,25 @@ scenes:
     heading: "Extension properties in the editor"
     image: screens/editor-extension.jpg
     video: screens/editor-extension.mp4
+    crop: [60, 44, 1844, 980]   # title bar and activity bar (account picture) cropped out; even x, so ffmpeg does not round it back onto the activity bar's border
     bar: "VS Code · Program.cs"
     demo: >
-      VS Code (C# Dev Kit), dark theme, src/Contoso.Requests.Demo/Program.cs at the extension members lines 28 to 30.
-      The pointer hovers requests.TotalBudget (line 28, inside the interpolation braces), then HighPriority (line 29),
-      then clock.Today (line 30): each tooltip shows the extension property's signature, TotalBudget and Today with
-      their doc comments. Hovers only, no typing: a completion list needs keys.
+      VS Code (C# extension; C# Dev Kit is off for this window), dark theme, src/Contoso.Requests.Demo/Program.cs,
+      lines 16 to 45 visible, line 28 current. Hovers only, no typing: a completion list needs keys. The pointer rests
+      on TotalBudget inside {requests.TotalBudget} (line 28), then on HighPriority (line 29), then on Today inside
+      {clock.Today:yyyy-MM-dd} (line 30), and goes back to the Explorer. Tooltips as recorded, each above its line:
+      (1) "Euros RequestExtensions.extension(IEnumerable<ProjectRequest>).TotalBudget { get; }" with the doc comment
+      "requests.TotalBudget, a property on a type we don't own.", on screen from 3.7 s to 9.0 s of the take;
+      (2) "IEnumerable<ProjectRequest> RequestExtensions.extension(IEnumerable<ProjectRequest>).HighPriority { get; }"
+      with the note "'HighPriority' is not null here." and no doc comment, 9.0 s to 13.3 s;
+      (3) "DateOnly TimeProviderExtensions.extension(TimeProvider).Today { get; }" with "time.Today: an extension
+      property on a framework type.", 13.3 s to 18.0 s. The narration follows these times: do not set video_compact
+      or video_cuts here, they would shorten every tooltip to under a second.
     narration: >
-      In the editor they are real properties. Hover total budget and the editor describes it as a property, with our
-      doc comment, on a type we don't own. Even on a framework type: our time provider gets a today property. Small
-      thing, but it makes call sites much easier to read.
+      In the editor they show up as properties. Hover total budget and the editor describes it as a property, with our
+      doc comment, on a type we don't own. High priority is one too, and the note says: not null here. Even on a
+      framework type: our time provider gets a today property. Small thing, but it makes call sites much easier to
+      read.
 
   - id: math
     type: code
@@ -270,14 +279,17 @@ scenes:
     bar: "Terminal · demo/expect-errors.sh"
     short: warnings
     demo: >
-      Terminal running ./demo/expect-errors.sh. Visible: the error lines CS9264, CS9258 (twice) and CS8509 for
-      demo/Gotchas, the six "ok" checks, and "C# 13: [1, 2, 3].Average() = 2". Optional split: the same build with
-      -p:TreatWarningsAsErrors=false showing "Build succeeded" with warnings CS8509, CS9258, CS9264.
+      Terminal running ./demo/expect-errors.sh (in the take: PowerShell starts Git Bash, the typed line is
+      & 'C:\Program Files\Git\bin\bash.exe' ./demo/expect-errors.sh). Visible: the error lines CS9264, CS9258 (twice)
+      and CS8509 for demo/Gotchas, the six "ok" checks, and "C# 13: [1, 2, 3].Average() = 2". In the take the four
+      error lines start with the neutral lab path C:\lab\pl02\demo\Gotchas\ and each wraps onto a second row, where the
+      script's 200 character limit cuts it mid word. The optional split (the same build with
+      -p:TreatWarningsAsErrors=false showing 0 errors and the warnings CS8509, CS9258, CS9264) is not in the take.
     narration: >
       More traps, in one script. A switch over every state of our closed record hierarchy: still not exhaustive,
-      because C# has no closed hierarchies. A class with a member called field: the accessor now means something
-      else. And here's the catch: all of these are only warnings by default. Without warnings as errors, the build
-      just succeeds.
+      because C# fourteen has no closed hierarchies. A class with a member called field: the accessor now means
+      something else. And here's the catch: all of these are only warnings by default. Without warnings as errors,
+      the build just succeeds.
 
   - id: recap
     type: bullets

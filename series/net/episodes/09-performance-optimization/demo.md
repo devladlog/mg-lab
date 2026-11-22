@@ -50,6 +50,10 @@ Do one complete dry run of the four screens first: the first start of the API se
 4. Optional: repeat the same call: **no new log lines** (output cache hit). Reference: `deploy/sql-log.sample.txt`.
 5. Stop the API (`Ctrl+C`) before screen 2, so the benchmarks have the CPU to themselves.
 
+   Recording kit (`record.json`): one pane. The API runs hidden and writes its output to a log file; each `curl.exe -s`
+   call is followed by `Get-Content $env:MG_LOGS\ep09-api.log -Tail 30` (first call: the five commands) or `-Tail 19`
+   (second call: the `COUNT(*)` and the `SELECT` with the joins, both complete).
+
 ### 2. `benchmarks` — "Prove it: BenchmarkDotNet" (terminal)
 ```powershell
 dotnet run -c Release --project src\ProjectRequests.Perf.Benchmarks -- --filter "*QueryBenchmarks*"
@@ -59,6 +63,12 @@ the waiting, and show the **final summary table** (6 rows in two groups `list` /
 Reference shape (container, ShortRun): N+1 tracked 6,010 KB allocated; Include tracked 578 KB; Include no-tracking 400 KB;
 projection 175 KB; sum load-everything 24 MB vs in-database 3 MB. Optional second run for the JSON gotcha:
 `--filter "*JsonBenchmarks*"` (35 KB as string either way, 17.6 KB as UTF-8 bytes). Delete `BenchmarkDotNet.Artifacts\` afterwards.
+
+Recording kit (`record.json`): after the run the take clears the screen and prints only the table rows of the report
+the run wrote, `Get-Content BenchmarkDotNet.Artifacts\results\*QueryBenchmarks-report-github.md | Select-String '^\|' -Raw`,
+and holds them for 8 s, so the table is on screen without the host banner. `QueryBenchmarks` hides StdDev, Median,
+RatioSD, Gen1 and Gen2 (`[HideColumns]`), so the rows fit the terminal width. The laptop take ran about 2.5 minutes;
+its table is in the README.
 
 ### 3. `loadtest` — "Before, after, cached" (PowerShell)
 ```powershell
@@ -76,6 +86,9 @@ Three blocks of output (BEFORE N+1 / AFTER projection, cache off / AFTER + outpu
    then `/api/summary` again. Pane B: `mglab.perf.requests.created` ticks, `mglab.perf.summary.computed` ticks **once, after the write**.
    Counters refresh every second: wait a second between the POST and the read so the two ticks are visible.
    Reference: `deploy/dotnet-counters.sample.csv`. The first `/api/summary` after a start also computes once.
+   On the laptop `dotnet-counters monitor` shows the two counters as running totals, not per-second rates as in the
+   container's CSV: `summary.computed` is 1 after the first read, still 1 after the eight reads and 2 after the write
+   and the read that follows it; `requests.created` is 1 after the write.
    Recording kit (`record.json`, `Start-WtLayout.ps1`): two panes in one Windows Terminal window, the API runs hidden
    (screen prepare). Left: `dotnet-counters monitor ...`. Right: one read first (it computes and fills the cache; the
    narration says so), then the eight reads, the POST (written as `-d '{"title":"Counter demo",...}'`: PowerShell 7.3+

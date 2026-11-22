@@ -9,7 +9,7 @@ linkedin_company:
 
     Episode 3 of DEVLADLOG Code calls a small Finance API from C# on .NET 10 and measures async and await instead of describing it. Twelve requests:
     - one at a time: 3.8 seconds
-    - all at once: a third of a second, with 24 calls in flight on the API
+    - all at once: about a third of a second, with 24 calls in flight on the API
     - bounded to 4 requests: about 1 second, and the API never sees more than 8 calls
 
     We also show a timeout that cancels the work versus Task.WaitAsync, which only stops waiting, plus retries tested with FakeTimeProvider, and a deadlock reproduced on demand on a single-threaded context. 27 xUnit tests back it up.
@@ -22,7 +22,7 @@ linkedin_company:
     #DotNet #CSharp #AsyncAwait #DevTools
 linkedin_personal:
   text: |
-    Task.WaitAsync(timeout) and a real timeout both throw TimeoutException after about 150 ms. They look identical in the code and in the exception. The API log tells them apart: with the real timeout the call shows ABORTED by the client after 150 ms. With WaitAsync it shows done 300 ms.
+    Task.WaitAsync(timeout) and a real timeout both throw TimeoutException after about 150 ms. They look identical in the code and in the exception. The API log tells them apart: with the real timeout the call shows ABORTED by the client after 148 ms. With WaitAsync it shows done 302 ms.
 
     WaitAsync stops waiting, not working. Nobody cancelled the HTTP call. Do that under load and your timeouts make things worse.
 
@@ -33,7 +33,7 @@ linkedin_personal:
     Narration uses an AI voice.
 facebook:
   text: |
-    New C# video: async and await, measured. Twelve API requests take 3.8 seconds one at a time, a third of a second all at once, and about one second with a limit of four. We also show a timeout that lies, a deadlock you can reproduce on demand, and why you should bound concurrency yourself.
+    New C# video: async and await, measured. Twelve API requests take 3.8 seconds one at a time, about a third of a second all at once, and about one second with a limit of four. We also show a timeout that lies, a deadlock you can reproduce on demand, and why you should bound concurrency yourself.
 
     Watch: {YOUTUBE_URL}
 

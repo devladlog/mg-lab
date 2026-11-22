@@ -114,9 +114,9 @@ scenes:
     bar: "Terminal · API + dotnet run -- sequential"
     demo: >
       Windows Terminal split in two panes (dark theme, font 18 pt or larger). Left pane: the Finance API running
-      (dotnet run --project src/Contoso.Approvals.Api), its log lines scrolling ("budget CC-100 start (in flight 1)",
-      "done 300 ms"). Right pane: dotnet run --project src/Contoso.Approvals.Cli -- sequential, ending with
-      "sequential: 12 requests in 3.8 s, 9 within budget, 3 over budget" and "api saw: ... MaxInFlight = 2".
+      (dotnet run --project src/Contoso.Approvals.Api), its log lines scrolling ("budget CC-300 start (in flight 1)",
+      "done 305 ms"). Right pane: dotnet run --project src/Contoso.Approvals.Cli -- sequential, ending with
+      "sequential: 12 requests in 3.79 s, 9 within budget, 3 over budget" and "api saw: ... MaxInFlight = 2".
     narration: >
       Here's the baseline, running for real. The console app processes the twelve requests one after another: three point eight seconds. Then the Finance API's own log, and the API never saw more than two calls at a time: the budget and the approver of the same request.
 
@@ -151,12 +151,12 @@ scenes:
     video: screens/bounded.mp4
     bar: "Terminal · unbounded vs bounded"
     demo: >
-      Same split terminal. Right pane: run "-- unbounded" (ends "all at once (Task.WhenEach): 12 requests in 0.33 s"
-      and "MaxInFlight = 24"), then "-- bounded" (ends "bounded, 4 at a time: 12 requests in 1.0 s" and
+      Same split terminal. Right pane: run "-- unbounded" (ends "all at once (Task.WhenEach): 12 requests in 0.36 s"
+      and "MaxInFlight = 24"), then "-- bounded" (ends "bounded, 4 at a time: 12 requests in 1.03 s" and
       "MaxInFlight = 8"). Left pane: the API log showing "(in flight 24)" during the unbounded run.
       Reference: demo/expected-output.txt.
     narration: >
-      All at once: a third of a second. Fantastic, until you look at the API. Twenty-four calls in flight at the
+      All at once: about a third of a second. Fantastic, until you look at the API. Twenty-four calls in flight at the
       same moment. With twelve thousand requests, that's twenty-four thousand. Bounded to four requests: about one
       second, and the API never sees more than eight calls. That's the version you ship.
 
@@ -194,14 +194,15 @@ scenes:
       // Looks like a timeout...
       var call = client.GetBudgetAsync("CC-100", cts.Token);
       await call.WaitAsync(TimeSpan.FromMilliseconds(150), cts.Token);
-      // TimeoutException after 158 ms. The HTTP call keeps running.
-      // API log: "budget CC-100 done 300 ms"
+      // TimeoutException after 164 ms. The HTTP call keeps running.
+      // API log: "budget CC-100 done 302 ms"
 
       // ...versus a timeout that cancels the work:
       await Resilience.WithTimeoutAsync(
-          c => client.GetBudgetAsync("CC-100", c), TimeSpan.FromMilliseconds(150), TimeProvider.System, cts.Token);
-      // TimeoutException after 158 ms.
-      // API log: "budget CC-100 ABORTED by the client after 150 ms"
+          c => client.GetBudgetAsync("CC-100", c),
+          TimeSpan.FromMilliseconds(150), TimeProvider.System, cts.Token);
+      // TimeoutException after 172 ms.
+      // API log: "budget CC-100 ABORTED by the client after 148 ms"
     narration: >
       Now the trap. Task dot Wait Async with a timeout looks like the same thing, and it's shorter. Both throw a
       timeout exception after a hundred and fifty milliseconds. But Wait Async only stops waiting. Nobody cancelled
@@ -213,18 +214,22 @@ scenes:
     heading: "Proof from the server side"
     image: screens/cancel.jpg
     video: screens/cancel.mp4
+    video_compact: true          # the waits between the three commands are cut; the batch itself plays in real time
+    video_full: true             # two panes at font 13: the whole frame keeps both readable
+    crop: [0, 41, 1906, 983]     # Windows Terminal tab strip cropped out
     bar: "Terminal · timeout, waitasync, Ctrl+C"
     demo: >
-      Same split terminal. Right pane, in order: "-- timeout --timeout-ms 150" (TimeoutException after ~158 ms,
-      Aborted = 1), "-- waitasync --timeout-ms 150" (TimeoutException, Aborted = 0), then "-- sequential" run as
-      Send-CtrlC -AfterMs 3000 { ... }, which sends a real Ctrl+C 3 s after the start, about a second into the batch
-      ("Ctrl+C: cancelling...", "Cancelled after ... s"). Left pane must show the matching
-      API lines: "ABORTED by the client after 150 ms", then "start" + "done 300 ms" for the WaitAsync call, then two
-      "ABORTED by the client" lines for the Ctrl+C.
+      Same split terminal. Right pane, in order: "-- timeout --timeout-ms 150" (TimeoutException after 172 ms,
+      Aborted = 1), "-- waitasync --timeout-ms 150" (TimeoutException after 164 ms, Aborted = 0), then "-- sequential"
+      run as Send-CtrlC -AfterMs 3000 { ... }, which sends a real Ctrl+C 3 s after the start, 1.87 s into the batch
+      ("Ctrl+C: cancelling...", "Cancelled after 1.87 s."). Left pane must show the matching
+      API lines: "ABORTED by the client after 148 ms", then "start" + "done 302 ms" for the WaitAsync call, then two
+      "ABORTED by the client" lines for the Ctrl+C. The timings are the ones in the recorded take; they vary by a
+      few milliseconds per run.
     narration: >
-      Here's the proof, from the server's point of view. The real timeout: aborted after a hundred and fifty
-      milliseconds. Wait Async: the call runs to completion, three hundred milliseconds. And Control C in the middle
-      of a batch: the console app cancels its token instead of dying, and the API logs both in-flight calls as
+      Here's the proof, from the server's point of view. The real timeout: aborted after a hundred and forty-eight
+      milliseconds. Wait Async: the call runs to completion, three hundred and two milliseconds. And Control C in the
+      middle of a batch: the console app cancels its token instead of dying, and the API logs both in-flight calls as
       aborted.
 
   - id: retry
@@ -256,12 +261,13 @@ scenes:
     heading: "The deadlock, on demand"
     image: screens/deadlock.jpg
     video: screens/deadlock.mp4
-    bar: "Terminal · demo/expect-errors.sh"
+    bar: 'Terminal · dotnet build demo\Analyzers, then dotnet run -- deadlock'
     short: deadlock
+    short_crop: [0, 0, 840, 632]   # Short: left 840 px, so the three result lines fill the phone width
     demo: >
       Terminal running ./demo/expect-errors.sh (Git Bash or WSL on the laptop), or the last part alone:
       dotnet run --project src/Contoso.Approvals.Cli -- deadlock. Visible: the CS4014 / CA2016 / CA1849 error lines
-      and "ok" checks, then "1. .Wait() on async code -> DEADLOCK (2008 ms, the work needed 100)",
+      and "ok" checks, then "1. .Wait() on async code -> DEADLOCK (2013 ms, the work needed 100)",
       "2. .Wait(), ConfigureAwait(false) -> completed", "3. await all the way -> completed".
     narration: >
       And the famous deadlock, reproduced on purpose. On a single threaded context, like a UI thread, we block on
