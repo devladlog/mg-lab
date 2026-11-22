@@ -62,18 +62,25 @@ scenes:
     heading: "Measure first"
     image: screens/perf-before.jpg
     video: screens/perf-before.mp4
+    video_compact: true
+    video_full: true
+    crop: [0, 36, 1906, 1024]   # title bar (signed-in account) cropped out
     bar: "Power BI Desktop · ContosoPerf.Before.pbip · Performance Analyzer"
     demo: "Desktop with ContosoPerf.Before.pbip after a refresh. Optimize ribbon > Performance Analyzer > Start recording > Refresh visuals. Expand the visuals: the slowest ones with their DAX query and visual display times. Name of the slowest visual and its duration in view. Export is not needed on camera."
     narration: >
       Performance Analyzer shows how long every visual takes, split into the D A X query and the display. It's the
       starting point. Learn warns that the durations include time spent queued behind other visuals, so we record every
-      run the same way, with the same filters.
+      run the same way, with the same filters. On the warm run, the table of every order line is the slowest visual, about
+      three hundred fifty milliseconds, most of it the D A X query.
 
   - id: sizescreen
     type: screen
     heading: "What takes the memory?"
     image: screens/perf-sizes.jpg
     video: screens/perf-sizes.mp4
+    video_compact: true
+    video_full: true
+    crop: [0, 36, 1906, 1024]   # title bar (signed-in account) cropped out
     bar: "Power BI Desktop · DAX query view · INFO.STORAGETABLECOLUMNS"
     demo: "Same Desktop file, DAX query view. Run queries/01-column-sizes.dax. Result grid sorted by dictionary size descending: Sales Line Ref (62.3 MB), Order Timestamp (40.1 MB), Order Number (26.8 MB), Note (10.3 MB) at the top (recorded 21 Nov 2026)."
     narration: >
@@ -184,6 +191,9 @@ scenes:
     heading: "Record again"
     image: screens/perf-after.jpg
     video: screens/perf-after.mp4
+    video_compact: true
+    video_full: true
+    crop: [0, 36, 1906, 1024]   # title bar (signed-in account) cropped out
     bar: "Power BI Desktop · ContosoPerf.After.pbip · Performance Analyzer"
     demo: "Desktop with ContosoPerf.After.pbip after a refresh. Same recording: Start recording > Refresh visuals on the Executive page. Then DAX query view: queries/01-column-sizes.dax again, the biggest dictionaries now much smaller and LineRef, Note and OrderTimestamp gone."
     narration: >
@@ -199,8 +209,7 @@ scenes:
     demo: "Terminal in the src folder: python tools/perf_compare.py results/performance-analyzer.csv with the numbers typed from the two Performance Analyzer recordings (page, visual, before ms, after ms). The table with the speed-up per visual and the total. Also the card values of both reports side by side: identical."
     narration: >
       The numbers from the two recordings go into a small file, and the script puts them side by side, with the speed up
-      per visual. It also fails if a visual got slower. And we compare the card values of both reports: same sales
-      amount, same orders, same margin.
+      per visual. It also fails if a visual got slower. Every visual measured in both is faster, one point seven times in total. And the cards agree in both reports: two point eight five billion in sales, forty percent margin.
 
   - id: gotcha
     type: code
