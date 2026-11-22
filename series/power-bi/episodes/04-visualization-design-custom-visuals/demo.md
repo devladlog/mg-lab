@@ -19,8 +19,8 @@ report and the custom visual; everything else was built and tested in the Linux 
 
 | Step | Verified in the container | Needs Windows + Power BI Desktop |
 |---|---|---|
-| Theme JSON | Desktop theme schema 2.159; `theme-check`: 0 findings | **importing / applying it** |
-| Generated PBIR report (1 page, 7 visuals) | every file against Microsoft's PBIR schemas; `report-lint`: 0 findings; fields exist in the TMDL model | **opening it**, visuals rendering |
+| Theme JSON (Contoso Bikes, Contoso Night Ride) | Desktop theme schema 2.159 (latest in `microsoft/powerbi-desktop-samples`, Nov 2026); `theme-check`: 0 findings each; Night Ride: every property name documented by the schema, all 8 data colours and good/neutral/bad ≥ 4.5:1 on its background | **importing / applying them** |
+| Generated PBIR report (2 pages: *Sales overview* 7 visuals, *Showcase* 10 visuals) | every file against Microsoft's PBIR schemas; `report-lint`: 0 findings; fields exist in the TMDL model; Showcase on a 24 px grid, no colour in its files | **opening it**, visuals rendering, the Year tiles and the headline textbox |
 | Target bullet (.pbiviz) | 16 unit tests (logic + SVG tree, incl. high contrast); `pbiviz package` + certification audit OK | **importing and rendering it** |
 | Deneb spec (`src/deneb/target-bullet.vl.json`) | Deneb's data contract (dataset name, field names), compiled by Vega-Lite 6.4.3 without warnings and run headless in Vega 6.4.0 with the 2025 rows: ▲ +8.4%, ▲ +9.0%, ● −3.0% | **pasting it into Deneb** and the rendering |
 | Expected numbers | `tests/test_expected.py` from the generated data | compare on screen |
@@ -69,6 +69,7 @@ maintainer before publishing. Fallback for the whole page: build the same 7 visu
 | `reportscreen` | `screens/viz-report-overview.jpg` | Report view, *Sales overview*, Year = 2025, all 7 visuals, theme applied, bottom-right cell empty. Optional second take with View > Selection > Tab order visible (order: 3 cards, slicer, line, bar, table). |
 | `importscreen` | `screens/viz-target-bullet.jpg` | Target Bullet in the bottom-right cell with the values above; Format pane open on **Bands** with *On-target tolerance (%)* = 5. Second take after setting it to 2 (Clothing ▼). |
 | `denebscreen` | `screens/viz-deneb.jpg` | Recorded right after `importscreen`, before the contrast theme. Visualizations pane **... > Import a visual from a file** > the Deneb `.pbiviz` in `C:\MGLab\tools\deneb` (never *Get more visuals*: AppSource needs a sign-in). New page *Deneb*, Year slicer = 2025. Deneb visual, Values: Product[Category], Sales Amount, Sales PY (display names unchanged). **... > Edit** > *Create new specification* > [empty], Vega-Lite > Create. Paste `src/deneb/target-bullet.vl.json` into *Specification*, **Ctrl+Enter**. Expected: Bikes ▲ +9.0%, Accessories ▲ +8.4%, Clothing ● −3.0%, a dark tick at the prior year on each bar, bars in the theme's good/neutral colours. **Back to report.** If a row differs, write it down: the narration says "same bands and markers". |
+| `showcasescreen` | `screens/viz-showcase.jpg` | Recorded right after `denebscreen` (Target Bullet still imported), before the contrast theme. Click the page tab **Showcase**, then the **2025** tile: headline *Sales up 8.1% in 2025 — Bikes carry the climb*, cards 967.47K / 8.1% / 1,268 / 3,811, Target Bullet as in `importscreen`, monthly line, bar by category, Top products (Enduro 300 first). **Design > Import theme** (older builds: *View > Themes > Browse for themes*), click the **File name** box, type `C:\MGLab\power-bi\ep04\src\themes\ContosoNightRide.json`, Enter, close the confirmation. Hold on the dark page. Afterwards (off camera) import `ContosoBikes.json` the same way and go back to *Sales overview*. Steps: `record.json` > `viz-showcase`. |
 | `hcscreen` | `screens/viz-high-contrast.jpg` | Same page under a Windows contrast theme: Target Bullet bars outlined in the foreground colour, markers and percentages visible, core visuals also in high contrast. |
 
 Optional B-roll: Design ribbon > Customize theme showing the Contoso Bikes colours; the Format pane > General > Alt
@@ -92,5 +93,6 @@ cd src/target-bullet && npm test && npx pbiviz package --certification-audit
   a `CustomVisuals/` folder and `resourcePackages` entries, and it may rewrite the generated report files: discard
   those changes with git, then `python3 src/tools/build_report.py --check` must pass again.
 - Switch Windows contrast theme back to *None*. Unpin the visual from the Visualizations pane if you pinned it.
-- Delete the *Deneb* page (or don't save). Deneb's `.pbiviz` can stay in `C:\MGLab\tools\deneb`.
+- Delete the *Deneb* page (or don't save). Importing *Contoso Night Ride* changes the report's theme in Desktop:
+  re-import `ContosoBikes.json` before `hcscreen`, and never save it into the repo copy. Deneb's `.pbiviz` can stay in `C:\MGLab\tools\deneb`.
 - Delete `C:\MGLab\power-bi\*.pbiviz` when done. Nothing to remove in any tenant.

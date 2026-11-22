@@ -55,7 +55,7 @@ def test_every_data_visual_has_alt_text_title_and_tab_order():
 
 
 def test_layout_is_a_12_column_grid_with_room_for_the_custom_visual():
-    boxes = [json.loads(vf.read_text())["position"] for vf in REPORT.glob("definition/pages/*/visuals/*/visual.json")]
+    boxes = [json.loads(vf.read_text())["position"] for vf in REPORT.glob("definition/pages/overview/visuals/*/visual.json")]
     assert len(boxes) == 7
     assert {b["x"] for b in boxes} <= {24 + 104 * c for c in range(12)}
     free = {"x": 24 + 104 * 6, "y": 432, "width": 6 * 104 - 16, "height": 264}
