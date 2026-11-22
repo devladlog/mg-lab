@@ -24,6 +24,7 @@ param([Parameter(Mandatory)] [string] $SceneFile)
 
 $ErrorActionPreference = 'Continue'
 $scene = Get-Content -LiteralPath $SceneFile -Raw | ConvertFrom-Json
+if ($scene.PSObject.Properties['path'] -and $scene.path) { $env:PATH = $scene.path }   # Windows Terminal panes: the recorder's PATH
 $Host.UI.RawUI.WindowTitle = $(if ($scene.windowTitle) { $scene.windowTitle } else { 'MG-REC' })
 # large, readable font inside this console (the window is recorded at 1600x900)
 try {

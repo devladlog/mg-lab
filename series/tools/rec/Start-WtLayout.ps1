@@ -78,6 +78,8 @@ foreach ($p in $panes) {
         title = $p.title; windowTitle = $title; target = 'host'; workdir = $(if ($Simulate -and $Workdir) { $Workdir } else { $p.workdir })
         prompt = $(if ($p.prompt) { $p.prompt } else { '> ' }); commands = $cmds
         typingDelayMs = $p.typingDelayMs; markerDir = $dir; keepOpen = $true
+        # panes start with the registry PATH; carry the recorder's PATH (node, dotnet tools set up by the prepare)
+        path = $env:PATH
     }
     $sceneFile = Join-Path $dir 'scene.json'
     if (-not $Check) {
