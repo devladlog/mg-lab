@@ -33,17 +33,19 @@
         "Select-String -Path src\\ProjectRequests.Api\\Requests\\PriorityRules.cs -Pattern 'HighThreshold =' -SimpleMatch",
         "./deploy/Invoke-Tests.ps1 -Mode Unit",
         "#pause 6",
-        "git checkout -- src/ProjectRequests.Api/Requests/PriorityRules.cs",
+        "(Get-Content src\\ProjectRequests.Api\\Requests\\PriorityRules.cs -Raw).Replace('HighThreshold = 49_000m', 'HighThreshold = 50_000m') | Set-Content -NoNewline src\\ProjectRequests.Api\\Requests\\PriorityRules.cs",
         "./deploy/Invoke-Tests.ps1 -Mode Unit",
         "#pause 4"
       ],
       "prepare": [
+        "$f = 'src\\ProjectRequests.Api\\Requests\\PriorityRules.cs'; if (-not (Select-String -LiteralPath $f -Pattern 'HighThreshold = 50_000m' -SimpleMatch -Quiet)) { (Get-Content $f -Raw).Replace('HighThreshold = 49_000m', 'HighThreshold = 50_000m') | Set-Content -NoNewline $f }; if (-not (Select-String -LiteralPath $f -Pattern 'HighThreshold = 50_000m' -SimpleMatch -Quiet)) { throw 'PriorityRules.cs: HighThreshold is not 50_000m, restore it by hand' }   # a take stopped half-way leaves 49_000m (the kit folder is not a git repo: git checkout cannot restore it)",
         "Copy-Item src\\ProjectRequests.Api\\Requests\\PriorityRules.cs (Join-Path $env:TEMP 'PriorityRules.cs.mgbak') -Force"
       ],
       "maxMinutes": 10,
       "mask": [
         "--dotnet-test-pipe path in the command line (crop)"
-      ]
+      ],
+      "note": "Take 1 (2026-11-22) RETAKE: the undo was 'git checkout', but D:\\momento_galatico_kit is not a git repo ('fatal: not a git repository'), so the threshold stayed at 49_000m and the last run failed again (narration says green). The undo is now the same Replace in reverse; prepare restores 50_000m first. Expected: 50_000m, 49_000m, total 18 failed 2 (Expected: Standard / But was: High, and Actual: High), then total 18 failed 0."
     },
     {
       "name": "filter-gotcha",
@@ -61,7 +63,11 @@
       "maxMinutes": 10,
       "mask": [
         "--dotnet-test-pipe path in the command line (crop)"
-      ]
+      ],
+      "prepare": [
+        "$f = 'src\\ProjectRequests.Api\\Requests\\PriorityRules.cs'; if (-not (Select-String -LiteralPath $f -Pattern 'HighThreshold = 50_000m' -SimpleMatch -Quiet)) { (Get-Content $f -Raw).Replace('HighThreshold = 49_000m', 'HighThreshold = 50_000m') | Set-Content -NoNewline $f }; if (-not (Select-String -LiteralPath $f -Pattern 'HighThreshold = 50_000m' -SimpleMatch -Quiet)) { throw 'PriorityRules.cs: HighThreshold is not 50_000m, restore it by hand' }   # a take stopped half-way leaves 49_000m (the kit folder is not a git repo: git checkout cannot restore it)"
+      ],
+      "note": "Take 1 (2026-11-22) RETAKE: recorded right after two-failures had left HighThreshold at 49_000m, so the xUnit run showed a failure and -Mode Unit ended 'failed: 2'. prepare now restores 50_000m. Expected (checked in the container, threshold intact): FilterGotcha -> xUnit total 8 succeeded 8, NUnit 'Exit code: 5' / Unknown option '--filter-trait'; -Mode Unit -> 'Test run summary: Passed!' total 18 succeeded 18."
     },
     {
       "name": "coverage-report",
@@ -110,11 +116,11 @@
   "prepare_local": [
     "Use-DotNetSdk -Channel 10.0   # kit helper: uses the installed .NET 10 SDK, else installs it into C:\\MGLab\\dotnet (no admin)",
     "dotnet tool restore; if ($LASTEXITCODE -ne 0) { throw 'dotnet tool restore failed' }",
-    "if (-not (Select-String -LiteralPath src\\ProjectRequests.Api\\Requests\\PriorityRules.cs -Pattern 'HighThreshold = 50_000m' -SimpleMatch -Quiet)) { git checkout -- src/ProjectRequests.Api/Requests/PriorityRules.cs }   # a take stopped half-way leaves 49_000m",
+    "$f = 'src\\ProjectRequests.Api\\Requests\\PriorityRules.cs'; if (-not (Select-String -LiteralPath $f -Pattern 'HighThreshold = 50_000m' -SimpleMatch -Quiet)) { (Get-Content $f -Raw).Replace('HighThreshold = 49_000m', 'HighThreshold = 50_000m') | Set-Content -NoNewline $f }; if (-not (Select-String -LiteralPath $f -Pattern 'HighThreshold = 50_000m' -SimpleMatch -Quiet)) { throw 'PriorityRules.cs: HighThreshold is not 50_000m, restore it by hand' }   # a take stopped half-way leaves 49_000m (the kit folder is not a git repo: git checkout cannot restore it)",
     "dotnet build ProjectRequests.slnx -v q --nologo; if ($LASTEXITCODE -ne 0) { throw 'dotnet build failed' }"
   ],
   "teardown_local": [
-    "if (-not (Select-String -LiteralPath src\\ProjectRequests.Api\\Requests\\PriorityRules.cs -Pattern 'HighThreshold = 50_000m' -SimpleMatch -Quiet)) { git checkout -- src/ProjectRequests.Api/Requests/PriorityRules.cs }   # a take stopped half-way leaves 49_000m"
+    "$f = 'src\\ProjectRequests.Api\\Requests\\PriorityRules.cs'; if (-not (Select-String -LiteralPath $f -Pattern 'HighThreshold = 50_000m' -SimpleMatch -Quiet)) { (Get-Content $f -Raw).Replace('HighThreshold = 49_000m', 'HighThreshold = 50_000m') | Set-Content -NoNewline $f }; if (-not (Select-String -LiteralPath $f -Pattern 'HighThreshold = 50_000m' -SimpleMatch -Quiet)) { throw 'PriorityRules.cs: HighThreshold is not 50_000m, restore it by hand' }   # a take stopped half-way leaves 49_000m (the kit folder is not a git repo: git checkout cannot restore it)"
   ],
   "needs": [
     "lab-vms",

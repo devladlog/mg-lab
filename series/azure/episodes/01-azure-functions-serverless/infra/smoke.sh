@@ -9,6 +9,9 @@ URL="$BASE/api/orders"
 HDR=(-H "Content-Type: application/json")
 [[ -n "$KEY" ]] && HDR+=(-H "x-functions-key: $KEY")
 
+# Right after `func start` the host is still building and loading: wait (up to 90 s) until it answers at all.
+for _ in $(seq 1 45); do curl -s -o /dev/null "$BASE/" && break; sleep 2; done
+
 post() {
   echo "--- $1"
   curl -sS -o /dev/stdout -w "\nHTTP %{http_code}\n" -X POST "$URL" "${HDR[@]}" -d "$2"
