@@ -22,17 +22,44 @@
       "name": "editor-never",
       "kind": "app",
       "app": "VS Code",
-      "steps": [
-        "Open the folder C:\\lab\\pl01 (code C:\\lab\\pl01), dark theme, font size 18 or larger",
-        "Run 'TypeScript: Select TypeScript Version' > 'Use Workspace Version' (6.0.x from node_modules/typescript)",
-        "Open demo/unsafe.ts and scroll to the badge function (lines 22 to 33)",
-        "Open the Problems panel (Ctrl+Shift+M) so the other errors are listed",
-        "Hover assertNever(state) on line 31 until the tooltip shows: Argument of type '{ readonly kind: \"rejected\"; ... }' is not assignable to parameter of type 'never'",
-        "Hold the frame for about 5 seconds"
+      "prepare": [
+        "& ..\\..\\..\\tools\\rec\\Open-VsCodeScene.ps1 -Screen editor-never"
       ],
+      "vscode": {
+        "folder": "C:\\lab\\pl01",
+        "goto": "demo/unsafe.ts:31:26",
+        "settings": {
+          "typescript.tsdk": "node_modules/@typescript/old/lib",
+          "typescript.enablePromptUseWorkspaceTsdk": true
+        }
+      },
+      "window": {
+        "title": "- pl01 - VS Code",
+        "out": "series\\programming-languages\\episodes\\01-typescript-best-practices\\screens\\editor-never.mp4",
+        "x": 1920,
+        "y": 0,
+        "width": 1920,
+        "height": 1032,
+        "maxSeconds": 120
+      },
+      "setup": [
+        "Action 'prepare: series/programming-languages/episodes/01-typescript-best-practices' (copy to C:\\lab\\pl01, npm ci), then 'screen-prepare: series/programming-languages/episodes/01-typescript-best-practices/editor-never': VS Code opens C:\\lab\\pl01 with demo/unsafe.ts at line 31",
+        "If the Workspace Trust dialog appears: click 'Yes, I trust the authors'",
+        "Optional, the error text is the same with VS Code's own TypeScript: if the notification 'This workspace contains a TypeScript version...' appears, click 'Allow'; otherwise click the '{ }' language status item next to 'TypeScript' in the status bar, click 'Select Version', click 'Use Workspace Version' (6.0.3)",
+        "Wait until line 31 shows a red squiggle under 'state' and the status bar error count reads 9 (more if the ESLint extension also reports); move the pointer off the window"
+      ],
+      "steps": [
+        "(take starts: window.json + window.go)",
+        "Click the errors/warnings indicator at the left of the status bar (circle-x 9, triangle 0): the Problems panel opens with the unsafe.ts errors",
+        "Move the pointer onto the word 'state' inside 'assertNever(state)' on line 31 (the red squiggle) and keep it still until the tooltip opens; hold about 5 seconds",
+        "Move the pointer off the window; create recordings\\stop",
+        "After the take: click the window's close button (X) before 'teardown:' removes C:\\lab\\pl01"
+      ],
+      "expected": "Tooltip: Argument of type '{ readonly kind: \"rejected\"; readonly rejectedBy: Email; readonly reason: string; }' is not assignable to parameter of type 'never'. ts(2345). Problems panel: 9 errors in unsafe.ts (TS1484, TS2532, TS2375, three TS7006, TS2345, TS2322, TS1294), as in demo/expected-output.txt.",
       "mask": [
-        "window title bar and Explorer root if they show a user name or a full path"
-      ]
+        "none expected: window title is 'unsafe.ts - pl01 - VS Code' (set by Open-VsCodeScene.ps1), folder under C:\\lab, Accounts entry hidden; check the Manage gear has no badge with a name"
+      ],
+      "note": "Click-tier take: only left-clicks and hovers. node_modules/typescript is the @typescript/typescript6 wrapper (no tsserver.js); the workspace TypeScript 6.0.3 with tsserver lives in node_modules/@typescript/old, which typescript.tsdk points at."
     },
     {
       "name": "lint",

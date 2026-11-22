@@ -76,6 +76,10 @@ Three blocks of output (BEFORE N+1 / AFTER projection, cache off / AFTER + outpu
    then `/api/summary` again. Pane B: `mglab.perf.requests.created` ticks, `mglab.perf.summary.computed` ticks **once, after the write**.
    Counters refresh every second: wait a second between the POST and the read so the two ticks are visible.
    Reference: `deploy/dotnet-counters.sample.csv`. The first `/api/summary` after a start also computes once.
+   Recording kit (`record.json`, `Start-WtLayout.ps1`): two panes in one Windows Terminal window, the API runs hidden
+   (screen prepare). Left: `dotnet-counters monitor ...`. Right: one read first (it computes and fills the cache; the
+   narration says so), then the eight reads, the POST (written as `-d '{"title":"Counter demo",...}'`: PowerShell 7.3+
+   passes the quotes to curl.exe as they are, `\"` escapes are not needed and would break), 1.5 s pause, one read.
 
 ## Gotcha scene (no screen, covered by the README)
 `gotchas` bullets are all real and reproducible from the tests/benchmarks; see the README "What we learned".

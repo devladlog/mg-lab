@@ -33,9 +33,11 @@ clear
 1. **`screens/editor-extension.jpg`** — *Extension properties in IntelliSense* (scene `editor`)
    - `code .` → `src/Contoso.Requests.Demo/Program.cs`. Wait for the C# Dev Kit to load the solution
      (`AdvancedCSharp.slnx`).
-   - On the `requests.TotalBudget` line, delete `TotalBudget` and type `requests.` again (or Ctrl+Space) so the
-     completion list shows **TotalBudget** and **HighPriority** with the *property* icon. Capture, then undo.
-   - Optional: hover `clock.Today` to show it comes from `TimeProviderExtensions`.
+   - Hover `TotalBudget` inside `{requests.TotalBudget}` on line 28 (the second one on the line; the first is string
+     text), then `HighPriority` on line 29, then `clock.Today` on line 30. Each tooltip shows the extension property
+     (signature with `{ get; }`); TotalBudget and Today show their doc comments. No typing: the recording is done with
+     clicks and hovers only, so the completion list (which needs a key) is not part of the take.
+   - Recording kit: `record.json` opens this exactly (`Open-VsCodeScene.ps1`). Write down the tooltip wording.
    - Mask the window title / explorer root if it shows a user name.
 
 2. **`screens/demo-run.jpg`** — *The walk-through* (scene `run`)

@@ -38,10 +38,13 @@ clear
 
 2. **`screens/editor-never.jpg`** — *Add a state, find every switch* (scene `editor`)
    - `code .` → open `demo/unsafe.ts`, scroll to `badge` (lines 22–33).
-   - Hover `assertNever(state)` on line 31 so the tooltip shows *Argument of type '{ readonly kind: "rejected"; … }'
-     is not assignable to parameter of type 'never'*. Problems panel open (Ctrl+Shift+M) with the other errors.
+   - Hover `state` in `assertNever(state)` on line 31 so the tooltip shows *Argument of type '{ readonly kind: "rejected"; … }'
+     is not assignable to parameter of type 'never'*. Problems panel open (click the error count in the status bar) with the other errors.
    - VS Code uses its bundled TypeScript unless you pick the workspace version: **TypeScript: Select TypeScript
-     Version → Use Workspace Version** (6.0.3 from `node_modules/typescript`). The error text is the same in both.
+     Version → Use Workspace Version** (6.0.3). `node_modules/typescript` is the `@typescript/typescript6` wrapper and
+     has no `tsserver.js`; the real 6.0.3 is `node_modules/@typescript/old`, so `typescript.tsdk` must point at
+     `node_modules/@typescript/old/lib`. The error text is the same in both.
+   - Recording kit: `record.json` opens this exactly (`Open-VsCodeScene.ps1`); the take is clicks and hovers only.
    - Mask: the window title bar if it shows the full path with a user name.
 
 3. **`screens/lint.jpg`** — *Type-correct, still wrong: the linter* (scene `lint`)

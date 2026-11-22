@@ -69,22 +69,74 @@
     {
       "name": "counters",
       "kind": "app",
-      "app": "Windows Terminal",
-      "steps": [
-        "Two panes. Left: dotnet-counters monitor -n ProjectRequests.Perf.Api --counters ProjectRequests.Perf  (if the process is not found: dotnet-counters ps and --process-id)",
-        "Right (PowerShell): 1..8 | ForEach-Object { curl.exe -s -o NUL http://localhost:5209/api/summary }",
-        "Right: curl.exe -s -X POST -H \"Content-Type: application/json\" -d \"{\\\"title\\\":\\\"Counter demo\\\",\\\"budget\\\":75000,\\\"departmentCode\\\":\\\"fin\\\",\\\"requesterId\\\":7}\" http://localhost:5209/api/requests",
-        "Wait one second, then curl.exe -s -o NUL http://localhost:5209/api/summary again",
-        "Left pane: mglab.perf.requests.created ticks, mglab.perf.summary.computed ticks once after the write, not for the cached reads"
-      ],
-      "mask": [],
+      "app": "Windows Terminal (two panes, played by Start-WtLayout.ps1)",
       "prepare": [
         "New-Item -ItemType Directory -Force 'C:\\lab\\mgnet' | Out-Null; $env:MG_LOGS = 'C:\\lab\\mgnet'; $env:MG_SVC = Join-Path $env:MG_LOGS 'svc.ps1'; Set-Content -LiteralPath $env:MG_SVC -Value @'\nparam([Parameter(Mandatory)][ValidateSet('start','ensure','stop')][string]$Action, [Parameter(Mandatory)][string]$Name, [string]$Project, [string]$Urls, [int]$Port, [string[]]$AppArgs = @(), [string[]]$DeleteFiles = @())\n$d = 'C:\\lab\\mgnet'; New-Item -ItemType Directory -Force $d | Out-Null\n$pf = Join-Path $d \"$Name.pid\"\nfunction Test-Port([int]$p) { try { [Net.Sockets.TcpClient]::new('localhost', $p).Dispose(); $true } catch { $false } }\nfunction Stop-Svc { if (Test-Path $pf) { taskkill /PID (Get-Content $pf) /T /F 2>&1 | Out-Null; Remove-Item $pf -ErrorAction SilentlyContinue } }\nif ($Action -eq 'stop') { Stop-Svc; return }\nif ($Action -eq 'ensure' -and $Port -and (Test-Port $Port)) { return }\nStop-Svc\nforeach ($f in $DeleteFiles) { Remove-Item (Join-Path $Project $f) -Force -ErrorAction SilentlyContinue }\n$env:ASPNETCORE_ENVIRONMENT = 'Development'\n$a = @('run', '--no-build', '--no-launch-profile')\nif ($Urls) { $a += '--urls', $Urls }\nif ($AppArgs) { $a += '--'; $a += $AppArgs }\n$p = Start-Process dotnet -ArgumentList $a -WorkingDirectory $Project -WindowStyle Hidden -RedirectStandardOutput (Join-Path $d \"$Name.log\") -RedirectStandardError (Join-Path $d \"$Name.err\") -PassThru\n$p.Id | Set-Content $pf\nif ($Port) { for ($i = 0; $i -lt 120; $i++) { if (Test-Port $Port) { break }; Start-Sleep -Milliseconds 500 } }\n'@",
-        "& $env:MG_SVC start -Name ep09-api -Project (Resolve-Path 'src\\ProjectRequests.Perf.Api').Path -Urls http://localhost:5209 -Port 5209 -DeleteFiles 'perf.db*'"
-      ]
+        "& $env:MG_SVC start -Name ep09-api -Project (Resolve-Path 'src\\ProjectRequests.Perf.Api').Path -Urls http://localhost:5209 -Port 5209 -DeleteFiles 'perf.db*'",
+        "& ..\\..\\..\\tools\\rec\\Start-WtLayout.ps1 -Screen counters"
+      ],
+      "layout": {
+        "title": "MG net09",
+        "requires": [
+          "dotnet-counters"
+        ],
+        "panes": [
+          {
+            "title": "dotnet-counters",
+            "workdir": "C:\\lab\\mgnet",
+            "prompt": "PS> ",
+            "commands": [
+              "#pause 1",
+              "#raw dotnet-counters monitor -n ProjectRequests.Perf.Api --counters ProjectRequests.Perf"
+            ]
+          },
+          {
+            "title": "client",
+            "workdir": "C:\\lab\\mgnet",
+            "prompt": "PS> ",
+            "commands": [
+              "#pause 5",
+              "curl.exe -s -o NUL http://localhost:5209/api/summary",
+              "#pause 3",
+              "1..8 | ForEach-Object { curl.exe -s -o NUL http://localhost:5209/api/summary }",
+              "#pause 3",
+              "curl.exe -s -X POST -H 'Content-Type: application/json' -d '{\"title\":\"Counter demo\",\"budget\":75000,\"departmentCode\":\"fin\",\"requesterId\":7}' http://localhost:5209/api/requests",
+              "#pause 1.5",
+              "curl.exe -s -o NUL http://localhost:5209/api/summary",
+              "#pause 4"
+            ]
+          }
+        ]
+      },
+      "teardown": [
+        "& ..\\..\\..\\tools\\rec\\Stop-WtLayout.ps1 -Screen counters"
+      ],
+      "window": {
+        "title": "MG net09",
+        "out": "series\\net\\episodes\\09-performance-optimization\\screens\\counters.mp4",
+        "x": 1920,
+        "y": 0,
+        "width": 1920,
+        "height": 1032,
+        "maxSeconds": 120
+      },
+      "setup": [
+        "Action 'prepare: series/net/episodes/09-performance-optimization' (svc helper, dotnet-counters install, builds) once per session",
+        "Action 'screen-prepare: series/net/episodes/09-performance-optimization/counters': starts the API hidden on :5209 (fresh perf.db, cold cache), then a Windows Terminal window 'dotnet-counters | MG net09' / 'client | MG net09' whose panes wait for the take",
+        "Move the pointer off the window (other monitor)"
+      ],
+      "steps": [
+        "(take starts: window.json + window.go; the panes start when the recorder creates recordings\\recording)",
+        "Nothing to click: left pane starts dotnet-counters monitor; right pane reads the summary once (fills the cache), eight more times, POSTs one request, waits 1.5 s and reads once more, then creates recordings\\stop (about 30 s)",
+        "After the take: action 'screen-teardown: series/net/episodes/09-performance-optimization/counters' (closes the panes and dotnet-counters); the episode teardown stops the API"
+      ],
+      "expected": "Left: [ProjectRequests.Perf] with mglab.perf.summary.computed ({computation} / 1 sec) and mglab.perf.requests.created ({request} / 1 sec) (they appear with the first read). summary.computed shows 1 for one interval after the first read, stays 0 during the eight reads, shows 1 again after the read that follows the POST; requests.created shows 1 after the POST. Right: the POST prints the created request as JSON (title Counter demo, budget 75000, FIN).",
+      "mask": [],
+      "note": "dotnet-counters runs attached to the pane's console (#raw: no pipeline) so its live table renders; its output is not in the pane transcript. Counters are per-second rates: each tick shows as 1 for one refresh."
     }
   ],
   "teardown": [
+    "& ..\\..\\..\\tools\\rec\\Stop-WtLayout.ps1 -Screen counters",
     "& $env:MG_SVC stop -Name ep09-api",
     "Remove-Item src\\ProjectRequests.Perf.Api\\perf.db* -Force -ErrorAction SilentlyContinue",
     "Remove-Item BenchmarkDotNet.Artifacts -Recurse -Force -ErrorAction SilentlyContinue",

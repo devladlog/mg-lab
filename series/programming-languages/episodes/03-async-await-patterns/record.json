@@ -49,21 +49,74 @@
     {
       "name": "cancel",
       "kind": "app",
-      "app": "Windows Terminal (two panes)",
-      "steps": [
-        "Left pane: cd C:\\lab\\pl03; Clear-Host; dotnet run --project src\\Contoso.Approvals.Api (or the built dll with --urls http://localhost:5080) and wait for 'Now listening on: http://localhost:5080'",
-        "Right pane: cd C:\\lab\\pl03; dotnet run --no-build --project src\\Contoso.Approvals.Cli -- timeout --timeout-ms 150  (expect TimeoutException after ~158 ms, Aborted = 1)",
-        "Right pane: dotnet run --no-build --project src\\Contoso.Approvals.Cli -- waitasync --timeout-ms 150  (TimeoutException, Aborted = 0; left pane shows start + done 300 ms)",
-        "Right pane: dotnet run --no-build --project src\\Contoso.Approvals.Cli -- sequential and press Ctrl+C after about 1.5 s (expect 'Ctrl+C: cancelling...' and 'Cancelled after ...'; left pane shows two 'ABORTED by the client' lines)",
-        "Frame both panes; stop the API with Ctrl+C in the left pane afterwards"
-      ],
-      "mask": [
-        "window and tab titles: set $Host.UI.RawUI.WindowTitle to 'api' and 'client'; short prompt function prompt { '> ' } in both panes"
-      ],
+      "app": "Windows Terminal (two panes, played by Start-WtLayout.ps1)",
       "prepare": [
-        "if (Test-Path C:\\lab\\pl03\\api.pid) { Stop-Process -Id (Get-Content C:\\lab\\pl03\\api.pid) -Force -ErrorAction SilentlyContinue; Remove-Item C:\\lab\\pl03\\api.pid }"
+        "if (Test-Path C:\\lab\\pl03\\api.pid) { Stop-Process -Id (Get-Content C:\\lab\\pl03\\api.pid) -Force -ErrorAction SilentlyContinue; Remove-Item C:\\lab\\pl03\\api.pid; Start-Sleep -Seconds 1 }",
+        "Remove-Item C:\\lab\\pl03\\api.log, C:\\lab\\pl03\\api.err -ErrorAction SilentlyContinue",
+        "# off-camera rehearsal: the Finance API hidden, one Ctrl+C run of the client (also the JIT warm-up demo.md asks for)",
+        "$bin = 'C:\\lab\\pl03\\src\\Contoso.Approvals.Api\\bin\\Debug\\net10.0'; $p = Start-Process dotnet -ArgumentList \"$bin\\Contoso.Approvals.Api.dll\", '--urls', 'http://localhost:5080' -WorkingDirectory $bin -RedirectStandardOutput C:\\lab\\pl03\\api.log -RedirectStandardError C:\\lab\\pl03\\api.err -WindowStyle Hidden -PassThru; $p.Id | Set-Content C:\\lab\\pl03\\api.pid; Start-Sleep -Seconds 4",
+        "& ..\\..\\..\\tools\\rec\\Send-CtrlC.ps1 -SelfTest",
+        "& ..\\..\\..\\tools\\rec\\Send-CtrlC.ps1 -Rehearse -WorkingDirectory C:\\lab\\pl03 -AfterMs 3000 -Command 'dotnet run --no-build --project src\\Contoso.Approvals.Cli -- sequential' -Expect 'Ctrl\\+C: cancelling', 'Cancelled after' -Reject 'sequential: 12 requests'",
+        "Start-Sleep -Seconds 1; $ab = @(Select-String 'ABORTED by the client' C:\\lab\\pl03\\api.log).Count; \"rehearsal: the API logged $ab aborted call(s)\"; if ($ab -lt 1) { throw 'rehearsal: the Ctrl+C reached no API call (it came before the batch started): raise -AfterMs in record.json' }",
+        "if (Test-Path C:\\lab\\pl03\\api.pid) { Stop-Process -Id (Get-Content C:\\lab\\pl03\\api.pid) -Force -ErrorAction SilentlyContinue; Remove-Item C:\\lab\\pl03\\api.pid; Start-Sleep -Seconds 1 }",
+        "& ..\\..\\..\\tools\\rec\\Start-WtLayout.ps1 -Screen cancel"
       ],
-      "note": "Ctrl+C has to be pressed by a person at the right moment, so this screen is a guided capture, not a played terminal."
+      "layout": {
+        "title": "MG pl03",
+        "panes": [
+          {
+            "title": "api",
+            "workdir": "C:\\lab\\pl03",
+            "prompt": "> ",
+            "commands": [
+              "#pause 1",
+              "dotnet run --no-build --project src\\Contoso.Approvals.Api"
+            ]
+          },
+          {
+            "title": "client",
+            "workdir": "C:\\lab\\pl03",
+            "prompt": "> ",
+            "commands": [
+              "#waitport 5080 90",
+              "#pause 2",
+              "dotnet run --no-build --project src\\Contoso.Approvals.Cli -- timeout --timeout-ms 150",
+              "#pause 3",
+              "dotnet run --no-build --project src\\Contoso.Approvals.Cli -- waitasync --timeout-ms 150",
+              "#pause 3",
+              "Send-CtrlC -AfterMs 3000 { dotnet run --no-build --project src\\Contoso.Approvals.Cli -- sequential }",
+              "#pause 5"
+            ]
+          }
+        ]
+      },
+      "teardown": [
+        "& ..\\..\\..\\tools\\rec\\Stop-WtLayout.ps1 -Screen cancel"
+      ],
+      "window": {
+        "title": "MG pl03",
+        "out": "series\\programming-languages\\episodes\\03-async-await-patterns\\screens\\cancel.mp4",
+        "x": 1920,
+        "y": 0,
+        "width": 1920,
+        "height": 1032,
+        "maxSeconds": 180
+      },
+      "setup": [
+        "Action 'prepare: series/programming-languages/episodes/03-async-await-patterns' (copy to C:\\lab\\pl03, dotnet build) if C:\\lab\\pl03 is gone",
+        "Action 'screen-prepare: series/programming-languages/episodes/03-async-await-patterns/cancel': runs the Ctrl+C self-test and one hidden rehearsal (action.last must say ok), then opens a Windows Terminal window 'api | MG pl03' / 'client | MG pl03' with two empty panes that wait for the take",
+        "Move the pointer off the window (other monitor)"
+      ],
+      "steps": [
+        "(take starts: window.json + window.go; the panes start by themselves when the recorder creates recordings\\recording)",
+        "Nothing to click: left pane starts the API, right pane runs timeout, waitasync, then Send-CtrlC { ... sequential } (a real Ctrl+C after 3 s); the right pane creates recordings\\stop at the end, which ends the take (about 40 s)",
+        "After the take: action 'screen-teardown: series/programming-languages/episodes/03-async-await-patterns/cancel' closes the panes and keeps their transcripts as screens\\cancel.api.log / cancel.client.log"
+      ],
+      "expected": "Right: 'TimeoutException after ~158 ms: Gave up after 150 ms.' and api saw ... Aborted = 1; 'TimeoutException after ... The operation has timed out.' and Aborted = 0; then 'Ctrl+C: cancelling...', 'Cancelled after N s.' and api saw ... Aborted = 2. Left: 'ABORTED by the client after 150 ms', then 'start' + 'done 300 ms' (the WaitAsync call kept running), then two 'ABORTED by the client' lines.",
+      "mask": [
+        "none expected: tab titles 'api | MG pl03' / 'client | MG pl03', prompt '> ', folder C:\\lab\\pl03; Stop-WtLayout.ps1 checks the pane transcripts for the Windows user name"
+      ],
+      "note": "Ctrl+C is not pressed by hand: Send-CtrlC (series/tools/rec/Send-CtrlC.ps1) generates a real CTRL_C_EVENT on the pane's console 3 s after the command starts (about a second into the batch); the client's own Console.CancelKeyPress handler runs. The helper call is typed on screen as it is."
     },
     {
       "name": "deadlock",
@@ -83,6 +136,7 @@
     }
   ],
   "teardown": [
+    "& ..\\..\\..\\tools\\rec\\Stop-WtLayout.ps1 -Screen cancel",
     "if (Test-Path C:\\lab\\pl03\\api.pid) { Stop-Process -Id (Get-Content C:\\lab\\pl03\\api.pid) -Force -ErrorAction SilentlyContinue; Remove-Item C:\\lab\\pl03\\api.pid }",
     "Remove-Item C:\\lab\\pl03 -Recurse -Force -ErrorAction SilentlyContinue"
   ],

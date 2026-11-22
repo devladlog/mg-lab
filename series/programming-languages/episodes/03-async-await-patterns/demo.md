@@ -43,6 +43,12 @@ function prompt { '> ' }                      # short prompt in BOTH panes (hide
      If both runs don't fit, capture two frames and cut between them.
 
 3. **`screens/cancel.jpg`** — *Proof from the server side* (scene `cancel`)
+   - Recorded with the kit (`record.json`, `Start-WtLayout.ps1`): a two-pane Windows Terminal plays the commands
+     below. The Ctrl+C is **sent, not pressed**: the client runs as
+     `Send-CtrlC -AfterMs 3000 { dotnet run --no-build --project src\Contoso.Approvals.Cli -- sequential }`, typed on
+     screen as is; `series/tools/rec/Send-CtrlC.ps1` generates a real CTRL_C_EVENT on that console 3 s after the start
+     (about 1 s into the batch) and the client's own `Console.CancelKeyPress` handler runs. The screen prepare rehearses
+     it once off camera and stops if the Ctrl+C would miss the batch.
    - `cls` the left pane first so only these lines show.
    - Right: `... -- timeout --timeout-ms 150`, then `... -- waitasync --timeout-ms 150`, then `... -- sequential` and
      press **Ctrl+C** after about 1.5 s.

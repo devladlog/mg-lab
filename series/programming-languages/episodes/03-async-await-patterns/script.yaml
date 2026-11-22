@@ -216,8 +216,9 @@ scenes:
     bar: "Terminal · timeout, waitasync, Ctrl+C"
     demo: >
       Same split terminal. Right pane, in order: "-- timeout --timeout-ms 150" (TimeoutException after ~158 ms,
-      Aborted = 1), "-- waitasync --timeout-ms 150" (TimeoutException, Aborted = 0), then "-- sequential" and press
-      Ctrl+C after about 1.5 s ("Ctrl+C: cancelling...", "Cancelled after 1.1 s"). Left pane must show the matching
+      Aborted = 1), "-- waitasync --timeout-ms 150" (TimeoutException, Aborted = 0), then "-- sequential" run as
+      Send-CtrlC -AfterMs 3000 { ... }, which sends a real Ctrl+C 3 s after the start, about a second into the batch
+      ("Ctrl+C: cancelling...", "Cancelled after ... s"). Left pane must show the matching
       API lines: "ABORTED by the client after 150 ms", then "start" + "done 300 ms" for the WaitAsync call, then two
       "ABORTED by the client" lines for the Ctrl+C.
     narration: >

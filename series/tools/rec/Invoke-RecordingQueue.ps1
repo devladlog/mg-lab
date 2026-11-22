@@ -19,7 +19,28 @@ $queueFile = Join-Path $Root 'recordings\queue.txt'
 $wanted = if (Test-Path $queueFile) { @(Get-Content $queueFile | ForEach-Object { $_.Trim() } | Where-Object { $_ -and -not $_.StartsWith('#') }) } else { @() }
 
 # "prepare: <episode>" / "teardown: <episode>" lines only run that episode's setup or cleanup, for app and browser
-# screens that are performed live while Record-Window.ps1 (MG R4) records; nothing is recorded by these lines
+# screens that are performed live while Record-Window.ps1 (MG R4) records; nothing is recorded by these lines.
+# "screen-prepare: <episode>/<screen>" / "screen-teardown: <episode>/<screen>" run one screen's own "prepare" /
+# "teardown" lists (e.g. open VS Code at a line, or a Windows Terminal layout for an app screen; close it again).
+$actionRe = '^(prepare|teardown|screen-prepare|screen-teardown):\s*(.+)$'
+function Resolve-QueueAction([string] $Line) {
+    # -> what to run for one action line: the episode folder, a label and the statements (may be empty)
+    if ($Line -notmatch $actionRe) { throw "unknown action: $Line" }
+    $what = $Matches[1]; $spec = $Matches[2].Trim().Replace('\', '/').TrimEnd('/')
+    if ($what -like 'screen-*') {
+        $cut = $spec.LastIndexOf('/')
+        if ($cut -lt 1) { throw "expected '${what}: <episode folder>/<screen name>'" }
+        $epDir = Join-Path $Root $spec.Substring(0, $cut).Replace('/', '\'); $name = $spec.Substring($cut + 1)
+        $def = Get-Content (Join-Path $epDir 'record.json') -Raw | ConvertFrom-Json
+        $s = $def.screens | Where-Object name -eq $name
+        if (-not $s) { throw "no screen '$name' in $epDir\record.json" }
+        $key = $what.Substring(7)
+        return [pscustomobject]@{ What = $what; EpisodeDir = $epDir; Statements = @($s.$key | Where-Object { $_ }) }
+    }
+    $epDir = Join-Path $Root $spec.Replace('/', '\')
+    $def = Get-Content (Join-Path $epDir 'record.json') -Raw | ConvertFrom-Json
+    [pscustomobject]@{ What = $what; EpisodeDir = $epDir; Statements = @($def.$what | Where-Object { $_ }) }
+}
 # "window-recorder" keeps running and records one window per trigger: write recordings\window.json, then create
 # recordings\window.go to start; create recordings\stop to end that take; create recordings\window-recorder.quit to exit.
 # This lets app and browser scenes be performed in the app itself, with no trip back to VS Code between takes.
@@ -36,11 +57,9 @@ if ($wanted -contains 'window-recorder') {
             $line = (Get-Content $actFile -Raw).Trim(); Remove-Item $actFile
             Set-Content $state 'working'
             try {
-                if ($line -notmatch '^(prepare|teardown):\s*(.+)$') { throw "unknown action: $line" }
-                $what = $Matches[1]; $epDir = Join-Path $Root ($Matches[2].Trim().Replace('/', '\'))
-                $def = Get-Content (Join-Path $epDir 'record.json') -Raw | ConvertFrom-Json
+                $act = Resolve-QueueAction $line
                 Write-Host "`n=== $line ===" -ForegroundColor Cyan
-                if ($def.$what) { Invoke-HostStatements -Statements $def.$what -EpisodeRoot $epDir }
+                if ($act.Statements) { Invoke-HostStatements -Statements $act.Statements -EpisodeRoot $act.EpisodeDir }
                 Set-Content (Join-Path $rd 'action.last') "ok: $line"
             } catch { Write-Host $_ -ForegroundColor Red; Set-Content (Join-Path $rd 'action.last') "error: $($_.Exception.Message)" }
             continue
@@ -61,16 +80,14 @@ if ($wanted -contains 'window-recorder') {
 
 $screenRe = '^screen(!?):\s*(.+)$'
 $screenLines = @($wanted | Where-Object { $_ -match $screenRe })
-$actions = @($wanted | Where-Object { $_ -match '^(prepare|teardown):\s*(.+)$' })
+$actions = @($wanted | Where-Object { $_ -match $actionRe })
 if ($actions) {
     if ($screenLines) { Write-Host "Ignored in a prepare:/teardown: queue (put them in their own queue): $($screenLines -join '; ')" -ForegroundColor Yellow }
     foreach ($a in $actions) {
-        $null = $a -match '^(prepare|teardown):\s*(.+)$'
-        $what = $Matches[1]; $epDir = Join-Path $Root ($Matches[2].Trim().Replace('/', '\'))
-        $def = Get-Content (Join-Path $epDir 'record.json') -Raw | ConvertFrom-Json
-        Write-Host "`n=== $what $($Matches[2].Trim()) ===" -ForegroundColor Cyan
-        if ($def.$what) { Invoke-HostStatements -Statements $def.$what -EpisodeRoot $epDir }
-        Write-Host "$what done." -ForegroundColor Green
+        $act = Resolve-QueueAction $a
+        Write-Host "`n=== $a ===" -ForegroundColor Cyan
+        if ($act.Statements) { Invoke-HostStatements -Statements $act.Statements -EpisodeRoot $act.EpisodeDir }
+        Write-Host "$($act.What) done." -ForegroundColor Green
     }
     New-Item -ItemType File -Force -Path (Join-Path $Root 'recordings\queue-actions.done') | Out-Null
     return

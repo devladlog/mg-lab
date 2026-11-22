@@ -217,12 +217,14 @@ scenes:
     bar: "Terminal · dotnet-counters monitor"
     demo: >
       Two panes. Left: dotnet-counters monitor -n ProjectRequests.Perf.Api --counters ProjectRequests.Perf, showing the
-      two custom counters mglab.perf.requests.created and mglab.perf.summary.computed. Right: a loop of curl.exe
-      calls to /api/summary (eight times), then one POST /api/requests, then /api/summary again. Show that
-      summary.computed ticks once after the write, not for the cached reads. Nothing to mask.
+      two custom counters mglab.perf.requests.created and mglab.perf.summary.computed. Right: one curl.exe call to
+      /api/summary (the first read after the start computes once and fills the cache), a loop of eight more, then one
+      POST /api/requests, then /api/summary again. Show that summary.computed ticks once after the write, not for the
+      cached reads. Nothing to mask.
     narration: >
-      Two counters on System dot Diagnostics dot Metrics, and dotnet counters shows them live. Read the summary
-      eight times, nothing computed. Create a request, read again, and the computed counter ticks once. That's the
+      Two counters on System dot Diagnostics dot Metrics, and dotnet counters shows them live. The first read fills
+      the cache. Read the summary eight more times, nothing computed. Create a request, read again, and the computed
+      counter ticks once. That's the
       cache doing exactly its job, visible without a debugger.
 
   - id: tests

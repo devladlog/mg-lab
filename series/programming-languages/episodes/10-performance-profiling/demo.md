@@ -50,6 +50,9 @@ Close other heavy applications while recording: the benchmark and event-loop num
      narration then needs one sentence less; Chrome DevTools > Performance/Profiles can load the same file).
    - Then in the terminal: `node --cpu-prof --cpu-prof-dir=cpuprof src/run-report.js slow 3000`, `dir cpuprof`
      (file name `CPU.<date>.<time>.<pid>.0.001.cpuprofile`), and `node src/cli.js top (Get-ChildItem cpuprof\*.cpuprofile).FullName`.
+   - Recording kit (`record.json`, `Open-VsCodeScene.ps1`): the take is clicks only, so the two commands are VS Code
+     tasks (Terminal > Run Task...; the task terminal echoes each command) and the file `node --cpu-prof` wrote is
+     opened from the Explorer (no `dir`). Order on screen: `--cpu-prof` task, open the new file, `cli.js top` task.
 4. **`screens/after.jpg`** - *Before and after, with numbers* (scene `after`)
    - `node src/cli.js bench --rows 2000 --runs 7`, then `node src/cli.js lag slow --rows 3000`, then `node src/cli.js lag fast --rows 3000`.
    - Frame: slow median vs fast median, and the two `event loop delay max` figures. The idle baseline is about 10 to 30 ms.

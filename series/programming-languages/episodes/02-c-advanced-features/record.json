@@ -12,17 +12,43 @@
       "name": "editor-extension",
       "kind": "app",
       "app": "VS Code (C# Dev Kit)",
-      "steps": [
-        "Open the folder C:\\lab\\pl02, dark theme, font size 18 or larger; wait for the C# Dev Kit to load AdvancedCSharp.slnx",
-        "Open src/Contoso.Requests.Demo/Program.cs",
-        "On the requests.TotalBudget line delete 'TotalBudget' and type 'requests.' again (or press Ctrl+Space)",
-        "Frame the completion list: TotalBudget and HighPriority with the property icon",
-        "Press Escape and undo (Ctrl+Z) so the file is unchanged",
-        "Optional second frame: hover clock.Today to show it comes from TimeProviderExtensions"
+      "prepare": [
+        "& ..\\..\\..\\tools\\rec\\Open-VsCodeScene.ps1 -Screen editor-extension"
       ],
+      "vscode": {
+        "folder": "C:\\lab\\pl02",
+        "goto": "src/Contoso.Requests.Demo/Program.cs:28:65",
+        "settings": {
+          "dotnet.defaultSolution": "AdvancedCSharp.slnx"
+        }
+      },
+      "window": {
+        "title": "- pl02 - VS Code",
+        "out": "series\\programming-languages\\episodes\\02-c-advanced-features\\screens\\editor-extension.mp4",
+        "x": 1920,
+        "y": 0,
+        "width": 1920,
+        "height": 1032,
+        "maxSeconds": 120
+      },
+      "setup": [
+        "Action 'prepare: series/programming-languages/episodes/02-c-advanced-features' (copy to C:\\lab\\pl02, dotnet build), then 'screen-prepare: series/programming-languages/episodes/02-c-advanced-features/editor-extension': VS Code opens C:\\lab\\pl02 with Program.cs at line 28",
+        "If the Workspace Trust dialog appears: click 'Yes, I trust the authors'",
+        "Wait until the C# extension has loaded AdvancedCSharp.slnx (Solution Explorer filled, no spinner in the status bar); rehearse one hover on TotalBudget off camera so the first tooltip is not slow; move the pointer off the window"
+      ],
+      "steps": [
+        "(take starts: window.json + window.go)",
+        "Hover 'TotalBudget' inside the braces '{requests.TotalBudget}' on line 28 (the second TotalBudget on the line; the first is plain string text); keep still about 4 seconds while the tooltip shows",
+        "Move to 'HighPriority' inside '{requests.HighPriority.Count()}' on line 29; about 4 seconds",
+        "Move to 'Today' inside '{clock.Today:yyyy-MM-dd}' on line 30; about 4 seconds",
+        "Move the pointer off the window; create recordings\\stop",
+        "After the take: click the window's close button (X) before 'teardown:' removes C:\\lab\\pl02"
+      ],
+      "expected": "Each tooltip shows the member as a property (signature ending in { get; }) declared in an extension block: TotalBudget of type Euros with the doc comment 'requests.TotalBudget, a property on a type we don't own.', HighPriority of type IEnumerable<ProjectRequest> (no doc comment), Today of type DateOnly with 'time.Today: an extension property on a framework type.'. The exact wording the C# extension uses for C# 14 extension members was not verified in the container: write it down from the take.",
       "mask": [
-        "window title and Explorer root if they show a user name"
-      ]
+        "none expected: window title 'Program.cs - pl02 - VS Code', folder under C:\\lab, Accounts entry hidden"
+      ],
+      "note": "Click-tier take: a completion list needs typing (Ctrl+Space or a dot), so the take shows the same member information through hovers; narration and demo text say hover, not completion list."
     },
     {
       "name": "demo-run",

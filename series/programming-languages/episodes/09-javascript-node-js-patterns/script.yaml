@@ -165,13 +165,15 @@ scenes:
     bar: "Terminal · Ctrl+C during a run"
     short: ctrlc
     demo: >
-      Two terminals. Left: serve with --latency 1000. Right: intake with --concurrency 5 --no-cache, then Ctrl+C
-      about half a second in. Visible on the right: stopped: interrupted (Ctrl+C), exit code 130 (echo $? or
+      Two terminals. Left: serve with --latency 1000. Right: intake with --concurrency 5 --no-cache, run as
+      Send-CtrlC -AfterMs 500 { ... }, which sends a real Ctrl+C half a second in (typed on screen as is). Visible on
+      the right: stopped: interrupted (Ctrl+C), exit code 130 (echo $? or
       $LASTEXITCODE). Visible on the left: five lines "ABORTED by the client". Reference: end of demo/expected-output.txt.
     narration: >
-      Now the proof. The service is slow, five lookups are running, and I press Control C. The client stops with exit
-      code one thirty. And on the server side, five lines: aborted by the client. The requests were really cancelled,
-      the server stopped waiting, nothing is left running. That is what passing the signal down buys you.
+      Now the proof. The service is slow, five lookups are running, and Control C arrives half a second in. The client
+      stops with exit code one thirty. And on the server side, five lines: aborted by the client. The requests were
+      really cancelled, the server stopped waiting, nothing is left running. That is what passing the signal down buys
+      you.
 
   - id: gotcha
     type: code

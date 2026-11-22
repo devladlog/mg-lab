@@ -5,7 +5,20 @@
   (PowerShell Direct). Nothing is faked: the output on screen is the real output. Started by Record-Scene.ps1 inside
   the window that is being recorded.
 .PARAMETER SceneFile
-  JSON written by Record-Scene.ps1: { title, target, workdir, prompt, commands[], typingDelayMs, markerDir }
+  JSON written by Record-Scene.ps1 or Start-WtLayout.ps1: { title, target, workdir, prompt, commands[], typingDelayMs,
+  markerDir, keepOpen }
+.NOTES
+  Hidden directives in commands[] (not typed, not shown):
+    #pause N                wait N seconds
+    #clear                  clear the screen
+    #waitfile PATH [S]      wait until PATH exists (at most S seconds, default 600): e.g. the window recorder's
+                            recordings\recording marker, so a Windows Terminal pane starts when the take starts
+    #waitport PORT [S]      wait until something listens on localhost:PORT (default 60 s)
+    #touch PATH             create the file PATH: e.g. recordings\stop, which ends the window recorder's take
+  A command written "#raw <command>" is typed without the "#raw " prefix and runs attached to the console (no
+  pipeline), for full-screen tools such as dotnet-counters that need a real console.
+  Host scenes can call Send-CtrlC (Send-CtrlC.ps1): a real Ctrl+C to the command after N ms, typed on screen as is.
+  keepOpen: true keeps the window open after the last command until <markerDir>\stop appears (Stop-WtLayout.ps1).
 #>
 param([Parameter(Mandatory)] [string] $SceneFile)
 
@@ -34,6 +47,7 @@ public struct CONSOLE_FONT_INFOEX { public uint cbSize; public uint nFont; publi
 try { [Console]::OutputEncoding = [Text.UTF8Encoding]::new($false); [Console]::InputEncoding = [Text.UTF8Encoding]::new($false); $OutputEncoding = [Text.UTF8Encoding]::new($false) } catch {}
 if ($scene.markerDir) {
     New-Item -ItemType File -Force -Path (Join-Path $scene.markerDir 'started') | Out-Null
+    Set-Content -LiteralPath (Join-Path $scene.markerDir 'pid') -Value $PID
     try { Start-Transcript -Path (Join-Path $scene.markerDir 'scene.log') -Force | Out-Null } catch {}
 }
 try { $Host.UI.RawUI.BackgroundColor = 'Black'; $Host.UI.RawUI.ForegroundColor = 'Gray' } catch {}
@@ -87,6 +101,9 @@ if ($target -eq 'host') {
     # holds the Windows user name: keep them out of on-camera test runs (pytest's own plugins are unaffected)
     $env:PYTEST_ADDOPTS = (("$env:PYTEST_ADDOPTS -p no:anyio -p no:cacheprovider").Trim())
     $env:PYTEST_DISABLE_PLUGIN_AUTOLOAD = '1'
+    # Send-CtrlC { command } -AfterMs N: a real Ctrl+C for scenes that show a program's Ctrl+C handling
+    $ctrlc = Join-Path $PSScriptRoot 'Send-CtrlC.ps1'
+    if (Test-Path -LiteralPath $ctrlc) { try { . $ctrlc } catch { Write-Warning "Send-CtrlC not loaded: $($_.Exception.Message)" } }
 }
 
 Start-Sleep -Milliseconds 800
@@ -94,6 +111,21 @@ foreach ($cmd in $scene.commands) {
     $line = "$cmd"
     if ($line -match '^#pause\s+(\d+(\.\d+)?)') { Start-Sleep -Seconds ([double]$Matches[1]); continue }
     if ($line -match '^#clear') { Clear-Host; continue }
+    if ($line -match '^#waitfile\s+(.+?)(\s+(\d+))?\s*$') {
+        $wf = $Matches[1].Trim('"'); $until = (Get-Date).AddSeconds($(if ($Matches[3]) { [int]$Matches[3] } else { 600 }))
+        while (-not (Test-Path -LiteralPath $wf) -and (Get-Date) -lt $until) { Start-Sleep -Milliseconds 200 }
+        continue
+    }
+    if ($line -match '^#waitport\s+(\d+)(\s+(\d+))?\s*$') {
+        $wp = [int]$Matches[1]; $until = (Get-Date).AddSeconds($(if ($Matches[3]) { [int]$Matches[3] } else { 60 }))
+        while ((Get-Date) -lt $until) {
+            try { [Net.Sockets.TcpClient]::new('localhost', $wp).Dispose(); break } catch { Start-Sleep -Milliseconds 250 }
+        }
+        continue
+    }
+    if ($line -match '^#touch\s+(.+?)\s*$') { New-Item -ItemType File -Force -Path $Matches[1].Trim('"') | Out-Null; continue }
+    $raw = $false
+    if ($line -match '^#raw\s+(.+)$') { $raw = $true; $line = $Matches[1] }
     Write-Host -NoNewline $prompt -ForegroundColor Green
     Write-Typed $line
     if ($line.TrimStart().StartsWith('#')) { Start-Sleep -Milliseconds 500; continue }
@@ -105,6 +137,9 @@ foreach ($cmd in $scene.commands) {
                 try { Invoke-Expression $using:line 2>&1 | Out-String -Width 150 } catch { $_ | Out-String -Width 150 }
             }
             if ($out) { Write-Host ($out.TrimEnd()) }
+        } elseif ($raw) {
+            # no pipeline: a native program gets the console itself (cursor control, its own colours)
+            & ([scriptblock]::Create($line))
         } else {
             Invoke-Expression $line 2>&1 | Out-Host
         }
@@ -120,6 +155,8 @@ Start-Sleep -Seconds 2
 if ($scene.markerDir) {
     New-Item -ItemType File -Force -Path (Join-Path $scene.markerDir 'done') | Out-Null
     $stop = Join-Path $scene.markerDir 'stop'
-    for ($i = 0; $i -lt 300 -and -not (Test-Path $stop); $i++) { Start-Sleep -Milliseconds 200 }
+    # keepOpen (Windows Terminal panes): the pane stays as it is until Stop-WtLayout.ps1 creates the stop marker
+    $limit = if ($scene.keepOpen) { [int]::MaxValue } else { 300 }
+    for ($i = 0; $i -lt $limit -and -not (Test-Path $stop); $i++) { Start-Sleep -Milliseconds 200 }
 }
 if ($session) { Remove-PSSession $session }

@@ -15,17 +15,52 @@
       "name": "node-ts",
       "kind": "app",
       "app": "VS Code",
-      "steps": [
-        "Open the folder C:\\lab\\pl11, dark theme, font size 18 or larger",
-        "Open src/ts/digest.ts and scroll to the Map.groupBy block",
-        "Open the integrated terminal below the editor (prompt shortened: function prompt { '> ' })",
-        "Run: node src/ts/main.ts samples/requests.json  (the full digest, three batches)",
-        "Run: npx tsc -p tsconfig.json  (no output), then $LASTEXITCODE (0)",
-        "Frame the code and the digest together"
+      "prepare": [
+        "& ..\\..\\..\\tools\\rec\\Open-VsCodeScene.ps1 -Screen node-ts"
       ],
+      "vscode": {
+        "folder": "C:\\lab\\pl11",
+        "goto": "src/ts/digest.ts:80:23",
+        "settings": {
+          "workbench.panel.defaultLocation": "right"
+        },
+        "tasks": [
+          {
+            "label": "node src/ts/main.ts samples/requests.json",
+            "command": "node src/ts/main.ts samples/requests.json"
+          },
+          {
+            "label": "npx tsc -p tsconfig.json",
+            "command": "npx tsc -p tsconfig.json; $LASTEXITCODE"
+          }
+        ]
+      },
+      "window": {
+        "title": "- pl11 - VS Code",
+        "out": "series\\programming-languages\\episodes\\11-modern-language-features\\screens\\node-ts.mp4",
+        "x": 1920,
+        "y": 0,
+        "width": 1920,
+        "height": 1032,
+        "maxSeconds": 120
+      },
+      "setup": [
+        "Action 'prepare: series/programming-languages/episodes/11-modern-language-features' if C:\\lab\\pl11 is gone (npm install, dotnet build; it also creates the Python 3.13 venv the other screens need), then 'screen-prepare: series/programming-languages/episodes/11-modern-language-features/node-ts': VS Code opens C:\\lab\\pl11 with src/ts/digest.ts at the Map.groupBy line (80), terminal panel on the right",
+        "If the Workspace Trust dialog appears: click 'Yes, I trust the authors'",
+        "If line 80 is not visible (it should be centred), click 'departments' in the breadcrumb bar's symbol list to reveal it; move the pointer off the window"
+      ],
+      "steps": [
+        "(take starts: window.json + window.go)",
+        "Click Terminal > Run Task..., then 'node src/ts/main.ts samples/requests.json': the panel prints the digest",
+        "Hold about 4 seconds, then click Terminal > Run Task..., then 'npx tsc -p tsconfig.json': nothing from the compiler, then 0 (its exit code)",
+        "Hold about 4 seconds with Map.groupBy and the digest both visible; move the pointer off the window; create recordings\\stop",
+        "After the take: click the window's close button (X)"
+      ],
+      "expected": "The digest as in expected/digest.txt: 'Contoso request digest', 'accepted 11, rejected 2, total 1,320,370.75 EUR, high priority 6', ... 'review batches of 4' with three batches. Then 'Executing task: npx tsc -p tsconfig.json; $LASTEXITCODE' followed only by 0. Node may print an ExperimentalWarning about type stripping: keep it, it is real (the narration says it is experimental).",
       "mask": [
-        "Explorer root and window title"
-      ]
+        "none expected: window title 'digest.ts - pl11 - VS Code', folder under C:\\lab, Accounts entry hidden"
+      ],
+      "note": "Click-tier take: the two commands run as VS Code tasks (Terminal > Run Task..., left-clicks only); the task terminal echoes each command. No typescript.tsdk: TypeScript 7 (native) has no tsserver.js, VS Code uses its own TypeScript for the editor."
     },
     {
       "name": "csharp-file-app",

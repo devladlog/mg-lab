@@ -13,6 +13,53 @@ KINDS = {"terminal", "browser", "app"}
 LOCAL_ONLY = re.compile(r"\baz\s+login\b|\bConnect-\w+|\bpac\s+auth\b|\bRead-Host\b|\bdocker\b|-VMName\b|\$cred\b|\bGet-VM\b|\bdevtunnel\b|\bgh\s+auth\b|\bAdd-PowerAppsAccount\b", re.I)
 
 
+GOTO = re.compile(r"^.+:\d+(:\d+)?$")
+
+
+def check_helpers(s: dict) -> list[str]:
+    """Blocks read by Start-WtLayout.ps1 (layout), Open-VsCodeScene.ps1 (vscode) and the lead's window.json (window)."""
+    m = []
+    prep = " ".join(x for x in s.get("prepare") or [] if isinstance(x, str))
+    lay = s.get("layout")
+    if lay is not None:
+        panes = lay.get("panes") or []
+        if not lay.get("title"):
+            m.append("layout.title missing (window.json title)")
+        if len(panes) < 2:
+            m.append("layout.panes needs two or more panes")
+        titles = [p.get("title") for p in panes]
+        for p in panes:
+            if not p.get("title") or not p.get("workdir") or not p.get("commands"):
+                m.append("every layout pane needs title, workdir and commands[]")
+            elif any(re.match(r"\s*(Write-Host|echo)\s+['\"]", c) for c in p["commands"]):
+                m.append(f"pane {p['title']}: commands must run real things, not print canned text")
+        if lay.get("stopPane") and lay["stopPane"] not in titles:
+            m.append(f"layout.stopPane {lay['stopPane']} is not a pane title")
+        if "Start-WtLayout.ps1" not in prep:
+            m.append("layout without Start-WtLayout.ps1 in the screen prepare")
+        if not any("Stop-WtLayout.ps1" in x for x in s.get("teardown") or []):
+            m.append("layout without Stop-WtLayout.ps1 in the screen teardown")
+    vs = s.get("vscode")
+    if vs is not None:
+        if not vs.get("folder") or not GOTO.match(str(vs.get("goto", ""))):
+            m.append("vscode needs folder and goto (file:line[:column])")
+        for t in vs.get("tasks") or []:
+            if not t.get("label") or not t.get("command"):
+                m.append("every vscode task needs label and command")
+        if "Open-VsCodeScene.ps1" not in prep:
+            m.append("vscode without Open-VsCodeScene.ps1 in the screen prepare")
+    w = s.get("window")
+    if w is not None:
+        for k in ("title", "out"):
+            if not w.get(k):
+                m.append(f"window.{k} missing")
+        if w.get("out") and not str(w["out"]).replace("/", "\\").endswith(f"screens\\{s.get('name')}.mp4"):
+            m.append("window.out must end with screens\\<name>.mp4")
+        if lay is not None and w.get("title") != lay.get("title"):
+            m.append("window.title must be the layout title")
+    return m
+
+
 def check(folder: Path) -> list[str]:
     errs = []
     e = lambda m: errs.append(f"{folder.name}: {m}")
@@ -58,6 +105,7 @@ def check(folder: Path) -> list[str]:
                 e(f"{n}: app screen needs app")
             if "mask" not in s:
                 e(f"{n}: {kind} screen needs mask[] (may be empty)")
+            errs.extend(f"{folder.name}: {n}: {m}" for m in check_helpers(s))
     text = rf.read_text(encoding="utf-8")
     for m in SECRET.finditer(text):
         e(f"possible secret handling: '{m.group(0)}'")

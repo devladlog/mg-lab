@@ -65,6 +65,21 @@ folder and extension (`screens/live-run.jpg` -> `live-run`).
   sign-ins, no cloud calls. Run `python3 /home/claude/mglab/mg-lab/series/tools/rec/check_record.py <folders>` and fix every
   error before handing back.
 
+## Click-tier app screens (VS Code, Windows Terminal)
+The lead records these through computer use with left-clicks and hovers only (no typing, no keys). Everything else
+is done by the screen's own `prepare` (run with the window recorder's action `screen-prepare: <episode>/<screen>`;
+`screen-teardown: <episode>/<screen>` runs its `teardown`):
+- `"vscode": {folder, goto: "file:line[:col]", settings, tasks}` + prepare `& ..\..\..\tools\rec\Open-VsCodeScene.ps1
+  -Screen <name>`: recording settings (theme, fonts, zoom, title `<file> - <folder> - VS Code`, no accounts badge),
+  optional `.vscode\tasks.json` (commands the lead starts with Terminal > Run Task...), new window at the line.
+- `"layout": {title, panes[{title, workdir, prompt, commands}], requires}` + prepare `Start-WtLayout.ps1 -Screen <name>`
+  and teardown `Stop-WtLayout.ps1 -Screen <name>`: a Windows Terminal window with split panes, each a live scene that
+  starts when the take starts (recordings\recording) and stops it at the end; `#raw <cmd>` for full-screen tools.
+- A program's Ctrl+C handling is shown with `Send-CtrlC -AfterMs N { command }` (a real CTRL_C_EVENT, typed on screen
+  as it is); prepare runs `Send-CtrlC.ps1 -SelfTest` and `-Rehearse` first. Say "sent", never "pressed".
+- `"window": {title, out, x, y, width, height, maxSeconds}` is what the lead writes to recordings\window.json.
+  `setup` (off camera), `steps` (on camera), `expected` describe the take.
+
 ## Lessons from the Windows Server 1 pilot
 - Never restart a lab VM with `Restart-VM` (it is a hard reset: recent registry and feature changes are lost). Restart from
   inside the guest: `Invoke-Command -VMName X -Credential $cred { Restart-Computer -Force }`, then wait for the Hyper-V

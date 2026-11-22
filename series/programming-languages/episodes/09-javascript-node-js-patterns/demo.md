@@ -38,7 +38,11 @@ npm test            # rehearsal: tests 26, pass 26, fail 0
      Left pane shows `operations: 503 (first call fails on purpose)` then a 200: that is the retry.
 2. **`screens/ctrlc.jpg`** - *Control C reaches the server* (scene `ctrlc`)
    - Restart the left pane with `--latency 1000`. Right pane: `node src/cli.js intake samples/requests.csv --concurrency 5 --no-cache`,
-     press Ctrl+C after about half a second, then `$LASTEXITCODE`.
+     Ctrl+C after about half a second, then `$LASTEXITCODE`.
+   - Recorded with the kit (`record.json`, `Start-WtLayout.ps1`): the Ctrl+C is **sent, not pressed**. The right pane
+     runs `Send-CtrlC -AfterMs 500 { node src/cli.js intake ... }`, typed on screen as is;
+     `series/tools/rec/Send-CtrlC.ps1` generates a real CTRL_C_EVENT on that console 0.5 s after node starts, Node
+     turns it into SIGINT and the client's own handler runs. The screen prepare rehearses it once off camera.
    - Frame: `stopped: interrupted (Ctrl+C)`, `130`, and five `ABORTED by the client` lines on the left.
 3. **`screens/gotchas.jpg`** - *Four traps, one script* (scene `gotchas`)
    - `npm run -s gotchas` (about 1 s). Frame: all four numbered results.

@@ -31,21 +31,72 @@
     {
       "name": "ctrlc",
       "kind": "app",
-      "app": "Windows Terminal (two panes)",
-      "steps": [
-        "Left pane: cd C:\\lab\\pl09; node src/cli.js serve --port 5090 --latency 1000 --fail-first operations",
-        "Right pane: cd C:\\lab\\pl09; node src/cli.js intake samples/requests.csv --concurrency 5 --no-cache",
-        "Press Ctrl+C in the right pane after about half a second",
-        "Right pane: type $LASTEXITCODE (expect 130 and 'stopped: interrupted (Ctrl+C)')",
-        "Frame both panes: five 'ABORTED by the client' lines on the left; stop the server with Ctrl+C"
-      ],
-      "mask": [
-        "window and tab titles; short prompt: function prompt { '> ' } in both panes"
-      ],
+      "app": "Windows Terminal (two panes, played by Start-WtLayout.ps1)",
       "prepare": [
-        "if (Test-Path C:\\lab\\pl09\\server.pid) { Stop-Process -Id (Get-Content C:\\lab\\pl09\\server.pid) -Force -ErrorAction SilentlyContinue; Remove-Item C:\\lab\\pl09\\server.pid }"
+        "if (Test-Path C:\\lab\\pl09\\server.pid) { Stop-Process -Id (Get-Content C:\\lab\\pl09\\server.pid) -Force -ErrorAction SilentlyContinue; Remove-Item C:\\lab\\pl09\\server.pid; Start-Sleep -Seconds 1 }",
+        "Remove-Item C:\\lab\\pl09\\api.log, C:\\lab\\pl09\\api.err -ErrorAction SilentlyContinue",
+        "# off-camera rehearsal: the service hidden (latency 1000 ms), one Ctrl+C run of the client",
+        "$p = Start-Process node -ArgumentList 'src/cli.js', 'serve', '--port', '5090', '--latency', '1000', '--fail-first', 'operations' -WorkingDirectory C:\\lab\\pl09 -RedirectStandardOutput C:\\lab\\pl09\\api.log -RedirectStandardError C:\\lab\\pl09\\api.err -WindowStyle Hidden -PassThru; $p.Id | Set-Content C:\\lab\\pl09\\server.pid; Start-Sleep -Seconds 2",
+        "& ..\\..\\..\\tools\\rec\\Send-CtrlC.ps1 -SelfTest",
+        "& ..\\..\\..\\tools\\rec\\Send-CtrlC.ps1 -Rehearse -WorkingDirectory C:\\lab\\pl09 -AfterMs 500 -Command 'node src/cli.js intake samples/requests.csv --concurrency 5 --no-cache' -Expect 'stopped: interrupted \\(Ctrl\\+C\\)' -ExpectExitCode 130 -Reject 'ready,'",
+        "Start-Sleep -Seconds 1; $ab = @(Select-String 'ABORTED by the client' C:\\lab\\pl09\\api.log).Count; \"rehearsal: the service logged $ab aborted call(s)\"; if ($ab -lt 1) { throw 'rehearsal: no lookup was aborted' }",
+        "if (Test-Path C:\\lab\\pl09\\server.pid) { Stop-Process -Id (Get-Content C:\\lab\\pl09\\server.pid) -Force -ErrorAction SilentlyContinue; Remove-Item C:\\lab\\pl09\\server.pid; Start-Sleep -Seconds 1 }",
+        "& ..\\..\\..\\tools\\rec\\Start-WtLayout.ps1 -Screen ctrlc"
       ],
-      "note": "Ctrl+C has to be pressed by a person at the right moment, so this screen is a guided capture."
+      "layout": {
+        "title": "MG pl09",
+        "panes": [
+          {
+            "title": "service",
+            "workdir": "C:\\lab\\pl09",
+            "prompt": "> ",
+            "commands": [
+              "#pause 1",
+              "node src/cli.js serve --port 5090 --latency 1000 --fail-first operations"
+            ]
+          },
+          {
+            "title": "client",
+            "workdir": "C:\\lab\\pl09",
+            "prompt": "> ",
+            "commands": [
+              "#waitport 5090 30",
+              "#pause 2",
+              "Send-CtrlC -AfterMs 500 { node src/cli.js intake samples/requests.csv --concurrency 5 --no-cache }",
+              "#pause 1.5",
+              "$LASTEXITCODE",
+              "#pause 5"
+            ]
+          }
+        ]
+      },
+      "teardown": [
+        "& ..\\..\\..\\tools\\rec\\Stop-WtLayout.ps1 -Screen ctrlc"
+      ],
+      "window": {
+        "title": "MG pl09",
+        "out": "series\\programming-languages\\episodes\\09-javascript-node-js-patterns\\screens\\ctrlc.mp4",
+        "x": 1920,
+        "y": 0,
+        "width": 1920,
+        "height": 1032,
+        "maxSeconds": 120
+      },
+      "setup": [
+        "Action 'prepare: series/programming-languages/episodes/09-javascript-node-js-patterns' if C:\\lab\\pl09 is gone",
+        "Action 'screen-prepare: series/programming-languages/episodes/09-javascript-node-js-patterns/ctrlc': Ctrl+C self-test and one hidden rehearsal (action.last must say ok), then a Windows Terminal window 'service | MG pl09' / 'client | MG pl09' whose panes wait for the take",
+        "Move the pointer off the window (other monitor)"
+      ],
+      "steps": [
+        "(take starts: window.json + window.go; the panes start when the recorder creates recordings\\recording)",
+        "Nothing to click: left pane starts the service, right pane runs Send-CtrlC { node src/cli.js intake ... } (a real Ctrl+C after 0.5 s) and $LASTEXITCODE, then creates recordings\\stop (about 15 s)",
+        "After the take: action 'screen-teardown: series/programming-languages/episodes/09-javascript-node-js-patterns/ctrlc'"
+      ],
+      "expected": "Right: 'stopped: interrupted (Ctrl+C)' and 130. Left: 'approvals API on http://127.0.0.1:5090 (latency 1000 ms). Ctrl+C to stop.' then five '<department>: ABORTED by the client' lines.",
+      "mask": [
+        "none expected: tab titles 'service | MG pl09' / 'client | MG pl09', prompt '> ', folder C:\\lab\\pl09"
+      ],
+      "note": "Ctrl+C is not pressed by hand: Send-CtrlC (series/tools/rec/Send-CtrlC.ps1) generates a real CTRL_C_EVENT on the client pane's console 0.5 s after node starts; Node turns it into SIGINT and the client's own process.once('SIGINT') handler aborts. The helper call is typed on screen as it is."
     },
     {
       "name": "gotchas",
@@ -78,6 +129,7 @@
     }
   ],
   "teardown": [
+    "& ..\\..\\..\\tools\\rec\\Stop-WtLayout.ps1 -Screen ctrlc",
     "if (Test-Path C:\\lab\\pl09\\server.pid) { Stop-Process -Id (Get-Content C:\\lab\\pl09\\server.pid) -Force -ErrorAction SilentlyContinue; Remove-Item C:\\lab\\pl09\\server.pid }",
     "Remove-Item C:\\lab\\pl09 -Recurse -Force -ErrorAction SilentlyContinue"
   ],

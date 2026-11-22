@@ -99,11 +99,11 @@ scenes:
     video: screens/vscode-profile.mp4
     bar: "VS Code · slow.cpuprofile"
     demo: >
-      VS Code, dark theme. In the Explorer, open profiles/slow.cpuprofile (written by node src/cli.js profile slow).
-      Visible: the profile viewer listing functions with their time, buildReportSlow at the top. Then, in a terminal,
-      show how to get the same kind of file with no code of ours: node --cpu-prof --cpu-prof-dir=cpuprof
-      src/run-report.js slow 3000 and the file that appears in cpuprof. Needs the recording laptop (VS Code is not
-      available in the build container).
+      VS Code, dark theme. Terminal > Run Task runs node --cpu-prof --cpu-prof-dir=cpuprof src/run-report.js slow 3000
+      (no code of ours), the file CPU.<date>.<time>.<pid>.0.001.cpuprofile appears in the Explorer under cpuprof, and a
+      click opens it in VS Code's profile table: functions with their time, buildReportSlow at the top. A second task
+      runs node src/cli.js top on the same file (our tool, the line view). Clicks only. Needs the recording laptop (VS
+      Code is not available in the build container).
     narration: >
       You do not need our tool to get a profile. Node writes one if you start it with dash dash cpu dash prof. The
       file is a dot cpuprofile, and VS Code opens it directly and lists the functions with their time. Chrome developer tools opens

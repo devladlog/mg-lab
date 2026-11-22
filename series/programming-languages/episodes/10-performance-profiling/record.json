@@ -33,20 +33,51 @@
       "name": "vscode-profile",
       "kind": "app",
       "app": "VS Code",
-      "steps": [
-        "Open the folder C:\\lab\\pl10, dark theme, font size 18 or larger",
-        "Open profiles/slow.cpuprofile from the Explorer (written by the previous screen's command)",
-        "Frame the profile viewer: functions with their time, buildReportSlow at the top; if the built-in viewer does not appear, say so and drop this screen (Chrome DevTools > Performance can load the same file)",
-        "Open the integrated terminal and run: node --cpu-prof --cpu-prof-dir=cpuprof src/run-report.js slow 3000",
-        "Run: dir cpuprof  (file CPU.<date>.<time>.<pid>.0.001.cpuprofile)",
-        "Run: node src/cli.js top (Get-ChildItem cpuprof\\*.cpuprofile).FullName"
-      ],
-      "mask": [
-        "window title and Explorer root if they show a user name"
-      ],
       "prepare": [
-        "Push-Location C:\\lab\\pl10; node src/cli.js profile slow --rows 3000 | Out-Null; Pop-Location"
-      ]
+        "Remove-Item C:\\lab\\pl10\\cpuprof -Recurse -Force -ErrorAction SilentlyContinue",
+        "& ..\\..\\..\\tools\\rec\\Open-VsCodeScene.ps1 -Screen vscode-profile"
+      ],
+      "vscode": {
+        "folder": "C:\\lab\\pl10",
+        "goto": "src/run-report.js:1:1",
+        "tasks": [
+          {
+            "label": "node --cpu-prof",
+            "command": "node --cpu-prof --cpu-prof-dir=cpuprof src/run-report.js slow 3000"
+          },
+          {
+            "label": "our tool reads it: cli.js top",
+            "command": "node src/cli.js top (Get-ChildItem cpuprof\\*.cpuprofile | Select-Object -First 1).FullName"
+          }
+        ]
+      },
+      "window": {
+        "title": "- pl10 - VS Code",
+        "out": "series\\programming-languages\\episodes\\10-performance-profiling\\screens\\vscode-profile.mp4",
+        "x": 1920,
+        "y": 0,
+        "width": 1920,
+        "height": 1032,
+        "maxSeconds": 150
+      },
+      "setup": [
+        "Action 'prepare: series/programming-languages/episodes/10-performance-profiling' if C:\\lab\\pl10 is gone, then 'screen-prepare: series/programming-languages/episodes/10-performance-profiling/vscode-profile': VS Code opens C:\\lab\\pl10 with src/run-report.js, two tasks written to .vscode/tasks.json",
+        "If the Workspace Trust dialog appears: click 'Yes, I trust the authors' (tasks do not run in Restricted Mode)",
+        "Move the pointer off the window"
+      ],
+      "steps": [
+        "(take starts: window.json + window.go)",
+        "Click the menu Terminal > Run Task..., then click 'node --cpu-prof' in the list: the terminal panel shows 'Executing task: node --cpu-prof --cpu-prof-dir=cpuprof src/run-report.js slow 3000' and 'slow: 2930 lines, 70 duplicates, N ms'",
+        "In the Explorer click the new folder 'cpuprof', then click the file CPU.<date>.<time>.<pid>.0.001.cpuprofile: VS Code opens it in its built-in profile table; hold about 5 seconds on the table (hover the buildReportSlow row)",
+        "Click Terminal > Run Task..., then 'our tool reads it: cli.js top': the panel prints the function table and the line table from the same file",
+        "Move the pointer off the window; create recordings\\stop",
+        "After the take: click the window's close button (X)"
+      ],
+      "expected": "The profile table lists the functions with self and total time, buildReportSlow (report.js) at or near the top. cli.js top prints 'buildReportSlow  report.js:25' first and the lines report.js:36 (toLocaleString) and report.js:30 (seen.some). If VS Code does not open the .cpuprofile in a table, stop and report it (demo.md: drop the screen).",
+      "mask": [
+        "none expected: window title '... - pl10 - VS Code', folder under C:\\lab, Accounts entry hidden; the task terminal shows only the command"
+      ],
+      "note": "Click-tier take: the terminal commands run as VS Code tasks (Terminal > Run Task..., left-clicks only) instead of typed commands; the Explorer shows the file that node --cpu-prof wrote, so no 'dir cpuprof'."
     },
     {
       "name": "after",
