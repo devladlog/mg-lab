@@ -6,9 +6,9 @@
     "python -m pip install -q -r requirements.txt",
     "$env:PYTHONPATH = 'src'",
     "# owner signs in as labadmin (device code), not on camera",
-    "az login --use-device-code --only-show-errors | Out-Null",
-    "az group create -n rg-mglab-ai-7 -l swedencentral -o none",
-    "$o = az deployment group create -g rg-mglab-ai-7 -f infra/main.bicep -p infra/main.bicepparam --query properties.outputs -o json | ConvertFrom-Json",
+    "az account show --query name -o none 2>$null; if ($LASTEXITCODE -ne 0) { az login --use-device-code }",
+    "az group create -n rg-mglab-ai-07 -l swedencentral -o none",
+    "$o = az deployment group create -g rg-mglab-ai-07 -f infra/main.bicep -p infra/main.bicepparam --query properties.outputs -o json | ConvertFrom-Json; if ($LASTEXITCODE) { throw 'deployment to rg-mglab-ai-07 failed' }",
     "$env:AOAI_NAME = $o.aoaiName.value; $env:SHADOW_NAME = $o.shadowName.value",
     "$env:SUB = az account show --query id -o tsv",
     "Start-Sleep -Seconds 900   # Azure Policy assignments need at least 15 minutes before the deny scenes",
@@ -81,9 +81,9 @@
   ],
   "teardown": [
     "# owner: in Purview delete the assessment 'HR assistant: EU AI Act' (Compliance Manager > Assessments > ... > Delete); an activated premium regulation keeps counting toward the free three",
-    "az group delete -n rg-mglab-ai-7 --yes",
-    "az cognitiveservices account purge -g rg-mglab-ai-7 -n $env:AOAI_NAME -l swedencentral",
-    "az cognitiveservices account purge -g rg-mglab-ai-7 -n $env:SHADOW_NAME -l swedencentral",
+    "az group delete -n rg-mglab-ai-07 --yes",
+    "az cognitiveservices account purge -g rg-mglab-ai-07 -n $env:AOAI_NAME -l swedencentral",
+    "az cognitiveservices account purge -g rg-mglab-ai-07 -n $env:SHADOW_NAME -l swedencentral",
     "Remove-Item reports, .venv -Recurse -Force -ErrorAction SilentlyContinue"
   ],
   "needs": [

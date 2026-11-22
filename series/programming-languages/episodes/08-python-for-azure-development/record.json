@@ -7,12 +7,12 @@
     "if (-not (py -3.13 --version 2>$null)) { winget install --id Python.Python.3.13 -e --silent --accept-package-agreements --accept-source-agreements }",
     "py -3.13 -m venv C:\\lab\\pl08\\.venv",
     "& C:\\lab\\pl08\\.venv\\Scripts\\python.exe -m pip install -q -e 'C:\\lab\\pl08[dev]'",
-    "# owner signs in: az login (interactive) and selects the lab subscription (az account set); never typed on camera",
-    "az login",
+    "# owner signs in (device code) only if there is no session yet, and selects the lab subscription (az account set); never typed on camera",
+    "az account show --query name -o none 2>$null; if ($LASTEXITCODE -ne 0) { az login --use-device-code }",
     "az group create -n rg-mglab-code-08 -l westeurope -o none",
     "$me = az ad signed-in-user show --query id -o tsv",
     "$sa = az storage account list -g rg-mglab-code-08 --query \"[0].name\" -o tsv; if (-not $sa) { $sa = 'stcontosomglab' + (Get-Random -Minimum 1000 -Maximum 9999) }",
-    "az deployment group create -g rg-mglab-code-08 -f C:\\lab\\pl08\\infra\\main.bicep -p storageAccountName=$sa principalId=$me assignRole=false -o none",
+    "az deployment group create -g rg-mglab-code-08 -f C:\\lab\\pl08\\infra\\main.bicep -p storageAccountName=$sa principalId=$me assignRole=false -o none; if ($LASTEXITCODE) { throw 'deployment to rg-mglab-code-08 failed' }",
     "Set-Content C:\\lab\\pl08\\.account-url \"https://$sa.blob.core.windows.net\" -NoNewline"
   ],
   "screens": [
