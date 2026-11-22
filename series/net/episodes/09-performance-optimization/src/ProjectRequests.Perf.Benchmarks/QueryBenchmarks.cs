@@ -12,6 +12,9 @@ namespace ProjectRequests.Perf.Benchmarks;
 /// Each benchmark creates and disposes its own DbContext (that cost is part of every variant, so ratios stay fair).
 /// </summary>
 [MemoryDiagnoser, GroupBenchmarksBy(BenchmarkLogicalGroupRule.ByCategory), CategoriesColumn]
+// Keep the summary table readable on one screen: Mean with its Error stays, the rest of the spread and the
+// empty GC columns go. Remove this line to see every column.
+[HideColumns("StdDev", "Median", "RatioSD", "Gen1", "Gen2")]
 public class QueryBenchmarks
 {
     private string _path = "";

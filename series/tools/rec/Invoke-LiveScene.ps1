@@ -40,10 +40,17 @@ public struct CONSOLE_FONT_INFOEX { public uint cbSize; public uint nFont; publi
     $f = New-Object MgRec.Font+CONSOLE_FONT_INFOEX
     $f.cbSize = [Runtime.InteropServices.Marshal]::SizeOf($f); $f.FaceName = 'Cascadia Mono'; $f.Y = $(if ($scene.fontSize) { [int16]$scene.fontSize } else { 22 }); $f.FontWeight = 400; $f.FontFamily = 54
     [void][MgRec.Font]::SetCurrentConsoleFontEx([MgRec.Font]::GetStdHandle(-11), $false, [ref]$f)
-    # colours from npm, vitest, dotnet etc. arrive as ANSI escapes: let the console render them instead of printing them
-    $h = [MgRec.Font]::GetStdHandle(-11); $m = 0
-    if ([MgRec.Font]::GetConsoleMode($h, [ref]$m)) { [void][MgRec.Font]::SetConsoleMode($h, $m -bor 0x0001 -bor 0x0004) }
 } catch {}
+# colours from npm, vitest, dotnet etc. arrive as ANSI escapes: let the console render them instead of printing them.
+# cmd.exe (npm.cmd, npx.cmd, any .cmd shim) switches that rendering off again while it runs, so the host branch below
+# calls this before every line it prints, not only once here.
+function Enable-ConsoleVt {
+    try {
+        $h = [MgRec.Font]::GetStdHandle(-11); $m = [uint32]0
+        if ([MgRec.Font]::GetConsoleMode($h, [ref]$m) -and (($m -band 0x0005) -ne 0x0005)) { [void][MgRec.Font]::SetConsoleMode($h, $m -bor 0x0001 -bor 0x0004) }
+    } catch {}
+}
+Enable-ConsoleVt
 # UTF-8 both ways, so tool symbols (check marks, crosses, box drawing) don't turn into mojibake
 try { [Console]::OutputEncoding = [Text.UTF8Encoding]::new($false); [Console]::InputEncoding = [Text.UTF8Encoding]::new($false); $OutputEncoding = [Text.UTF8Encoding]::new($false) } catch {}
 if ($scene.markerDir) {
@@ -142,7 +149,7 @@ foreach ($cmd in $scene.commands) {
             # no pipeline: a native program gets the console itself (cursor control, its own colours)
             & ([scriptblock]::Create($line))
         } else {
-            Invoke-Expression $line 2>&1 | Out-Host
+            Invoke-Expression $line 2>&1 | ForEach-Object { Enable-ConsoleVt; $_ } | Out-Host
         }
     } catch {
         Write-Host ($_ | Out-String) -ForegroundColor Red

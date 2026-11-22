@@ -24,7 +24,10 @@ $wanted = if (Test-Path $queueFile) { @(Get-Content $queueFile | ForEach-Object 
 # "teardown" lists (e.g. open VS Code at a line, or a Windows Terminal layout for an app screen; close it again).
 # "screen-play: <episode>/<screen>" runs the screen's "play" list just before a take: it starts a helper that waits for
 # the take and then acts by itself (Invoke-PointerScript.ps1 -Start: pointer moves and left clicks inside the window).
-$actionRe = '^(prepare|teardown|screen-prepare|screen-teardown|screen-play):\s*(.+)$'
+# "screen-record: <episode>/<screen>" records one terminal screen with Record-Scene.ps1 (again, if it exists): the
+# running window recorder can retake a terminal screen without being restarted with another queue. The episode
+# "prepare:" action comes first when the screen needs the working copy.
+$actionRe = '^(prepare|teardown|screen-prepare|screen-teardown|screen-play|screen-record):\s*(.+)$'
 function Resolve-QueueAction([string] $Line) {
     # -> what to run for one action line: the episode folder, a label and the statements (may be empty)
     if ($Line -notmatch $actionRe) { throw "unknown action: $Line" }
@@ -36,12 +39,20 @@ function Resolve-QueueAction([string] $Line) {
         $def = Get-Content (Join-Path $epDir 'record.json') -Raw | ConvertFrom-Json
         $s = $def.screens | Where-Object name -eq $name
         if (-not $s) { throw "no screen '$name' in $epDir\record.json" }
+        if ($what -eq 'screen-record') {
+            if ($s.kind -and $s.kind -ne 'terminal') { throw "screen-record is for terminal screens; '$name' is a $($s.kind) screen" }
+            return [pscustomobject]@{ What = $what; EpisodeDir = $epDir; Screen = $name; Statements = @() }
+        }
         $key = $what.Substring(7)
-        return [pscustomobject]@{ What = $what; EpisodeDir = $epDir; Statements = @($s.$key | Where-Object { $_ }) }
+        return [pscustomobject]@{ What = $what; EpisodeDir = $epDir; Screen = $name; Statements = @($s.$key | Where-Object { $_ }) }
     }
     $epDir = Join-Path $Root $spec.Replace('/', '\')
     $def = Get-Content (Join-Path $epDir 'record.json') -Raw | ConvertFrom-Json
-    [pscustomobject]@{ What = $what; EpisodeDir = $epDir; Statements = @($def.$what | Where-Object { $_ }) }
+    [pscustomobject]@{ What = $what; EpisodeDir = $epDir; Screen = $null; Statements = @($def.$what | Where-Object { $_ }) }
+}
+function Invoke-QueueAction($Act) {
+    if ($Act.What -eq 'screen-record') { & (Join-Path $PSScriptRoot 'Record-Scene.ps1') -Episode $Act.EpisodeDir -Screen $Act.Screen -Root $Root }
+    elseif ($Act.Statements) { Invoke-HostStatements -Statements $Act.Statements -EpisodeRoot $Act.EpisodeDir }
 }
 # "window-recorder" keeps running and records one window per trigger: write recordings\window.json, then create
 # recordings\window.go to start; create recordings\stop to end that take; create recordings\window-recorder.quit to exit.
@@ -54,14 +65,17 @@ if ($wanted -contains 'window-recorder') {
     while (-not (Test-Path (Join-Path $rd 'window-recorder.quit'))) {
         Set-Content $state 'idle'
         # recordings\action.txt with "prepare: <episode>" or "teardown: <episode>" runs that step (for the next app episode)
+        # An empty read means the writer has not finished the file yet: look again next round (never a crash).
         $actFile = Join-Path $rd 'action.txt'
-        if (Test-Path $actFile) {
-            $line = (Get-Content $actFile -Raw).Trim(); Remove-Item $actFile
+        $line = ''
+        if (Test-Path $actFile) { try { $line = "$(Get-Content $actFile -Raw -ErrorAction Stop)".Trim() } catch { $line = '' } }
+        if ($line) {
+            Remove-Item $actFile -ErrorAction SilentlyContinue
             Set-Content $state 'working'
             try {
                 $act = Resolve-QueueAction $line
                 Write-Host "`n=== $line ===" -ForegroundColor Cyan
-                if ($act.Statements) { Invoke-HostStatements -Statements $act.Statements -EpisodeRoot $act.EpisodeDir }
+                Invoke-QueueAction $act
                 Set-Content (Join-Path $rd 'action.last') "ok: $line"
             } catch { Write-Host $_ -ForegroundColor Red; Set-Content (Join-Path $rd 'action.last') "error: $($_.Exception.Message)" }
             continue
@@ -88,7 +102,7 @@ if ($actions) {
     foreach ($a in $actions) {
         $act = Resolve-QueueAction $a
         Write-Host "`n=== $a ===" -ForegroundColor Cyan
-        if ($act.Statements) { Invoke-HostStatements -Statements $act.Statements -EpisodeRoot $act.EpisodeDir }
+        Invoke-QueueAction $act
         Write-Host "$($act.What) done." -ForegroundColor Green
     }
     New-Item -ItemType File -Force -Path (Join-Path $Root 'recordings\queue-actions.done') | Out-Null

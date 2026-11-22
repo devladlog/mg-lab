@@ -23,7 +23,8 @@
         "extensions": "none",
         "goto": "src/ts/digest.ts:80:23",
         "settings": {
-          "workbench.panel.defaultLocation": "right"
+          "terminal.integrated.defaultLocation": "editor",
+          "editor.fontSize": 16
         },
         "tasks": [
           {
@@ -46,22 +47,50 @@
         "maxSeconds": 120
       },
       "setup": [
-        "Action 'prepare: series/programming-languages/episodes/11-modern-language-features' if C:\\lab\\pl11 is gone (npm install, dotnet build; it also creates the Python 3.13 venv the other screens need), then 'screen-prepare: series/programming-languages/episodes/11-modern-language-features/node-ts': VS Code opens C:\\lab\\pl11 with src/ts/digest.ts at the Map.groupBy line (80), terminal panel on the right",
+        "Action 'prepare: series/programming-languages/episodes/11-modern-language-features' if C:\\lab\\pl11 is gone (npm install, dotnet build; it also creates the Python 3.13 venv the other screens need), then 'screen-prepare: series/programming-languages/episodes/11-modern-language-features/node-ts': VS Code opens C:\\lab\\pl11 with src/ts/digest.ts at the Map.groupBy line (80)",
         "If the Workspace Trust dialog appears: click 'Yes, I trust the authors'",
-        "If line 80 is not visible (it should be centred), click 'departments' in the breadcrumb bar's symbol list to reveal it; move the pointer off the window"
+        "Close the 'All installed extensions are temporarily disabled' notification with its X; if a terminal panel from an earlier run is open, click its bin icon (the panel closes)",
+        "Click the Explorer icon in the activity bar (the side bar hides), then the 'Split Editor Right' button at the top right of the editor: digest.ts shows twice, line 80 visible in both; task terminals open as a tab in the right-hand group (terminal.integrated.defaultLocation = editor), wide enough for the digest (64 columns) without wrapping",
+        "Record with 'screen-play: .../node-ts' just before window.go: the pointer script then performs the steps below by itself and ends the take"
+      ],
+      "pointer": [
+        { "wait": 2 },
+        { "click": [389, 21] },
+        { "wait": 1.2 },
+        { "click": [423, 154] },
+        { "wait": 1.5 },
+        { "click": [669, 69] },
+        { "wait": 0.8 },
+        { "move": [29, 600], "glide": 0.8 },
+        { "wait": 5 },
+        { "click": [389, 21], "glide": 0.8 },
+        { "wait": 1.2 },
+        { "click": [423, 154] },
+        { "wait": 1.5 },
+        { "click": [699, 94] },
+        { "wait": 0.8 },
+        { "move": [29, 600], "glide": 0.8 },
+        { "wait": 7 }
+      ],
+      "play": [
+        "& ..\\..\\..\\tools\\rec\\Invoke-PointerScript.ps1 -Screen node-ts -Start"
+      ],
+      "teardown": [
+        "& ..\\..\\..\\tools\\rec\\Invoke-PointerScript.ps1 -Screen node-ts -CloseWindow"
       ],
       "steps": [
         "(take starts: window.json + window.go)",
-        "Click Terminal > Run Task..., then 'node src/ts/main.ts samples/requests.json': the panel prints the digest",
-        "Hold about 4 seconds, then click Terminal > Run Task..., then 'npx tsc -p tsconfig.json': nothing from the compiler, then 0 (its exit code)",
-        "Hold about 4 seconds with Map.groupBy and the digest both visible; move the pointer off the window; create recordings\\stop",
+        "Click Terminal > Run Task..., then 'node src/ts/main.ts samples/requests.json': a terminal tab opens in the right-hand editor group and prints the digest",
+        "Hold about 5 seconds, then click Terminal > Run Task..., then 'npx tsc -p tsconfig.json': nothing from the compiler, then 0 (its exit code), below the digest in the same terminal",
+        "Hold about 7 seconds with Map.groupBy (left) and the digest (right) both visible; park the pointer on the empty part of the activity bar; create recordings\\stop",
         "After the take: click the window's close button (X)"
       ],
-      "expected": "The digest as in expected/digest.txt: 'Contoso request digest', 'accepted 11, rejected 2, total 1,320,370.75 EUR, high priority 6', ... 'review batches of 4' with three batches. Then 'Executing task: npx tsc -p tsconfig.json; $LASTEXITCODE' followed only by 0. Node may print an ExperimentalWarning about type stripping: keep it, it is real (the narration says it is experimental).",
+      "expected": "The digest as in expected/digest.txt: 'Contoso request digest', 'accepted 11, rejected 2, total 1,320,370.75 EUR, high priority 6', ... 'review batches of 4' with three batches. Then 'Executing task: npx tsc -p tsconfig.json; $LASTEXITCODE' followed only by 0. Node may print an ExperimentalWarning about type stripping (older Node 22/23): keep it if it shows, it is real.",
       "mask": [
-        "none expected: window title 'digest.ts - pl11 - VS Code', folder under C:\\lab, Accounts entry hidden"
+        "the round account picture at the bottom of the activity bar (about x 14-60, y 882-926 of the 1906x1025 take): the scene sets mask [[14, 882, 46, 44]] in script.yaml (the menu bar is used, so the title bar cannot be cropped away)",
+        "otherwise none expected: window title '... - pl11 - VS Code', folder under C:\\lab, Accounts entry hidden"
       ],
-      "note": "Click-tier take: the two commands run as VS Code tasks (Terminal > Run Task..., left-clicks only); the task terminal echoes each command. No typescript.tsdk: TypeScript 7 (native) has no tsserver.js, VS Code uses its own TypeScript for the editor."
+      "note": "Click-tier take: the two commands run as VS Code tasks (Terminal > Run Task..., left-clicks only); the task terminal echoes each command. The terminal sits in the editor area (second group) because a terminal panel on the right opens at a quarter of the window width (about 38 columns at this font) and wraps the digest mid-word; the panel cannot be widened with clicks. Editor font 16 so line 80 fits in half the window. No typescript.tsdk: TypeScript 7 (native) has no tsserver.js, VS Code uses its own TypeScript for the editor."
     },
     {
       "name": "csharp-file-app",

@@ -549,6 +549,14 @@ def main():
         if sc["type"] == "screen" and sc.get("video"):
             clip = Path(sc["video"]) if Path(sc["video"]).is_absolute() else Path(sc["_base"]) / sc["video"]
             if clip.exists():
+                if sc.get("mask"):   # privacy: paint over boxes ([[x, y, w, h], ...] in source pixels) before anything uses the take
+                    masked = work / f"{i:02d}_{sc['id']}_masked.mp4"
+                    if not masked.exists() or masked.stat().st_mtime < clip.stat().st_mtime:
+                        boxes = ",".join(f"drawbox=x={x}:y={y}:w={w}:h={h}:color={sc.get('mask_color', '0x181818')}:t=fill"
+                                         for x, y, w, h in sc["mask"])
+                        run(["ffmpeg", "-y", "-i", str(clip), "-vf", boxes, "-an", "-c:v", "libx264", "-preset", "veryfast",
+                             "-crf", "16", "-pix_fmt", "yuv420p", str(masked)])
+                    clip = masked
                 poster = work / f"{i:02d}_{sc['id']}_poster.png"
                 run(["ffmpeg", "-y", "-sseof", "-0.1", "-i", str(clip), "-frames:v", "1", "-update", "1", str(poster)])
                 sc["_poster"] = str(poster)

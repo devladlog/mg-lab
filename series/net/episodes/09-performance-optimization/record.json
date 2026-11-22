@@ -22,7 +22,7 @@
         "#clear",
         "curl.exe -s \"http://localhost:5209/api/requests?department=FIN&pageSize=2\"",
         "#pause 2",
-        "Get-Content $env:MG_LOGS\\ep09-api.log -Tail 14",
+        "Get-Content $env:MG_LOGS\\ep09-api.log -Tail 19",
         "#pause 6"
       ],
       "prepare": [
@@ -39,6 +39,9 @@
       "prompt": "PS> ",
       "commands": [
         "dotnet run -c Release --project src\\ProjectRequests.Perf.Benchmarks -- --filter \"*QueryBenchmarks*\"",
+        "#pause 4",
+        "#clear",
+        "Get-Content BenchmarkDotNet.Artifacts\\results\\*QueryBenchmarks-report-github.md | Select-String '^\\|' -Raw",
         "#pause 8"
       ],
       "prepare": [
@@ -131,9 +134,9 @@
         "Nothing to click: left pane starts dotnet-counters monitor; right pane reads the summary once (fills the cache), eight more times, POSTs one request, waits 1.5 s and reads once more, then creates recordings\\stop (about 30 s)",
         "After the take: action 'screen-teardown: series/net/episodes/09-performance-optimization/counters' (closes the panes and dotnet-counters); the episode teardown stops the API"
       ],
-      "expected": "Left: [ProjectRequests.Perf] with mglab.perf.summary.computed ({computation} / 1 sec) and mglab.perf.requests.created ({request} / 1 sec) (they appear with the first read). summary.computed shows 1 for one interval after the first read, stays 0 during the eight reads, shows 1 again after the read that follows the POST; requests.created shows 1 after the POST. Right: the POST prints the created request as JSON (title Counter demo, budget 75000, FIN).",
+      "expected": "Left: [ProjectRequests.Perf] with mglab.perf.summary.computed ({computation}) (appears with the first read) and mglab.perf.requests.created ({request}) (appears with the POST). The values are running totals, not rates: summary.computed shows 1 after the first read, stays 1 during the eight reads, shows 2 after the read that follows the POST; requests.created shows 1 after the POST. Right: the POST prints the created request as JSON (title Counter demo, budget 75000, FIN).",
       "mask": [],
-      "note": "dotnet-counters runs attached to the pane's console (#raw: no pipeline) so its live table renders; its output is not in the pane transcript. Counters are per-second rates: each tick shows as 1 for one refresh."
+      "note": "dotnet-counters runs attached to the pane's console (#raw: no pipeline) so its live table renders; its output is not in the pane transcript. In the take of 2026-11-22 the counters show as running totals (no '/ 1 sec' in the name): a tick is the value going up by one, and it stays."
     }
   ],
   "teardown": [
