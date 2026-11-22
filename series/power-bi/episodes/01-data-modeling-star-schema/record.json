@@ -5,11 +5,7 @@
     "Remove-Item C:\\MGLab\\power-bi\\ep01 -Recurse -Force -ErrorAction SilentlyContinue",
     "Copy-Item -Path (Get-Location).Path -Destination C:\\MGLab\\power-bi\\ep01 -Recurse -Force",
     "New-Item -ItemType Directory -Force C:\\MGLab\\power-bi\\star | Out-Null",
-    "Copy-Item .\\src\\data\\star\\*.csv C:\\MGLab\\power-bi\\star\\ -Force",
-    "New-Item -ItemType Directory -Force C:\\MGLab\\tools\\bpa | Out-Null",
-    "if (-not (Test-Path C:\\MGLab\\tools\\TabularEditor2\\TabularEditor.exe)) { Invoke-WebRequest https://github.com/TabularEditor/TabularEditor/releases/download/2.29.0/TabularEditor.2.29.0.zip -OutFile C:\\MGLab\\tools\\TabularEditor.2.29.0.zip; Expand-Archive C:\\MGLab\\tools\\TabularEditor.2.29.0.zip C:\\MGLab\\tools\\TabularEditor2 -Force; Get-ChildItem C:\\MGLab\\tools\\TabularEditor2 -Recurse | Unblock-File }",
-    "Invoke-WebRequest https://raw.githubusercontent.com/microsoft/Analysis-Services/master/BestPracticeRules/BPARules.json -OutFile C:\\MGLab\\tools\\bpa\\BPARules.json",
-    "'Tabular Editor 2: ' + (Test-Path C:\\MGLab\\tools\\TabularEditor2\\TabularEditor.exe) + '; BPA rules: ' + @(Get-Content C:\\MGLab\\tools\\bpa\\BPARules.json -Raw | ConvertFrom-Json).Count"
+    "Copy-Item .\\src\\data\\star\\*.csv C:\\MGLab\\power-bi\\star\\ -Force"
   ],
   "screens": [
     {
@@ -26,25 +22,6 @@
       "mask": [
         "account name and picture at the top right of Power BI Desktop (sign out first)",
         "Windows user name in any file path (record from C:\\MGLab)"
-      ]
-    },
-    {
-      "name": "te2-bpa",
-      "kind": "app",
-      "app": "Tabular Editor 2 (portable) + Power BI Desktop",
-      "steps": [
-        "Power BI Desktop: C:\\MGLab\\power-bi\\ep01\\src\\ContosoSales.pbip open and refreshed (from the model-view screen)",
-        "Start C:\\MGLab\\tools\\TabularEditor2\\TabularEditor.exe (portable build: no External Tools button, that needs the MSI). Close any update/welcome prompt",
-        "File > Open > From DB... > Local instance: pick the ContosoSales Power BI Desktop entry > OK (the model tree shows Customer, Date, Product, Sales, Store)",
-        "Tools > Manage BPA Rules... > Add... > include a local rule file > type C:\\MGLab\\tools\\bpa\\BPARules.json > Open > OK (TE2 labels may differ slightly; the TE docs call it 'Include Rule File')",
-        "Press F10 (Best Practice Analyzer): the list of rules with violations; expand Provide format string for \"Date\" columns (Date[Date]), Remove unnecessary columns (Sales[Line Number]) and Visible objects with no description; hold on each",
-        "Write down every rule that appears and its object count (record the real list; demo.md has what the rule expressions predict)",
-        "Do not click Fix, Ignore or Save; File > Exit and answer No if asked to save"
-      ],
-      "mask": [
-        "account name and picture at the top right of Power BI Desktop (sign out first)",
-        "Tabular Editor title bar shows localhost:<port>, which is fine; do not open File > Recent Files",
-        "Windows user name in the rule-file dialog (type the C:\\MGLab path, do not browse the nav pane)"
       ]
     },
     {
@@ -92,9 +69,41 @@
   ],
   "teardown": [
     "Remove-Item C:\\MGLab\\power-bi\\ep01 -Recurse -Force -ErrorAction SilentlyContinue",
-    "Remove-Item C:\\MGLab\\power-bi\\star -Recurse -Force -ErrorAction SilentlyContinue",
-    "# Tabular Editor 2 portable and the rule file stay in C:\\MGLab\\tools for later episodes; to remove: Remove-Item C:\\MGLab\\tools\\TabularEditor2, C:\\MGLab\\tools\\TabularEditor.2.29.0.zip, C:\\MGLab\\tools\\bpa -Recurse -Force"
+    "Remove-Item C:\\MGLab\\power-bi\\star -Recurse -Force -ErrorAction SilentlyContinue"
   ],
+  "not_in_video": {
+    "note": "Tabular Editor 2 Best Practice Analyzer screen: NOT part of the published video (owner decision, 22 Nov 2026) and never recorded. It is parked here, word for word, because check_record.py wants screens[] to equal the screen scenes of script.yaml, and so that the episode's prepare does not download a tool the video does not use. To record it later: add the scene back to script.yaml after 'snowflake' (image: screens/te2-bpa.jpg, video: screens/te2-bpa.mp4), move the screen below back into screens[] after model-view, and append the prepare and teardown lines below to the top-level lists.",
+    "prepare": [
+      "New-Item -ItemType Directory -Force C:\\MGLab\\tools\\bpa | Out-Null",
+      "if (-not (Test-Path C:\\MGLab\\tools\\TabularEditor2\\TabularEditor.exe)) { Invoke-WebRequest https://github.com/TabularEditor/TabularEditor/releases/download/2.29.0/TabularEditor.2.29.0.zip -OutFile C:\\MGLab\\tools\\TabularEditor.2.29.0.zip; Expand-Archive C:\\MGLab\\tools\\TabularEditor.2.29.0.zip C:\\MGLab\\tools\\TabularEditor2 -Force; Get-ChildItem C:\\MGLab\\tools\\TabularEditor2 -Recurse | Unblock-File }",
+      "Invoke-WebRequest https://raw.githubusercontent.com/microsoft/Analysis-Services/master/BestPracticeRules/BPARules.json -OutFile C:\\MGLab\\tools\\bpa\\BPARules.json",
+      "'Tabular Editor 2: ' + (Test-Path C:\\MGLab\\tools\\TabularEditor2\\TabularEditor.exe) + '; BPA rules: ' + @(Get-Content C:\\MGLab\\tools\\bpa\\BPARules.json -Raw | ConvertFrom-Json).Count"
+    ],
+    "screens": [
+      {
+        "name": "te2-bpa",
+        "kind": "app",
+        "app": "Tabular Editor 2 (portable) + Power BI Desktop",
+        "steps": [
+          "Power BI Desktop: C:\\MGLab\\power-bi\\ep01\\src\\ContosoSales.pbip open and refreshed (from the model-view screen)",
+          "Start C:\\MGLab\\tools\\TabularEditor2\\TabularEditor.exe (portable build: no External Tools button, that needs the MSI). Close any update/welcome prompt",
+          "File > Open > From DB... > Local instance: pick the ContosoSales Power BI Desktop entry > OK (the model tree shows Customer, Date, Product, Sales, Store)",
+          "Tools > Manage BPA Rules... > Add... > include a local rule file > type C:\\MGLab\\tools\\bpa\\BPARules.json > Open > OK (TE2 labels may differ slightly; the TE docs call it 'Include Rule File')",
+          "Press F10 (Best Practice Analyzer): the list of rules with violations; expand Provide format string for \"Date\" columns (Date[Date]), Remove unnecessary columns (Sales[Line Number]) and Visible objects with no description; hold on each",
+          "Write down every rule that appears and its object count (record the real list; demo.md has what the rule expressions predict)",
+          "Do not click Fix, Ignore or Save; File > Exit and answer No if asked to save"
+        ],
+        "mask": [
+          "account name and picture at the top right of Power BI Desktop (sign out first)",
+          "Tabular Editor title bar shows localhost:<port>, which is fine; do not open File > Recent Files",
+          "Windows user name in the rule-file dialog (type the C:\\MGLab path, do not browse the nav pane)"
+        ]
+      }
+    ],
+    "teardown": [
+      "# Tabular Editor 2 portable and the rule file stay in C:\\MGLab\\tools for later episodes; to remove: Remove-Item C:\\MGLab\\tools\\TabularEditor2, C:\\MGLab\\tools\\TabularEditor.2.29.0.zip, C:\\MGLab\\tools\\bpa -Recurse -Force"
+    ]
+  },
   "needs": [],
-  "owner_notes": "Local only: no tenant, no sign-in. Close Power BI Desktop without saving into the repo. te2-bpa uses Tabular Editor 2 portable (free, MIT), downloaded by prepare into C:\\MGLab\\tools: no admin, no sign-in."
+  "owner_notes": "Local only: no tenant, no sign-in. Close Power BI Desktop without saving into the repo. The Tabular Editor 2 Best Practice Analyzer screen (te2-bpa) is not part of the published video: its screen entry and its prepare and teardown lines are parked under not_in_video."
 }

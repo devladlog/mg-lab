@@ -2,7 +2,7 @@
 
 ## Lab environment
 
-No VM, no Azure resource and **no tenant sign-in**: this episode is recorded entirely in Power BI Desktop, DAX Studio and a terminal on
+No VM, no Azure resource and **no tenant sign-in**: this episode is recorded entirely in Power BI Desktop and a terminal on
 the recording laptop (`series/LAB.md`). The Power BI service is not needed.
 
 | What | Details | Cost |
@@ -10,7 +10,6 @@ the recording laptop (`series/LAB.md`). The Power BI service is not needed.
 | Recording laptop (Windows) | Power BI Desktop (current release), Python 3.10+ (`py`/`python` on PATH; only the standard library is used), Windows Terminal. At least 16 GB RAM is advisable: two Import models of 2,000,000 lines are open one after the other (not measured) | free |
 | Data folder | `C:\ContosoBikesPerf`, written by `gen_sales.py --rows 2000000` (177 MB of fictional CSV, about 25 seconds in the container) | free |
 | Project folder | `src/` copied to `C:\MGLab\power-bi\ep08\src` (the two `.pbip` projects, `tools`, `queries`, `results`) | free |
-| DAX Studio 3.6.x (free, open source, Ms-RL) | **All Users** install, so Power BI Desktop shows it in the External Tools ribbon: `winget install -e --id DaxStudio.DaxStudio --scope machine` (UAC prompt: the owner approves it). Without it, `prepare` downloads the portable build into `C:\MGLab\tools\DaxStudio` (no admin; no External Tools button, connect through *Power BI / SSDT Model*) | free |
 | Lab users / tenant | none | — |
 
 Screens are recorded on the laptop only. Nothing is recorded from the container.
@@ -47,8 +46,6 @@ Screens are recorded on the laptop only. Nothing is recorded from the container.
 | `pabefore` | `screens/perf-before.jpg` | `ContosoPerf.Before.pbip`, page *Executive*. **Optimize** ribbon > **Performance Analyzer** > **Start recording** > **Refresh visuals**. Expand the visuals: each duration split into categories (Learn: for example the time the DAX query took to run; record the category names you see). Keep the slowest visual in view with its duration. Do the run twice and record the second (warm) one; type all durations into `performance-analyzer.csv` (column `before_ms`, one row per visual, the visual names are the ones in the Selection pane / template). |
 | `sizescreen` | `screens/perf-sizes.jpg` | Same file, **DAX query view**: open `queries/01-column-sizes.dax` (paste it), **Run**. Result grid sorted by `DICTIONARY_SIZE` descending: the Sales columns on top (recorded 21 Nov 2026, 2M lines: *Line Ref* 62.3 MB, *Order Timestamp* 40.1 MB, *Order Number* 26.8 MB, *Note* 10.3 MB; the narration names them in that order). |
 | `afterscreen` | `screens/perf-after.jpg` | `ContosoPerf.After.pbip`, page *Executive* (7 visuals). Same recording (cleared pane, same year selection, second run). Then DAX query view with the same query: the big dictionaries are gone (no LineRef, Note, OrderTimestamp). Type the durations into the csv (`after_ms`; for `tableLines` leave the cell empty: that visual moved to the page *Order lines*). |
-| `servertimings` | `screens/perf-server-timings.jpg` | Recorded **after** `afterscreen` (the After model must be open), shown after `daxfix` in the video. **External Tools** ribbon > **DAX Studio** (opens connected). Home: **Server Timings** on, **Clear on Run** on. Open `queries/04-server-timings-yoy-twice.dax` > Run > *Server Timings* tab (Total, FE, SE, SE queries, SE cache, xmSQL). Same for `queries/05-server-timings-yoy-var.dax`. Then **Advanced > Run Benchmark** (5 cold, 5 warm) on each: *Summary* tab. **Record the real numbers**: the narration is number-free; if the variable version is not faster, add a sentence (the engine can reuse a storage engine result, so the gap may be small). |
-| `vertipaq` | `screens/perf-vertipaq.jpg` | Off camera, while the Before model is open: DAX Studio > **Advanced > Export Metrics** > `C:\MGLab\power-bi\ep08\src\results\ContosoPerf.Before.vpax`. On camera, on the After model: **Advanced > View Metrics** (defaults) > *Summary* (total size) and *Columns* sorted by total size; then **Advanced > Import Metrics** > the Before `.vpax`: Line Ref, Order Timestamp, Order Number, Note on top. **Record both totals and the top five columns.** |
 | `comparescreen` | `screens/perf-compare.jpg` | Terminal in `C:\MGLab\power-bi\ep08\src`: `python tools\perf_compare.py results\performance-analyzer.csv`. Then both reports' cards side by side (Sales amount, Margin percent, Growth vs prior year): identical in both (expected values above). Optional: **View > Performance Analyzer** on the page *Order lines* with the store slicer set to *Contoso Madrid*. |
 
 Optional scenes, if time allows (code scenes already cover them, no extra screen scene in the script):
@@ -82,14 +79,33 @@ python tools\perf_lint.py --model ContosoPerf.After.SemanticModel\definition --r
   table in the before model is a hand-made stand-in for it), and which annotation or property in the TMDL records the option?
   (Send the diff.)
 - The two DAX queries above: what they return.
-- DAX Studio: Server Timings of `04`/`05` (Total, FE, SE, SE queries) and the benchmark summary; View Metrics totals before/after and the top five columns. Does the External Tools button open DAX Studio already connected to the PBIP model?
 
 ## Masking
-- DAX Studio: don't open the File > Recent list, don't sign in (account area top right stays empty), type `C:\MGLab` paths in the Open/Export dialogs instead of browsing.
 - Nothing from the tenant is on screen. Blur the Windows user name in paths (`C:\Users\...`) if the file dialog shows it.
 - All data is generated and fictional (Contoso stores, `Customer 00042`).
 
 ## Tear-down
-- The `.vpax` export lives in the working copy (`C:\MGLab\power-bi\ep08\src\results`) and goes with it. DAX Studio can stay installed.
 - Delete `C:\ContosoBikesPerf` (177 MB) and the 200,000-line folder; close Desktop without saving the refreshed data into the repo.
 - Don't commit `.pbi` cache files or the CSVs: the repository holds the generator, not the data. No Azure cost, nothing to unpublish.
+
+## Optional extra, not part of the video: DAX Studio
+
+The published video has no DAX Studio scene (the owner's decision of 22 Nov 2026: the two screens below were not
+recorded when the video was rendered).
+`script.yaml` has no scene for the two screens below, nothing in the narration or the posts refers to them, and no
+number from them exists yet. They are kept so they can be recorded later; their `record.json` entries, with the
+set-up statements, are under `optional_screens` (move them back into `screens`, `prepare` and `teardown` when the
+scenes return to the script).
+
+| What | Details | Cost |
+|---|---|---|
+| DAX Studio 3.6.x (free, open source, Ms-RL) | **All Users** install, so Power BI Desktop shows it in the External Tools ribbon: `winget install -e --id DaxStudio.DaxStudio --scope machine` (UAC prompt: the owner approves it). Without it, the set-up statements in `optional_screens` download the portable build into `C:\MGLab\tools\DaxStudio` (no admin; no External Tools button, connect through *Power BI / SSDT Model*) | free |
+
+| Screen (`record.json`) | Steps and what must be on screen |
+|---|---|
+| `perf-server-timings` | Recorded **after** `afterscreen` (the After model must be open). **External Tools** ribbon > **DAX Studio** (opens connected). Home: **Server Timings** on, **Clear on Run** on. Open `queries/04-server-timings-yoy-twice.dax` > Run > *Server Timings* tab (Total, FE, SE, SE queries, SE cache, xmSQL). Same for `queries/05-server-timings-yoy-var.dax`. Then **Advanced > Run Benchmark** (5 cold, 5 warm) on each: *Summary* tab. **Record the real numbers** and write the narration from them: if the variable version is not faster, say so (the engine can reuse a storage engine result, so the gap may be small). |
+| `perf-vertipaq` | Off camera, while the Before model is open: DAX Studio > **Advanced > Export Metrics** > `C:\MGLab\power-bi\ep08\src\results\ContosoPerf.Before.vpax`. On camera, on the After model: **Advanced > View Metrics** (defaults) > *Summary* (total size) and *Columns* sorted by total size; then **Advanced > Import Metrics** > the Before `.vpax`: Line Ref, Order Timestamp, Order Number, Note on top. **Record both totals and the top five columns.** |
+
+- Record and report: Server Timings of `04`/`05` (Total, FE, SE, SE queries) and the benchmark summary; View Metrics totals before/after and the top five columns. Does the External Tools button open DAX Studio already connected to the PBIP model?
+- Masking: don't open the File > Recent list, don't sign in (account area top right stays empty), type `C:\MGLab` paths in the Open/Export dialogs instead of browsing.
+- Tear-down: the `.vpax` export lives in the working copy (`C:\MGLab\power-bi\ep08\src\results`) and goes with it. DAX Studio can stay installed.

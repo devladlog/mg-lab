@@ -6,8 +6,7 @@
 |---|---|
 | VMs / tenant / Azure | none. The report is not published, so no workspace and no use of the Fabric/Power BI trial; no sign-in needed |
 | Data | The committed star CSVs `src/data/star/*.csv`, copied to `C:\MGLab\power-bi\star\` on the laptop (the semantic model's real data source: Power BI Desktop reads the files itself; no mock involved) |
-| Licences / cost | Power BI Desktop is free; Tabular Editor 2 (portable, MIT) is free; cost 0 |
-| Community tool | **Tabular Editor 2.29.0 portable** in `C:\MGLab\tools\TabularEditor2` and Microsoft's `BPARules.json` in `C:\MGLab\tools\bpa`, both downloaded by `prepare` (no admin, no sign-in). The MSI (`winget install -e --id TabularEditor.TabularEditor.2`) would add an External Tools button but installs machine-wide; not needed |
+| Licences / cost | Power BI Desktop is free; cost 0 |
 | Recording machine | The Windows lab laptop: current **Power BI Desktop**, signed out (or account masked); terminal B-roll on the same laptop (.NET 10 SDK, Python 3, Node where listed) |
 
 Everything in this episode is local: **no tenant, no workspace, no licence** is needed. Power BI Desktop (free) on a
@@ -64,7 +63,6 @@ Windows machine is the only requirement for the screen scenes. Nothing is publis
 | Scene id | File | What must be on screen |
 |---|---|---|
 | `modelview` | `screens/model-view.jpg` | **Model view** after refresh. Arrange: Sales centre, Date top, Customer left, Product right, Store bottom. Four solid one-to-many lines with single arrowheads, one **dashed** line Sales[Ship Date] → Date[Date]. Hover the dashed line so both columns highlight. |
-| `bpa` | `screens/te2-bpa.jpg` | Recorded after `modelview` (the model must be open in Desktop). **Tabular Editor 2** (portable) > **File > Open > From DB...** > *Local instance* = the ContosoSales Desktop entry. **Tools > Manage BPA Rules... > Add...** > include `C:\MGLab\tools\bpa\BPARules.json`. **F10**: rules with violations, objects under each. Expected from the rule expressions (record what really appears): *Provide format string for "Date" columns* (Date[Date] and the hidden Sales dates: `yyyy-mm-dd`, the rule wants `mm/dd/yyyy`), *Percentages should be formatted with thousands separators and 1 decimal* (Margin %), *Whole numbers should be formatted with thousands separators and no decimals* (measures with `#,0.00`), *Visible objects with no description* (the measures and most columns), *Remove unnecessary columns* (Sales[Line Number]), *Set IsAvailableInMdx to false on non-attribute columns* (hidden columns), *Add data category for columns* (City, Country), *Relationship columns should be of integer data type* (the two date relationships), possibly *Mark primary keys*. None of the snowflake, bi-directional or many-to-many rules should fire (star lint agrees). **No Fix, no Ignore, no Save.** If the date rule doesn't fire, drop "insists on American dates" from the narration. |
 | `datapane` | `screens/data-pane.jpg` | **Report view**, Data pane expanded: Sales shows only `Order Number` and the display folders **Margin** (Margin, Margin %) and **Sales** (Orders, Sales Amount, Total Cost, Units). Product expanded with **Product Hierarchy** (Category > Subcategory > Product). Date with **Calendar** hierarchy. No key columns visible. |
 | `report` | `screens/report.jpg` | Matrix: rows Product[Category], columns Date[Year], values Sales Amount and Margin %. Values as in the table above (2026 column absent: no orders). Card visual: Orders = 2,440. |
 | `gotcha` | `screens/unknown-customer.jpg` | Table visual: Customer[Country], Sales Amount, sorted by Sales Amount descending. Row **Unknown = 61,345.69** visible, no "(Blank)" row. |
@@ -84,11 +82,38 @@ Optional B-roll: **TMDL view** with the Date table scripted (drag Date from the 
 - Nothing tenant-related is on screen (no sign-in needed). If Power BI Desktop shows a signed-in account in the top
   right corner, sign out before recording or mask it with `pipeline/mask.js` / a blur box.
 - Mask the Windows user name if it appears in the title bar path (`C:\Users\<name>\...`): record from `C:\MGLab\`.
-- Tabular Editor 2: the title shows `localhost:<port>` (fine). Don't open File > Recent Files; type the `C:\MGLab` path in the rule-file dialog.
 - All customer names are generated ("Alex Placeholder 001", ...), stores are "Contoso ...". Nothing else to mask.
 
 ## Tear-down
 - Close Power BI Desktop without saving changes to the repo copy (or save the project into a scratch folder).
 - Delete `C:\MGLab\power-bi\star\` if you don't need it for episode 2 (episode 2 uses the same CSVs).
 - Nothing to remove in any tenant.
-- Tabular Editor 2 and the rule file stay in `C:\MGLab\tools` for later episodes (delete the folder to remove them; nothing was installed).
+
+## Optional extra, not in the video: Best Practice Analyzer
+
+**Not part of the published episode and never recorded** (owner decision, 22 Nov 2026). The recipe stays here in case
+the screen is recorded later; `record.json` keeps the screen entry (`te2-bpa`) and its prepare and teardown lines
+under `not_in_video`, and `script.yaml` has no scene for it.
+
+- **Tools** (free, no admin, no sign-in): **Tabular Editor 2.29.0 portable** (MIT) in `C:\MGLab\tools\TabularEditor2`
+  and Microsoft's `BPARules.json` in `C:\MGLab\tools\bpa`, both downloaded by the parked prepare lines. The MSI
+  (`winget install -e --id TabularEditor.TabularEditor.2`) would add an External Tools button but installs
+  machine-wide; not needed.
+- **Steps** (with `ContosoSales.pbip` open and refreshed in Desktop): **Tabular Editor 2** > **File > Open > From
+  DB...** > *Local instance* = the ContosoSales Desktop entry. **Tools > Manage BPA Rules... > Add...** > include
+  `C:\MGLab\tools\bpa\BPARules.json`. **F10**: rules with violations, objects under each. **No Fix, no Ignore, no
+  Save.** The menu labels come from the Tabular Editor docs and were not checked on a real run.
+- **Predicted, not observed** (from reading the rule expressions; write down what really appears): *Provide format
+  string for "Date" columns* (Date[Date] and the hidden Sales dates: `yyyy-mm-dd`, the rule wants `mm/dd/yyyy`),
+  *Percentages should be formatted with thousands separators and 1 decimal* (Margin %), *Whole numbers should be
+  formatted with thousands separators and no decimals* (measures with `#,0.00`), *Visible objects with no description*
+  (the measures and most columns), *Remove unnecessary columns* (Sales[Line Number]), *Set IsAvailableInMdx to false
+  on non-attribute columns* (hidden columns), *Add data category for columns* (City, Country), *Relationship columns
+  should be of integer data type* (the two date relationships), possibly *Mark primary keys*. None of the snowflake,
+  bi-directional or many-to-many rules should fire (star lint agrees).
+- **Masking:** the Tabular Editor title shows `localhost:<port>` (fine). Don't open File > Recent Files; type the
+  `C:\MGLab` path in the rule-file dialog. The Power BI Desktop account at the top right must stay out of the frame.
+- **Tear-down:** Tabular Editor 2 and the rule file stay in `C:\MGLab\tools` (delete the folder to remove them;
+  nothing is installed).
+- **Before it goes into a video:** add the scene to `script.yaml`, write its narration from what the recording really
+  shows, and mention it in `social.yaml` only then.

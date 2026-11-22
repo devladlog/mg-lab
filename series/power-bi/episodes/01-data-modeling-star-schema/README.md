@@ -8,9 +8,10 @@ We take a flat sales export ("one big table", 4,071 order lines of fictional **C
 - the semantic model is written in **TMDL** (text files you can diff and review): single-direction many-to-one
   relationships, hidden keys, a marked date table, a role-playing ship date (inactive relationship), measures with
   format strings, implicit measures discouraged
-- **`star-lint`**, a small .NET tool built on the Tabular Object Model (TOM), reads the TMDL folder and fails the build
-  when the model breaks star schema rules (snowflake chains, bi-directional or many-to-many relationships, visible
-  keys, no date table, a `sourceColumn` that isn't in the CSV...)
+- **`star-lint`**, a small .NET tool built on the Tabular Object Model (TOM), reads the TMDL folder and checks nine star
+  schema rules. Errors fail the build with exit code 1 (a many-to-many relationship, no marked date table, a
+  `sourceColumn` that isn't in the CSV); snowflake chains, bi-directional relationships, visible keys and measures
+  without a format string are warnings
 
 | Path | What it is |
 |---|---|
@@ -75,26 +76,15 @@ expected numbers.
 Expected totals after refresh (computed from the CSVs): **Sales Amount 1,862,401.98** (2024: 894,929.10 · 2025:
 967,472.88), **Orders 2,440**, **Units 7,462**, Margin % 43.7 % in both years, Unknown customer 61,345.69.
 
-## A second opinion: Tabular Editor 2 and Microsoft's Best Practice Analyzer rules
+## Optional extra, not in the video: Microsoft's Best Practice Analyzer rules
 
-Star lint checks our nine rules (SS001-SS009). The `bpa` screen runs a second, independent set on the same model:
-[Tabular Editor 2](https://github.com/TabularEditor/TabularEditor) (free, open source, MIT; 2.29.0, portable zip, no
-admin) connects to the model open in Power BI Desktop (*File > Open > From DB > Local instance* lists running Desktop
-instances) and runs the **Best Practice Analyzer** (F10) with the rule file Microsoft publishes in
-[microsoft/Analysis-Services/BestPracticeRules](https://github.com/microsoft/Analysis-Services/tree/master/BestPracticeRules)
-(71 rules on 22 Nov 2026, in Performance, DAX Expressions, Error Prevention, Maintenance, Naming and Formatting).
-
-- **Overlap:** bi-directional and many-to-many relationships, snowflakes, a marked date table, hidden foreign keys and
-  summarize-by on numeric columns are in both. Star lint also checks every source column against the CSV header (SS009),
-  which BPA can't.
-- **What BPA adds on this model** (from reading the rule expressions; the recording decides): descriptions on visible
-  objects, the style of format strings (it wants `#,0.0%;-#,0.0%;#,0.0%` for percentages, `#,0` for whole numbers and
-  `mm/dd/yyyy` for every column named *Date*), a hidden column nothing uses (`Sales[Line Number]`), `IsAvailableInMdx`
-  on hidden columns, data categories for City and Country, integer keys for relationships (our date relationships use the date column, as Learn's date-table guidance does).
-- **Advice, not a verdict.** The date rule is a US convention and the whole-number rule also catches currency formats;
-  BPA lets you ignore a rule per object. We don't change the model on camera.
-- TE2's own command line can run BPA in a pipeline (`TabularEditor.exe <model> -A <rules>`; exit code 1 on severity 3+);
-  not used in this episode.
+Star lint checks our nine rules (SS001-SS009). For a second, independent rule set you can run the **Best Practice
+Analyzer** of [Tabular Editor 2](https://github.com/TabularEditor/TabularEditor) (free, open source, MIT) on the same
+model, with the rule file Microsoft publishes in
+[microsoft/Analysis-Services/BestPracticeRules](https://github.com/microsoft/Analysis-Services/tree/master/BestPracticeRules).
+This is **not part of the video** and we have not run it on this model yet: the steps, and what we expect it to flag
+from reading the rule expressions, are in
+[demo.md](demo.md#optional-extra-not-in-the-video-best-practice-analyzer).
 
 ## What we learned / gotchas
 
@@ -128,5 +118,5 @@ instances) and runs the **Best Practice Analyzer** (F10) with the rule file Micr
 - [TMDL overview](https://learn.microsoft.com/analysis-services/tmdl/tmdl-overview) · [TMDL scripts (createOrReplace)](https://learn.microsoft.com/analysis-services/tmdl/tmdl-scripts) · [TMDL view](https://learn.microsoft.com/power-bi/transform-model/desktop-tmdl-view)
 - [DIVIDE function vs. divide operator](https://learn.microsoft.com/dax/best-practices/dax-divide-function-operator)
 - [Table.TransformColumnTypes (culture argument)](https://learn.microsoft.com/powerquery-m/table-transformcolumntypes)
-- Tabular Editor 2: [getting started](https://docs.tabulareditor.com/te2/Getting-Started.html) · [Best Practice Analyzer](https://docs.tabulareditor.com/te2/Best-Practice-Analyzer.html) · [command line](https://docs.tabulareditor.com/en/features/Command-line-Options.html) · [External tools in Power BI Desktop](https://learn.microsoft.com/power-bi/transform-model/desktop-external-tools)
+- Optional extra, not in the video. Tabular Editor 2: [getting started](https://docs.tabulareditor.com/te2/Getting-Started.html) · [Best Practice Analyzer](https://docs.tabulareditor.com/te2/Best-Practice-Analyzer.html) · [External tools in Power BI Desktop](https://learn.microsoft.com/power-bi/transform-model/desktop-external-tools)
 - Blog: [Data Modeling & Star Schema — Complete Guide](https://www.devladlog.com/articles/power-bi/2025-01-01-data-modeling-complete-guide-2025/)

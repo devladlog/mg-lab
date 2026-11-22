@@ -12,11 +12,10 @@ linkedin_company:
     In episode 1 of DEVLADLOG Power BI we take a 4,071-row, 19-column export of fictional Contoso Bikes data and turn it into a star schema:
     - dimensions with surrogate keys, an explicit unknown customer and a marked date table
     - the model written as TMDL text, with a role-playing ship date
-    - star-lint, a small .NET tool that checks nine modeling rules and exits with code 1 when someone breaks them
+    - star-lint, a small .NET tool that checks nine modeling rules and exits with code 1 on an error such as a many-to-many relationship or a missing date table
     - 31 Python tests that run before Power BI Desktop is even opened
-    - a second opinion from Tabular Editor 2 and Microsoft's Best Practice Analyzer rules
 
-    In Desktop, a quick matrix shows the same numbers the tests computed: 1,862,401.98 in sales and 2,440 orders.
+    In Desktop, a quick matrix shows the same numbers the CSV files add up to: 1,862,401.98 in sales and 2,440 orders.
 
     Watch the episode: {YOUTUBE_URL}
     Code: {REPO_URL}
@@ -30,7 +29,7 @@ linkedin_personal:
 
     That blank row is Power BI quietly adding a virtual member to a dimension when a fact row has no match. My fix in this episode: guest orders point to an explicit "Unknown customer" with key -1, and a test makes sure no key is ever missing.
 
-    I also wrote the model as TMDL and built a small linter on the Tabular Object Model, so a pull request can fail on a snowflake or a bi-directional filter. The model reviews itself.
+    I also wrote the model as TMDL and built a small linter on the Tabular Object Model, so a pull request can fail on a many-to-many relationship or a missing date table, and gets a warning for a snowflake or a bi-directional filter. The model reviews itself.
 
     Episode 1 of the Power BI series: {YOUTUBE_URL}
 

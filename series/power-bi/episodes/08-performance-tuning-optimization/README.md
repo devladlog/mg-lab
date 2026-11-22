@@ -26,7 +26,7 @@ numbers on the report don't move:
 | [`src/tools/perf_compare.py`](src/tools/perf_compare.py), [`results/`](src/results) | Before/after table from the Performance Analyzer durations you type into a CSV |
 | [`src/tools/extract_m.py`](src/tools/extract_m.py), [`src/pq-lint/`](src/pq-lint) | Writes every partition's M to `.pq` files; `pq-lint` (episode 3) parses them with Microsoft's Power Query parser |
 | [`src/TmdlLoad/`](src/TmdlLoad) | `tmdl-load` (.NET 10, `Microsoft.AnalysisServices` 19.120.1): loads a TMDL folder with the Tabular Object Model |
-| [`src/queries/`](src/queries) | Five `.dax` files: 01-03 for DAX query view, 04-05 the Server Timings pair for DAX Studio (**need Desktop**, not run in the container) |
+| [`src/queries/`](src/queries) | Five `.dax` files: 01-03 for DAX query view (the video runs 01), 04-05 a Server Timings pair for DAX Studio, an optional extra that is not in the video (**need Desktop**, not run in the container) |
 | [`tests/`](tests) | pytest (88 tests), vendored Microsoft schemas in `tests/schemas` |
 
 ## What changed between the two models
@@ -93,24 +93,27 @@ On the recording laptop (**needs Desktop**, see [demo.md](demo.md)): generate th
 files, record Performance Analyzer on each, run `queries/01-column-sizes.dax` in DAX query view, type the durations into
 `results/performance-analyzer.csv`, run `perf_compare.py`.
 
-## DAX Studio: Server Timings and VertiPaq Analyzer
+## Optional extra, not in the video: DAX Studio
 
-Performance Analyzer gives one duration per visual. Two screens of this episode use [DAX Studio](https://daxstudio.org)
-(free, open source, Ms-RL licence; 3.6.2 on 7 Nov 2026) on the same models:
+The video measures with Performance Analyzer and DAX query view only. Performance Analyzer gives one duration per
+visual; two further measurements with [DAX Studio](https://daxstudio.org) (free, open source, Ms-RL licence; 3.6.2 on
+7 Nov 2026) are prepared in this folder for the same models. They are **not part of the video, its Shorts or the
+posts**, and as of 22 Nov 2026 they have not been recorded, so there are no numbers from them anywhere:
 
-| Screen | What it shows | Files |
+| Measurement | What it would show | Files |
 |---|---|---|
-| `servertimings` | **Server Timings** (a trace button on the ribbon) splits a query's server time into formula engine (FE) and storage engine (SE), with the number of SE queries, SE cache hits and the xmSQL of each SE query. **Run Benchmark** (Advanced ribbon) runs the query a set number of times with a cold cache (Clear Cache before each run) and a warm cache and shows summary and detail tabs | [`queries/04-server-timings-yoy-twice.dax`](src/queries/04-server-timings-yoy-twice.dax), [`queries/05-server-timings-yoy-var.dax`](src/queries/05-server-timings-yoy-var.dax): same grouping, the growth measure with the prior-year `CALCULATE` twice vs. the model's `VAR` version |
-| `vertipaq` | **View Metrics** (Advanced ribbon, VertiPaq Analyzer): tables, columns, relationships, partitions and a summary of memory use. **Export Metrics** saves a `.vpax` file and **Import Metrics** shows it again, which is how the before model is compared with the after model | `results/ContosoPerf.Before.vpax` (written on the recording laptop, not committed) |
+| Server Timings | **Server Timings** (a trace button on the ribbon) splits a query's server time into formula engine (FE) and storage engine (SE), with the number of SE queries, SE cache hits and the xmSQL of each SE query. **Run Benchmark** (Advanced ribbon) runs the query a set number of times with a cold cache (Clear Cache before each run) and a warm cache and shows summary and detail tabs | [`queries/04-server-timings-yoy-twice.dax`](src/queries/04-server-timings-yoy-twice.dax), [`queries/05-server-timings-yoy-var.dax`](src/queries/05-server-timings-yoy-var.dax): same grouping, the growth measure with the prior-year `CALCULATE` twice vs. the model's `VAR` version |
+| VertiPaq Analyzer | **View Metrics** (Advanced ribbon, VertiPaq Analyzer): tables, columns, relationships, partitions and a summary of memory use. **Export Metrics** saves a `.vpax` file and **Import Metrics** shows it again, which is how the before model would be compared with the after model | `results/ContosoPerf.Before.vpax` (to be written on the recording laptop, not committed) |
 
 - **Connecting.** Launched from Power BI Desktop's **External Tools** ribbon, a tool gets the server name, port and
   model name of Desktop's Analysis Services instance and connects by itself (Learn). DAX Studio registers that button
   only with the **All Users** install (needs admin to install); the Current User and portable builds don't, and connect
   through *Connect > Power BI / SSDT Model* while Desktop has the file open (DAX Studio docs).
 - **Tracing needs server admin rights** (DAX Studio docs); on Desktop's local engine the signed-in Windows user has them.
-- **Not measured in the container:** every number of these two screens. The narration is number-free; the duplicate
-  `CALCULATE` may cost less than Learn's example suggests because the engine can reuse a storage engine result, so the
-  recording decides.
+- **Nothing measured yet:** the duplicate `CALCULATE` may cost less than Learn's example suggests because the engine
+  can reuse a storage engine result, so only a real run can say what the variable saves in this model.
+- The recording steps are kept in `record.json` under `optional_screens` (`perf-server-timings`, `perf-vertipaq`) and
+  in the "Optional extra" section of [demo.md](demo.md).
 
 ## What the numbers say (and what they don't)
 
@@ -164,7 +167,7 @@ Performance Analyzer gives one duration per visual. Two screens of this episode 
 - [Use Performance Analyzer to examine report performance](https://learn.microsoft.com/power-bi/create-reports/performance-analyzer) · [Monitor report performance in Power BI](https://learn.microsoft.com/power-bi/guidance/monitor-report-performance) · [Optimization guide for Power BI](https://learn.microsoft.com/power-bi/guidance/power-bi-optimization)
 - [Data reduction techniques for Import modeling](https://learn.microsoft.com/power-bi/guidance/import-modeling-data-reduction) · [Auto date/time guidance](https://learn.microsoft.com/power-bi/guidance/auto-date-time) · [Apply auto date/time in Power BI Desktop](https://learn.microsoft.com/power-bi/transform-model/desktop-auto-date-time) · [Model relationships (DateTime columns)](https://learn.microsoft.com/power-bi/transform-model/desktop-relationships-understand)
 - [Bi-directional relationship guidance](https://learn.microsoft.com/power-bi/guidance/relationships-bidirectional-filtering) · [Avoid using FILTER as a filter argument](https://learn.microsoft.com/power-bi/guidance/dax-avoid-avoid-filter-as-filter-argument) · [DIVIDE function vs. divide operator](https://learn.microsoft.com/power-bi/guidance/dax-divide-function-operator) · [Use variables to improve your DAX formulas](https://learn.microsoft.com/dax/best-practices/dax-variables)
-- DAX Studio: [installation options](https://daxstudio.org/docs/installation/index/) · [winget](https://daxstudio.org/docs/installation/winget) · [getting connected](https://daxstudio.org/docs/tutorials/getting-connected/) · [Server Timings trace](https://daxstudio.org/docs/features/traces/server-timings-trace/) · [Run Benchmark](https://daxstudio.org/docs/features/run-benchmark/) · [Model Metrics](https://daxstudio.org/docs/features/model-metrics/) · [External tools in Power BI Desktop](https://learn.microsoft.com/power-bi/transform-model/desktop-external-tools)
+- DAX Studio (optional extra, not in the video): [installation options](https://daxstudio.org/docs/installation/index/) · [winget](https://daxstudio.org/docs/installation/winget) · [getting connected](https://daxstudio.org/docs/tutorials/getting-connected/) · [Server Timings trace](https://daxstudio.org/docs/features/traces/server-timings-trace/) · [Run Benchmark](https://daxstudio.org/docs/features/run-benchmark/) · [Model Metrics](https://daxstudio.org/docs/features/model-metrics/) · [External tools in Power BI Desktop](https://learn.microsoft.com/power-bi/transform-model/desktop-external-tools)
 - [Work with DAX query view](https://learn.microsoft.com/power-bi/transform-model/dax-query-view) · [DAX queries](https://learn.microsoft.com/dax/dax-queries) · [INFO.STORAGETABLECOLUMNS](https://learn.microsoft.com/dax/info-storagetablecolumns-function-dax)
 - [Power Query parser (GitHub monorepo, MIT)](https://github.com/microsoft/powerquery-language-services/tree/master/packages/powerquery-parser) · [TMDL overview](https://learn.microsoft.com/analysis-services/tmdl/tmdl-overview)
 - Blog: [Performance Tuning & Optimization: Complete Guide](https://www.devladlog.com/articles/power-bi/2025-07-09-performance-tuning-complete-guide-2025/). Note: the guide is generic template text (no Power BI, DAX or VertiPaq content), so this episode takes its facts from Learn and the blog should be updated from this folder.

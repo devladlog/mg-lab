@@ -45,8 +45,14 @@ $jpg = Join-Path $screens "$Screen.jpg"
 
 # 1. the window to record (classic console host, so the font and size are ours)
 $live = Join-Path $PSScriptRoot 'Invoke-LiveScene.ps1'
-$p = Start-Process conhost.exe -ArgumentList "`"$pwsh`" -NoProfile -NoLogo -File `"$live`" -SceneFile `"$sceneJson`"" -PassThru
-try { $win = Wait-WindowByTitle -Title $windowTitle -TimeoutSeconds 30 }
+# The window starts hidden and is then shown behind every other window, never activated: the capture reads the
+# window itself (tested: a covered window records the same), so takes do not interrupt whoever uses the laptop and
+# do not get in front of a browser or app take. MGREC_BACK=0 brings back the old top-most window in front.
+$back = ($env:MGREC_BACK -ne '0')
+$start = @{ FilePath = 'conhost.exe'; PassThru = $true; ArgumentList = "`"$pwsh`" -NoProfile -NoLogo -File `"$live`" -SceneFile `"$sceneJson`"" }
+if ($back) { $start.WindowStyle = 'Hidden' }
+$p = Start-Process @start
+try { $win = if ($back) { Wait-HiddenWindowByTitle -Title $windowTitle -TimeoutSeconds 30 } else { Wait-WindowByTitle -Title $windowTitle -TimeoutSeconds 30 } }
 catch {
     # keep what the scene window left behind, so the reason can be read: recordings\failed-<screen>\
     $keep = Join-Path $Root "recordings\failed-$Screen"
@@ -60,7 +66,7 @@ Start-Sleep -Milliseconds 500
 $winX = 40; $winY = 40
 if ($env:MGREC_X -match '^-?\d+$') { $winX = [int]$env:MGREC_X }
 if ($env:MGREC_Y -match '^-?\d+$') { $winY = [int]$env:MGREC_Y }
-Set-RecordingWindow -Handle $win.Handle -Width $(if ($s.width) { $s.width } else { 1600 }) -Height $(if ($s.height) { $s.height } else { 900 }) -X $winX -Y $winY
+Set-RecordingWindow -Handle $win.Handle -Width $(if ($s.width) { $s.width } else { 1600 }) -Height $(if ($s.height) { $s.height } else { 900 }) -X $winX -Y $winY -Background:$back
 
 # 2. capture it
 $rec = Start-WindowCapture -Ffmpeg $ffmpeg -Title $win.Title -OutFile $mp4

@@ -150,9 +150,58 @@ function Start-RegionCapture([string]$Ffmpeg, [int[]]$Bounds, [string]$OutFile, 
     return [Diagnostics.Process]::Start($psi)
 }
 
-function Set-RecordingWindow([IntPtr]$Handle, [int]$Width = 1600, [int]$Height = 900, [int]$X = 40, [int]$Y = 40, [switch]$NotTopMost) {
+if (-not ('MgRec.Win4' -as [type])) {
+    Add-Type -Namespace MgRec -Name Win4 -MemberDefinition @'
+public delegate bool EnumProc4(IntPtr h, IntPtr l);
+[DllImport("user32.dll")] static extern bool EnumWindows(EnumProc4 cb, IntPtr l);
+[DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetWindowText(IntPtr h, System.Text.StringBuilder s, int n);
+[StructLayout(LayoutKind.Sequential)] public struct POINT4 { public int X, Y; }
+[StructLayout(LayoutKind.Sequential)] public struct RECT4 { public int Left, Top, Right, Bottom; }
+[StructLayout(LayoutKind.Sequential)] public struct WINDOWPLACEMENT { public int length; public int flags; public int showCmd; public POINT4 ptMinPosition; public POINT4 ptMaxPosition; public RECT4 rcNormalPosition; }
+[DllImport("user32.dll")] static extern bool GetWindowPlacement(IntPtr h, ref WINDOWPLACEMENT p);
+[DllImport("user32.dll")] static extern bool SetWindowPlacement(IntPtr h, ref WINDOWPLACEMENT p);
+[DllImport("user32.dll")] static extern bool SetWindowPos(IntPtr h, IntPtr after, int x, int y, int cx, int cy, uint flags);
+// first top-level window whose title contains the text, hidden ones included
+public static IntPtr FindAny(string part) {
+    IntPtr hit = IntPtr.Zero;
+    EnumWindows(delegate (IntPtr h, IntPtr l) {
+        var sb = new System.Text.StringBuilder(512);
+        GetWindowText(h, sb, 512);
+        if (sb.ToString().Contains(part)) { hit = h; return false; }
+        return true;
+    }, IntPtr.Zero);
+    return hit;
+}
+// shows a (hidden) window at the given place without activating it, behind every other window
+public static void ShowBehind(IntPtr h, int x, int y, int w, int hgt) {
+    WINDOWPLACEMENT p = new WINDOWPLACEMENT();
+    p.length = System.Runtime.InteropServices.Marshal.SizeOf(typeof(WINDOWPLACEMENT));
+    GetWindowPlacement(h, ref p);
+    p.showCmd = 4;   // SW_SHOWNOACTIVATE
+    p.rcNormalPosition.Left = x; p.rcNormalPosition.Top = y; p.rcNormalPosition.Right = x + w; p.rcNormalPosition.Bottom = y + hgt;
+    SetWindowPlacement(h, ref p);
+    SetWindowPos(h, new IntPtr(1), x, y, w, hgt, 0x0010);   // HWND_BOTTOM, SWP_NOACTIVATE
+}
+'@
+}
+
+function Wait-HiddenWindowByTitle([string]$Title, [int]$TimeoutSeconds = 20) {
+    # like Wait-WindowByTitle, for a window that was started hidden (background takes)
+    $end = (Get-Date).AddSeconds($TimeoutSeconds)
+    do {
+        $h = [MgRec.Win4]::FindAny($Title)
+        if ($h -ne [IntPtr]::Zero) { return [pscustomobject]@{ Handle = $h; Title = [MgRec.Win2]::Title($h) } }
+        Start-Sleep -Milliseconds 200
+    } while ((Get-Date) -lt $end)
+    throw "No window with '$Title' in its title appeared"
+}
+
+function Set-RecordingWindow([IntPtr]$Handle, [int]$Width = 1600, [int]$Height = 900, [int]$X = 40, [int]$Y = 40, [switch]$NotTopMost, [switch]$Background) {
     # fixed size and position; top-most (terminals) so nothing covers it, or just in front (apps: a top-most window
-    # would hide the app's own dialogs, which open behind it)
+    # would hide the app's own dialogs, which open behind it). -Background (terminals): never activated and behind
+    # every other window: a window capture reads the window itself, so it need not be seen, and whoever is using
+    # the laptop (or a browser take on the same screen) is not disturbed.
+    if ($Background) { [MgRec.Win4]::ShowBehind($Handle, $X, $Y, $Width, $Height); return }
     [void][MgRec.Win2]::ShowWindow($Handle, 1)
     $after = if ($NotTopMost) { [IntPtr]::Zero } else { [IntPtr]::new(-1) }
     [void][MgRec.Win2]::SetWindowPos($Handle, $after, $X, $Y, $Width, $Height, 0x0040)
