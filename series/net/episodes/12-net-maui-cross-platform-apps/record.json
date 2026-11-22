@@ -104,6 +104,10 @@
     "Get-ChildItem src, tests -Recurse -Directory -Include bin,obj | Remove-Item -Recurse -Force",
     "Remove-Item ('C:\\lab\\mgnet\\ep12-*') -Force -ErrorAction SilentlyContinue"
   ],
+  "prepare_local": [
+    "Use-DotNetSdk -Channel 10.0   # kit helper: uses the installed .NET 10 SDK, else installs it into C:\\MGLab\\dotnet (no admin)",
+    "dotnet build tests/Contoso.Mobile.Tests -v q --nologo; if ($LASTEXITCODE -ne 0) { throw 'dotnet build failed' }   # no MAUI workload or emulator needed for the tests project"
+  ],
   "needs": [
     "maui-workload (dotnet workload install maui, not installed yet)",
     "android-sdk",

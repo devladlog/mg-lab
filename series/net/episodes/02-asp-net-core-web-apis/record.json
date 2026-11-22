@@ -111,6 +111,14 @@
     "Remove-Item deploy\\out -Recurse -Force -ErrorAction SilentlyContinue",
     "Remove-Item ('C:\\lab\\mgnet\\ep02*'), ('C:\\lab\\mgnet\\az-sam') -Recurse -Force -ErrorAction SilentlyContinue"
   ],
+  "prepare_local": [
+    "Use-DotNetSdk -Channel 10.0   # kit helper: uses the installed .NET 10 SDK, else installs it into C:\\MGLab\\dotnet (no admin)",
+    "if (Test-Path 'C:\\lab\\mgnet\\svc.ps1') { & 'C:\\lab\\mgnet\\svc.ps1' stop -Name ep02-api }   # an API left from an earlier take keeps its data and locks bin: the screen prepare starts a fresh one",
+    "dotnet build src\\ExpenseClaims.Api -v q --nologo; if ($LASTEXITCODE -ne 0) { throw 'dotnet build failed' }"
+  ],
+  "teardown_local": [
+    "if (Test-Path 'C:\\lab\\mgnet\\svc.ps1') { & 'C:\\lab\\mgnet\\svc.ps1' stop -Name ep02-api }"
+  ],
   "needs": [
     "azure",
     "tenant",

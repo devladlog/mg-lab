@@ -28,7 +28,7 @@
         "#pause 12"
       ],
       "prepare": [
-        "Start-Process npx.cmd -ArgumentList '--yes','azurite','--silent','--location',\"$env:TEMP\\azurite\" -WindowStyle Hidden; Start-Sleep -Seconds 10   # Azurite, the local storage emulator (not shown)"
+        "Start-Process npx.cmd -ArgumentList '--yes','azurite','--silent','--location','C:\\MGLab\\azurite' -WindowStyle Hidden; Start-Sleep -Seconds 10   # Azurite, the local storage emulator (not shown)"
       ],
       "mask": [
         "nothing secret is printed locally"
@@ -102,10 +102,24 @@
   "teardown": [
     "Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -match 'azurite|func start|WebHost|OrderIntake' -and $_.ProcessId -ne $PID } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }",
     "Remove-Item src/OrderIntake/local.settings.json -Force -ErrorAction SilentlyContinue",
-    "Remove-Item \"$env:TEMP\\azurite\" -Recurse -Force -ErrorAction SilentlyContinue",
+    "Remove-Item C:\\MGLab\\azurite -Recurse -Force -ErrorAction SilentlyContinue",
     "bash infra/teardown.sh rg-mglab-azure-01",
     "Remove-Item Env:EP_KEY, Env:EP_HOST, Env:EP_APP -ErrorAction SilentlyContinue",
     "az group exists --name rg-mglab-azure-01   # false once deletion finishes"
+  ],
+  "prepare_local": [
+    "if ($env:PATH -notlike 'C:\\Program Files\\Git\\bin;*') { $env:PATH = 'C:\\Program Files\\Git\\bin;' + $env:PATH }   # Git Bash's bash (not WSL's) for the .sh scripts",
+    "Use-DotNetSdk -Channel 10.0   # kit helper: uses the installed .NET 10 SDK, else installs it into C:\\MGLab\\dotnet (no admin)",
+    "if (-not (Get-Command func -ErrorAction SilentlyContinue)) { npm install -g azure-functions-core-tools@4 --unsafe-perm true; if ($LASTEXITCODE -ne 0) { throw 'npm install of the Functions Core Tools failed' }; $env:PATH = \"$env:PATH;$(npm prefix -g)\" }",
+    "Get-CimInstance Win32_Process | Where-Object { $_.ProcessId -ne $PID -and ($_.Name -eq 'func.exe' -or $_.CommandLine -match 'azurite|func(\\.exe\"?)?\\s+start|OrderIntake\\.dll') } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }   # Azurite, the Functions host and its worker",
+    "Remove-Item C:\\MGLab\\azurite -Recurse -Force -ErrorAction SilentlyContinue   # fresh emulator: no queue messages left from an earlier take",
+    "npx.cmd --yes azurite --version | Out-Null   # downloads Azurite once, so the screen's hidden start is ready within its 10 s",
+    "Push-Location src\\OrderIntake; dotnet build -v q --nologo; Pop-Location   # the build func start does on camera is then incremental",
+    "if ($LASTEXITCODE -ne 0) { throw 'the step above failed' }"
+  ],
+  "teardown_local": [
+    "Get-CimInstance Win32_Process | Where-Object { $_.ProcessId -ne $PID -and ($_.Name -eq 'func.exe' -or $_.CommandLine -match 'azurite|func(\\.exe\"?)?\\s+start|OrderIntake\\.dll') } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }   # Azurite, the Functions host and its worker",
+    "Remove-Item C:\\MGLab\\azurite -Recurse -Force -ErrorAction SilentlyContinue"
   ],
   "needs": [
     "azure",

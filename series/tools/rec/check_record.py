@@ -10,6 +10,7 @@ import yaml
 SECRET = re.compile(r"(password\s*=|pwd=|\.Password\b|GetNetworkCredential|client_secret\s*=|AccountKey=|sig=|Get-Credential\b(?!s))", re.I)
 REAL = re.compile(r"onmicrosoft\.com|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", re.I)
 KINDS = {"terminal", "browser", "app"}
+LOCAL_ONLY = re.compile(r"\baz\s+login\b|\bConnect-\w+|\bpac\s+auth\b|\bRead-Host\b|\bdocker\b|-VMName\b|\$cred\b|\bGet-VM\b|\bdevtunnel\b|\bgh\s+auth\b|\bAdd-PowerAppsAccount\b", re.I)
 
 
 def check(folder: Path) -> list[str]:
@@ -27,9 +28,14 @@ def check(folder: Path) -> list[str]:
     got = [s.get("name") for s in rec.get("screens", [])]
     if sorted(got) != sorted(want):
         e(f"screens {got} != screen scenes in script.yaml {want}")
-    for key in ("prepare", "teardown"):
-        if key in rec and not isinstance(rec[key], list):
+    for key in ("prepare", "teardown", "prepare_local", "teardown_local"):
+        if key in rec and not (isinstance(rec[key], list) and all(isinstance(x, str) for x in rec[key])):
             e(f"{key} must be a list of strings")
+    # prepare_local / teardown_local run for "screen:" queue lines: laptop-only steps, nothing from the owner
+    for key in ("prepare_local", "teardown_local"):
+        for st in rec.get(key) or []:
+            if isinstance(st, str) and not st.lstrip().startswith("#") and LOCAL_ONLY.search(st):
+                e(f"{key} must stay local (no sign-in, prompt, Docker or VM): '{st[:80]}'")
     for s in rec.get("screens", []):
         n = s.get("name")
         kind = s.get("kind", "terminal")

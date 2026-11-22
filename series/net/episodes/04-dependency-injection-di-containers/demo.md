@@ -55,9 +55,10 @@ APP=contoso-requests-<4 digits> ./deploy/deploy-appservice.sh          # ends wi
 
 2. **`screens/startup-validation.jpg`** — *A bad setting, caught at startup* (no tenant)
    - Stop the running app. `cd src/ProjectRequests.Api && Notifications__Channel=webhook dotnet run --launch-profile http`
-     then `echo $?`.
+     then `echo $?` (on the Windows laptop, in PowerShell: `dotnet run --launch-profile http` then `$LASTEXITCODE`).
    - In frame: `Hosting failed to start`, `OptionsValidationException ... 'WebhookUrl' ... must be an absolute https
-     URL when Channel is 'webhook'`, and `134`. Crop the stack trace lines if the terminal is crowded.
+     URL when Channel is 'webhook'`, and the exit code: `134` on Linux, `-532462766` (0xE0434352, unhandled .NET
+     exception) on Windows. The narration says no number. Crop the stack trace lines if the terminal is crowded.
 
 3. **`screens/azure-log-stream.jpg`** — *The worker, live on App Service* (**needs tenant**)
    - Portal: web app → **Monitoring → Log stream** (or `az webapp log tail -g rg-mglab-net-04 -n <app>`).

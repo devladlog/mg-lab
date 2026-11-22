@@ -81,6 +81,15 @@
     "# manual (owner): close the terminal so the key variables disappear and check the shell history has no key: Get-Content (Get-PSReadLineOption).HistorySavePath | Select-String KEY",
     "# manual (owner): rotate or revoke either API key if it appeared in any recording; delete unused takes"
   ],
+  "prepare_local": [
+    "$py = Get-PythonExe -Version 3.13; if (-not (Test-Path C:\\MGLab\\venv\\copilot-22\\Scripts\\python.exe)) { & $py -m venv C:\\MGLab\\venv\\copilot-22; if ($LASTEXITCODE -ne 0) { throw 'venv failed' } }   # google-genai 3 needs Python 3.11+, the laptop's python is 3.10",
+    "$env:PATH = \"C:\\MGLab\\venv\\copilot-22\\Scripts;$env:PATH\"   # python = the 3.13 venv for this screen only (the queue restores PATH afterwards)",
+    "python -m pip install -r src/requirements.txt --quiet; if ($LASTEXITCODE -ne 0) { throw 'pip install failed' }",
+    "python -m pytest -q | Out-Null; if ($LASTEXITCODE -ne 0) { throw 'the episode tests fail in the Python 3.13 venv' }"
+  ],
+  "teardown_local": [
+    "Remove-Item C:\\MGLab\\venv\\copilot-22 -Recurse -Force -ErrorAction SilentlyContinue"
+  ],
   "needs": [
     "api-key:openai",
     "api-key:gemini (paid tier)"

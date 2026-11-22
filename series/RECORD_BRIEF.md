@@ -28,6 +28,8 @@ folder and extension (`screens/live-run.jpg` -> `live-run`).
     { "name": "desktop", "kind": "app", "app": "Power BI Desktop | SSMS 22 | ...", "steps": ["..."], "mask": ["..."] }
   ],
   "teardown": ["PowerShell statements run on the laptop after the last screen, NOT recorded"],
+  "prepare_local":  ["optional: laptop-only set-up for 'screen:' queue lines (no sign-in, prompt, Docker or VM)"],
+  "teardown_local": ["optional: undoes prepare_local (stop what it started, delete its temp folders under C:\\MGLab)"],
   "needs": ["lab-vms", "tenant", "azure", "premium-trial", "paid:<what>", "licence:<what>", "docker", "api-key:<vendor>"],
   "blocked": "optional: one sentence when a screen cannot be recorded yet (missing licence, purchase, preview not available)"
 }
@@ -52,6 +54,11 @@ folder and extension (`screens/live-run.jpg` -> `live-run`).
   subscription/tenant ids). Terminal scenes must not print secrets (no `Get-Clixml ... .Password`, no `az account show`
   without `--query` that hides ids).
 - **Cost:** anything billed (Azure resources, paid capacities, API keys) goes in `needs` and `teardown` must remove it.
+- **`prepare_local` / `teardown_local`:** a queue line `screen: <episode folder>/<screen name>` (or `screen!:` to record
+  it again) records one terminal screen with these lists instead of `prepare`/`teardown`, so a screen that needs nothing
+  from the owner can be recorded while the episode's `prepare` still signs in somewhere. Only local, idempotent steps:
+  build, restore, venv, copy to a work folder, start/stop a local service. The kit restores the environment variables
+  after the line; the kit helpers `Use-DotNetSdk -Channel 10.0` and `Get-PythonExe -Version 3.13` are available.
 - Keep `commands` short and readable on screen; split long scripts into several commands. Use `#pause N` after a result
   that the narration talks about.
 - Write **only** `record.json` files in the episode folders you are given. No other file edits, no git, no browser, no

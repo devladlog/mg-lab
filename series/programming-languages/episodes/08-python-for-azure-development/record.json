@@ -108,6 +108,13 @@
     "az group exists -n rg-mglab-code-08",
     "Remove-Item C:\\lab\\pl08 -Recurse -Force -ErrorAction SilentlyContinue"
   ],
+  "prepare_local": [
+    "New-Item -ItemType Directory -Force C:\\lab | Out-Null",
+    "Remove-Item C:\\lab\\pl08 -Recurse -Force -ErrorAction SilentlyContinue",
+    "Copy-Item -Path (Get-Location).Path -Destination C:\\lab\\pl08 -Recurse -Force",
+    "& (Get-PythonExe -Version 3.13) -m venv C:\\lab\\pl08\\.venv; if ($LASTEXITCODE -ne 0) { throw 'venv failed' }   # except* needs 3.11+, the laptop's python is 3.10",
+    "& C:\\lab\\pl08\\.venv\\Scripts\\python.exe -m pip install -q -e 'C:\\lab\\pl08[dev]'; if ($LASTEXITCODE -ne 0) { throw 'pip install failed' }"
+  ],
   "needs": [
     "tenant",
     "azure",

@@ -102,6 +102,16 @@
     "az cognitiveservices account purge -g rg-mglab-ai-17 -n $env:AI_ACCOUNT -l westeurope",
     "Remove-Item build, .venv -Recurse -Force -ErrorAction SilentlyContinue"
   ],
+  "prepare_local": [
+    "$v = python -c \"import sys; print(sys.version_info >= (3, 10))\"; if ($v -ne 'True') { throw 'python 3.10 or newer must be on PATH as python' }",
+    "if (-not (Test-Path C:\\MGLab\\venv\\ai-17\\Scripts\\python.exe)) { python -m venv C:\\MGLab\\venv\\ai-17; if ($LASTEXITCODE -ne 0) { throw 'venv failed' } }",
+    "$env:PATH = \"C:\\MGLab\\venv\\ai-17\\Scripts;$env:PATH\"   # this screen only (the queue restores PATH afterwards)",
+    "python -m pip install -q -r requirements.txt; if ($LASTEXITCODE -ne 0) { throw 'pip install failed' }",
+    "$env:PYTHONPATH = 'src'"
+  ],
+  "teardown_local": [
+    "Remove-Item C:\\MGLab\\venv\\ai-17 -Recurse -Force -ErrorAction SilentlyContinue"
+  ],
   "needs": [
     "azure",
     "paid:foundry-tools-per-transaction-and-log-analytics",

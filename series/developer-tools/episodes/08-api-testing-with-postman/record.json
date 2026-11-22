@@ -63,6 +63,7 @@
         "[IO.File]::WriteAllText('C:\\work\\bin\\python3', \"#!/bin/sh`nexec python `\"`$@`\"`n\")",
         "if ($env:PATH -notlike '*C:\\work\\bin*') { $env:PATH = 'C:\\work\\bin;C:\\Program Files\\Git\\bin;' + $env:PATH + ';C:\\Program Files\\Git\\usr\\bin' }",
         "$env:PYTHON = 'python'",
+        "[IO.File]::WriteAllText('C:\\work\\bin\\dotnet-tree', ((@('#!/bin/bash', '# DOTNET for scripts/run-api-tests.sh on Windows: Git Bash''s kill ends only \"dotnet run\", not the API it started (which then keeps bin locked for the next run); this ends the whole process tree', 'dotnet \"$@\" &', 'child=$!', 'trap ''w=$(cat /proc/$child/winpid 2>/dev/null); [ -n \"$w\" ] && taskkill //F //T //PID \"$w\" >/dev/null 2>&1; kill \"$child\" 2>/dev/null; exit 143'' TERM INT HUP', 'wait \"$child\"') -join \"`n\") + \"`n\")); $env:DOTNET = 'dotnet-tree'",
         "Set-Location C:\\work\\orders-app-api-tests",
         "git checkout -- . 2>$null"
       ],
@@ -115,6 +116,29 @@
     "# owner: Postman > delete the workspace orders-api-demo (collections and environment inside); the free account stays",
     "$owner = gh api user --jq .login; if (gh repo view \"$owner/orders-app-api-tests\" --json name 2>$null) { gh repo delete \"$owner/orders-app-api-tests\" --yes }",
     "Set-Location C:\\work; Remove-Item C:\\work\\orders-app-api-tests -Recurse -Force -ErrorAction SilentlyContinue"
+  ],
+  "prepare_local": [
+    "$ep = (Get-Location).Path",
+    "Use-DotNetSdk -Channel 10.0   # kit helper: uses the installed .NET 10 SDK, else installs it into C:\\MGLab\\dotnet (no admin)",
+    "New-Item -ItemType Directory -Force C:\\work\\bin | Out-Null",
+    "[IO.File]::WriteAllText('C:\\work\\bin\\python3', \"#!/bin/sh`nexec python `\"`$@`\"`n\")",
+    "if ($env:PATH -notlike '*C:\\work\\bin*') { $env:PATH = 'C:\\work\\bin;C:\\Program Files\\Git\\bin;' + $env:PATH + ';C:\\Program Files\\Git\\usr\\bin' }",
+    "$env:PYTHON = 'python'",
+    "[IO.File]::WriteAllText('C:\\work\\bin\\dotnet-tree', ((@('#!/bin/bash', '# DOTNET for scripts/run-api-tests.sh on Windows: Git Bash''s kill ends only \"dotnet run\", not the API it started (which then keeps bin locked for the next run); this ends the whole process tree', 'dotnet \"$@\" &', 'child=$!', 'trap ''w=$(cat /proc/$child/winpid 2>/dev/null); [ -n \"$w\" ] && taskkill //F //T //PID \"$w\" >/dev/null 2>&1; kill \"$child\" 2>/dev/null; exit 143'' TERM INT HUP', 'wait \"$child\"') -join \"`n\") + \"`n\")); $env:DOTNET = 'dotnet-tree'",
+    "Get-CimInstance Win32_Process | Where-Object { $_.Name -eq 'Contoso.Orders.Api.exe' -or ($_.Name -eq 'dotnet.exe' -and $_.CommandLine -like '*Contoso.Orders.Api*') } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }   # no orders API left running (it would lock bin)",
+    "New-Item -ItemType Directory -Force C:\\work | Out-Null; Remove-Item C:\\work\\orders-app-api-tests -Recurse -Force -ErrorAction SilentlyContinue",
+    "Copy-Item -Recurse \"$ep\\src\\orders-app\" C:\\work\\orders-app-api-tests",
+    "Get-ChildItem 'C:\\work\\orders-app-api-tests' -Recurse -File -Force -Include *.cs,*.csproj,*.props,*.slnx,*.slnf,*.json,*.md,*.yml,*.yaml,*.py,*.sh,*.toml,*.config,*.http,*.runsettings,*.playlist,*.ts,Dockerfile,compose.yaml,CODEOWNERS,.gitignore,.gitattributes,.editorconfig,pre-commit,commit-msg -ErrorAction SilentlyContinue | Where-Object { $_.FullName -notmatch '\\\\(node_modules|bin|obj|\\.git)\\\\' } | ForEach-Object { [IO.File]::WriteAllText($_.FullName, ([IO.File]::ReadAllText($_.FullName) -replace \"`r`n\", \"`n\")) }",
+    "Push-Location C:\\work\\orders-app-api-tests\\api-tests; npm ci --no-audit --no-fund; Pop-Location",
+    "if ($LASTEXITCODE -ne 0) { throw 'the step above failed' }",
+    "Set-Location C:\\work\\orders-app-api-tests",
+    "git init -q -b main; git config core.autocrlf false; git config user.name 'Alex Demo'; git config user.email 'alex.demo@contoso.com'",
+    "git add -A; git commit -q -m 'chore: import the orders API with its Postman collection'",
+    "bash scripts/run-api-tests.sh | Out-Null; if ($LASTEXITCODE -ne 0) { \"warm-up run exit code $LASTEXITCODE (a cold first run can miss the 2000 ms check): once more\" | Out-Host; bash scripts/run-api-tests.sh | Out-Null }; if ($LASTEXITCODE -ne 0) { throw \"off-camera warm-up of scripts/run-api-tests.sh failed (exit $LASTEXITCODE): the on-camera run would not be green\" }   # off-camera warm-up run",
+    "Get-CimInstance Win32_Process | Where-Object { $_.Name -eq 'Contoso.Orders.Api.exe' -or ($_.Name -eq 'dotnet.exe' -and $_.CommandLine -like '*Contoso.Orders.Api*') } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }   # no orders API left running (it would lock bin)"
+  ],
+  "teardown_local": [
+    "Get-CimInstance Win32_Process | Where-Object { $_.Name -eq 'Contoso.Orders.Api.exe' -or ($_.Name -eq 'dotnet.exe' -and $_.CommandLine -like '*Contoso.Orders.Api*') } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }   # no orders API left running (it would lock bin)"
   ],
   "needs": [
     "docker",

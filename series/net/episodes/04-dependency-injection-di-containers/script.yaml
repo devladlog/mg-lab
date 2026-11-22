@@ -197,7 +197,7 @@ scenes:
       Visible: "fail: Microsoft.Extensions.Hosting.Internal.Host[11] Hosting failed to start" and
       "OptionsValidationException: DataAnnotation validation failed for 'NotificationOptions' members: 'WebhookUrl'
       with the error: 'Notifications:WebhookUrl must be an absolute https URL when Channel is 'webhook'.'", then the
-      prompt back (echo $? shows 134). See deploy/startup-validation.output.txt. Nothing to mask.
+      prompt back (echo $? shows 134 on Linux; $LASTEXITCODE on the Windows laptop shows -532462766, 0xE0434352). See deploy/startup-validation.output.txt. Nothing to mask.
     narration: >
       Let's try it. Switch the channel to webhook with an environment variable, and forget the URL. The host refuses
       to start, and the log says exactly which setting is wrong and why. A failed deploy is much cheaper than a

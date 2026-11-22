@@ -134,6 +134,25 @@
     "# owner: VS Code > Run > Remove All Breakpoints (extensions stay)",
     "Set-Location C:\\work; Remove-Item C:\\work\\orders-debug, C:\\work\\orders-history -Recurse -Force -ErrorAction SilentlyContinue"
   ],
+  "prepare_local": [
+    "$ep = (Get-Location).Path",
+    "Use-DotNetSdk -Channel 10.0   # kit helper: uses the installed .NET 10 SDK, else installs it into C:\\MGLab\\dotnet (no admin)",
+    "New-Item -ItemType Directory -Force C:\\work\\bin | Out-Null",
+    "[IO.File]::WriteAllText('C:\\work\\bin\\python3', \"#!/bin/sh`nexec python `\"`$@`\"`n\")",
+    "if ($env:PATH -notlike '*C:\\work\\bin*') { $env:PATH = 'C:\\work\\bin;C:\\Program Files\\Git\\bin;' + $env:PATH + ';C:\\Program Files\\Git\\usr\\bin' }",
+    "$env:PYTHON = 'python'",
+    "Get-CimInstance Win32_Process | Where-Object { $_.Name -eq 'Contoso.Orders.Api.exe' -or ($_.Name -eq 'dotnet.exe' -and $_.CommandLine -like '*Contoso.Orders.Api*') } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }   # no orders API left running (it would lock bin)",
+    "New-Item -ItemType Directory -Force C:\\work | Out-Null; Remove-Item C:\\work\\orders-debug -Recurse -Force -ErrorAction SilentlyContinue",
+    "Copy-Item -Recurse \"$ep\\src\\orders-app\" C:\\work\\orders-debug",
+    "Get-ChildItem 'C:\\work\\orders-debug' -Recurse -File -Force -Include *.cs,*.csproj,*.props,*.slnx,*.slnf,*.json,*.md,*.yml,*.yaml,*.py,*.sh,*.toml,*.config,*.http,*.runsettings,*.playlist,*.ts,Dockerfile,compose.yaml,CODEOWNERS,.gitignore,.gitattributes,.editorconfig,pre-commit,commit-msg -ErrorAction SilentlyContinue | Where-Object { $_.FullName -notmatch '\\\\(node_modules|bin|obj|\\.git)\\\\' } | ForEach-Object { [IO.File]::WriteAllText($_.FullName, ([IO.File]::ReadAllText($_.FullName) -replace \"`r`n\", \"`n\")) }",
+    "Set-Location C:\\work\\orders-debug",
+    "dotnet tool restore; dotnet build src/Contoso.Orders.Api -v q --nologo; if ($LASTEXITCODE -ne 0) { throw 'dotnet build failed' }",
+    "git init -q -b main; git config core.autocrlf false; git config user.name 'Alex Demo'; git config user.email 'alex.demo@contoso.com'",
+    "git add -A; git commit -q -m \"feat(reports): monthly revenue per customer\""
+  ],
+  "teardown_local": [
+    "Get-CimInstance Win32_Process | Where-Object { $_.Name -eq 'Contoso.Orders.Api.exe' -or ($_.Name -eq 'dotnet.exe' -and $_.CommandLine -like '*Contoso.Orders.Api*') } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }   # no orders API left running (it would lock bin)"
+  ],
   "needs": [
     "docker",
     "vscode",

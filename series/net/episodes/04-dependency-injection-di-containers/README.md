@@ -34,7 +34,7 @@ chosen in configuration. Along the way:
 | [`tests/ProjectRequests.Api.Tests/NotificationTests.cs`](tests/ProjectRequests.Api.Tests/NotificationTests.cs) | 8 tests: startup validation (2), key → channel (2), webhook via `IHttpClientFactory`, worker on `FakeTimeProvider`, worker survives a failed send, worker = hosted service |
 | `tests/…/ApiTests.cs`, `DataTests.cs`, `ConfigurationTests.cs` | Episode 3's 26 tests, still green |
 | [`deploy/local-demo.sh`](deploy/local-demo.sh) / [`deploy/local-demo.output.txt`](deploy/local-demo.output.txt) | Lifetimes, two requests, send the digest now — and its real output |
-| [`deploy/startup-validation.output.txt`](deploy/startup-validation.output.txt) | Real output of `Notifications__Channel=webhook dotnet run`: `OptionsValidationException`, exit code 134 |
+| [`deploy/startup-validation.output.txt`](deploy/startup-validation.output.txt) | Real output of `Notifications__Channel=webhook dotnet run`: `OptionsValidationException`, exit code 134 on Linux (-532462766, 0xE0434352, on Windows) |
 | [`deploy/deploy-appservice.sh`](deploy/deploy-appservice.sh) | F1 Linux web app with SQLite in `/home`; `break` / `fix` phases for the ValidateOnStart demo |
 
 ## Build, test, run
@@ -92,7 +92,7 @@ episode 3 is the production path (Azure SQL, managed identity). The Azure steps 
   the catch to check: the "survives a failed send" test fails.
 - **`ValidateOnStart` turns a 3 a.m. surprise into a failed deploy.** Without it, a missing `WebhookUrl` would only
   surface when the first digest runs (or the first time someone reads the options). With it, `dotnet run` exits with
-  code 134 and the exact message (`deploy/startup-validation.output.txt`).
+  code 134 on Linux (-532462766 on Windows) and the exact message (`deploy/startup-validation.output.txt`).
 - **Keyed + typed `HttpClient`**: typed clients are transient and `IHttpClientFactory` manages the handler under them,
   so the `"webhook"` key is registered as a transient factory over the typed client, resolved inside a scope —
   never captured by the singleton worker.

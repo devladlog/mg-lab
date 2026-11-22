@@ -81,6 +81,10 @@
     "Disconnect-MgGraph -ErrorAction SilentlyContinue | Out-Null",
     "# optional (owner): Entra admin center, Enterprise applications, Microsoft Graph Command Line Tools, Permissions: remove the LicenseAssignment.Read.All consent if it is not needed for other episodes"
   ],
+  "prepare_local": [
+    "$v = python -c \"import sys; print(sys.version_info >= (3, 10))\"; if ($v -ne 'True') { throw 'python 3.10 or newer must be on PATH as python' }",
+    "python -m pip install -r src/requirements.txt --quiet; if ($LASTEXITCODE -ne 0) { throw 'pip install failed' }"
+  ],
   "needs": [
     "tenant"
   ]

@@ -92,6 +92,14 @@
     "Remove-Item Env:VENDOR_API_KEY, Env:MG_TUNNEL_URL, Env:MG_APIKEY_REGID -ErrorAction SilentlyContinue",
     "# manual (owner): stop devtunnel host (Ctrl+C), devtunnel delete <tunnel id>, devtunnel user logout; Developer Portal: delete the API key registration; Teams: remove Contoso Vendor Desk; switch the Upload custom apps policy back if it was off; clear the shell history line that contains the key"
   ],
+  "prepare_local": [
+    "$v = python -c \"import sys; print(sys.version_info >= (3, 10))\"; if ($v -ne 'True') { throw 'python 3.10 or newer must be on PATH as python' }",
+    "python -m pip install -r src/requirements.txt --quiet; if ($LASTEXITCODE -ne 0) { throw 'pip install failed' }",
+    "if (-not (Select-String -LiteralPath src/agent/appPackage/manifest.json -Pattern '\"manifestVersion\": \"1.30\"' -SimpleMatch -Quiet)) { git checkout -- src/agent/appPackage/manifest.json }   # a take stopped half-way leaves manifestVersion 1.19"
+  ],
+  "teardown_local": [
+    "if (-not (Select-String -LiteralPath src/agent/appPackage/manifest.json -Pattern '\"manifestVersion\": \"1.30\"' -SimpleMatch -Quiet)) { git checkout -- src/agent/appPackage/manifest.json }   # a take stopped half-way leaves manifestVersion 1.19"
+  ],
   "needs": [
     "tenant",
     "dev-tunnels-cli",

@@ -8,8 +8,11 @@ function Get-FfmpegPath {
     throw 'ffmpeg not found: run series\tools\rec\Setup-RecordingLaptop.ps1 once (it installs it with winget).'
 }
 
+$script:LabCredentialPath = 'E:\MGLab\secrets\lab-admin.xml'
+
 function Get-LabCredential {
-    $path = 'E:\MGLab\secrets\lab-admin.xml'
+    $path = $script:LabCredentialPath
+    if (-not (Test-Path -LiteralPath $path)) { throw "Lab credential file not found: $path" }
     $c = Import-Clixml -LiteralPath $path
     if ($c.UserName -notmatch '\\|@') { return [pscredential]::new("CONTOSO\$($c.UserName)", $c.Password) }
     $c
@@ -17,15 +20,68 @@ function Get-LabCredential {
 
 function Invoke-HostStatements {
     # Runs preparation statements on the laptop (not recorded). $cred (lab credential) and $EpisodeRoot are available.
+    # The lab credential file is only needed by statements that use $cred or reach a VM (-VMName, PowerShell Direct):
+    # when the file is missing, host-only statements still run and such a statement fails before it runs.
     param([string[]] $Statements, [string] $EpisodeRoot)
-    $cred = Get-LabCredential
+    $cred = if (Test-Path -LiteralPath $script:LabCredentialPath) { Get-LabCredential } else { $null }
     Push-Location $EpisodeRoot
     try {
         foreach ($st in $Statements) {
             Write-Host "  > $st" -ForegroundColor DarkGray
+            if (-not $cred -and -not $st.TrimStart().StartsWith('#') -and $st -match '\$cred\b|-VMName\b') {
+                throw "This statement needs the lab credential (`$cred / PowerShell Direct), but $($script:LabCredentialPath) is missing: $st"
+            }
             Invoke-Expression $st | Out-Host
         }
     } finally { Pop-Location }
+}
+
+function Get-PythonExe {
+    # For prepare_local statements: full path of a python.exe of the given version (e.g. '3.13'), installed per user
+    # with winget (no admin rights) when it is missing. The laptop's default `python` (3.10) is left alone.
+    param([Parameter(Mandatory)] [string] $Version)
+    $nodot = $Version.Replace('.', '')
+    $find = {
+        $c = @()
+        if (Get-Command py -ErrorAction SilentlyContinue) { $c += @(py "-$Version" -c 'import sys; print(sys.executable)' 2>$null) }
+        $c += "$env:LOCALAPPDATA\Programs\Python\Python$nodot\python.exe", "$env:ProgramFiles\Python$nodot\python.exe"
+        $c | Where-Object { $_ -and (Test-Path -LiteralPath $_) } | Select-Object -First 1
+    }
+    $exe = & $find
+    if (-not $exe) {
+        winget install --id "Python.Python.$Version" -e --scope user --silent --accept-package-agreements --accept-source-agreements | Out-Host
+        $exe = & $find
+    }
+    if (-not $exe) { throw "Python $Version is missing and winget did not install it (winget install --id Python.Python.$Version --scope user)" }
+    $exe
+}
+
+function Use-DotNetSdk {
+    # For prepare_local statements: makes a .NET SDK of the given channel (and, optionally, extra runtimes such as '8.0')
+    # available to this process and to the scene windows it starts. The dotnet on PATH is used when it has them;
+    # otherwise they are installed without admin rights into C:\MGLab\dotnet (outside the user profile, so no profile
+    # path can reach the camera) and that folder goes first on PATH for this process only.
+    param([string] $Channel = '10.0', [string[]] $Runtime = @())
+    $major = $Channel.Split('.')[0]
+    $has = {
+        $d = Get-Command dotnet -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+        if (-not $d) { return $false }
+        $sdks = @(& $d.Source --list-sdks 2>$null); $rts = @(& $d.Source --list-runtimes 2>$null)
+        if (-not ($sdks -match "^$major\.")) { return $false }
+        foreach ($r in $Runtime) { if (-not ($rts -match "^Microsoft\.NETCore\.App $([regex]::Escape($r))\.")) { return $false } }
+        $true
+    }
+    if (& $has) { return }
+    $dir = 'C:\MGLab\dotnet'
+    New-Item -ItemType Directory -Force -Path $dir | Out-Null
+    $installer = Join-Path $dir 'dotnet-install.ps1'
+    if (-not (Test-Path $installer)) { Invoke-WebRequest -Uri 'https://dot.net/v1/dotnet-install.ps1' -OutFile $installer -UseBasicParsing }
+    Write-Host "  installing .NET SDK $Channel into $dir" -ForegroundColor DarkGray
+    & $installer -Channel $Channel -InstallDir $dir -NoPath | Out-Host
+    foreach ($r in $Runtime) { & $installer -Runtime dotnet -Channel $r -InstallDir $dir -NoPath | Out-Host }
+    $env:DOTNET_ROOT = $dir; $env:DOTNET_MULTILEVEL_LOOKUP = '0'
+    if ($env:PATH -notlike "$dir;*") { $env:PATH = "$dir;$env:PATH" }
+    if (-not (& $has)) { throw ".NET SDK $Channel is still not available after installing it into $dir" }
 }
 
 if (-not ('MgRec.Win2' -as [type])) {

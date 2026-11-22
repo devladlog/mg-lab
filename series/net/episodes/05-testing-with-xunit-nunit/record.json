@@ -107,6 +107,15 @@
     "$bak = Join-Path $env:TEMP 'PriorityRules.cs.mgbak'; if (Test-Path $bak) { Copy-Item $bak src\\ProjectRequests.Api\\Requests\\PriorityRules.cs -Force; Remove-Item $bak -Force }",
     "Invoke-Command -VMName CON-SQL01 -Credential $cred { sqlcmd -S localhost -E -Q \"SELECT name FROM sys.databases WHERE name LIKE 'ProjectRequests[_]%'; IF EXISTS (SELECT 1 FROM sys.server_principals WHERE name = 'requests_tests') DROP LOGIN requests_tests\" }"
   ],
+  "prepare_local": [
+    "Use-DotNetSdk -Channel 10.0   # kit helper: uses the installed .NET 10 SDK, else installs it into C:\\MGLab\\dotnet (no admin)",
+    "dotnet tool restore; if ($LASTEXITCODE -ne 0) { throw 'dotnet tool restore failed' }",
+    "if (-not (Select-String -LiteralPath src\\ProjectRequests.Api\\Requests\\PriorityRules.cs -Pattern 'HighThreshold = 50_000m' -SimpleMatch -Quiet)) { git checkout -- src/ProjectRequests.Api/Requests/PriorityRules.cs }   # a take stopped half-way leaves 49_000m",
+    "dotnet build ProjectRequests.slnx -v q --nologo; if ($LASTEXITCODE -ne 0) { throw 'dotnet build failed' }"
+  ],
+  "teardown_local": [
+    "if (-not (Select-String -LiteralPath src\\ProjectRequests.Api\\Requests\\PriorityRules.cs -Pattern 'HighThreshold = 50_000m' -SimpleMatch -Quiet)) { git checkout -- src/ProjectRequests.Api/Requests/PriorityRules.cs }   # a take stopped half-way leaves 49_000m"
+  ],
   "needs": [
     "lab-vms",
     "vm:CON-SQL01",

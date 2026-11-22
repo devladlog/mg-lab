@@ -53,7 +53,8 @@
         "New-Item -ItemType Directory -Force 'C:\\lab\\mgnet' | Out-Null; $env:MG_LOGS = 'C:\\lab\\mgnet'; $env:MG_SVC = Join-Path $env:MG_LOGS 'svc.ps1'; Set-Content -LiteralPath $env:MG_SVC -Value @'\nparam([Parameter(Mandatory)][ValidateSet('start','ensure','stop')][string]$Action, [Parameter(Mandatory)][string]$Name, [string]$Project, [string]$Urls, [int]$Port, [string[]]$AppArgs = @(), [string[]]$DeleteFiles = @())\n$d = 'C:\\lab\\mgnet'; New-Item -ItemType Directory -Force $d | Out-Null\n$pf = Join-Path $d \"$Name.pid\"\nfunction Test-Port([int]$p) { try { [Net.Sockets.TcpClient]::new('localhost', $p).Dispose(); $true } catch { $false } }\nfunction Stop-Svc { if (Test-Path $pf) { taskkill /PID (Get-Content $pf) /T /F 2>&1 | Out-Null; Remove-Item $pf -ErrorAction SilentlyContinue } }\nif ($Action -eq 'stop') { Stop-Svc; return }\nif ($Action -eq 'ensure' -and $Port -and (Test-Port $Port)) { return }\nStop-Svc\nforeach ($f in $DeleteFiles) { Remove-Item (Join-Path $Project $f) -Force -ErrorAction SilentlyContinue }\n$env:ASPNETCORE_ENVIRONMENT = 'Development'\n$a = @('run', '--no-build', '--no-launch-profile')\nif ($Urls) { $a += '--urls', $Urls }\nif ($AppArgs) { $a += '--'; $a += $AppArgs }\n$p = Start-Process dotnet -ArgumentList $a -WorkingDirectory $Project -WindowStyle Hidden -RedirectStandardOutput (Join-Path $d \"$Name.log\") -RedirectStandardError (Join-Path $d \"$Name.err\") -PassThru\n$p.Id | Set-Content $pf\nif ($Port) { for ($i = 0; $i -lt 120; $i++) { if (Test-Port $Port) { break }; Start-Sleep -Milliseconds 500 } }\n'@",
         "& $env:MG_SVC stop -Name ep04-api"
       ],
-      "maxMinutes": 5
+      "maxMinutes": 5,
+      "note": "Expected: 'Hosting failed to start' and the OptionsValidationException for Notifications:WebhookUrl; the host does not start. $LASTEXITCODE is -532462766 (0xE0434352, an unhandled .NET exception) on Windows, not the 134 of the Linux output in deploy/startup-validation.output.txt; the narration says no number."
     },
     {
       "name": "azure-log-stream",
@@ -106,6 +107,15 @@
     "Remove-Item src\\ProjectRequests.Api\\requests.db* -Force -ErrorAction SilentlyContinue",
     "Remove-Item deploy\\out -Recurse -Force -ErrorAction SilentlyContinue",
     "Remove-Item ('C:\\lab\\mgnet\\ep04*') -Force -ErrorAction SilentlyContinue"
+  ],
+  "prepare_local": [
+    "Use-DotNetSdk -Channel 10.0   # kit helper: uses the installed .NET 10 SDK, else installs it into C:\\MGLab\\dotnet (no admin)",
+    "if (Test-Path 'C:\\lab\\mgnet\\svc.ps1') { & 'C:\\lab\\mgnet\\svc.ps1' stop -Name ep04-api }   # an API left from an earlier take keeps its data and locks bin: the screen prepare starts a fresh one",
+    "dotnet tool restore; if ($LASTEXITCODE -ne 0) { throw 'dotnet tool restore failed' }",
+    "dotnet build ProjectRequests.slnx -v q --nologo; if ($LASTEXITCODE -ne 0) { throw 'dotnet build failed' }"
+  ],
+  "teardown_local": [
+    "if (Test-Path 'C:\\lab\\mgnet\\svc.ps1') { & 'C:\\lab\\mgnet\\svc.ps1' stop -Name ep04-api }"
   ],
   "needs": [
     "azure",

@@ -115,6 +115,9 @@
     "# owner: delete the 'contoso lab' profile in the Azure VPN Client",
     "az group exists --name rg-mglab-azure-09   # false when done"
   ],
+  "prepare_local": [
+    "$v = python -c \"import sys; print(sys.version_info >= (3, 10))\"; if ($v -ne 'True') { throw 'python 3.10 or newer must be on PATH as python' }   # netplan.py is standard library only"
+  ],
   "needs": [
     "azure",
     "tenant",
