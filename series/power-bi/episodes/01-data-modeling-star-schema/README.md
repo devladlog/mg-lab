@@ -75,6 +75,27 @@ expected numbers.
 Expected totals after refresh (computed from the CSVs): **Sales Amount 1,862,401.98** (2024: 894,929.10 · 2025:
 967,472.88), **Orders 2,440**, **Units 7,462**, Margin % 43.7 % in both years, Unknown customer 61,345.69.
 
+## A second opinion: Tabular Editor 2 and Microsoft's Best Practice Analyzer rules
+
+Star lint checks our nine rules (SS001-SS009). The `bpa` screen runs a second, independent set on the same model:
+[Tabular Editor 2](https://github.com/TabularEditor/TabularEditor) (free, open source, MIT; 2.29.0, portable zip, no
+admin) connects to the model open in Power BI Desktop (*File > Open > From DB > Local instance* lists running Desktop
+instances) and runs the **Best Practice Analyzer** (F10) with the rule file Microsoft publishes in
+[microsoft/Analysis-Services/BestPracticeRules](https://github.com/microsoft/Analysis-Services/tree/master/BestPracticeRules)
+(71 rules on 22 Nov 2026, in Performance, DAX Expressions, Error Prevention, Maintenance, Naming and Formatting).
+
+- **Overlap:** bi-directional and many-to-many relationships, snowflakes, a marked date table, hidden foreign keys and
+  summarize-by on numeric columns are in both. Star lint also checks every source column against the CSV header (SS009),
+  which BPA can't.
+- **What BPA adds on this model** (from reading the rule expressions; the recording decides): descriptions on visible
+  objects, the style of format strings (it wants `#,0.0%;-#,0.0%;#,0.0%` for percentages, `#,0` for whole numbers and
+  `mm/dd/yyyy` for every column named *Date*), a hidden column nothing uses (`Sales[Line Number]`), `IsAvailableInMdx`
+  on hidden columns, data categories for City and Country, integer keys for relationships (our date relationships use the date column, as Learn's date-table guidance does).
+- **Advice, not a verdict.** The date rule is a US convention and the whole-number rule also catches currency formats;
+  BPA lets you ignore a rule per object. We don't change the model on camera.
+- TE2's own command line can run BPA in a pipeline (`TabularEditor.exe <model> -A <rules>`; exit code 1 on severity 3+);
+  not used in this episode.
+
 ## What we learned / gotchas
 
 - **Relationships can't have `///` descriptions in TMDL.** Our first `relationships.tmdl` had one and TOM refused the
@@ -107,4 +128,5 @@ Expected totals after refresh (computed from the CSVs): **Sales Amount 1,862,401
 - [TMDL overview](https://learn.microsoft.com/analysis-services/tmdl/tmdl-overview) · [TMDL scripts (createOrReplace)](https://learn.microsoft.com/analysis-services/tmdl/tmdl-scripts) · [TMDL view](https://learn.microsoft.com/power-bi/transform-model/desktop-tmdl-view)
 - [DIVIDE function vs. divide operator](https://learn.microsoft.com/dax/best-practices/dax-divide-function-operator)
 - [Table.TransformColumnTypes (culture argument)](https://learn.microsoft.com/powerquery-m/table-transformcolumntypes)
+- Tabular Editor 2: [getting started](https://docs.tabulareditor.com/te2/Getting-Started.html) · [Best Practice Analyzer](https://docs.tabulareditor.com/te2/Best-Practice-Analyzer.html) · [command line](https://docs.tabulareditor.com/en/features/Command-line-Options.html) · [External tools in Power BI Desktop](https://learn.microsoft.com/power-bi/transform-model/desktop-external-tools)
 - Blog: [Data Modeling & Star Schema — Complete Guide](https://www.devladlog.com/articles/power-bi/2025-01-01-data-modeling-complete-guide-2025/)

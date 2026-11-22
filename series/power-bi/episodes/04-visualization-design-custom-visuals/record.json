@@ -10,7 +10,14 @@
     "npm ci --no-audit --no-fund",
     "npx pbiviz package",
     "Copy-Item .\\dist\\*.pbiviz C:\\MGLab\\power-bi\\ -Force",
-    "Pop-Location"
+    "Pop-Location",
+    "New-Item -ItemType Directory -Force C:\\MGLab\\tools\\deneb | Out-Null",
+    "if (-not (Get-ChildItem C:\\MGLab\\tools\\deneb\\*.pbiviz -ErrorAction SilentlyContinue)) { $assets = (Invoke-RestMethod https://api.github.com/repos/deneb-viz/deneb/releases/tags/2.0.0).assets | Where-Object name -like '*.pbiviz'; $a = @($assets | Where-Object name -like '*standalone*') + @($assets) | Select-Object -First 1; Invoke-WebRequest $a.browser_download_url -OutFile (Join-Path C:\\MGLab\\tools\\deneb $a.name) }",
+    "Push-Location C:\\MGLab\\power-bi\\ep04\\src\\deneb",
+    "npm ci --no-audit --no-fund",
+    "node check-spec.mjs target-bullet.vl.json",
+    "Pop-Location",
+    "'Deneb visual: ' + ((Get-ChildItem C:\\MGLab\\tools\\deneb\\*.pbiviz | Select-Object -ExpandProperty Name) -join ', ')"
   ],
   "screens": [
     {
@@ -45,6 +52,26 @@
       ]
     },
     {
+      "name": "viz-deneb",
+      "kind": "app",
+      "app": "Power BI Desktop + Deneb visual",
+      "steps": [
+        "Same session as viz-target-bullet (ContosoSales.pbip open, refreshed, theme applied)",
+        "Off camera: open C:\\MGLab\\power-bi\\ep04\\src\\deneb\\target-bullet.vl.json in Notepad, Ctrl+A, Ctrl+C",
+        "Visualizations pane ... > Import a visual from a file > type C:\\MGLab\\tools\\deneb\\<the .pbiviz prepare printed> > Open > Import > OK (no sign-in; do NOT use Get more visuals / AppSource, that needs an account)",
+        "Add a page 'Deneb'; copy the Year slicer from Sales overview (Ctrl+C, Ctrl+V; answer Sync if asked) and set 2025",
+        "Insert the Deneb visual, about 900 x 360; Values: Product[Category], then Sales Amount, then Sales PY (display names must stay exactly Category, Sales Amount, Sales PY)",
+        "Visual header ... > Edit > Create new specification: [empty] template, Vega-Lite > Create (labels may differ slightly in 2.0; any empty Vega-Lite start works, the paste replaces it)",
+        "Specification tab: select all, paste (Ctrl+V), Ctrl+Enter (Apply): three rows, Bikes +9.0% and Accessories +8.4% with up triangles, Clothing circle -3.0%, a dark tick at the prior year; hold",
+        "Back to report; hold on the page. Optional: hover a bar for the tooltip",
+        "Close without saving into the repo copy (or delete the Deneb page)"
+      ],
+      "mask": [
+        "account name and picture at the top right of Power BI Desktop (sign out first)",
+        "Windows user name in the import file dialog (type the C:\\MGLab path in the File name box, do not browse the nav pane)"
+      ]
+    },
+    {
       "name": "viz-high-contrast",
       "kind": "app",
       "app": "Power BI Desktop + Windows Settings",
@@ -62,8 +89,9 @@
   "teardown": [
     "Remove-Item C:\\MGLab\\power-bi\\ep04 -Recurse -Force -ErrorAction SilentlyContinue",
     "Remove-Item C:\\MGLab\\power-bi\\*.pbiviz -Force -ErrorAction SilentlyContinue",
-    "Remove-Item C:\\MGLab\\power-bi\\star -Recurse -Force -ErrorAction SilentlyContinue"
+    "Remove-Item C:\\MGLab\\power-bi\\star -Recurse -Force -ErrorAction SilentlyContinue",
+    "# Deneb .pbiviz stays in C:\\MGLab\\tools\\deneb; to remove: Remove-Item C:\\MGLab\\tools\\deneb -Recurse -Force"
   ],
   "needs": [],
-  "owner_notes": "Local only. Windows contrast theme must be set back to None after hcscreen. Node 24 builds the visual (needs 20.19+)."
+  "owner_notes": "Local only. Windows contrast theme must be set back to None after hcscreen. Node 24 builds the visual (needs 20.19+). viz-deneb: Deneb 2.0.0 (free, MIT) standalone .pbiviz downloaded by prepare into C:\\MGLab\\tools\\deneb from the GitHub release (no admin, no AppSource sign-in). Record it before viz-high-contrast so the contrast theme is off."
 }

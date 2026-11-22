@@ -172,6 +172,21 @@ scenes:
       and Learn reports about half the query time for that pattern. And a Boolean filter replaces a filter over the
       whole Store table. Learn says Import tables are column stores, built to filter columns that way.
 
+  - id: servertimings
+    type: screen
+    heading: "Where the query time goes"
+    image: screens/perf-server-timings.jpg
+    video: screens/perf-server-timings.mp4
+    video_compact: true
+    video_full: true
+    bar: "DAX Studio · Server Timings · growth written twice vs with a variable"
+    demo: "DAX Studio opened from Power BI Desktop's External Tools ribbon on ContosoPerf.After.pbip (title shows the localhost connection). Home: Server Timings on, Clear on Run on. Run queries/04-server-timings-yoy-twice.dax, then 05-server-timings-yoy-var.dax: the Server Timings tab of each with Total, FE, SE, SE queries and the xmSQL list. Then Advanced > Run Benchmark on each (5 cold, 5 warm): Summary tab. Record the real numbers. Narration is number-free; if the variable version is NOT faster or does not send fewer storage engine queries, add one sentence saying so (the engine may reuse the first prior-year result). If DAX Studio had to be the portable build (no External Tools button), the shot shows Connect > Power BI / SSDT Model instead: change 'opens from the External Tools ribbon already connected' to 'connects to the model open in Desktop'."
+    narration: >
+      Learn says about half the query time. Let's check. DAX Studio, free and open source, opens from the External Tools
+      ribbon already connected. Server Timings splits a query into formula engine and storage engine time, and counts
+      the storage engine queries. Growth written twice, then with a variable, from a cold cache. Run Benchmark repeats
+      each one, cold and warm.
+
   - id: rules
     type: bullets
     heading: "Model changes"
@@ -199,6 +214,20 @@ scenes:
     narration: >
       Same recording on the tuned model. Same slicers, same refresh. The big dictionaries are gone from the size query,
       and the executive page no longer carries the table of every order line.
+
+  - id: vertipaq
+    type: screen
+    heading: "The whole model, before and after"
+    image: screens/perf-vertipaq.jpg
+    video: screens/perf-vertipaq.mp4
+    video_compact: true
+    video_full: true
+    bar: "DAX Studio · View Metrics (VertiPaq Analyzer) · ContosoPerf.After vs Before.vpax"
+    demo: "DAX Studio connected to ContosoPerf.After.pbip. Advanced > View Metrics: Summary tab (total size), then Columns tab sorted by Total Size. Then Advanced > Import Metrics > results\\ContosoPerf.Before.vpax (exported off camera from the Before model): Columns tab with Line Ref, Order Timestamp, Order Number and Note at the top. Record the real total sizes of both; the narration only says the total is much smaller."
+    narration: >
+      The size query counted dictionaries only. View Metrics, DAX Studio's VertiPaq Analyzer, adds every column's data
+      and hierarchies. The tuned model, next to the metrics saved from the old one: the line reference, the timestamp
+      and the note are gone, and the total is much smaller.
 
   - id: comparescreen
     type: screen

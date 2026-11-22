@@ -1,0 +1,10 @@
+// NEEDS POWER BI DESKTOP + DAX STUDIO (Server Timings). Not run in the build container.
+// Run it on the AFTER model, opened in DAX Studio from the External Tools ribbon, with Server Timings and Clear on Run on.
+// The model's Sales YoY % (one VAR for the prior year, used twice). Same grouping as 04-server-timings-yoy-twice.dax,
+// so the two Server Timings tabs can be compared line by line: record the real numbers.
+EVALUATE
+    SUMMARIZECOLUMNS(
+        'Date'[Year Month],
+        'Store'[Store],
+        "YoY", [Sales YoY %]
+    )

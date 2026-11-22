@@ -1,0 +1,34 @@
+{
+  "$schema": "https://vega.github.io/schema/vega-lite/v6.json",
+  "description": "Target bullet as a Deneb spec. Values well: Category, Sales Amount, Sales PY. Same rule as target-bullet/src/model.ts.",
+  "data": {"name": "dataset"},
+  "params": [{"name": "tolerance", "value": 0.05}],
+  "transform": [
+    {"calculate": "isValid(datum['Sales Amount']) && isValid(datum['Sales PY']) && datum['Sales PY'] != 0 ? (datum['Sales Amount'] - datum['Sales PY']) / abs(datum['Sales PY']) : null", "as": "Variance"},
+    {"calculate": "!isValid(datum['Sales Amount']) ? 'noActual' : !isValid(datum['Variance']) ? 'noTarget' : datum['Variance'] > tolerance ? 'above' : datum['Variance'] < -tolerance ? 'below' : 'near'", "as": "Band"},
+    {"calculate": "datum['Band'] == 'above' ? '▲' : datum['Band'] == 'below' ? '▼' : datum['Band'] == 'near' ? '●' : '–'", "as": "Marker"},
+    {"calculate": "isValid(datum['Variance']) ? datum['Marker'] + ' ' + (datum['Variance'] > 0 ? '+' : '') + format(datum['Variance'], '.1%') : datum['Marker']", "as": "Label"},
+    {"calculate": "max(isValid(datum['Sales Amount']) ? datum['Sales Amount'] : 0, isValid(datum['Sales PY']) ? datum['Sales PY'] : 0)", "as": "Label At"}
+  ],
+  "encoding": {
+    "y": {"field": "Category", "type": "nominal", "title": null, "sort": {"field": "Sales Amount", "op": "max", "order": "descending"}}
+  },
+  "layer": [
+    {
+      "mark": {"type": "bar", "height": {"band": 0.5}, "tooltip": true},
+      "encoding": {
+        "x": {"field": "Sales Amount", "type": "quantitative", "title": "Sales amount (tick: prior year)"},
+        "color": {"field": "Band", "type": "nominal", "legend": null,
+                  "scale": {"domain": ["above", "near", "below"], "range": ["#0B5CAD", "#7A6A00", "#B34700"]}}
+      }
+    },
+    {
+      "mark": {"type": "tick", "thickness": 3, "size": 28, "color": "#252423"},
+      "encoding": {"x": {"field": "Sales PY", "type": "quantitative"}}
+    },
+    {
+      "mark": {"type": "text", "align": "left", "dx": 8, "color": "#252423", "fontSize": 13},
+      "encoding": {"x": {"field": "Label At", "type": "quantitative"}, "text": {"field": "Label"}}
+    }
+  ]
+}

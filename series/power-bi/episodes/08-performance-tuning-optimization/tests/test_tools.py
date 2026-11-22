@@ -61,7 +61,7 @@ def test_dax_query_measures_exist_in_the_model():
     model = pl.read_model(AFTER)
     measures = {m["name"] for t in model.values() for m in t["measures"]}
     columns = {(t["name"], c["name"]) for t in model.values() for c in t["columns"]}
-    for q in (SRC / "queries").glob("0[23]*.dax"):
+    for q in (SRC / "queries").glob("0[2-5]*.dax"):   # 04/05: DAX Studio Server Timings pair
         text = q.read_text(encoding="utf-8")
         for m in re.findall(r"(?<![\w'\]])\[([^\]]+)\]", re.sub(r'"[^"]*"', "", text)):
             assert m in measures or m == "Online Sales Filter" or m == "YoY Twice" or m in {c for _, c in columns}, m

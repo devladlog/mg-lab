@@ -27,7 +27,8 @@ measures). This episode is about what sits on top of it, built so it can be chec
 | [`src/ContosoSales.SemanticModel/`](src/ContosoSales.SemanticModel), [`src/ContosoSales.pbip`](src/ContosoSales.pbip) | Episode 2 model (TMDL), unchanged |
 | [`src/target-bullet/`](src/target-bullet) | The custom visual: `capabilities.json`, `pbiviz.json`, `src/model.ts` (logic), `src/view.ts` (SVG node tree), `src/settings.ts` (format pane), `src/visual.ts` (glue), `test/*.test.ts` |
 | [`src/data/`](src/data) | Episode 1 generator + star builder (the tests compute the numbers the recorder must see) |
-| [`tests/`](tests) | pytest: theme, report (schemas + lint + layout), expected numbers |
+| [`src/deneb/`](src/deneb) | The same chart as a **Deneb** spec (`target-bullet.vl.json`, Vega-Lite) and `check-spec.mjs`, which compiles it with Vega-Lite 6.4.3 and runs it headless in Vega 6.4.0 (the versions Deneb 2.0.0 bundles) |
+| [`tests/`](tests) | pytest: theme, report (schemas + lint + layout), expected numbers, Deneb spec |
 | [`tests/fixtures/messy-report/`](tests/fixtures/messy-report) | A schema-valid page that breaks every `report-lint` rule |
 | [`tests/fixtures/learn-example-theme.json`](tests/fixtures/learn-example-theme.json) | The example theme colours from Learn's *Create custom report themes* page (our "before") |
 | [`tests/schemas/`](tests/schemas) | Vendored schemas: PBIR/PBIP from developer.microsoft.com, theme schema 2.159 (Oct 2026) from `microsoft/powerbi-desktop-samples`; `fetch_schemas.py` re-downloads them |
@@ -56,7 +57,8 @@ python3 src/tools/report_lint.py src/ContosoSales.Report --model src/ContosoSale
 #   0 error(s), 0 warning(s)
 python3 src/tools/report_lint.py tests/fixtures/messy-report --model src/ContosoSales.SemanticModel/definition --max-visuals 2
 #   4 error(s), 7 warning(s), exit 1
-python3 -m pytest tests -q                                               # 36 passed
+(cd src/deneb && npm ci --no-audit --no-fund && node check-spec.mjs target-bullet.vl.json)   # 3 rows: above, above, near
+python3 -m pytest tests -q                                               # 41 passed (2 skip without src/deneb/node_modules)
 
 cd src/target-bullet
 npm ci --no-audit --no-fund
@@ -75,6 +77,29 @@ In the video, `theme-check` and `report-lint` are short for `python3 src/tools/t
 | Cards | Sales amount **967,472.88** · Sales growth vs prior year **8.1%** · Orders **1,268** |
 | Target bullet (Category, Sales Amount vs Sales PY) | Accessories 130,320.98 vs 120,256.62 **▲ +8.4%** · Bikes 780,356.80 vs 716,095.45 **▲ +9.0%** · Clothing 56,795.10 vs 58,577.03 **● -3.0%** (on target at 5 % tolerance; **▼** below at 2 %) |
 | theme-check, Learn example | good #1AAB40 vs bad #D64554: colour difference 74.0 with normal vision, **5.6** with simulated deuteranopia |
+
+## Deneb: the same chart without a build step
+
+[Deneb](https://deneb.guide) (free, open source, MIT; 2.0.0 released 8 Sep 2026, bundles Vega 6.4.0 and Vega-Lite 6.4.3)
+is a custom visual that renders a Vega or Vega-Lite spec you write inside the report. The `denebscreen` scene pastes
+[`src/deneb/target-bullet.vl.json`](src/deneb/target-bullet.vl.json) into it: the same three fields and the same rule
+as `target-bullet/src/model.ts` (variance against the absolute target, ±5 % = near, ▲ ▼ ● markers).
+
+| | Target bullet (`.pbiviz`) | Deneb spec |
+|---|---|---|
+| Code | TypeScript, `pbiviz package` | 34 lines of JSON, pasted into the visual's editor |
+| Tests | 16 node tests (logic, SVG tree, high contrast) | `tests/test_deneb.py`: Deneb's data contract + `check-spec.mjs` (compile without warnings, computed rows) |
+| High contrast, rendering events, format pane | written in the visual | not in our spec (Deneb's own behaviour not checked here) |
+| Lives in | the visual package, reusable in any report | the report (each copy of the visual carries its spec) |
+
+- **Data contract (Deneb docs):** the Values well becomes a dataset named `dataset`; fields are referenced by display
+  name, and `.`, `[`, `]`, `\` and `"` in names are replaced with `_`; each row gets `__row__`. Default limit 30,000 rows.
+- **Which build:** the AppSource version is certified and has remote data fetching (URLs) disabled; the standalone
+  `.pbiviz` in the GitHub release assets can fetch remote data and is uncertified. AppSource (*Get more visuals*) needs a
+  sign-in, so the recording imports the standalone build from file; our spec loads no remote data, so either build works.
+- **A real catch the checker found:** a `sort` with `op: "sum"` on a layered chart is silently dropped by Vega-Lite
+  ("unioned domains only support ... count, min and max"); Deneb would just show unsorted rows. `check-spec.mjs` fails on
+  any compile warning.
 
 ## What we learned / gotchas
 
@@ -110,6 +135,7 @@ In the video, `theme-check` and `report-lint` are short for `python3 src/tools/t
   view tree and packaging are tested, the DOM glue in `visual.ts` is not.
 
 ## References
+- Deneb: [getting started](https://deneb.guide/docs/getting-started) · [dataset](https://deneb.guide/docs/dataset) · [simple worked example](https://deneb.guide/docs/simple-example) · [changelog](https://deneb.guide/docs/changelog) · [Vega-Lite docs](https://vega.github.io/vega-lite/docs/)
 - [Use report themes](https://learn.microsoft.com/power-bi/create-reports/desktop-report-themes) · [Create custom report themes (schema, dataColors, good/neutral/bad, textClasses, visualStyles)](https://learn.microsoft.com/power-bi/create-reports/report-themes-create-custom) · [Report theme JSON schema (GitHub)](https://github.com/microsoft/powerbi-desktop-samples/tree/main/Report%20Theme%20JSON%20Schema)
 - [Design Power BI reports for accessibility (4.5:1, alt text 250 characters, tab order, colour combinations to avoid, high contrast)](https://learn.microsoft.com/power-bi/create-reports/desktop-accessibility-creating-reports)
 - [Power BI project report folder (PBIR, RegisteredResources, schemas)](https://learn.microsoft.com/power-bi/developer/projects/projects-report)

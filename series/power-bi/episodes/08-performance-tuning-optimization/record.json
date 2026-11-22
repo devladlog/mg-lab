@@ -8,7 +8,12 @@
     "python data\\gen_sales.py --rows 2000000 --out C:\\ContosoBikesPerf",
     "python tools\\expected_totals.py C:\\ContosoBikesPerf",
     "if (-not (Test-Path results\\performance-analyzer.csv)) { Copy-Item results\\performance-analyzer.template.csv results\\performance-analyzer.csv }",
-    "Pop-Location"
+    "Pop-Location",
+    "# owner: DAX Studio for All Users, once (UAC prompt: approve it yourself; it registers the External Tools button): winget install -e --id DaxStudio.DaxStudio --scope machine",
+    "New-Item -ItemType Directory -Force C:\\MGLab\\tools | Out-Null",
+    "$dsReg = Select-String -Path \"${env:CommonProgramFiles(x86)}\\Microsoft Shared\\Power BI Desktop\\External Tools\\*.pbitool.json\" -Pattern 'DaxStudio' -List -ErrorAction SilentlyContinue",
+    "if (-not $dsReg -and -not (Test-Path C:\\MGLab\\tools\\DaxStudio\\DaxStudio.exe)) { $a = (Invoke-RestMethod https://api.github.com/repos/DaxStudio/DaxStudio/releases/latest).assets | Where-Object name -like '*portable*.zip' | Select-Object -First 1; Invoke-WebRequest $a.browser_download_url -OutFile C:\\MGLab\\tools\\DaxStudio-portable.zip; Expand-Archive C:\\MGLab\\tools\\DaxStudio-portable.zip C:\\MGLab\\tools\\DaxStudio -Force; Get-ChildItem C:\\MGLab\\tools\\DaxStudio -Recurse | Unblock-File }",
+    "if ($dsReg) { 'DAX Studio: External Tools button registered (' + $dsReg.Filename + ')' } elseif (Test-Path C:\\MGLab\\tools\\DaxStudio\\DaxStudio.exe) { 'DAX Studio: portable fallback in C:\\MGLab\\tools\\DaxStudio (no External Tools button: use Connect > Power BI / SSDT Model)' } else { 'DAX Studio: NOT available - perf-server-timings and perf-vertipaq cannot be recorded' }"
   ],
   "screens": [
     {
@@ -54,6 +59,45 @@
       ]
     },
     {
+      "name": "perf-server-timings",
+      "kind": "app",
+      "app": "DAX Studio + Power BI Desktop",
+      "steps": [
+        "Power BI Desktop: ContosoPerf.After.pbip open and refreshed (from the perf-after screen)",
+        "External Tools ribbon > DAX Studio: it opens already connected (status bar: localhost:<port>). Fallback (portable build): start C:\\MGLab\\tools\\DaxStudio\\DaxStudio.exe > Connect > Power BI / SSDT Model > pick ContosoPerf.After > Connect",
+        "Dismiss any version-notification popup; zoom the editor (Ctrl + mouse wheel) so the query is readable",
+        "Home ribbon: switch on Server Timings and Clear on Run (cold cache for every run)",
+        "File > Open > type C:\\MGLab\\power-bi\\ep08\\src\\queries\\04-server-timings-yoy-twice.dax > Open; Run (F5); open the Server Timings tab: Total, FE, SE, SE queries, SE cache and the xmSQL list; hold",
+        "Open 05-server-timings-yoy-var.dax the same way; Run; Server Timings tab; hold. Write both sets of numbers down (Total, FE, SE, SE queries)",
+        "Advanced ribbon > Run Benchmark on the 05 tab: 5 cold, 5 warm > Run; Summary tab; hold. Repeat on the 04 tab",
+        "Do not save anything to the model; leave DAX Studio open for perf-vertipaq"
+      ],
+      "mask": [
+        "account name and picture at the top right of Power BI Desktop (sign out first)",
+        "DAX Studio: never open File > Recent / the start page list; do not sign in to any account in DAX Studio (top right stays empty)",
+        "Windows user name in the Import/Export Metrics file dialogs (type the C:\\MGLab path in the File name box, do not browse the nav pane)"
+      ],
+      "note": "Narration is number-free: report the real Server Timings and benchmark numbers so the README and social posts can quote them."
+    },
+    {
+      "name": "perf-vertipaq",
+      "kind": "app",
+      "app": "DAX Studio + Power BI Desktop",
+      "steps": [
+        "(off camera, during the perf-before/perf-sizes session, Before model open) External Tools > DAX Studio > Advanced > Export Metrics > File name C:\\MGLab\\power-bi\\ep08\\src\\results\\ContosoPerf.Before.vpax > Save. If perf-before is not re-recorded: open ContosoPerf.Before.pbip, Refresh, export, close it, then reopen the After model",
+        "On camera, DAX Studio connected to ContosoPerf.After: Advanced > View Metrics > OK in Metric Options (defaults)",
+        "Summary tab: total size; hold. Columns tab: sort by Total Size descending; hold",
+        "Advanced > Import Metrics > File name C:\\MGLab\\power-bi\\ep08\\src\\results\\ContosoPerf.Before.vpax > Open; Columns tab sorted by Total Size: Line Ref, Order Timestamp, Order Number, Note on top; Summary tab: total size; hold",
+        "Write down both totals and the top five columns of each (record the real numbers)",
+        "Close DAX Studio without saving the query tabs"
+      ],
+      "mask": [
+        "account name and picture at the top right of Power BI Desktop (sign out first)",
+        "DAX Studio: never open File > Recent / the start page list; do not sign in to any account in DAX Studio (top right stays empty)",
+        "Windows user name in the Import/Export Metrics file dialogs (type the C:\\MGLab path in the File name box, do not browse the nav pane)"
+      ]
+    },
+    {
       "name": "perf-compare",
       "kind": "terminal",
       "target": "host",
@@ -69,8 +113,9 @@
   "teardown": [
     "Remove-Item C:\\MGLab\\power-bi\\ep08 -Recurse -Force -ErrorAction SilentlyContinue",
     "Remove-Item C:\\ContosoBikesPerf -Recurse -Force -ErrorAction SilentlyContinue",
-    "Remove-Item C:\\ContosoBikesPerf200k -Recurse -Force -ErrorAction SilentlyContinue"
+    "Remove-Item C:\\ContosoBikesPerf200k -Recurse -Force -ErrorAction SilentlyContinue",
+    "# DAX Studio stays installed; to remove the portable fallback: Remove-Item C:\\MGLab\\tools\\DaxStudio, C:\\MGLab\\tools\\DaxStudio-portable.zip -Recurse -Force"
   ],
   "needs": [],
-  "owner_notes": "Local only; at least 16 GB RAM advised (laptop has 191 GB). No tenant sign-in."
+  "owner_notes": "Local only; at least 16 GB RAM advised (laptop has 191 GB). No tenant sign-in. DAX Studio (free) for perf-server-timings and perf-vertipaq: All Users install via winget needs your UAC approval (gives the External Tools button); without it prepare downloads the portable build into C:\\MGLab\\tools (no admin)."
 }

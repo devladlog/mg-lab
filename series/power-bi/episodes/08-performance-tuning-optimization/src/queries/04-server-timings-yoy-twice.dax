@@ -1,0 +1,16 @@
+// NEEDS POWER BI DESKTOP + DAX STUDIO (Server Timings). Not run in the build container.
+// Run it on the AFTER model, opened in DAX Studio from the External Tools ribbon, with Server Timings and Clear on Run on.
+// Growth with the prior-year CALCULATE written twice (the BEFORE model's formula, as a query-scoped measure).
+// Compare Total, FE, SE and SE queries with 05-server-timings-yoy-var.dax: record the real numbers.
+DEFINE
+    MEASURE Sales[YoY Twice] =
+        DIVIDE(
+            [Sales Amount] - CALCULATE([Sales Amount], SAMEPERIODLASTYEAR('Date'[Date])),
+            CALCULATE([Sales Amount], SAMEPERIODLASTYEAR('Date'[Date]))
+        )
+EVALUATE
+    SUMMARIZECOLUMNS(
+        'Date'[Year Month],
+        'Store'[Store],
+        "YoY", [YoY Twice]
+    )
