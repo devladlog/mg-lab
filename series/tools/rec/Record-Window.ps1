@@ -24,7 +24,7 @@ $title = $win.Title
 [void][MgRec.Win3]::SetThreadDpiAwarenessContext([IntPtr]::new(-4))
 $w = if ($cfg.width) { [int]$cfg.width } else { 1920 }; $h = if ($cfg.height) { [int]$cfg.height } else { 1080 }
 $x = if ($null -ne $cfg.x) { [int]$cfg.x } else { 40 }; $y = if ($null -ne $cfg.y) { [int]$cfg.y } else { 40 }
-Set-RecordingWindow -Handle $win.Handle -Width $w -Height $h -X $x -Y $y
+Set-RecordingWindow -Handle $win.Handle -Width $w -Height $h -X $x -Y $y -NotTopMost:($cfg.topmost -ne $true)
 Start-Sleep -Milliseconds 800
 $bounds = Get-WindowBounds $win.Handle
 Write-Host "Recording window: $title [$($bounds -join ',')] -> $out" -ForegroundColor Cyan

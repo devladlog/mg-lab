@@ -94,10 +94,12 @@ function Start-RegionCapture([string]$Ffmpeg, [int[]]$Bounds, [string]$OutFile, 
     return [Diagnostics.Process]::Start($psi)
 }
 
-function Set-RecordingWindow([IntPtr]$Handle, [int]$Width = 1600, [int]$Height = 900, [int]$X = 40, [int]$Y = 40) {
-    # top-most, fixed size, on the primary screen, so nothing covers it while it is captured
+function Set-RecordingWindow([IntPtr]$Handle, [int]$Width = 1600, [int]$Height = 900, [int]$X = 40, [int]$Y = 40, [switch]$NotTopMost) {
+    # fixed size and position; top-most (terminals) so nothing covers it, or just in front (apps: a top-most window
+    # would hide the app's own dialogs, which open behind it)
     [void][MgRec.Win2]::ShowWindow($Handle, 1)
-    [void][MgRec.Win2]::SetWindowPos($Handle, [IntPtr]::new(-1), $X, $Y, $Width, $Height, 0x0040)
+    $after = if ($NotTopMost) { [IntPtr]::Zero } else { [IntPtr]::new(-1) }
+    [void][MgRec.Win2]::SetWindowPos($Handle, $after, $X, $Y, $Width, $Height, 0x0040)
     [void][MgRec.Win2]::SetForegroundWindow($Handle)
 }
 
