@@ -554,6 +554,12 @@ def main():
                 sc["_poster"] = str(poster)
                 if "crop" not in sc and sc.get("autocrop", True):
                     sc["crop"] = content_crop(clip)
+                if sc.get("crop"):   # a crop past the frame edge is silently ignored by ffmpeg: the masked area shows
+                    cw_, ch_ = map(int, subprocess.check_output(["ffprobe", "-v", "error", "-select_streams", "v:0",
+                        "-show_entries", "stream=width,height", "-of", "csv=p=0", str(clip)], text=True).strip().split(",")[:2])
+                    x_, y_, w_, h_ = sc["crop"]
+                    if x_ < 0 or y_ < 0 or x_ + w_ > cw_ or y_ + h_ > ch_:
+                        raise SystemExit(f"{sc['id']}: crop {sc['crop']} exceeds the {cw_}x{ch_} recording")
                 sc["_live"] = True
                 if sc.get("video_compact") or sc.get("video_cuts"):
                     clip = compact_clip(clip, work / f"{i:02d}_{sc['id']}_take.mp4", cuts=sc.get("video_cuts"), crop=sc.get("crop"))
