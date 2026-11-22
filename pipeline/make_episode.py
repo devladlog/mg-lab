@@ -266,20 +266,30 @@ def video_duration(path):
     return float(subprocess.check_output(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", str(path)]).decode())
 
 
-def compact_clip(clip, out, max_still=0.6, min_still=1.2, thresh=0.02, cuts=None):
-    """App and browser takes: shorten every stretch where nothing on screen changes (waiting between actions) to
+def compact_clip(clip, out, max_still=0.6, min_still=1.2, thresh=0.02, cuts=None, crop=None):
+    """App and browser takes: drop the `cuts` ([[from, to], ...] in seconds of the original take: detours that aren't
+    part of the demo), then shorten every stretch where nothing on screen changes (waiting between actions) to
     max_still seconds; every change on screen is kept, in order. Returns the compacted file (cached by mtime)."""
     import numpy as np
     out = Path(out)
     if out.exists() and out.stat().st_mtime >= Path(clip).stat().st_mtime:
         return out
+    src = Path(clip)
+    if cuts:
+        src = out.with_name(out.stem + "_cut.mp4")
+        drop = "+".join(f"between(t,{a},{b})" for a, b in cuts)
+        run(["ffmpeg", "-y", "-i", str(clip), "-vf", f"select='not({drop})',setpts=N/FRAME_RATE/TB", "-an", "-c:v",
+             "libx264", "-preset", "veryfast", "-crf", "18", "-pix_fmt", "yuv420p", str(src)])
     fps = 10
-    W, H = 320, 180   # analysis size only (aspect ignored)
-    raw = subprocess.check_output(["ffmpeg", "-v", "error", "-i", str(clip), "-vf", f"fps={fps},scale={W}:{H},format=gray",
+    W, H = 320, 180   # analysis size only (aspect ignored); only the part that ends up on screen counts
+    cf = f"crop={crop[2]}:{crop[3]}:{crop[0]}:{crop[1]}," if crop else ""
+    raw = subprocess.check_output(["ffmpeg", "-v", "error", "-i", str(src), "-vf", f"fps={fps},{cf}scale={W}:{H},format=gray",
                                    "-f", "rawvideo", "-"])
     frames = np.frombuffer(raw, np.uint8)
     frames = frames[: len(frames) // (W * H) * W * H].reshape(-1, H, W).astype(np.int16)
     diff = np.r_[255, np.abs(np.diff(frames, axis=0)).mean(axis=(1, 2))]
+    # screen-region captures carry a little noise in every frame: "still" is relative to the clip's own noise level
+    thresh = max(thresh, 2.5 * float(np.median(diff[1:])) if len(diff) > 1 else thresh)
     moving = diff > thresh
     keep, i, n = [], 0, len(moving)
     while i < n:
@@ -299,14 +309,10 @@ def compact_clip(clip, out, max_still=0.6, min_still=1.2, thresh=0.02, cuts=None
         else:
             merged.append((a, b))
     expr = "+".join(f"between(t,{a:.2f},{b:.2f})" for a, b in merged)
-    tmp = out.with_name(out.stem + "_c.mp4") if cuts else out
-    run(["ffmpeg", "-y", "-i", str(clip), "-vf", f"select='{expr}',setpts=N/FRAME_RATE/TB", "-an", "-c:v", "libx264",
-         "-preset", "veryfast", "-crf", "18", "-pix_fmt", "yuv420p", str(tmp)])
-    if cuts:  # video_cuts: [[from, to], ...] in seconds of the compacted take, e.g. a detour that isn't part of the demo
-        keep = "+".join(f"between(t,{a},{b})" for a, b in cuts)
-        run(["ffmpeg", "-y", "-i", str(tmp), "-vf", f"select='not({keep})',setpts=N/FRAME_RATE/TB", "-an", "-c:v",
-             "libx264", "-preset", "veryfast", "-crf", "18", "-pix_fmt", "yuv420p", str(out)])
-        tmp.unlink()
+    run(["ffmpeg", "-y", "-i", str(src), "-vf", f"select='{expr}',setpts=N/FRAME_RATE/TB", "-an", "-c:v", "libx264",
+         "-preset", "veryfast", "-crf", "18", "-pix_fmt", "yuv420p", str(out)])
+    if cuts:
+        src.unlink()
     return out
 
 
@@ -550,7 +556,7 @@ def main():
                     sc["crop"] = content_crop(clip)
                 sc["_live"] = True
                 if sc.get("video_compact") or sc.get("video_cuts"):
-                    clip = compact_clip(clip, work / f"{i:02d}_{sc['id']}_take.mp4", cuts=sc.get("video_cuts"))
+                    clip = compact_clip(clip, work / f"{i:02d}_{sc['id']}_take.mp4", cuts=sc.get("video_cuts"), crop=sc.get("crop"))
                 sc["_clip"] = str(clip)
             else:
                 print(f"  ! {sc['id']}: video {clip} missing, using the still image", flush=True)
