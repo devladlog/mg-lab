@@ -8,11 +8,13 @@ linkedin_company:
     Everyone has a theory about why the report is slow. Bidirectional filters. The big table. That one measure. Theories are cheap.
 
     Episode 8 of DEVLADLOG Power BI measures first, then changes one thing at a time, on a generated, fictional export of two million Contoso Bikes order lines:
-    - Performance Analyzer recordings before and after, compared by a script that fails if a visual got slower
-    - a DAX query that lists column dictionary sizes, biggest first
+    - a DAX query that lists column dictionary sizes; before tuning the top four were Line Ref 62.3 MB, Order Timestamp 40.1 MB, Order Number 26.8 MB and Note 10.3 MB
     - a lint on the TMDL and report files where every rule comes from a Microsoft Learn recommendation
     - data reduction in Power Query: columns from 13 to 9, bits per row down by more than 40 percent, identical totals
-    - three measures rewritten with DIVIDE, variables and Boolean filters
+    - three measures rewritten with DIVIDE, variables and Boolean filters, and the order-lines table (352 ms) moved off the executive page
+    - Performance Analyzer before and after, compared by a script that fails if a visual got slower
+
+    Result on the warm run: 871 ms to 502 ms in total, 1.7x, and every visual measured in both is faster. The cards are identical in both reports: 2.85 billion in sales, 40.0% margin.
 
     The gotcha: a faster rewrite can change the answer.
 
@@ -30,7 +32,7 @@ linkedin_personal:
 
     So before replacing a measure, I compare results under filters, not just the total. And I do not remove a bidirectional filter blindly: in this model it exists for row-level security.
 
-    Measure first, change one thing, measure again.
+    The page did get faster: 871 ms to 502 ms on the warm Performance Analyzer run, with identical cards. Measure first, change one thing, measure again.
 
     Episode 8: {YOUTUBE_URL}
 
@@ -39,7 +41,7 @@ linkedin_personal:
     Narration uses an AI voice.
 facebook:
   text: |
-    Don't guess why a Power BI report is slow. This episode measures first with Performance Analyzer, shrinks the model by dropping columns and distinct values, and rewrites three DAX measures. Then it shows the catch: a faster measure is not always the same measure, so you compare results under filters. Fictional Contoso Bikes data.
+    Don't guess why a Power BI report is slow. This episode measures first with Performance Analyzer, shrinks the model by dropping columns and distinct values, and rewrites three DAX measures. The page ends up 1.7 times faster with the same card values. Then it shows the catch: a faster measure is not always the same measure, so you compare results under filters. Fictional Contoso Bikes data.
 
     Watch: {YOUTUBE_URL}
 
@@ -62,7 +64,7 @@ shorts:
     youtube_short_title: "Shrink a Power BI model, keep the answers #Shorts"
     instagram_reel:
       caption: |
-        Data reduction, measured on the real file. Drop the columns nothing uses. Keep the date, not the timestamp. Strip the prefix from the order number. Compute the line amount in Power Query. The columns go from 13 to 9, the bits per row drop by more than 40 percent, and the totals and every month and store total are identical.
+        Data reduction, measured on a 200,000-line export. Drop the columns nothing uses. Keep the date, not the timestamp. Strip the prefix from the order number. Compute the line amount in Power Query. The columns go from 13 to 9, the bits per row drop by more than 40 percent, and the totals and every month and store total are identical.
         Full episode: link in bio.
         Narration uses an AI voice.
         #PowerBI #PowerQuery #PerformanceTuning #DataModeling
