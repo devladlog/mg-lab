@@ -1,8 +1,10 @@
 # DEVLADLOG .NET #10 — What .NET 8 and 9 gave you (and what you can use today on .NET 10)
 
 The series runs on **.NET 10 (LTS)**, but most teams arrive from .NET 8 or 9, and **both reached end of support in
-November 2026**: Microsoft's lifecycle page lists 11/11/2026 for .NET 8 and for .NET 9, and 11/15/2028 for .NET 10
-(.NET 10 is "supported for three years as a long-term support release"). So this episode is a tour of what those two
+November 2026**: Microsoft's lifecycle page lists 11/10/2026 for .NET 8 and for .NET 9, and 11/14/2028 for .NET 10
+(as of 22 Nov 2026 the table also starts with a .NET 11 row, and it labels only .NET 8, not .NET 10, "(LTS)"; Learn's
+What's new says .NET 10 "is supported for three years as a long-term support (LTS) release", and the .NET support
+policy lists .NET 10 as LTS and .NET 11 as STS). So this episode is a tour of what those two
 releases (C# 12 and 13) added, written as **one library that compiles for `net8.0` and `net10.0`** (and `net9.0`, see
 below) with the .NET 9 code behind `#if NET9_0_OR_GREATER`. The same tests run once per target. You see, on screen,
 exactly what a retarget gives you and what the compiler says when you try to get it too early.
@@ -30,7 +32,7 @@ Everything is in the project requests domain of the earlier episodes (fictional 
 |---|---|
 | [`FeatureMatrix.cs`](src/ProjectRequests.Features/FeatureMatrix.cs) | `CompiledFor` and `Net9FeaturesCompiledIn`: which target this build is |
 | [`src/ProjectRequests.Features.Tour/`](src/ProjectRequests.Features.Tour/) | The demo: one console app, `dotnet run -f net8.0` then `-f net10.0` |
-| [`tests/ProjectRequests.Features.Tests/`](tests/ProjectRequests.Features.Tests/) | xUnit v3, multi-targeted (`net8.0;net10.0`): 53 test runs, 18 on .NET 8 and 35 on .NET 10 |
+| [`tests/ProjectRequests.Features.Tests/`](tests/ProjectRequests.Features.Tests/) | xUnit v3, multi-targeted (`net8.0;net10.0`): 53 test runs, 18 on .NET 8 and 35 on .NET 10 (the per-target counts show with `-f`) |
 | [`deploy/net8-compile-errors.txt`](deploy/net8-compile-errors.txt) | Real compiler output for .NET 9 / C# 13 code built for `net8.0` |
 | [`deploy/tour-net8.0.output.txt`](deploy/tour-net8.0.output.txt) · [`tour-net10.0.output.txt`](deploy/tour-net10.0.output.txt) | Real output of the tour on each runtime |
 | [`deploy/lock-warning-cs9216.txt`](deploy/lock-warning-cs9216.txt) | The compiler's own warning for the `Lock`-as-`object` trap |
@@ -38,9 +40,10 @@ Everything is in the project requests domain of the earlier episodes (fictional 
 ## Build, test, run
 
 ```bash
-dotnet test -c Release        # MTP mode via global.json: total 53, failed 0 (net8.0: 18, net10.0: 35), ~20 s
+dotnet test -c Release        # MTP mode via global.json: one "passed" line per target, then total: 53, failed: 0, ~20 s
 dotnet test                   # Debug: 52 passed, 1 skipped (the allocation test refuses to run in Debug, see gotchas)
-dotnet test -c Release -f net8.0     # only the .NET 8 test app (needs the .NET 8 runtime installed)
+dotnet test -c Release -f net8.0     # only the .NET 8 test app: total: 18 (needs the .NET 8 runtime installed)
+dotnet test -c Release -f net10.0    # only the .NET 10 test app: total: 35
 
 dotnet run --project src/ProjectRequests.Features.Tour -f net8.0      # .NET 9 section: "not compiled into this build"
 dotnet run --project src/ProjectRequests.Features.Tour -f net10.0     # everything
@@ -91,13 +94,14 @@ laptop (see demo.md). No Azure, no tenant, no network at run time.
   `--__` in Base64Url (Learn: `+` becomes `-`, `/` becomes `_`); our cursor has no `=`, so it needs no URL escaping.
 - **v7 GUIDs sort by time as text** (the timestamp comes first), which is what the test checks. Whether *your database*
   sorts them that way is a separate question we did not test here.
-- **`dotnet test` runs one test app per target.** In MTP mode you get one run per framework (18 tests on .NET 8,
-  35 on .NET 10: the .NET 9 tests are compiled out of the net8 build), which is also the proof that the `#if`s do what
-  they claim. The SDK 10.0.115 built `net8.0` without any "out of support" warning, even though Learn's lifecycle page
-  lists the end of support as 11/11/2026: don't count on the tooling to tell you.
+- **`dotnet test` runs one test app per target.** In MTP mode you get one run per framework, but the combined
+  summary prints only the total (53) and a "passed" line per test app; run with `-f net8.0` and `-f net10.0` to see 18
+  and 35 (the .NET 9 tests are compiled out of the net8 build), which is the proof that the `#if`s do what they claim. The SDK 10.0.115 built `net8.0` without any "out of support" warning, even though Learn's lifecycle page
+  lists the end of support as 11/10/2026: don't count on the tooling to tell you.
 
 ## References
-- [.NET and .NET Core support policy / lifecycle table (.NET 8, 9, 10 dates)](https://learn.microsoft.com/lifecycle/products/microsoft-net-and-net-core)
+- [.NET and .NET Core lifecycle table (.NET 8, 9, 10, 11 dates)](https://learn.microsoft.com/lifecycle/products/microsoft-net-and-net-core)
+- [.NET support policy (release types: .NET 10 LTS, .NET 11 STS)](https://dotnet.microsoft.com/platform/support/policy/dotnet-core)
 - [What's new in .NET 10 (LTS)](https://learn.microsoft.com/dotnet/core/whats-new/dotnet-10/overview)
 - [What's new in .NET 9: libraries (LINQ `CountBy`/`AggregateBy`/`Index`, `Task.WhenEach`, `Guid.CreateVersion7`, `OrderedDictionary`, `Base64Url`, `ReadOnlySet`, `SearchValues<string>`, `params` spans, `TimeSpan`, `JsonSerializerOptions.Web`)](https://learn.microsoft.com/dotnet/core/whats-new/dotnet-9/libraries)
 - [What's new in .NET 8: runtime (`FrozenDictionary`, `TimeProvider`, JSON naming policies, `JsonStringEnumConverter<T>`, populate read-only, `Random.GetItems`, `SearchValues`, `CompositeFormat`)](https://learn.microsoft.com/dotnet/core/whats-new/dotnet-8/runtime)

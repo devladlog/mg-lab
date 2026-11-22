@@ -13,7 +13,7 @@
 Every screen shows the real tour app, the real compiler output and the real test run; nothing is mocked.
 
 Built and verified in the build container (Linux, SDK 10.0.115, .NET 8.0.34 and 10.0.15 runtimes): `dotnet test -c Release`
-**53 passed** (18 on net8.0, 35 on net10.0); Debug: 52 passed, 1 skipped (the allocation test). The tour output of both
+**53 passed** (18 on net8.0, 35 on net10.0, counted with `-f`; the combined run prints only the total); Debug: 52 passed, 1 skipped (the allocation test). The tour output of both
 runtimes and the compiler errors are saved in `deploy/`. **Not run on Windows.** **net9.0 was only compile-checked**
 (`-p:IncludeNet9=true`); no .NET 9 runtime was available, so nothing was run on .NET 9 and the video claims nothing about it.
 The GUID and the exact runtime build numbers on screen will differ from `deploy/`.
@@ -22,7 +22,7 @@ The GUID and the exact runtime build numbers on screen will differ from `deploy/
 | What | Notes | Cost |
 |---|---|---|
 | `dotnet --version` is 10.0.1xx | `global.json` pins the SDK with roll-forward and selects the Microsoft.Testing.Platform runner | free |
-| .NET 8 runtime installed | without it the net8.0 tour and test run fail with "You must install or update .NET" (the lab laptop has only .NET 10 as of 21 Nov 2026; .NET 8 support ended on 10 Nov 2026, so say so on screen and install the runtime only for this recording) | free |
+| .NET 8 runtime installed | without it the net8.0 tour and test run fail with "You must install or update .NET" (the lab laptop has only .NET 10 as of 21 Nov 2026; .NET 8 and .NET 9 support ended on 10 Nov 2026, so say so on screen and install the runtime only for this recording) | free |
 | Terminal font 18-20 pt, dark theme | | — |
 | Masking | the prompt shows the Windows user name: use `function prompt { "PS> " }`. No tenant names or URLs besides public Learn | — |
 
@@ -37,9 +37,12 @@ function prompt { "PS> " }
 ## Screens (match `screen` scenes in script.yaml)
 
 ### 1. `lifecycle` — "The dates" (browser, public)
-Open `https://learn.microsoft.com/lifecycle/products/microsoft-net-and-net-core`, scroll to the table. Point at .NET 10 (LTS),
-.NET 9 and .NET 8. **Re-read the dates on the day**: when built they were 11/11/2026 (.NET 8 and 9) and 11/15/2028 (.NET 10);
-the narration quotes them. No sign-in.
+Open `https://learn.microsoft.com/lifecycle/products/microsoft-net-and-net-core`, scroll to the table. The first row is
+.NET 11 (start 11/10/2026, no end date): pass it. Point at .NET 10, .NET 9 and .NET 8 (LTS). **Re-read the dates on the day**:
+on 22 Nov 2026 the page showed 11/10/2026 for .NET 8 and .NET 9 and 11/14/2028 for .NET 10; the narration quotes them. The
+page labels only .NET 8 "(LTS)" among these rows and **does not label .NET 10 "(LTS)"**, so don't point at a label there: the
+narration's "long term support" for .NET 10 comes from the [.NET support policy](https://dotnet.microsoft.com/platform/support/policy/dotnet-core)
+(.NET 10 LTS, .NET 11 STS, both end 14 Nov 2028) and Learn's What's new in .NET 10. No sign-in.
 
 ### 2. `tour8` — "Run it on .NET 8" (terminal)
 ```powershell
@@ -65,7 +68,10 @@ and one snippet from the file, then `dotnet build`. (Outside the repo folder; de
 ```powershell
 dotnet test -c Release
 ```
-One test app per target: net8.0 total 18, net10.0 total 35, 53 succeeded in total. About 20 s on the container.
+Prints one line per test app (`ProjectRequests.Features.Tests.dll (net8.0|x64) passed`, `(net10.0|x64) passed`), then
+`Test run summary: Passed!` with `total: 53`, `failed: 0`, `succeeded: 53`, `skipped: 0`. **The per-target counts are not
+printed** by this command (18 and 35 show only with `-f net8.0` / `-f net10.0`), so the narration doesn't quote them. About
+20 s on the container.
 
 ## Gotcha and tip scenes (no screen)
 All bullets are covered by tests or saved output; see the README "What we learned". The params allocation figures (0 bytes Release,

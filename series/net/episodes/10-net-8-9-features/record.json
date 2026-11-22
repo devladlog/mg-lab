@@ -1,5 +1,5 @@
 {
-  "note": "Live-session recording of the screen scenes (series/tools/rec). prepare/teardown run on the laptop, not recorded; commands are typed and run for real. Servers are started hidden by prepare (helper C:\\lab\\mgnet\\svc.ps1) and their logs are shown with Get-Content/Select-String. Needs the .NET 8 runtime for this recording only; prepare installs it with winget when missing and teardown removes it again. Re-read the support dates on the lifecycle page on the day (the narration quotes them).",
+  "note": "Live-session recording of the screen scenes (series/tools/rec). prepare/teardown run on the laptop, not recorded; commands are typed and run for real. Servers are started hidden by prepare (helper C:\\lab\\mgnet\\svc.ps1) and their logs are shown with Get-Content/Select-String. Needs the .NET 8 runtime for this recording only; prepare installs it with winget when missing and teardown removes it again. Re-read the support dates on the lifecycle page on the day (the narration quotes them; on 22 Nov 2026 it showed 11/10/2026 for .NET 8 and 9, 11/14/2028 for .NET 10, and a .NET 11 row at the top).",
   "prepare": [
     "if (-not ((dotnet --list-runtimes) -match 'Microsoft\\.NETCore\\.App 8\\.')) { winget install --id Microsoft.DotNet.Runtime.8 -e --silent --accept-package-agreements --accept-source-agreements; 'installed by prepare' | Set-Content (Join-Path $env:TEMP 'mg-ep10-net8-runtime.marker') }  # .NET 8 runtime only for this recording (support ended 10 Nov 2026)",
     "dotnet --list-runtimes",
@@ -13,8 +13,9 @@
       "account": "none",
       "steps": [
         "Open the public page (no sign-in)",
-        "Scroll to the table",
-        "Point at .NET 10 (LTS), .NET 9 and .NET 8 with their end of support dates"
+        "Scroll to the table; the first row is .NET 11 (start 11/10/2026, no end date), pass it",
+        "Point at .NET 10 and its end date 11/14/2028 (the row has no (LTS) label on this page; the narration takes LTS from the .NET support policy)",
+        "Point at .NET 9 and .NET 8 (LTS), both ending 11/10/2026"
       ],
       "mask": []
     },
@@ -63,6 +64,7 @@
         "dotnet test -c Release",
         "#pause 6"
       ],
+      "note": "Expected: one line per test app, (net8.0|x64) passed and (net10.0|x64) passed, then the summary total: 53, failed: 0, succeeded: 53, skipped: 0. Per-target counts are not printed, and the narration does not quote them.",
       "maxMinutes": 10
     }
   ],

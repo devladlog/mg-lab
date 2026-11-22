@@ -14,6 +14,8 @@ youtube:
 sources:
   - https://www.devladlog.com/articles/dotnet/2026-05-27-net-89-features-complete-guide-2026/
   - https://learn.microsoft.com/lifecycle/products/microsoft-net-and-net-core
+  - https://dotnet.microsoft.com/platform/support/policy/dotnet-core
+  - https://learn.microsoft.com/dotnet/core/whats-new/dotnet-10/overview
   - https://learn.microsoft.com/dotnet/csharp/whats-new/csharp-13
 
 scenes:
@@ -23,8 +25,8 @@ scenes:
     sub: "What you have, what ten adds"
     short: hook
     narration: >
-      Dot net eight and dot net nine both stop getting security patches in November twenty twenty six. If your
-      project requests service still runs on one of them, the question is what you already use, and what moving to
+      Dot net eight and dot net nine both stopped getting security patches on November tenth, twenty twenty six. If
+      your project requests service still runs on one of them, the question is what you already use, and what moving to
       dot net ten gives you. We'll answer it with one library, built for both, and a test run on each. Welcome to
       DEVLADLOG dot net.
 
@@ -32,7 +34,7 @@ scenes:
     type: bullets
     heading: "What we're doing"
     bullets:
-      - "Support dates: 8 and 9 end 11/11/2026, 10 is LTS"
+      - "Support dates: 8 and 9 ended 11/10/2026, 10 is LTS"
       - "C# 12 and .NET 8 features in the project requests code"
       - "C# 13 and .NET 9 features behind one #if"
       - "Same tests on every target framework"
@@ -49,12 +51,17 @@ scenes:
     video: screens/lifecycle.mp4
     bar: "Browser · Microsoft Learn, .NET and .NET Core lifecycle"
     demo: >
-      Browser, public page learn.microsoft.com/lifecycle/products/microsoft-net-and-net-core. Scroll to the table and
-      point at .NET 10 (LTS), .NET 9 and .NET 8 with their end of support dates. No sign-in, nothing to mask.
+      Browser, public page learn.microsoft.com/lifecycle/products/microsoft-net-and-net-core. Scroll to the table.
+      The first row is .NET 11 (start 11/10/2026, no end date): pass it. Point at .NET 10 (end 11/14/2028), .NET 9
+      and .NET 8 (LTS) (both end 11/10/2026). The page labels only .NET 8 "(LTS)" among these rows, not .NET 10; the
+      narration takes .NET 10's LTS status from the .NET support policy page, so don't point at an LTS label on the
+      .NET 10 row. No sign-in, nothing to mask.
     narration: >
-      Microsoft's lifecycle page lists dot net eight and dot net nine ending support on November eleventh, twenty
-      twenty six. Dot net ten is a long term support release, supported until November twenty twenty eight. Nine was
-      a standard term release, and eight is the one a lot of production systems are still on.
+      Microsoft's lifecycle page lists dot net eight and dot net nine ending support on November tenth, twenty twenty
+      six, so both are already out of support. The table now starts with dot net eleven, released that same day. Dot
+      net ten runs until November twenty twenty eight, and Microsoft's support policy lists it as the long term
+      support release. Nine was a standard term release, and eight is the one a lot of production systems are still
+      on.
 
   - id: csharp12
     type: code
@@ -232,13 +239,15 @@ scenes:
     video: screens/tests.mp4
     bar: "Terminal · dotnet test -c Release"
     demo: >
-      Terminal. dotnet test -c Release from the episode folder. Output shows one test app per target: net8.0 total 18,
-      net10.0 total 35, and a summary of 53 succeeded, 0 failed. Needs both the .NET 8 and .NET 10 runtimes
-      installed. Nothing to mask.
+      Terminal. dotnet test -c Release from the episode folder. Output shows one line per test app,
+      ProjectRequests.Features.Tests.dll (net8.0|x64) passed and (net10.0|x64) passed, then "Test run summary:
+      Passed!" with total: 53, failed: 0, succeeded: 53, skipped: 0. The per-target test counts are not printed by
+      this command, so the narration doesn't quote them. Needs both the .NET 8 and .NET 10 runtimes installed.
+      Nothing to mask.
     narration: >
-      One command, two runs. The dot net eight build runs eighteen tests. The dot net ten build runs thirty five,
-      because the dot net nine tests only exist there. Fifty three pass. That split is the proof that the
-      conditional does what we said.
+      One command, two test apps: one built for dot net eight, one for dot net ten, and both pass. The summary counts
+      fifty three tests across the two, with none failed and none skipped. One test project, run once per target
+      framework, is the multi targeting doing what we said.
 
   - id: shorts
     type: bullets
@@ -257,6 +266,6 @@ scenes:
     heading: "Code on GitHub, guides on devladlog.com"
     sub: "github.com/devladlog/mg-lab"
     narration: >
-      The library, the tour and the fifty three tests are on GitHub, and the full guide is on devladlog dot com.
+      The library, the tour and the tests are on GitHub, and the full guide is on devladlog dot com.
       Next time: microservices with dot net, splitting the project requests service into pieces that talk to each
       other. Subscribe so you don't miss it. This was DEVLADLOG dot net, by Momento Galático.
