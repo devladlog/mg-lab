@@ -1,16 +1,14 @@
 {
-  "note": "Live-session recording of the screen scenes (series/tools/rec). Two GUI screens on the Windows 11 lab VM CON-W11-01 (viewed through the Hyper-V console), one portal screen and one terminal screen on the laptop. CON-W11-01 is not on the lab network and is not domain-joined, so files go in with Copy-VMFile (no credential) and the in-guest steps are done by the owner signed in as the lab user. The run is attended (self-service Premium trial); unattended is not filmed.",
+  "note": "Live-session recording of the screen scenes (series/tools/rec). Two GUI screens on the Windows 11 lab VM CON-W11-01 (viewed through the Hyper-V console), one portal screen and one terminal screen on the laptop. CON-W11-01 is not on the lab network and is not domain-joined, so files go in with Copy-VMFile (no credential) and the in-guest steps are done by the owner signed in as the lab user. The run is attended (self-service Premium trial); unattended is not filmed. The Hyper-V steps in prepare and teardown are wrapped in try/catch so the laptop-only tests screen can be queued while the VM is not available.",
   "prepare": [
     "python -m pip install -r requirements-test.txt --quiet",
     "$env:PSModulePath = (Join-Path (Resolve-Path ..\\..\\..\\..).Path '.tools\\Modules') + ';' + $env:PSModulePath",
     "python -m pytest",
-    "Enable-VMIntegrationService -VMName CON-W11-01 -Name 'Guest Service Interface'",
     "New-Item -ItemType Directory -Force -Path .\\out | Out-Null",
     "dotnet publish .\\src\\legacy-app\\App -c Release -r win-x64 --self-contained true -o .\\out\\ContosoPurchasing",
     "Compress-Archive -Path .\\out\\ContosoPurchasing\\* -DestinationPath .\\out\\ContosoPurchasing.zip -Force",
     "Compress-Archive -Path .\\src\\scripts\\*.ps1 -DestinationPath .\\out\\scripts.zip -Force",
-    "Copy-VMFile -Name CON-W11-01 -SourcePath (Resolve-Path .\\out\\ContosoPurchasing.zip).Path -DestinationPath C:\\MGLab\\pkg\\ContosoPurchasing.zip -FileSource Host -CreateFullPath -Force",
-    "Copy-VMFile -Name CON-W11-01 -SourcePath (Resolve-Path .\\out\\scripts.zip).Path -DestinationPath C:\\MGLab\\pkg\\scripts.zip -FileSource Host -CreateFullPath -Force",
+    "try { Enable-VMIntegrationService -VMName CON-W11-01 -Name 'Guest Service Interface' -ErrorAction Stop; Copy-VMFile -Name CON-W11-01 -SourcePath (Resolve-Path .\\out\\ContosoPurchasing.zip).Path -DestinationPath C:\\MGLab\\pkg\\ContosoPurchasing.zip -FileSource Host -CreateFullPath -Force -ErrorAction Stop; Copy-VMFile -Name CON-W11-01 -SourcePath (Resolve-Path .\\out\\scripts.zip).Path -DestinationPath C:\\MGLab\\pkg\\scripts.zip -FileSource Host -CreateFullPath -Force -ErrorAction Stop } catch { Write-Warning \"CON-W11-01 not reachable, files not copied (needed only for the legacyapp and pad screens; the tests screen does not use the VM): $($_.Exception.Message)\" }",
     "# owner (inside CON-W11-01, signed in as the lab user, session kept open): Expand-Archive C:\\MGLab\\pkg\\ContosoPurchasing.zip C:\\MGLab\\ContosoPurchasing -Force; Expand-Archive C:\\MGLab\\pkg\\scripts.zip C:\\MGLab\\scripts -Force; New-Item -ItemType Directory -Force C:\\MGLab\\run",
     "# owner signs in: browser profiles for labadmin (make.powerautomate.com), alex.demo (SharePoint) and sam.demo (approvals). Nothing is typed or stored here.",
     "# owner (tenant and VM, demo.md Setup 2-6): register CON-W11-01 in DEV (machine runtime); build the desktop flow 'Enter purchase order' from src\\desktop-flow\\enter-purchase-order.robin.txt; Desktop flows connection (attended) for labadmin; add Supplier, PONumber and RpaStatus to Purchase Requests; import solution Purchase RPA (pac solution pack --zipfile out\\PurchaseRpa.zip --folder src\\solution --packagetype Unmanaged), set the connection references and the real uiFlowId, turn the cloud flow on; as alex.demo add the Fabrikam 12,500 request and let sam.demo approve it",
@@ -27,7 +25,10 @@
         "Fill Fabrikam / Laptops / 12500 and select Save",
         "Show the message box with the new order number"
       ],
-      "mask": ["user name in the Windows title bar and taskbar", "only fictional data (Fabrikam, 12,500) on screen"]
+      "mask": [
+        "user name in the Windows title bar and taskbar",
+        "only fictional data (Fabrikam, 12,500) on screen"
+      ]
     },
     {
       "name": "pad",
@@ -38,7 +39,10 @@
         "Show the variables pane: inputs Supplier, Description, Amount, RequestId and outputs Status, OrderNumber, Errors",
         "Scroll the action list that matches enter-purchase-order.robin.txt"
       ],
-      "mask": ["user name in the title bar and the account menu", "machine and flow IDs if shown"]
+      "mask": [
+        "user name in the title bar and the account menu",
+        "machine and flow IDs if shown"
+      ]
     },
     {
       "name": "flowrun",
@@ -50,7 +54,12 @@
         "Show 'Run desktop flow' green, 'Order saved' on the Saved branch and 'Mark entered' green",
         "Next to it open the SharePoint item (as alex.demo) and show the PO number and RPA status Entered"
       ],
-      "mask": ["tenant URL and site URL", "environment ID in the address bar", "desktop flow ID and machine ID in the run inputs", "tenant name"]
+      "mask": [
+        "tenant URL and site URL",
+        "environment ID in the address bar",
+        "desktop flow ID and machine ID in the run inputs",
+        "tenant name"
+      ]
     },
     {
       "name": "tests",
@@ -69,7 +78,9 @@
         "dotnet test src/legacy-app/Tests -m:1",
         "#pause 4"
       ],
-      "mask": ["user name in the prompt (the short prompt hides it)"]
+      "mask": [
+        "user name in the prompt (the short prompt hides it)"
+      ]
     }
   ],
   "teardown": [
@@ -77,8 +88,13 @@
     "# owner (inside CON-W11-01): Remove-Item C:\\MGLab -Recurse -Force; Remove-Item $env:LOCALAPPDATA\\ContosoLegacy -Recurse -Force",
     "Remove-Item Env:DATAVERSE_TOKEN -ErrorAction SilentlyContinue",
     "Remove-Item .\\out -Recurse -Force -ErrorAction SilentlyContinue",
-    "Stop-VM -Name CON-W11-01 -ErrorAction SilentlyContinue"
+    "try { Stop-VM -Name CON-W11-01 -ErrorAction Stop } catch { Write-Warning \"CON-W11-01 not stopped: $($_.Exception.Message)\" }"
   ],
-  "needs": ["tenant", "lab-vms", "vm:CON-W11-01", "premium-trial"],
+  "needs": [
+    "tenant",
+    "lab-vms",
+    "vm:CON-W11-01",
+    "premium-trial"
+  ],
   "blocked": "The legacyapp and pad screens need CON-W11-01 ready: the Windows 11 Enterprise evaluation ISO saved as E:\\MGLab\\iso\\Win11Ent-Eval.iso, Windows setup and the Entra join done by the owner, the machine registered in DEV; the cloud run needs the Power Automate Premium trial (attended only, unattended needs a Process licence)."
 }
