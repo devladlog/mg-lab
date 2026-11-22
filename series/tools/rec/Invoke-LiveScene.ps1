@@ -83,6 +83,10 @@ if ($target -eq 'host') {
     if ($global:MgPwshExe) { function global:pwsh { & $global:MgPwshExe -NoProfile @args } }
     $global:MgPsExe = (Get-Command powershell -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1).Source
     if ($global:MgPsExe) { function global:powershell { & $global:MgPsExe -NoProfile @args } }
+    # third-party pytest plugins installed per user (e.g. anyio) print warnings with their site-packages path, which
+    # holds the Windows user name: keep them out of on-camera test runs (pytest's own plugins are unaffected)
+    $env:PYTEST_ADDOPTS = (("$env:PYTEST_ADDOPTS -p no:anyio -p no:cacheprovider").Trim())
+    $env:PYTEST_DISABLE_PLUGIN_AUTOLOAD = '1'
 }
 
 Start-Sleep -Milliseconds 800
